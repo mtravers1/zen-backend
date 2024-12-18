@@ -25,13 +25,12 @@ module.exports = {
   devtool: 'source-map',
   plugins: [
     new TerserPlugin({
-      cache: true,
       parallel: true,
-      sourceMap: true,
       terserOptions: {
         compress: false,
         ecma: 6,
-        mangle: true
+        mangle: true,
+        sourceMap: true
       }
     }),
     new CopyWebpackPlugin([
