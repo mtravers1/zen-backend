@@ -35,7 +35,9 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [
-        { from: './lib/mailer/templates/', to: './lib/mailer/templates/' }
+        { from: './lib/mailer/templates/', to: './lib/mailer/templates/' },
+        { from: './ecosystem.config.js', to: './ecosystem.config.js' },
+        { from: './.env.sample', to: './' }
       ]
     }),
     new webpack.WatchIgnorePlugin({
