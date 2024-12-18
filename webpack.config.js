@@ -33,18 +33,16 @@ module.exports = {
         sourceMap: true
       }
     }),
-    new CopyWebpackPlugin([
-      { from: './lib/mailer/templates/', to: './lib/mailer/templates/' }
-    ],{}),
-    new CopyWebpackPlugin([
-      { from: './views/', to: './views/' }
-    ],{}),
-    new CopyWebpackPlugin([
-        { from: './wwwroot/', to: './wwwroot/' }
-      ],{}),
-    new webpack.WatchIgnorePlugin([
-      /\.d\.ts$/
-    ])
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: './lib/mailer/templates/', to: './lib/mailer/templates/' }
+      ]
+    }),
+    new webpack.WatchIgnorePlugin({
+      paths: [
+        /\.d\.ts$/
+      ]
+    })
   ],
   resolve: {
     // Add `.ts` and `.tsx` as a resolvable extension.
