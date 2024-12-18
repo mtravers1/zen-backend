@@ -1,7 +1,7 @@
 const webpack = require('webpack');
 const path = require('path');
 const fs = require('fs');
-const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+const TerserPlugin = require("terser-webpack-plugin");
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 let nodeModules = {};
 fs.readdirSync('node_modules')
@@ -24,15 +24,15 @@ module.exports = {
   },
   devtool: 'source-map',
   plugins: [
-    new UglifyJsPlugin({
+    new TerserPlugin({
       cache: true,
       parallel: true,
-      uglifyOptions: {
+      sourceMap: true,
+      terserOptions: {
         compress: false,
         ecma: 6,
         mangle: true
-      },
-      sourceMap: true
+      }
     }),
     new CopyWebpackPlugin([
       { from: './lib/mailer/templates/', to: './lib/mailer/templates/' }
