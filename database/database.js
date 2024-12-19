@@ -1,5 +1,8 @@
-const mongoose = require('mongoose');
-const initialize = require('./datainit.js');
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
+// import initialize from './datainit.js';
 
 const mongoDB = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 
@@ -15,11 +18,11 @@ mongoDBConnection.on('error', console.error.bind(console, 'MongoDB connection er
 mongoDBConnection.once('open', async function() {
     console.log('Connected to MongoDB!');
 
-    await initialize();
+    // await initialize();
 });
 
 mongoDBConnection.on('disconnected', function() {
     console.log('MongoDB disconnected!');
 });
 
-module.exports = { mongoDBConnection };
+export { mongoDBConnection };
