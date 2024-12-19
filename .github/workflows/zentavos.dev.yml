@@ -31,6 +31,6 @@ jobs:
           remote_user: ${{ secrets.EC2_SSH_USER }}
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           rsh: |
-            cd ~/dev
+            cd /home/ubuntu/dev
             chmod +x ./scripts/start_server.sh
             ./scripts/start_server.sh
