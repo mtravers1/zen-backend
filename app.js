@@ -5,9 +5,9 @@ import createError from 'http-errors';
 import cors from 'cors';
 import firebaseAuth from './middlewares/firebaseAuth.js';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.router.js';
 import './lib/firebaseAdmin.js';
 import './database/database.js';
+import router from'./routes/index.js';
 
 dotenv.config();
 
@@ -34,9 +34,7 @@ app.use(firebaseAuth
 }));
 
 // Load routes
-
-app.use('/api/auth', authRoutes);
-
+app.use('/api', router);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
