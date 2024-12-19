@@ -60,7 +60,5 @@ typings/
 # next.js build output
 .next
 
-# specific files
-**/ServiceAccountKey.json
 
 dist/
