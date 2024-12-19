@@ -62,3 +62,5 @@ typings/
 
 # specific files
 **/ServiceAccountKey.json
+
+dist/
