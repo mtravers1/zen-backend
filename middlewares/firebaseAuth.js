@@ -1,5 +1,6 @@
-const { unless } = require("express-unless");
-const { firebaseAuth } = require('../lib/firebaseAdmin.js');
+import { unless } from "express-unless";
+import admin from 'firebase-admin';
+
 
 async function firebaseAuthentication(req, res, next){
     const idToken = req.headers.authorization?.split('Bearer ')[1];
@@ -9,14 +10,16 @@ async function firebaseAuthentication(req, res, next){
     }
 
     try {
-        const decodedToken = await firebaseAuth.verifyIdToken(idToken);
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        console.log(decodedToken);
         req.user = decodedToken;
         next();
     } catch (error) {
+        console.log(error);
         return res.status(401).send('Unauthorized');
     }
 };
 
 firebaseAuthentication.unless = unless;
 
-module.exports = firebaseAuthentication;
+export default firebaseAuthentication;

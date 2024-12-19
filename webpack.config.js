@@ -1,26 +1,26 @@
-const webpack = require('webpack');
-const path = require('path');
-const fs = require('fs');
-const TerserPlugin = require("terser-webpack-plugin");
-const CopyWebpackPlugin = require('copy-webpack-plugin')
+import webpack from 'webpack';
+import path from 'path';
+import fs from 'fs';
+import TerserPlugin from 'terser-webpack-plugin';
+import CopyWebpackPlugin from 'copy-webpack-plugin';
+
 let nodeModules = {};
 fs.readdirSync('node_modules')
-  .filter(function (x) {
-    return ['.bin'].indexOf(x) === -1;
-  })
-  .forEach(function (mod) {
+  .filter((x) => x !== '.bin')
+  .forEach((mod) => {
     nodeModules[mod] = 'commonjs ' + mod;
   });
-module.exports = {
+
+export default {
   entry: './bin/www',
   target: 'node',
   mode: 'production',
   node: {
-    __dirname: true
+    __dirname: true,
   },
   output: {
     filename: 'index.js',
-    path: path.resolve(__dirname, '.', 'dist')
+    path: path.resolve(process.cwd(), 'dist'),
   },
   devtool: 'source-map',
   plugins: [
@@ -30,8 +30,8 @@ module.exports = {
         compress: false,
         ecma: 6,
         mangle: true,
-        sourceMap: true
-      }
+        sourceMap: true,
+      },
     }),
     new CopyWebpackPlugin({
       patterns: [
@@ -40,25 +40,23 @@ module.exports = {
         { from: 'scripts/', to: './scripts/' },
         { from: 'package.json', to: '.' },
         { from: '.env.sample', to: '.' },
-      ]
+      ],
     }),
     new webpack.WatchIgnorePlugin({
-      paths: [
-        /\.d\.ts$/
-      ]
-    })
+      paths: [/\.d\.ts$/],
+    }),
+
   ],
   resolve: {
-    // Add `.ts` and `.tsx` as a resolvable extension.
-    extensions: ['.ts', '.tsx', '.js', '.mjs']
+    extensions: ['.ts', '.tsx', '.js', '.mjs'],
   },
   module: {
     rules: [
-      // all files with a `.ts` or `.tsx` extension will be handled by `ts-loader`
       {
-        test: /\.tsx?$/, loader: 'ts-loader',
-      }
-    ]
+        test: /\.tsx?$/,
+        loader: 'ts-loader',
+      },
+    ],
   },
-  externals: nodeModules
+  externals: nodeModules,
 };

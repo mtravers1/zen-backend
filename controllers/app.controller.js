@@ -4,6 +4,6 @@ function getAppVersion(req, res) {
     res.status(200).send(VERSION);
 }
 
-module.exports = {
+export default {
     getAppVersion
 };

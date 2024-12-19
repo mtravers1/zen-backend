@@ -1,6 +1,7 @@
-const User = require('./models/user.js');
-const Role = require('./models/role.js');
-const UserRole = require('./models/userRole.js');
+import User from './models/user.js';
+import Role from './models/role.js';
+import UserRole from './models/userRole.js';
+
 
 async function initialize() {
     console.log('Initializing MongoDB data...');
@@ -49,4 +50,4 @@ async function initialize() {
     }
 }
 
-module.exports = initialize;
+export default initialize;

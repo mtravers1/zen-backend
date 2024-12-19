@@ -1,21 +1,37 @@
-const mailer = require('../lib/mailer/mailer.js');
+import authService from '../services/auth.service.js';
 
-function login (req, res) {
-    const login = req.body;
+const signUp = async (req, res) => {
+    const { email, password, phone, role } = req.body;
+    try {
+      await authService.signUp(email, password, phone, role);
+      res.status(201).send({
+        email,
+        phone,
+      });
+    } catch (error) {
+      res.status(500).send(error.message);
+    }
+  };
+  
+  const signIn = async (req, res) => {
+    const { email, password, firebaseToken } = req.body;
+    try {
+      await authService.signIn(email.toLowerCase(), password, firebaseToken);
+      res.status(200).send({
+        email,
+        token: firebaseToken,
+      });
+    } catch (error) {
+      if (error.message === "User not found") {
+        return res.status(404).send(error.message);
+      }
+      res.status(500).send(error.message);
+    }
+  };
 
-    //TODO: Implement login logic
-    res.status(200).send("Success");
+const authController ={
+    signUp,
+    signIn
 }
 
-function recoveryPassword (req, res) {
-    const login = req.body;
-
-    //TODO: Implement recovery password logic
-
-    res.status(200).send("Success");
-}
-
-module.exports = {
-    login,
-    recoveryPassword
-};
+export default authController;
