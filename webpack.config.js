@@ -45,6 +45,7 @@ export default {
     new webpack.WatchIgnorePlugin({
       paths: [/\.d\.ts$/],
     }),
+
   ],
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.mjs'],

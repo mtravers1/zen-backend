@@ -1,16 +1,16 @@
-name: zentavos-api-dev
+name: zentavos-api-uat
 
 on:
   push:
-    branches: [ main ]
+    branches: [ uat ]
   pull_request:
-    branches: [ main ]
+    branches: [ uat ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/uat'
     strategy:
       matrix:
         node-version: [20.x]
@@ -26,7 +26,7 @@ jobs:
         with:
           switches: -avzr --delete --include=".env.sample" 
           path: ./dist/*
-          remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+          remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/uat
           remote_host: ${{ secrets.EC2_SSH_HOST }}
           remote_user: ${{ secrets.EC2_SSH_USER }}
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
