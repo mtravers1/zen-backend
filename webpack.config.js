@@ -1,7 +1,7 @@
 const webpack = require('webpack');
 const path = require('path');
 const fs = require('fs');
-const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+const TerserPlugin = require("terser-webpack-plugin");
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 let nodeModules = {};
 fs.readdirSync('node_modules')
@@ -24,28 +24,29 @@ module.exports = {
   },
   devtool: 'source-map',
   plugins: [
-    new UglifyJsPlugin({
-      cache: true,
+    new TerserPlugin({
       parallel: true,
-      uglifyOptions: {
+      terserOptions: {
         compress: false,
         ecma: 6,
-        mangle: true
-      },
-      sourceMap: true
+        mangle: true,
+        sourceMap: true
+      }
     }),
-    new CopyWebpackPlugin([
-      { from: './lib/mailer/templates/', to: './lib/mailer/templates/' }
-    ],{}),
-    new CopyWebpackPlugin([
-      { from: './views/', to: './views/' }
-    ],{}),
-    new CopyWebpackPlugin([
-        { from: './wwwroot/', to: './wwwroot/' }
-      ],{}),
-    new webpack.WatchIgnorePlugin([
-      /\.d\.ts$/
-    ])
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'lib/mailer/templates/', to: './lib/mailer/templates/' },
+        { from: 'ecosystem.config.js', to: './ecosystem.config.js' },
+        { from: 'scripts/', to: './scripts/' },
+        { from: 'package.json', to: '.' },
+        { from: '.env.sample', to: '.' },
+      ]
+    }),
+    new webpack.WatchIgnorePlugin({
+      paths: [
+        /\.d\.ts$/
+      ]
+    })
   ],
   resolve: {
     // Add `.ts` and `.tsx` as a resolvable extension.
