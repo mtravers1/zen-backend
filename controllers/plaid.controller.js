@@ -27,6 +27,7 @@ const getAccessToken = async (req, res) => {
     const accessToken = await plaidService.getAccessToken(publicToken);
     res.status(200).send(accessToken);
   } catch (error) {
+    console.log(error.message);
     res.status(500).send({ message: error.message });
   }
 };
@@ -50,8 +51,10 @@ const saveAccessToken = async (req, res) => {
 
 const getAccounts = async (req, res) => {
   try {
-    const { accessToken } = req.body;
-    const accounts = await plaidService.getAccounts(accessToken);
+    console.log("getAccounts");
+    const email = req.user.email;
+    console.log(email);
+    const accounts = await plaidService.getAccounts(email);
     res.status(200).send(accounts);
   } catch (error) {
     res.status(500).send({ message: error.message });

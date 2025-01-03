@@ -41,7 +41,7 @@ const getPublicToken = async (linkToken) => {
 };
 
 const getAccessToken = async (publicToken) => {
-  const response = plaidClient.itemPublicTokenExchange({
+  const response = await plaidClient.itemPublicTokenExchange({
     public_token: publicToken,
   });
   return response.data;
@@ -77,11 +77,22 @@ const getUserAccessTokens = async (email) => {
   return tokens;
 };
 
-const getAccounts = async (accessToken) => {
-  const response = await plaidClient.accountsGet({
-    access_token: accessToken,
-  });
-  return response.data;
+const getAccounts = async (email) => {
+  const tokens = await getUserAccessTokens(email);
+  const accounts = [];
+  for (const token of tokens) {
+    const response = await plaidClient.accountsGet({
+      access_token: token.accessToken,
+    });
+
+    for (const account of response.data.accounts) {
+      account.institutionId = response.data.item.institution_id;
+      accounts.push(account);
+    }
+  }
+  console.log(accounts);
+
+  return accounts;
 };
 
 const getBalance = async (email) => {
