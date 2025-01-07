@@ -23,7 +23,7 @@ jobs:
         run: npm run build
       - name: Replace environment variables
         run: |
-          sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'/g" .env.sample
+          sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000/g" .env.sample
           cp .env.example .env
       - name: rsync deployments
