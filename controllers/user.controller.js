@@ -1,6 +1,6 @@
-const _ = require('underscore');
-const permissionHelper = require('../lib/permissionHelper.js');
-const dataTableHelper = require('../lib/dataTableHelper.js');
+import _ from 'underscore';
+import * as permissionHelper from '../lib/permissionHelper.js';
+import * as dataTableHelper from '../lib/dataTableHelper.js';
 
 /**
  * Search by id

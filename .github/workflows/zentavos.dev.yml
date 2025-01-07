@@ -20,11 +20,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Build backend
-        run: npm run build      
+        run: npm run build
+      - name: Replace environment variables
+        run: |
+          sed -i 's/MONGODB_URI=.*/MONGODB_URI=\'mongodb://${{ secrets.MONGODB_URI_QA }}:27017\'/g' .env.sample
+          sed -i 's/APP_PORT=.*/APP_PORT=3000/g' .env.sample
+          cp .env.example .env
       - name: rsync deployments
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete --include=".env.sample" 
+          switches: -avzr --delete --include ".env"
           path: ./dist/*
           remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
           remote_host: ${{ secrets.EC2_SSH_HOST }}

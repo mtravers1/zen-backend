@@ -1,5 +1,5 @@
-const { Router } = require('express');
-const roleController = require('../controllers/role.controller.js');
+import { Router } from 'express';
+import * as roleController from '../controllers/role.controller.js';
 
 const router = Router();
 

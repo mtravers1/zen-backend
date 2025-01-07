@@ -1,6 +1,4 @@
-const { Schema: _Schema, Types, model } = require('mongoose');
-
-const Schema = _Schema;
+import { Schema, Types, model } from 'mongoose';
 
 const userRoleSchema = new Schema({
     id: {
