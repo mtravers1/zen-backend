@@ -24,10 +24,11 @@ jobs:
       - name: Replace environment variables
         run: |
           cd dist
+          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=dev|g" scripts/start_server.sh
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000|g" .env.sample
-          cp .env.sample .env
           sed -i -e "/\"type\"\:.*/d" package.json
+          cp .env.sample .env
           cd ..
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.1
@@ -49,6 +50,8 @@ jobs:
           # ssh-keyscan -H ${{ secrets.EC2_SSH_HOST }} >> ~/.ssh/known_hosts
           scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
           ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
-            chmod +x ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev/scripts/start_server.sh
+            cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+            chmod +x scripts/start_server.sh
+            ./scripts/start_server.sh
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
