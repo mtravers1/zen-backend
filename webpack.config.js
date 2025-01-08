@@ -40,6 +40,7 @@ export default {
         { from: 'scripts/', to: './scripts/' },
         { from: 'package.json', to: '.' },
         { from: '.env.sample', to: '.' },
+        { from: 'ServiceAccountKey.json', to: '.' },
       ],
     }),
     new webpack.WatchIgnorePlugin({

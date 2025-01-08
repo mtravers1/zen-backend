@@ -26,6 +26,7 @@ jobs:
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000|g" .env.sample
           cp .env.sample .env
+          sed -i -e "/\"type\"\:.*/d" package.json
       - name: rsync deployments
         uses: burnett01/rsync-deployments@7.0.1
         with:
