@@ -3,7 +3,8 @@ module.exports = {
         {
             name: "dev",
             script: "./index.js",
-            watch: true
+            watch: true,
+            node_args: "--env-file=.env"
         },
         {
             name: "testing",
