@@ -46,6 +46,7 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: SSH into EC2 instance
         run: |
+          ssh-keyscan -H ${{ secrets.EC2_SSH_HOST }} >> ~/.ssh/known_hosts
           scp -i private_key.pem ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
           ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
