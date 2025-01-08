@@ -23,11 +23,13 @@ jobs:
         run: npm run build
       - name: Replace environment variables
         run: |
+          cd dist
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000|g" .env.sample
           cp .env.sample .env
           sed -i -e "/\"type\"\:.*/d" package.json
-      - name: rsync deployments
+          cd ..
+      - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avzr --delete --include ".env"
@@ -36,7 +38,18 @@ jobs:
           remote_host: ${{ secrets.EC2_SSH_HOST }}
           remote_user: ${{ secrets.EC2_SSH_USER }}
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          rsh: ${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no "touch ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev/.env.test"
-          #   cd ~/dev
-          #   chmod +x ./scripts/start_server.sh
-          #   ./scripts/start_server.sh
+      - name: SSH config
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
+          chmod 600 private_key.pem # Set the appropriate permissions for the key file
+      - name: SSH into EC2 instance
+        run: |
+          scp -i private_key.pem ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+          ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
+            cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+            touch .env.test
+            pm2 restart dev
+          EOF
+          rm -f private_key.pem # Remove the private key file after use for security
