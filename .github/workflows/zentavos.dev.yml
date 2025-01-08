@@ -50,6 +50,7 @@ jobs:
           # ssh-keyscan -H ${{ secrets.EC2_SSH_HOST }} >> ~/.ssh/known_hosts
           scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
           ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
+            source ~/.nvm/nvm.sh
             cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
