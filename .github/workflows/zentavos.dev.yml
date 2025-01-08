@@ -27,6 +27,7 @@ jobs:
           sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=dev|g" scripts/start_server.sh
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000|g" .env.sample
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=\.\/ServiceAccountKey\.json|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           cd ..
@@ -45,9 +46,8 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
-      - name: SSH into EC2 instance
+      - name: Restart API service
         run: |
-          # ssh-keyscan -H ${{ secrets.EC2_SSH_HOST }} >> ~/.ssh/known_hosts
           scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
           ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
             source ~/.nvm/nvm.sh
