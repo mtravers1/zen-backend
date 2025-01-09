@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  DEPLOYMENT_NAME: dev
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,8 +27,9 @@ jobs:
       - name: Replace environment variables
         run: |
           cd dist
-          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=dev|g" scripts/start_server.sh
+          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
+          sed -i -e "s|MONGODB_DB\=.*|MONGODB_DB\=\'zentavos_$DEPLOYMENT_NAME\'|g" .env.sample
           sed -i -e "s|APP_PORT\=.*|APP_PORT\=3000|g" .env.sample
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=./ServiceAccountKey.json|g" .env.sample
           sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_DEV }}|g" .env.sample
@@ -38,7 +42,7 @@ jobs:
         with:
           switches: -avzr --delete --include ".env"
           path: ./dist/*
-          remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+          remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
           remote_host: ${{ secrets.EC2_SSH_HOST }}
           remote_user: ${{ secrets.EC2_SSH_USER }}
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -50,10 +54,10 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
           ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
             source ~/.nvm/nvm.sh
-            cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/dev
+            cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
           EOF
