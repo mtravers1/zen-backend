@@ -90,32 +90,34 @@ const getAccounts = async (email) => {
       accounts.push(account);
     }
   }
-  console.log(accounts);
 
   return accounts;
 };
 
 const getBalance = async (email) => {
-  const tokens = await getUserAccessTokens(email);
-  const balances = [];
-  for (const token of tokens) {
-    const response = await plaidClient.accountsBalanceGet({
-      access_token: token.accessToken,
-    });
-    const accounts = response.data.accounts;
-    for (const account of accounts) {
-      account.institutionId = token.institutionId;
-      balances.push(account);
+  try {
+    const tokens = await getUserAccessTokens(email);
+    const balances = [];
+    for (const token of tokens) {
+      const response = await plaidClient.accountsBalanceGet({
+        access_token: token.accessToken,
+      });
+      const accounts = response.data.accounts;
+      for (const account of accounts) {
+        account.institutionId = token.institutionId;
+        balances.push(account);
+      }
     }
-  }
 
-  return balances;
+    return balances;
+  } catch (error) {
+    console.log(error);
+  }
+  2;
 };
 
 const getInstitutions = async () => {
-  const response = await api.post("/institutions/get", {
-    client_id: plaidClientId,
-    secret: plaidSecret,
+  const response = await plaidClient.institutionsGet({
     count: 500,
     offset: 0,
     country_codes: ["US"],
