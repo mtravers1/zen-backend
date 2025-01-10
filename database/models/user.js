@@ -15,15 +15,18 @@ const userSchema = new Schema({
   },
   phone: {
     type: String,
-    required: true,
   },
   password: {
     type: String,
-    required: true,
   },
   deleted: {
     type: Boolean,
     default: false,
+  },
+  signinMethod: {
+    type: String,
+    enum: ["email", "google", "apple"],
+    default: "email",
   },
   createdAt: {
     type: Date,
