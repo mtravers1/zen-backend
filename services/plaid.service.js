@@ -1,12 +1,14 @@
-import AccessToken from "../database/models/accessToken.js";
-import User from "../database/models/user.js";
+import AccessToken from "../database/models/AccessToken.js";
+import User from "../database/models/User.js";
 import plaidClient from "../config/plaid.js";
 
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
 
 const createLinkToken = async (email) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({
+    "email.email": email,
+  });
   if (!user) {
     throw new Error("User not found");
   }
@@ -17,12 +19,14 @@ const createLinkToken = async (email) => {
     client_name: "Zentavos",
     country_codes: ["US"],
     redirect_uri: "https://mysite.com/universal-link/jump-to-my-app.html",
-    webhook: "https://webhook.site/8c9fdd11-2e63-4b46-ab25-d1a45242e08d",
+    webhook:
+      "https://webhook.site/#!/view/5cb2c921-fba0-4eb6-bc20-7ceff7736504",
     language: "en",
     user: {
       client_user_id: userId,
     },
     products: ["auth"],
+    required_if_supported_products: ["transactions"],
     hosted_link: {
       is_mobile_app: true,
       completion_redirect_uri: "myapp://hosted-link-complete",
@@ -48,14 +52,16 @@ const getAccessToken = async (publicToken) => {
 };
 
 const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({
+    "email.email": email,
+  });
   if (!user) {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
   const existingToken = await AccessToken.findOne({ userId, institutionId });
   if (existingToken) {
-    await AccessToken.findOneAndDelete({ userId, institutionId });
+    return existingToken;
   }
   const newToken = new AccessToken({
     userId,
@@ -68,7 +74,9 @@ const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
 };
 
 const getUserAccessTokens = async (email) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({
+    "email.email": email,
+  });
   if (!user) {
     throw new Error("User not found");
   }
@@ -77,43 +85,39 @@ const getUserAccessTokens = async (email) => {
   return tokens;
 };
 
-const getAccounts = async (email) => {
-  const tokens = await getUserAccessTokens(email);
-  const accounts = [];
-  for (const token of tokens) {
+const getAccounts = async (token) => {
+  try {
     const response = await plaidClient.accountsGet({
-      access_token: token.accessToken,
+      access_token: token,
     });
-
-    for (const account of response.data.accounts) {
-      account.institutionId = response.data.item.institution_id;
-      accounts.push(account);
-    }
+    console.log(response.data);
+    return response.data;
+  } catch (error) {
+    return [];
   }
-
-  return accounts;
 };
 
 const getBalance = async (email) => {
   try {
     const tokens = await getUserAccessTokens(email);
-    const balances = [];
-    for (const token of tokens) {
+    if (!tokens.length) return [];
+
+    const balancePromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsBalanceGet({
         access_token: token.accessToken,
       });
-      const accounts = response.data.accounts;
-      for (const account of accounts) {
-        account.institutionId = token.institutionId;
-        balances.push(account);
-      }
-    }
+      return response.data.accounts.map((account) => ({
+        ...account,
+        institutionId: token.institutionId,
+      }));
+    });
+    const balancesArray = await Promise.all(balancePromises);
+    const balances = balancesArray.flat();
 
     return balances;
   } catch (error) {
-    console.log(error);
+    return [];
   }
-  2;
 };
 
 const getInstitutions = async () => {
@@ -133,6 +137,23 @@ const getInstitutions = async () => {
   return institutions;
 };
 
+const getTransactions = async (email) => {
+  const tokens = await getUserAccessTokens(email);
+
+  const response = await plaidClient.transactionsSync({
+    access_token: tokens[0].accessToken,
+    count: 250,
+  });
+  return response.data;
+};
+
+const getCurrentCashflow = async (email) => {
+  const transactionsResponse = await getTransactions(email);
+  const transactions = transactionsResponse.added;
+  console.log(transactions);
+  return transactions;
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -141,6 +162,8 @@ const plaidService = {
   saveAccessToken,
   getBalance,
   getInstitutions,
+  getTransactions,
+  getCurrentCashflow,
 };
 
 export default plaidService;

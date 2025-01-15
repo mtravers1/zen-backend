@@ -10,5 +10,6 @@ router.get("/accounts", plaidController.getAccounts);
 router.post("/save-token", plaidController.saveAccessToken);
 router.post("/balance", plaidController.getBalance);
 router.get("/institutions", plaidController.getInstitutions);
+router.get("/transactions", plaidController.getTransactions);
 
 export default router;
