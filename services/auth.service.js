@@ -1,23 +1,32 @@
-import User from "../database/models/user.js";
+import User from "../database/models/User.js";
 import admin from "firebase-admin";
 import { encryptPassword, comparePassword } from "../lib/encrypt.js";
+import e from "express";
 
-const signUp = async (email, password, phone, role, method) => {
+const signUp = async (email, password, phone, role, method, authUid) => {
   try {
     const existingUser = await User.findOne({
-      email,
+      "email.email": email,
     });
 
     if (existingUser) {
       throw new Error("User already exists");
     }
 
+    const emailSchema = {
+      email,
+      //TODO: add email type to the schema
+      emailType: "personal",
+      isPrimary: true,
+    };
+
     if (method === "google" || method === "apple") {
       const user = new User({
-        email,
+        email: emailSchema,
         phone,
         role,
         signinMethod: method,
+        authUid,
       });
 
       await user.save();
@@ -28,22 +37,29 @@ const signUp = async (email, password, phone, role, method) => {
     const encryptedPassword = await encryptPassword(password);
 
     const user = new User({
-      email,
+      email: emailSchema,
       password: encryptedPassword,
       phone,
       role,
       signinMethod: method,
+      authUid,
     });
 
     await user.save();
+    console.log(user);
 
     return user;
-  } catch (error) {}
+  } catch (error) {
+    console.log(error);
+    throw new Error(error);
+  }
 };
 
 const signIn = async (email, password, method) => {
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      "email.email": email,
+    });
 
     if (!user) {
       throw new Error("User not found");
@@ -73,11 +89,14 @@ const signIn = async (email, password, method) => {
     return retrievedUser;
   } catch (error) {
     console.log("error in signin", error);
+    throw new Error(error);
   }
 };
 
 const checkEmail = async (email, method) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({
+    "email.email": email,
+  });
   if (!user) {
     throw new Error("User not found");
   }

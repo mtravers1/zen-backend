@@ -28,6 +28,7 @@ app.use(
     path: [
       "/api/auth/register",
       "/api/auth/login",
+      "/api/auth/check-email",
       "/api/auth/recoverypassword",
       "/api/_info/version",
       "/api/plaid/webhook",

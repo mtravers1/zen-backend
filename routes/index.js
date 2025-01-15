@@ -3,6 +3,7 @@ import infoRouter from "./app.router.js";
 import authRouter from "./auth.router.js";
 import plaidRouter from "./plaid.router.js";
 import webhookRouter from "./webhook.router.js";
+import accountRouter from "./accounts.router.js";
 
 const router = Router();
 
@@ -11,6 +12,7 @@ router.use("/_info", infoRouter);
 router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);
 router.use("/webhook", webhookRouter);
+router.use("/account", accountRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));

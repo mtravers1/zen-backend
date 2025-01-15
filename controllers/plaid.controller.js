@@ -51,10 +51,9 @@ const saveAccessToken = async (req, res) => {
 
 const getAccounts = async (req, res) => {
   try {
-    console.log("getAccounts");
-    const email = req.user.email;
-    console.log(email);
-    const accounts = await plaidService.getAccounts(email);
+    const { token } = req.body;
+
+    const accounts = await plaidService.getAccounts(token);
     res.status(200).send(accounts);
   } catch (error) {
     res.status(500).send({ message: error.message });
@@ -81,6 +80,17 @@ const getInstitutions = async (req, res) => {
   }
 };
 
+const getTransactions = async (req, res) => {
+  try {
+    const transactions = await plaidService.getTransactions(req.user.email);
+
+    res.status(200).send(transactions);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const plaidController = {
   createLinkToken,
   getPublicToken,
@@ -89,6 +99,7 @@ const plaidController = {
   saveAccessToken,
   getBalance,
   getInstitutions,
+  getTransactions,
 };
 
 export default plaidController;

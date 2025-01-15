@@ -1,9 +1,10 @@
 import authService from "../services/auth.service.js";
 
 const signUp = async (req, res) => {
-  const { email, password, phone, role, method } = req.body;
+  const { email, password, phone, role, method, authUid } = req.body;
+  console.log(req.body);
   try {
-    await authService.signUp(email, password, phone, role, method);
+    await authService.signUp(email, password, phone, role, method, authUid);
     res.status(201).send({
       email,
       phone,
@@ -32,8 +33,10 @@ const signIn = async (req, res) => {
 
 const checkEmail = async (req, res) => {
   const { email, method } = req.body;
+
   try {
     const user = await authService.checkEmail(email, method);
+    console.log(user);
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {
