@@ -1,7 +1,5 @@
 import User from "../database/models/User.js";
-import admin from "firebase-admin";
 import { encryptPassword, comparePassword } from "../lib/encrypt.js";
-import e from "express";
 
 const signUp = async (email, password, phone, role, method, authUid) => {
   try {

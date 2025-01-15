@@ -1,7 +1,7 @@
 import plaidService from "./plaid.service.js";
-import PlaidAccount from "../database/models/plaidAccount.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
-import Transaction from "../database/models/transaction.js";
+import Transaction from "../database/models/Transaction.js";
 
 const addAccount = async (accessToken, email) => {
   const user = await User.findOne({
