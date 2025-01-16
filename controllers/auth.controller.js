@@ -2,7 +2,6 @@ import authService from "../services/auth.service.js";
 
 const signUp = async (req, res) => {
   const { email, password, phone, role, method, authUid } = req.body;
-  console.log(req.body);
   try {
     await authService.signUp(email, password, phone, role, method, authUid);
     res.status(201).send({

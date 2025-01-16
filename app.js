@@ -26,8 +26,8 @@ app.use(cookieParser());
 app.use(
   firebaseAuth.unless({
     path: [
-      "/api/auth/register",
-      "/api/auth/login",
+      "/api/auth/signup",
+      "/api/auth/signin",
       "/api/auth/check-email",
       "/api/auth/recoverypassword",
       "/api/_info/version",
