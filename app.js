@@ -31,7 +31,7 @@ app.use(
       "/api/auth/check-email",
       "/api/auth/recoverypassword",
       "/api/_info/version",
-      "/api/plaid/webhook",
+      "/api/webhook/plaid",
       "api/plaid/institutions",
     ],
   })
