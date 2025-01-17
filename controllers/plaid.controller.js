@@ -3,7 +3,8 @@ import plaidService from "../services/plaid.service.js";
 const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
-    const linkToken = await plaidService.createLinkToken(email);
+    const { isAndroid } = req.body;
+    const linkToken = await plaidService.createLinkToken(email, isAndroid);
     res.status(200).send({ linkToken });
   } catch (error) {
     console.log(error.message);

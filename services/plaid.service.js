@@ -5,7 +5,7 @@ import plaidClient from "../config/plaid.js";
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
 
-const createLinkToken = async (email) => {
+const createLinkToken = async (email, isAndroid) => {
   const user = await User.findOne({
     "email.email": email,
   });
@@ -18,7 +18,10 @@ const createLinkToken = async (email) => {
     secret: plaidSecret,
     client_name: "Zentavos",
     country_codes: ["US"],
-    redirect_uri: "https://mysite.com/universal-link/jump-to-my-app.html",
+    android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+    redirect_uri: !isAndroid
+      ? "https://mysite.com/universal-link/jump-to-my-app.html"
+      : null,
     webhook:
       "https://webhook.site/#!/view/5cb2c921-fba0-4eb6-bc20-7ceff7736504",
     language: "en",
@@ -31,7 +34,6 @@ const createLinkToken = async (email) => {
       is_mobile_app: true,
       completion_redirect_uri: "myapp://hosted-link-complete",
     },
-    // android_package_name: "com.zentavos.mobile",
   };
   const response = await plaidClient.linkTokenCreate(plaidRequest);
   return response.data;
