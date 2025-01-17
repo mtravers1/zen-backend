@@ -31,7 +31,7 @@ const createLinkToken = async (email, isAndroid) => {
     products: ["auth"],
     required_if_supported_products: ["transactions"],
     hosted_link: {
-      is_mobile_app: true,
+      // is_mobile_app: true,
       completion_redirect_uri: "myapp://hosted-link-complete",
     },
   };
