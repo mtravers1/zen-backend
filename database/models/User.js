@@ -48,7 +48,7 @@ const userSchema = new Schema({
     required: true,
     enum: ["business_owner", "individual"],
   },
-  email: emailSchema,
+  email: [emailSchema],
   authUid: {
     type: String,
     required: true,
