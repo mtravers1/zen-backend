@@ -138,6 +138,10 @@ const getAccounts = async (email) => {
     throw new Error("User not found");
   }
 
+  if (!user.plaidAccounts.length) {
+    return [];
+  }
+
   const accounts = user.plaidAccounts;
   return accounts;
 };

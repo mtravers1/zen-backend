@@ -1,6 +1,13 @@
 import User from "../database/models/User.js";
 import { encryptPassword, comparePassword } from "../lib/encrypt.js";
 
+const own = async (email) => {
+  const user = await User.findOne({
+    "email.email": email,
+  }).select("-password");
+  return user;
+};
+
 const signUp = async (email, password, phone, role, method, authUid) => {
   try {
     const existingUser = await User.findOne({
@@ -20,7 +27,7 @@ const signUp = async (email, password, phone, role, method, authUid) => {
 
     if (method === "google" || method === "apple") {
       const user = new User({
-        email: emailSchema,
+        email: [emailSchema],
         phone,
         role,
         signinMethod: method,
@@ -109,6 +116,7 @@ const authService = {
   signUp,
   signIn,
   checkEmail,
+  own,
 };
 
 export default authService;

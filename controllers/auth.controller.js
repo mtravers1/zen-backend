@@ -1,5 +1,15 @@
 import authService from "../services/auth.service.js";
 
+const own = async (req, res) => {
+  const { email } = req.user;
+  try {
+    const user = await authService.own(email);
+    res.status(200).send(user);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+};
+
 const signUp = async (req, res) => {
   const { email, password, phone, role, method, authUid } = req.body;
   try {
@@ -49,6 +59,7 @@ const checkEmail = async (req, res) => {
 };
 
 const authController = {
+  own,
   signUp,
   signIn,
   checkEmail,
