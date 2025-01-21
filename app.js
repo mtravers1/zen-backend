@@ -32,7 +32,7 @@ app.use(
       "/api/auth/recoverypassword",
       "/api/_info/version",
       "/api/webhook/plaid",
-      "api/plaid/institutions",
+      "/api/plaid/institutions",
     ],
   })
 );
