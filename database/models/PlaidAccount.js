@@ -38,9 +38,11 @@ const plaidAccountSchema = new Schema({
   image_url: {
     type: String,
   },
-  balance: {
+  currentBalance: {
     type: Number,
-    required: true,
+  },
+  availableBalance: {
+    type: Number,
   },
   currency: {
     type: String,

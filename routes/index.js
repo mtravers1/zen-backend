@@ -8,6 +8,7 @@ import accountRouter from "./accounts.router.js";
 const router = Router();
 
 // Load different routes
+
 router.use("/_info", infoRouter);
 router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);

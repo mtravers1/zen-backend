@@ -51,6 +51,10 @@ const transactionSchema = new Schema({
   transactionCode: {
     type: Number,
   },
+  isInternal: {
+    type: Boolean,
+    default: false,
+  },
   tags: {
     type: [String],
   },

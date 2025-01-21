@@ -1,6 +1,8 @@
 import AccessToken from "../database/models/AccessToken.js";
 import User from "../database/models/User.js";
 import plaidClient from "../config/plaid.js";
+import Transaction from "../database/models/Transaction.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
 
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
@@ -22,8 +24,9 @@ const createLinkToken = async (email, isAndroid) => {
     redirect_uri: !isAndroid
       ? "https://mysite.com/universal-link/jump-to-my-app.html"
       : null,
+    //TODO: change this to fit every environment
     webhook:
-      "https://webhook.site/#!/view/5cb2c921-fba0-4eb6-bc20-7ceff7736504",
+      "https://6c35-2806-103e-15-3cd2-7977-6a2b-4518-875.ngrok-free.app/api/webhook/plaid",
     language: "en",
     user: {
       client_user_id: userId,
@@ -87,16 +90,37 @@ const getUserAccessTokens = async (email) => {
   return tokens;
 };
 
-const getAccounts = async (token) => {
+const getAccounts = async (email) => {
   try {
-    const response = await plaidClient.accountsGet({
-      access_token: token,
+    const tokens = await getUserAccessTokens(email);
+    if (!tokens.length) return [];
+
+    const accountsPromises = tokens.map(async (token) => {
+      const response = await plaidClient.accountsGet({
+        access_token: token.accessToken,
+      });
+      console.log(response.data);
+      return response.data.accounts.map((account) => ({
+        ...account,
+        institutionId: token.institutionId,
+      }));
     });
-    console.log(response.data);
-    return response.data;
+
+    const accountsArray = await Promise.all(accountsPromises);
+
+    const accounts = accountsArray.flat();
+
+    return accounts;
   } catch (error) {
     return [];
   }
+};
+
+const getAccountsWithAccessToken = async (accessToken) => {
+  const response = await plaidClient.accountsGet({
+    access_token: accessToken,
+  });
+  return response.data;
 };
 
 const getBalance = async (email) => {
@@ -141,12 +165,88 @@ const getInstitutions = async () => {
 
 const getTransactions = async (email) => {
   const tokens = await getUserAccessTokens(email);
+  if (!tokens.length) return [];
 
+  const transactionsPromises = tokens.map(async (token) => {
+    const response = await plaidClient.transactionsSync({
+      access_token: token.accessToken,
+    });
+    return response.data.added;
+  });
+
+  const transactionsArray = await Promise.all(transactionsPromises);
+  const transactions = transactionsArray.flat();
+
+  return transactions;
+};
+
+const getTransactionsWithAccessToken = async (accessToken) => {
   const response = await plaidClient.transactionsSync({
-    access_token: tokens[0].accessToken,
-    count: 250,
+    access_token: accessToken,
   });
   return response.data;
+};
+
+const updateTransactions = async (item) => {
+  const access = await AccessToken.findOne({ itemId: item });
+  if (!access) {
+    throw new Error("Access token not found");
+  }
+  const accessToken = access.accessToken;
+  const response = await plaidClient.transactionsSync({
+    access_token: accessToken,
+    count: 250,
+  });
+  const transactions = response.data.added;
+  const nextCursor = response.data.next_cursor;
+
+  const transactionsByAccount = {};
+
+  for (let transaction of transactions) {
+    const existingTransaction = await Transaction.findOne({
+      transaction_id: transaction.transaction_id,
+    });
+    if (existingTransaction) continue;
+
+    const merchant = {
+      merchantName: transaction.merchant_name,
+      name: transaction.name,
+      merchantCategory: transaction.category?.[0],
+      website: transaction.website,
+      logo: transaction.logo_url,
+    };
+
+    const newTransaction = new Transaction({
+      plaidTransactionId: transaction.transaction_id,
+      plaidAccountId: transaction.account_id,
+      transactionDate: transaction.date,
+      amount: transaction.amount,
+      currency: transaction.iso_currency_code,
+      notes: null,
+      merchant: merchant,
+      description: null,
+      transactionCode: transaction.transaction_code,
+      tags: transaction.category,
+    });
+
+    await newTransaction.save();
+
+    if (!transactionsByAccount[transaction.account_id]) {
+      transactionsByAccount[transaction.account_id] = [];
+    }
+
+    transactionsByAccount[transaction.account_id].push(newTransaction._id);
+  }
+
+  for (const accountId in transactionsByAccount) {
+    const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+    if (!account) continue;
+    account.transactions = transactionsByAccount[accountId];
+    account.nextCursor = nextCursor;
+    await account.save();
+  }
+
+  return transactions;
 };
 
 const getCurrentCashflow = async (email) => {
@@ -154,6 +254,53 @@ const getCurrentCashflow = async (email) => {
   const transactions = transactionsResponse.added;
   console.log(transactions);
   return transactions;
+};
+
+const detectInternalTransfers = async (email) => {
+  const transactions = await getTransactions(email);
+
+  const transfers = [];
+  const groupedByAmount = new Map();
+
+  transactions
+    .filter((txn) =>
+      ["transfer", "internal account transfer", "payroll"].includes(
+        txn.category?.[0]?.toLowerCase()
+      )
+    )
+    .forEach((txn) => {
+      const key = Math.abs(txn.amount);
+      if (!groupedByAmount.has(key)) {
+        groupedByAmount.set(key, []);
+      }
+      groupedByAmount.get(key).push(txn);
+    });
+
+  groupedByAmount.forEach((txns, amount) => {
+    for (let i = 0; i < txns.length; i++) {
+      const txn1 = txns[i];
+      for (let j = i + 1; j < txns.length; j++) {
+        const txn2 = txns[j];
+
+        const isOppositeAmount = txn1.amount === -txn2.amount;
+        const isDifferentAccount = txn1.account_id !== txn2.account_id;
+        const isDateClose =
+          Math.abs(new Date(txn1.date) - new Date(txn2.date)) <=
+          2 * 24 * 60 * 60 * 1000;
+
+        if (isOppositeAmount && isDifferentAccount && isDateClose) {
+          if (!transfers.includes(txn1.transaction_id)) {
+            transfers.push(txn1.transaction_id);
+          }
+          if (!transfers.includes(txn2.transaction_id)) {
+            transfers.push(txn2.transaction_id);
+          }
+        }
+      }
+    }
+  });
+
+  return transfers;
 };
 
 const plaidService = {
@@ -166,6 +313,12 @@ const plaidService = {
   getInstitutions,
   getTransactions,
   getCurrentCashflow,
+  getUserAccessTokens,
+  updateTransactions,
+  getAccounts,
+  detectInternalTransfers,
+  getAccountsWithAccessToken,
+  getTransactionsWithAccessToken,
 };
 
 export default plaidService;
