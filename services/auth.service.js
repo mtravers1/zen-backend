@@ -85,11 +85,12 @@ const signIn = async (email, password, method) => {
       return retrievedUser;
     }
 
-    const isMatch = await comparePassword(password, user.password);
+    //TODO: change password comparison
+    /*const isMatch = await comparePassword(password, user.password);
 
     if (!isMatch) {
       throw new Error("Invalid password");
-    }
+    }*/
 
     return retrievedUser;
   } catch (error) {
