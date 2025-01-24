@@ -8,7 +8,20 @@ const own = async (email) => {
   return user;
 };
 
-const signUp = async (email, password, phone, role, method, authUid) => {
+const signUp = async (
+  email,
+  password,
+  phone,
+  role,
+  method,
+  authUid,
+  photoUrl,
+  firstName,
+  lastName,
+  prefix,
+  suffix,
+  middleName
+) => {
   try {
     const existingUser = await User.findOne({
       "email.email": email,
@@ -25,6 +38,14 @@ const signUp = async (email, password, phone, role, method, authUid) => {
       isPrimary: true,
     };
 
+    const nameSchema = {
+      firstName,
+      lastName,
+      prefix,
+      suffix,
+      middleName,
+    };
+
     if (method === "google" || method === "apple") {
       const user = new User({
         email: [emailSchema],
@@ -32,6 +53,8 @@ const signUp = async (email, password, phone, role, method, authUid) => {
         role,
         signinMethod: method,
         authUid,
+        profilePhotoUrl: photoUrl,
+        name: nameSchema,
       });
 
       await user.save();
@@ -48,6 +71,8 @@ const signUp = async (email, password, phone, role, method, authUid) => {
       role,
       signinMethod: method,
       authUid,
+      profilePhotoUrl: photoUrl,
+      name: nameSchema,
     });
 
     await user.save();
@@ -55,7 +80,8 @@ const signUp = async (email, password, phone, role, method, authUid) => {
 
     return user;
   } catch (error) {
-    console.log(error);
+    console.log("error in signup", error);
+
     throw new Error(error);
   }
 };
@@ -70,27 +96,14 @@ const signIn = async (email, password, method) => {
       throw new Error("User not found");
     }
 
-    if (user.signinMethod !== method) {
-      throw new Error("Invalid method");
-    }
-
     const retrievedUser = {
       id: user._id,
       email: user.email,
       phone: user.phone,
       role: user.role,
+      profilePhotoUrl: user.profilePhotoUrl,
+      name: user.name,
     };
-
-    if (method === "google" || method === "apple") {
-      return retrievedUser;
-    }
-
-    //TODO: change password comparison
-    /*const isMatch = await comparePassword(password, user.password);
-
-    if (!isMatch) {
-      throw new Error("Invalid password");
-    }*/
 
     return retrievedUser;
   } catch (error) {
@@ -105,10 +118,6 @@ const checkEmail = async (email, method) => {
   });
   if (!user) {
     throw new Error("User not found");
-  }
-  const signinMethod = user.signinMethod;
-  if (signinMethod !== method) {
-    throw new Error("Invalid method");
   }
   return user;
 };

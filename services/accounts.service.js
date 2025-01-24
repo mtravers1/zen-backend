@@ -147,7 +147,7 @@ const getAccounts = async (email) => {
   const user = await User.findOne({
     "email.email": email,
   })
-    .populate("plaidAccounts")
+    .populate("plaidAccounts", "-transactions")
     .exec();
   if (!user) {
     throw new Error("User not found");
@@ -351,10 +351,64 @@ const getCashFlows = async (email) => {
   };
 };
 
+const getUserTransactions = async (email, page = 1, limit = 10) => {
+  const user = await User.findOne({ "email.email": email })
+    .populate("plaidAccounts")
+    .exec();
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  let totalTransactions = 0;
+  const allTransactions = [];
+
+  for (const plaidAccount of user.plaidAccounts) {
+    totalTransactions += await Transaction.countDocuments({
+      plaidAccountId: plaidAccount.plaid_account_id,
+    });
+
+    const transactions = await Transaction.find({
+      plaidAccountId: plaidAccount.plaid_account_id,
+    })
+      .sort({ transactionDate: -1 })
+      .lean();
+
+    transactions.forEach((transaction) => {
+      transaction.institutionName = plaidAccount.institution_name;
+      transaction.institutionId = plaidAccount.institution_id;
+    });
+
+    allTransactions.push(...transactions);
+  }
+
+  return allTransactions;
+};
+
+const getTransactionsByAccount = async (accountId) => {
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+    .populate("transactions")
+    .lean()
+    .exec();
+
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  account.transactions.forEach((transaction) => {
+    transaction.institutionName = account.institution_name;
+    transaction.institutionId = account.institution_id;
+  });
+
+  return account.transactions;
+};
+
 const accountsService = {
   addAccount,
   getAccounts,
   getCashFlows,
+  getUserTransactions,
+  getTransactionsByAccount,
 };
 
 export default accountsService;

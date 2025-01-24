@@ -11,9 +11,35 @@ const own = async (req, res) => {
 };
 
 const signUp = async (req, res) => {
-  const { email, password, phone, role, method, authUid } = req.body;
+  const {
+    email,
+    password,
+    phone,
+    role,
+    method,
+    authUid,
+    photoUrl,
+    firstName,
+    lastName,
+    prefix,
+    suffix,
+    middleName,
+  } = req.body;
   try {
-    await authService.signUp(email, password, phone, role, method, authUid);
+    await authService.signUp(
+      email,
+      password,
+      phone,
+      role,
+      method,
+      authUid,
+      photoUrl,
+      firstName,
+      lastName,
+      prefix,
+      suffix,
+      middleName
+    );
     res.status(201).send({
       email,
       phone,
