@@ -42,6 +42,25 @@ const emailSchema = new Schema({
   },
 });
 
+//TODO: first and last name should be required but apple sign in does not provide this information always
+const nameSchema = new Schema({
+  prefix: {
+    type: String,
+  },
+  firstName: {
+    type: String,
+  },
+  middleName: {
+    type: String,
+  },
+  lastName: {
+    type: String,
+  },
+  suffix: {
+    type: String,
+  },
+});
+
 const userSchema = new Schema({
   role: {
     type: String,
@@ -53,6 +72,7 @@ const userSchema = new Schema({
     type: String,
     required: true,
   },
+  name: nameSchema,
   phone: {
     type: String,
   },

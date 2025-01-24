@@ -32,10 +32,34 @@ const getCashFlows = async (req, res) => {
   }
 };
 
+const getUserTransactions = async (req, res) => {
+  try {
+    const email = req.user.email;
+    const transactions = await accountsService.getUserTransactions(email);
+    res.status(200).send(transactions);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+};
+
+const getTransactionsByAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const transactions = await accountsService.getTransactionsByAccount(
+      accountId
+    );
+    res.status(200).send(transactions);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const accountsController = {
   addAccount,
   getAccounts,
   getCashFlows,
+  getUserTransactions,
+  getTransactionsByAccount,
 };
 
 export default accountsController;
