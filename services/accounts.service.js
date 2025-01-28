@@ -63,15 +63,6 @@ const addAccount = async (accessToken, email) => {
     });
 
     userAccounts.push(newAccount._id);
-    const numAccounts = {
-      banking: bankingAccounts,
-      credit: creditAccounts,
-      investment: investmentAccounts,
-      loan: loanAccounts,
-      other: otherAccounts,
-    };
-
-    user.numAccounts = numAccounts;
 
     await user.save();
     await newAccount.save();

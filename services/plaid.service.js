@@ -6,6 +6,7 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
+const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 
 const createLinkToken = async (email, isAndroid) => {
   const user = await User.findOne({
@@ -25,8 +26,7 @@ const createLinkToken = async (email, isAndroid) => {
       ? "https://mysite.com/universal-link/jump-to-my-app.html"
       : null,
     //TODO: change this to fit every environment
-    webhook:
-      "https://6c35-2806-103e-15-3cd2-7977-6a2b-4518-875.ngrok-free.app/api/webhook/plaid",
+    webhook: webhookUrl,
     language: "en",
     user: {
       client_user_id: userId,

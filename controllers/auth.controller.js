@@ -11,38 +11,12 @@ const own = async (req, res) => {
 };
 
 const signUp = async (req, res) => {
-  const {
-    email,
-    password,
-    phone,
-    role,
-    method,
-    authUid,
-    photoUrl,
-    firstName,
-    lastName,
-    prefix,
-    suffix,
-    middleName,
-  } = req.body;
+  const { data } = req.body;
   try {
-    await authService.signUp(
-      email,
-      password,
-      phone,
-      role,
-      method,
-      authUid,
-      photoUrl,
-      firstName,
-      lastName,
-      prefix,
-      suffix,
-      middleName
-    );
+    await authService.signUp(data);
     res.status(201).send({
-      email,
-      phone,
+      email: data.email,
+      phone: data.phone,
     });
   } catch (error) {
     res.status(500).send(error.message);
@@ -52,11 +26,7 @@ const signUp = async (req, res) => {
 const signIn = async (req, res) => {
   const { email, password, method } = req.body;
   try {
-    const user = await authService.signIn(
-      email.toLowerCase(),
-      password,
-      method
-    );
+    const user = await authService.signIn(email.toLowerCase());
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {
