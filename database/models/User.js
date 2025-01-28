@@ -61,6 +61,37 @@ const nameSchema = new Schema({
   },
 });
 
+const phoneNumbersSchema = new Schema({
+  phone: {
+    type: String,
+    required: true,
+  },
+  phoneType: {
+    type: String,
+  },
+});
+
+const addressSchema = new Schema({
+  street: {
+    type: String,
+  },
+  city: {
+    type: String,
+  },
+  state: {
+    type: String,
+  },
+  postalCode: {
+    type: String,
+  },
+  country: {
+    type: String,
+  },
+  type: {
+    type: String,
+  },
+});
+
 const userSchema = new Schema({
   role: {
     type: String,
@@ -73,20 +104,10 @@ const userSchema = new Schema({
     required: true,
   },
   name: nameSchema,
-  phone: {
-    type: String,
-  },
-  password: {
-    type: String,
-  },
+  phones: [phoneNumbersSchema],
   deleted: {
     type: Boolean,
     default: false,
-  },
-  signinMethod: {
-    type: String,
-    enum: ["email", "google", "apple"],
-    default: "email",
   },
   plaidAccounts: [
     {
@@ -94,7 +115,9 @@ const userSchema = new Schema({
       ref: "PlaidAccount",
     },
   ],
-  numAccounts: numAccountsSchema,
+  numAccounts: {
+    type: Number,
+  },
   profilePhotoUrl: {
     type: String,
   },
@@ -104,6 +127,27 @@ const userSchema = new Schema({
   annualIncome: {
     type: Number,
   },
+  maritalStatus: {
+    type: String,
+    enum: [
+      "single",
+      "married",
+      "divorced",
+      "widowed",
+      "domestic_partner",
+      "other",
+    ],
+  },
+  occupation: {
+    type: String,
+  },
+  encryptedSSN: {
+    type: String,
+  },
+  dependents: {
+    type: Number,
+  },
+  address: [addressSchema],
   createdAt: {
     type: Date,
     default: Date.now,

@@ -1,5 +1,4 @@
 import User from "../database/models/User.js";
-import { encryptPassword, comparePassword } from "../lib/encrypt.js";
 
 const own = async (email) => {
   const user = await User.findOne({
@@ -8,23 +7,10 @@ const own = async (email) => {
   return user;
 };
 
-const signUp = async (
-  email,
-  password,
-  phone,
-  role,
-  method,
-  authUid,
-  photoUrl,
-  firstName,
-  lastName,
-  prefix,
-  suffix,
-  middleName
-) => {
+const signUp = async (data) => {
   try {
     const existingUser = await User.findOne({
-      "email.email": email,
+      "email.email": data.email,
     });
 
     if (existingUser) {
@@ -32,51 +18,49 @@ const signUp = async (
     }
 
     const emailSchema = {
-      email,
+      email: data.email,
       //TODO: add email type to the schema
       emailType: "personal",
       isPrimary: true,
     };
 
     const nameSchema = {
-      firstName,
-      lastName,
-      prefix,
-      suffix,
-      middleName,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      prefix: data.prefix,
+      suffix: data.suffix,
+      middleName: data.middleName,
     };
 
-    if (method === "google" || method === "apple") {
-      const user = new User({
-        email: [emailSchema],
-        phone,
-        role,
-        signinMethod: method,
-        authUid,
-        profilePhotoUrl: photoUrl,
-        name: nameSchema,
-      });
+    const phoneNumbersSchema = {
+      phone: data.phone,
+    };
 
-      await user.save();
-
-      return user;
-    }
-
-    const encryptedPassword = await encryptPassword(password);
+    const addressSchema = {
+      street: data.address1,
+      city: data.city,
+      state: data.state,
+      postalCode: data.zip,
+      country: data.country,
+    };
 
     const user = new User({
-      email: emailSchema,
-      password: encryptedPassword,
-      phone,
-      role,
-      signinMethod: method,
-      authUid,
-      profilePhotoUrl: photoUrl,
+      email: [emailSchema],
+      phones: [phoneNumbersSchema],
+      role: data.role,
+      authUid: data.authUid,
+      profilePhotoUrl: data.photoUrl,
+      numAccounts: data.numAccounts,
       name: nameSchema,
+      maritalStatus: data.maritalStatus,
+      address: [addressSchema],
+      dateOfBirth: Date.parse(data.dob),
+      occupation: data.occupation,
+      annualIncome: data.annualIncome,
+      ssn: data.ssn,
     });
 
     await user.save();
-    console.log(user);
 
     return user;
   } catch (error) {
@@ -86,7 +70,7 @@ const signUp = async (
   }
 };
 
-const signIn = async (email, password, method) => {
+const signIn = async (email) => {
   try {
     const user = await User.findOne({
       "email.email": email,
