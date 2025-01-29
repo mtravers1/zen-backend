@@ -9,6 +9,7 @@ on:
 
 env:
   DEPLOYMENT_NAME: testing
+  APP_PORT: 3001
 
 jobs:
   build:
@@ -30,10 +31,11 @@ jobs:
           sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_QA }}\:27017\'|g" .env.sample
           sed -i -e "s|MONGODB_DB\=.*|MONGODB_DB\=\'zentavos_$DEPLOYMENT_NAME\'|g" .env.sample
-          sed -i -e "s|APP_PORT\=.*|APP_PORT\=3001|g" .env.sample
+          sed -i -e "s|APP_PORT\=.*|APP_PORT\=$APP_PORT|g" .env.sample
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=./ServiceAccountKey.json|g" .env.sample
           sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_DEV }}|g" .env.sample
           sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_DEV }}|g" .env.sample
+          sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_TESTING }}|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           cd ..
