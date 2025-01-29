@@ -64,7 +64,6 @@ const nameSchema = new Schema({
 const phoneNumbersSchema = new Schema({
   phone: {
     type: String,
-    required: true,
   },
   phoneType: {
     type: String,

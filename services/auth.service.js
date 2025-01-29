@@ -54,7 +54,7 @@ const signUp = async (data) => {
       name: nameSchema,
       maritalStatus: data.maritalStatus,
       address: [addressSchema],
-      dateOfBirth: Date.parse(data.dob),
+      dateOfBirth: data.dob ? Date.parse(data.dob) : data.dob,
       occupation: data.occupation,
       annualIncome: data.annualIncome,
       ssn: data.ssn,
