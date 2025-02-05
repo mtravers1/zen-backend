@@ -1,52 +1,110 @@
 import User from "../database/models/User.js";
 import Business from "../database/models/Businesses.js";
 
-const addBusinesses = async (businessData, email) => {
-
+const addBusinesses = async (businessList, email) => {
   const user = await User.findOne({ "email.email": email });
 
   if (!user) {
     throw new Error("User not found");
   }
 
+  console.log(user);
+
   const userId = user._id.toString();
 
-  const newBusiness = new Business({
-    user_id: userId,
-    name: businessData.name,
-    legal_name: businessData.legal_name,
-    encrypted_ein: businessData.encrypted_ein,
-    business_desc: businessData.business_desc,
-    business_code: businessData.business_code,
-    entity_type: businessData.entity_type,
-    addresses: businessData.addresses || [],
-    website: businessData.website,
-    phone_numbers: businessData.phone_numbers || [],
-    industry_desc: businessData.industry_desc,
-    plaid_account_ids: businessData.plaid_account_ids || [],
-    document_ids: businessData.document_ids || [],
-    goal_ids: businessData.goal_ids || [],
-    subsidiaries: businessData.subsidiaries || [],
-    business_locations: businessData.business_locations || [],
-    accounting_info: businessData.accounting_info || {},
-    fiscal_year_start: businessData.fiscal_year_start,
-    tax_information: businessData.tax_information || {},
-    payroll_details: businessData.payroll_details || {},
-    formation_date: businessData.formation_date,
-    business_hours: businessData.business_hours || [],
-    timezone: businessData.timezone,
-    created_at: new Date(),
-    updated_at: new Date(),
-  });
+  console.log(userId);
 
-  await newBusiness.save();
+  for (const businessData of businessList) {
+    const ownership = {
+      ownership: businessData.ownership,
+    };
+    const newBusiness = new Business({
+      userId: userId,
+      name: businessData.name,
+      industryDesc: businessData.industry,
+      ownership: ownership,
+      businessLogo: businessData.businessLogo,
+      numAccounts: businessData.accounts,
+    });
 
-  return newBusiness;
+    await newBusiness.save();
+  }
+
+  return { message: "Businesses added successfully" };
 };
 
+const getUserProfiles = async (email) => {
+  const user = await User.findOne({ "email.email": email });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const profiles = [];
+
+  const personalProfile = {
+    id: user._id,
+    name: user.name.firstName,
+    photo: user.profilePhotoUrl,
+    plaidAccounts: user.plaidAccounts,
+    isPersonal: true,
+  };
+
+  profiles.push(personalProfile);
+
+  const userId = user._id.toString();
+
+  const businesses = await Business.find({ userId });
+
+  if (!businesses.length) {
+    return profiles;
+  }
+
+  for (const business of businesses) {
+    const businessProfile = {
+      id: business._id,
+      name: business.name,
+      photo: business.businessLogo,
+      plaidAccounts: business.plaidAccountIds,
+      isPersonal: false,
+    };
+    profiles.push(businessProfile);
+
+    for (const account of business.plaidAccountIds) {
+      const index = personalProfile.plaidAccounts.indexOf(account);
+      if (index > -1) {
+        personalProfile.plaidAccounts.splice(index, 1);
+      }
+    }
+  }
+
+  return profiles;
+};
+
+const assignsAccountsToProfiles = async (data, email) => {
+  const profiles = await getUserProfiles(email);
+  console.log(data);
+  for (const profile of profiles) {
+    if (profile.isPersonal) {
+      continue;
+    }
+    const business = await Business.findById(profile.id);
+
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    business.plaidAccountIds = data[profile.id];
+    await business.save();
+  }
+
+  return { message: "Accounts assigned successfully" };
+};
 
 const businessService = {
-    addBusinesses
+  addBusinesses,
+  getUserProfiles,
+  assignsAccountsToProfiles,
 };
 
 export default businessService;

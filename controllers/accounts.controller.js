@@ -14,8 +14,18 @@ const addAccount = async (req, res) => {
 
 const getAccounts = async (req, res) => {
   try {
+    const { profile } = req.body;
+    const accounts = await accountsService.getAccounts(profile);
+    res.status(200).send(accounts);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+};
+
+const getAllUserAccounts = async (req, res) => {
+  try {
     const email = req.user.email;
-    const accounts = await accountsService.getAccounts(email);
+    const accounts = await accountsService.getAllUserAccounts(email);
     res.status(200).send(accounts);
   } catch (error) {
     res.status(500).send({ message: error.message });
@@ -24,10 +34,11 @@ const getAccounts = async (req, res) => {
 
 const getCashFlows = async (req, res) => {
   try {
-    const email = req.user.email;
-    const cashFlows = await accountsService.getCashFlows(email);
+    const { profile } = req.body;
+    const cashFlows = await accountsService.getCashFlows(profile);
     res.status(200).send(cashFlows);
   } catch (error) {
+    console.log(error);
     res.status(500).send({ message: error.message });
   }
 };
@@ -60,6 +71,7 @@ const accountsController = {
   getCashFlows,
   getUserTransactions,
   getTransactionsByAccount,
+  getAllUserAccounts,
 };
 
 export default accountsController;

@@ -4,6 +4,7 @@ import authRouter from "./auth.router.js";
 import plaidRouter from "./plaid.router.js";
 import webhookRouter from "./webhook.router.js";
 import accountRouter from "./accounts.router.js";
+import businessRouter from "./businesses.router.js";
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);
 router.use("/webhook", webhookRouter);
 router.use("/account", accountRouter);
+router.use("/business", businessRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));

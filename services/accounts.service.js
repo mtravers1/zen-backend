@@ -2,6 +2,7 @@ import plaidService from "./plaid.service.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
+import businessService from "./businesses.service.js";
 
 const addAccount = async (accessToken, email) => {
   const user = await User.findOne({
@@ -134,7 +135,16 @@ const addAccount = async (accessToken, email) => {
   return transactions;
 };
 
-const getAccounts = async (email) => {
+const getAccounts = async (profile) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccounts = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).lean();
+
+  return plaidAccounts;
+};
+
+const getAllUserAccounts = async (email) => {
   const user = await User.findOne({
     "email.email": email,
   })
@@ -152,15 +162,11 @@ const getAccounts = async (email) => {
   return accounts;
 };
 
-const getCashFlows = async (email) => {
-  const user = await User.findOne({
-    "email.email": email,
-  })
-    .populate("plaidAccounts")
-    .exec();
-  if (!user) {
-    throw new Error("User not found");
-  }
+const getCashFlows = async (profile) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccounts = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).exec();
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -174,7 +180,7 @@ const getCashFlows = async (email) => {
   const investmentTransactions = [];
   const loanTransactions = [];
 
-  for (const plaidAccount of user.plaidAccounts) {
+  for (const plaidAccount of plaidAccounts) {
     if (plaidAccount.account_type === "credit") {
       balanceCredit = balanceCredit += plaidAccount.currentBalance * -1;
     } else if (plaidAccount.account_type === "depository") {
@@ -400,6 +406,7 @@ const accountsService = {
   getCashFlows,
   getUserTransactions,
   getTransactionsByAccount,
+  getAllUserAccounts,
 };
 
 export default accountsService;
