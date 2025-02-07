@@ -44,7 +44,7 @@ const getUserProfiles = async (email) => {
 
   const personalProfile = {
     id: user._id,
-    name: user.name.firstName,
+    name: user.name.firstName + " " + user.name.lastName,
     photo: user.profilePhotoUrl,
     plaidAccounts: user.plaidAccounts,
     isPersonal: true,

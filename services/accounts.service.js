@@ -141,7 +141,29 @@ const getAccounts = async (profile) => {
     _id: { $in: plaidIds },
   }).lean();
 
-  return plaidAccounts;
+  const depositoryAccounts = plaidAccounts.filter(
+    (account) => account.account_type === "depository"
+  );
+  const creditAccounts = plaidAccounts.filter(
+    (account) => account.account_type === "credit"
+  );
+  const investmentAccounts = plaidAccounts.filter(
+    (account) => account.account_type === "investment"
+  );
+  const loanAccounts = plaidAccounts.filter(
+    (account) => account.account_type === "loan"
+  );
+  const otherAccounts = plaidAccounts.filter(
+    (account) => account.account_type === "other"
+  );
+
+  return {
+    depositoryAccounts,
+    creditAccounts,
+    investmentAccounts,
+    loanAccounts,
+    otherAccounts,
+  };
 };
 
 const getAllUserAccounts = async (email) => {
@@ -159,6 +181,7 @@ const getAllUserAccounts = async (email) => {
   }
 
   const accounts = user.plaidAccounts;
+
   return accounts;
 };
 
