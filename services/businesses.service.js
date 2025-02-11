@@ -1,5 +1,6 @@
 import User from "../database/models/User.js";
 import Business from "../database/models/Businesses.js";
+import { businessColors } from "../constants/colors.js";
 
 const addBusinesses = async (businessList, email) => {
   const user = await User.findOne({ "email.email": email });
@@ -8,16 +9,39 @@ const addBusinesses = async (businessList, email) => {
     throw new Error("User not found");
   }
 
-  console.log(user);
-
   const userId = user._id.toString();
 
-  console.log(userId);
+  const usedColors = new Set();
 
   for (const businessData of businessList) {
+    if (businessData.name === "") continue;
     const ownership = {
       ownership: businessData.ownership,
     };
+
+    let color = null;
+
+    if (businessData.photo) {
+      //TODO: cuando guardemos fotos, extraer el color de la foto y guardarlo
+    } else {
+      const availableColors = businessColors.filter((c) => !usedColors.has(c));
+
+      if (availableColors.length > 0) {
+        color =
+          availableColors[Math.floor(Math.random() * availableColors.length)];
+        usedColors.add(color);
+      } else {
+        color =
+          businessColors[Math.floor(Math.random() * businessColors.length)];
+      }
+    }
+
+    const businessOwners = [];
+    for (const owner of businessData.businessOwners) {
+      if (owner.name === "") continue;
+      businessOwners.push(owner.name);
+    }
+
     const newBusiness = new Business({
       userId: userId,
       name: businessData.name,
@@ -25,6 +49,8 @@ const addBusinesses = async (businessList, email) => {
       ownership: ownership,
       businessLogo: businessData.businessLogo,
       numAccounts: businessData.accounts,
+      color: color,
+      businessOwners: businessOwners,
     });
 
     await newBusiness.save();
@@ -48,6 +74,7 @@ const getUserProfiles = async (email) => {
     photo: user.profilePhotoUrl,
     plaidAccounts: user.plaidAccounts,
     isPersonal: true,
+    color: null,
   };
 
   profiles.push(personalProfile);
@@ -67,6 +94,7 @@ const getUserProfiles = async (email) => {
       photo: business.businessLogo,
       plaidAccounts: business.plaidAccountIds,
       isPersonal: false,
+      color: business.color,
     };
     profiles.push(businessProfile);
 

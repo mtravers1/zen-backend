@@ -61,7 +61,9 @@ const businessSchema = new Schema({
   formationDate: Date,
   businessHours: [String],
   ownership: businessOwnershipSchema,
+  businessOwners: [String],
   timezone: String,
+  color: String,
   createdAt: {
     type: Date,
     default: Date.now,
