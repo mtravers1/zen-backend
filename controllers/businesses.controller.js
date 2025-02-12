@@ -38,10 +38,23 @@ const assignsAccountsToProfiles = async (req, res) => {
   }
 };
 
+const unlinkAccounts = async (req, res) => {
+  try {
+    const data = req.body;
+    const email = req.user.email;
+    const response = await businessService.unlinkAccounts(data, email);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const businessController = {
   addBusiness,
   getUserProfiles,
   assignsAccountsToProfiles,
+  unlinkAccounts,
 };
 
 export default businessController;

@@ -1,6 +1,8 @@
 import User from "../database/models/User.js";
 import Business from "../database/models/Businesses.js";
 import { businessColors } from "../constants/colors.js";
+import Transaction from "../database/models/Transaction.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
 
 const addBusinesses = async (businessList, email) => {
   const user = await User.findOne({ "email.email": email });
@@ -111,28 +113,71 @@ const getUserProfiles = async (email) => {
 
 const assignsAccountsToProfiles = async (data, email) => {
   const profiles = await getUserProfiles(email);
-  console.log(data);
-  for (const profile of profiles) {
+  for (const [key, value] of Object.entries(data)) {
+    console.log(key, value);
+    const profile = profiles.find((p) => String(p.id) === value);
+    if (!profile) {
+      throw new Error("Profile not found");
+    }
+
     if (profile.isPersonal) {
       continue;
     }
-    const business = await Business.findById(profile.id);
 
+    const business = await Business.findById(profile.id);
     if (!business) {
       throw new Error("Business not found");
     }
 
-    business.plaidAccountIds = data[profile.id];
+    if (!business.plaidAccountIds) {
+      business.plaidAccountIds = [];
+    }
+
+    if (!business.plaidAccountIds.includes(key)) {
+      business.plaidAccountIds.push(key);
+    }
+
     await business.save();
   }
 
   return { message: "Accounts assigned successfully" };
 };
 
+const unlinkAccounts = async (data, email) => {
+  const user = await User.findOne({ "email.email": email });
+  const businesses = await Business.find({ userId: user._id });
+
+  for (const account of data) {
+    const plaidAccount = await PlaidAccount.findById(account.id);
+    const plaidAccountId = plaidAccount.plaid_account_id;
+
+    await Transaction.deleteMany({
+      plaidAccountId: plaidAccountId,
+    });
+    await User.updateOne(
+      { _id: user._id },
+      { $pull: { plaidAccounts: account.id } }
+    );
+
+    for (const business of businesses) {
+      if (business.plaidAccountIds.includes(account.id)) {
+        business.plaidAccountIds = business.plaidAccountIds.filter(
+          (id) => id !== account.id
+        );
+        await business.save();
+      }
+    }
+
+    await PlaidAccount.deleteOne({ _id: account.id });
+  }
+  return { message: "Accounts unlinked successfully" };
+};
+
 const businessService = {
   addBusinesses,
   getUserProfiles,
   assignsAccountsToProfiles,
+  unlinkAccounts,
 };
 
 export default businessService;
