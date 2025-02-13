@@ -7,5 +7,6 @@ router.post("/signup", authController.signUp);
 router.post("/signin", authController.signIn);
 router.post("/check-email", authController.checkEmail);
 router.get("/own", authController.own);
+router.post("/sendCode", authController.sendCode);
 
 export default router;

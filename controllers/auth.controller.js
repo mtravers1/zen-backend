@@ -1,4 +1,5 @@
 import authService from "../services/auth.service.js";
+import {emailValidation} from "../lib/mailer/mailer.js";
 
 const own = async (req, res) => {
   const { email } = req.user;
@@ -54,11 +55,23 @@ const checkEmail = async (req, res) => {
   }
 };
 
+const sendCode = async (req, res) => {
+  const { email } = req.body;
+  const code = Math.floor(100000 + Math.random() * 900000);
+  try {
+    await emailValidation(code, email);
+    res.status(200).send(code);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+}
+
 const authController = {
   own,
   signUp,
   signIn,
   checkEmail,
+  sendCode,
 };
 
 export default authController;
