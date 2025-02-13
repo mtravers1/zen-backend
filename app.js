@@ -33,6 +33,7 @@ app.use(
       "/api/_info/version",
       "/api/webhook/plaid",
       "/api/plaid/institutions",
+      "/api/auth/sendCode",
     ],
   })
 );
