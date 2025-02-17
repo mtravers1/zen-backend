@@ -21,7 +21,7 @@ const createLinkToken = async (email, isAndroid) => {
     secret: plaidSecret,
     client_name: "Zentavos",
     country_codes: ["US"],
-    android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+    android_package_name: isAndroid ? "com.zentavos.zentavosuat" : null,
     redirect_uri: !isAndroid
       ? "https://mysite.com/universal-link/jump-to-my-app.html"
       : null,
@@ -190,7 +190,8 @@ const getTransactionsWithAccessToken = async (accessToken) => {
 const updateTransactions = async (item) => {
   const access = await AccessToken.findOne({ itemId: item });
   if (!access) {
-    throw new Error("Access token not found");
+    console.log("Access token not found");
+    return;
   }
   const accessToken = access.accessToken;
   const response = await plaidClient.transactionsSync({
