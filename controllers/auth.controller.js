@@ -60,11 +60,21 @@ const sendCode = async (req, res) => {
   const code = Math.floor(100000 + Math.random() * 900000);
   try {
     await emailValidation(code, email);
-    res.status(200).send(code);
+    res.status(200).send({code});
   } catch (error) {
     res.status(500).send(error.message);
   }
 }
+
+const resetPassword = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    await authService.changeUserPassword(email, password);
+    res.status(200).send({ message: "Password reset email sent successfully" });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+};
 
 const authController = {
   own,
@@ -72,6 +82,7 @@ const authController = {
   signIn,
   checkEmail,
   sendCode,
+  resetPassword,
 };
 
 export default authController;

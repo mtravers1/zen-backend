@@ -1,4 +1,5 @@
 import User from "../database/models/User.js";
+import admin from "../lib/firebaseAdmin.js";
 
 const own = async (email) => {
   const user = await User.findOne({
@@ -106,11 +107,26 @@ const checkEmail = async (email, method) => {
   return user;
 };
 
+const changeUserPassword = async (email, newPassword) => {
+  try {
+    const user = await admin.auth().getUserByEmail(email);
+
+    await admin.auth().updateUser(user.uid, {
+      password: newPassword,
+    });
+
+    console.log(`Password updated successfully for user: ${email}`);
+  } catch (error) {
+    console.error("Error updating password:", error);
+  }
+}
+
 const authService = {
   signUp,
   signIn,
   checkEmail,
   own,
+  changeUserPassword,
 };
 
 export default authService;

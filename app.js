@@ -34,6 +34,7 @@ app.use(
       "/api/webhook/plaid",
       "/api/plaid/institutions",
       "/api/auth/sendCode",
+      "/api/auth/resetPassword",
     ],
   })
 );
