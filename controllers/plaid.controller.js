@@ -5,6 +5,7 @@ const createLinkToken = async (req, res) => {
     const email = req.user.email;
     const { isAndroid } = req.body;
     const linkToken = await plaidService.createLinkToken(email, isAndroid);
+    console.log(linkToken);
     res.status(200).send({ linkToken });
   } catch (error) {
     console.log(error.message);

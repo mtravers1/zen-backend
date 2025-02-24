@@ -31,17 +31,8 @@ const createLinkToken = async (email, isAndroid) => {
     },
     products: ["auth"],
     required_if_supported_products: ["transactions"],
-    hosted_link: {
-      // is_mobile_app: true,
-      completion_redirect_uri: "myapp://hosted-link-complete",
-    },
   };
-  const response = await plaidClient
-    .linkTokenCreate(plaidRequest)
-    .then((res) => res.data)
-    .catch((err) => {
-      console.log(err);
-    });
+  const response = await plaidClient.linkTokenCreate(plaidRequest);
   return response.data;
 };
 
