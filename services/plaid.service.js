@@ -4,8 +4,8 @@ import plaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 
-const plaidClientId = process.env.PLAID_CLIENT_ID;
-const plaidSecret = process.env.PLAID_SECRET;
+const plaidClientId = process.env.PLAID_CLIENT_ID_PROD;
+const plaidSecret = process.env.PLAID_SECRET_PROD;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 
 const createLinkToken = async (email, isAndroid) => {
@@ -21,10 +21,8 @@ const createLinkToken = async (email, isAndroid) => {
     secret: plaidSecret,
     client_name: "Zentavos",
     country_codes: ["US"],
-    android_package_name: isAndroid ? "com.zentavos.zentavosuat" : null,
-    redirect_uri: !isAndroid
-      ? "https://mysite.com/universal-link/jump-to-my-app.html"
-      : null,
+    android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+    redirect_uri: !isAndroid ? "https://zentavos.com/app" : null,
     //TODO: change this to fit every environment
     webhook: webhookUrl,
     language: "en",
@@ -38,7 +36,12 @@ const createLinkToken = async (email, isAndroid) => {
       completion_redirect_uri: "myapp://hosted-link-complete",
     },
   };
-  const response = await plaidClient.linkTokenCreate(plaidRequest);
+  const response = await plaidClient
+    .linkTokenCreate(plaidRequest)
+    .then((res) => res.data)
+    .catch((err) => {
+      console.log(err);
+    });
   return response.data;
 };
 
