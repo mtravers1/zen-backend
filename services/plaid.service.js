@@ -30,7 +30,19 @@ const createLinkToken = async (email, isAndroid) => {
       client_user_id: userId,
     },
     products: ["auth"],
-    required_if_supported_products: ["transactions"],
+    required_if_supported_products: [
+      "transactions",
+      "investments",
+      "assets",
+      "loans",
+    ],
+    hosted_link: {
+      // is_mobile_app: true,
+      completion_redirect_uri: "myapp://hosted-link-complete",
+    },
+    transactions: {
+      days_requested: 730,
+    },
   };
   const response = await plaidClient.linkTokenCreate(plaidRequest);
   return response.data;
