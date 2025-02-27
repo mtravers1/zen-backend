@@ -366,7 +366,7 @@ const detectInternalTransfers = async (email) => {
 
   transactions
     .filter((txn) =>
-      ["transfer", "internal account transfer", "payroll"].includes(
+      ["transfer", "internal account transfer"].includes(
         txn.category?.[0]?.toLowerCase()
       )
     )

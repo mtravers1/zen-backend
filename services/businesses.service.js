@@ -121,7 +121,6 @@ const getUserProfiles = async (email) => {
 const assignsAccountsToProfiles = async (data, email) => {
   const profiles = await getUserProfiles(email);
   for (const [key, value] of Object.entries(data)) {
-    console.log(key, value);
     const profile = profiles.find((p) => String(p.id) === value);
     if (!profile) {
       throw new Error("Profile not found");
@@ -180,11 +179,53 @@ const unlinkAccounts = async (data, email) => {
   return { message: "Accounts unlinked successfully" };
 };
 
+const assignAccountToProfile = async (email, profileId, accountIds) => {
+  const profiles = await getUserProfiles(email);
+  const profile = profiles.find((p) => String(p.id) === profileId);
+  if (!profile) {
+    throw new Error("Profile not found");
+  }
+  if (profile.isPersonal) {
+    return { message: "Account assigned successfully" };
+  }
+
+  const business = await Business.findById(profile.id);
+  if (!business) {
+    throw new Error("Business not found");
+  }
+
+  if (!business.plaidAccountIds) {
+    business.plaidAccountIds = [];
+  }
+
+  for (const accountId of accountIds) {
+    try {
+      console.log(accountId);
+      const plaidAccount = await PlaidAccount.findOne({
+        plaid_account_id: accountId,
+      });
+      console.log(plaidAccount);
+      if (!plaidAccount) {
+        throw new Error("Plaid account not found");
+      }
+      if (!business.plaidAccountIds.includes(plaidAccount._id)) {
+        business.plaidAccountIds.push(plaidAccount._id);
+      }
+    } catch (error) {
+      console.error(`Invalid ObjectId: ${accountId}`, error);
+    }
+  }
+
+  await business.save();
+  return { message: "Account assigned successfully" };
+};
+
 const businessService = {
   addBusinesses,
   getUserProfiles,
   assignsAccountsToProfiles,
   unlinkAccounts,
+  assignAccountToProfile,
 };
 
 export default businessService;

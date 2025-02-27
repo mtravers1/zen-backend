@@ -39,7 +39,6 @@ const verifyPlaidToken = async (token, body) => {
   if (!decoded) {
     throw new Error("Invalid token");
   }
-  console.log(decoded);
   const timestamp = decoded.iat;
   const now = Math.floor(Date.now() / 1000);
   if (now - timestamp > 300) {
@@ -47,11 +46,10 @@ const verifyPlaidToken = async (token, body) => {
   }
 
   const bodyString = JSON.stringify(body);
-  console.log(bodyString);
   const bodyHash = sha256(bodyString).toString();
 
   //Deberian ser iguales
-  console.log(bodyHash);
+  // console.log(bodyHash);
 
   return decoded;
 };

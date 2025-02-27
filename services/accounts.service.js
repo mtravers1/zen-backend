@@ -51,19 +51,9 @@ const addAccount = async (accessToken, email) => {
       plaid_account_id: account.account_id,
     });
 
-    if (existingAccount) continue;
+    console.log("EXISTING ACCOUNT", existingAccount);
 
-    if (account.type === "depository") {
-      bankingAccounts++;
-    } else if (account.type === "credit") {
-      creditAccounts++;
-    } else if (account.type === "loan") {
-      loanAccounts++;
-    } else if (account.type === "investment") {
-      investmentAccounts++;
-    } else {
-      otherAccounts++;
-    }
+    if (existingAccount) continue;
     const newAccount = new PlaidAccount({
       owner_id: userId,
       owner_type: userType,
@@ -301,7 +291,7 @@ const addAccount = async (accessToken, email) => {
     await account.save();
   }
 
-  return transactions;
+  return savedAccounts;
 };
 
 const getAccounts = async (profile) => {
@@ -365,7 +355,8 @@ const getCashFlows = async (profile) => {
   const allTransactions = [];
   let balanceCredit = 0;
   let balanceDebit = 0;
-  let balanceInvestment = 0;
+  let balanceCurrentInvestment = 0;
+  let balanceAvailableInvestment = 0;
   let balanceLoan = 0;
   const depositoryTransactions = [];
   const creditTransactions = [];
@@ -373,10 +364,13 @@ const getCashFlows = async (profile) => {
   const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
-    if (plaidAccount.account_type === "credit") {
-      balanceCredit = balanceCredit += plaidAccount.currentBalance * -1;
-    } else if (plaidAccount.account_type === "depository") {
-      balanceDebit = balanceDebit += plaidAccount.currentBalance;
+    if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
+      balanceCredit = balanceCredit += plaidAccount.currentBalance;
+    } else if (
+      plaidAccount.account_type === "depository" &&
+      plaidAccount.availableBalance
+    ) {
+      balanceDebit = balanceDebit += plaidAccount.availableBalance;
     } else if (plaidAccount.account_type === "investment") {
       if (
         plaidAccount.account_subtype === "brokerage" ||
@@ -388,10 +382,20 @@ const getCashFlows = async (profile) => {
         plaidAccount.account_subtype === "retirement" ||
         plaidAccount.account_subtype === "trust"
       ) {
-        balanceInvestment = balanceInvestment += plaidAccount.currentBalance;
+        if (plaidAccount.currentBalance) {
+          balanceCurrentInvestment = balanceCurrentInvestment +=
+            plaidAccount.currentBalance;
+        }
+        if (plaidAccount.availableBalance) {
+          balanceAvailableInvestment = balanceAvailableInvestment +=
+            plaidAccount.availableBalance;
+        }
       }
-    } else if (plaidAccount.account_type === "loan") {
-      balanceLoan = balanceLoan += plaidAccount.currentBalance * -1;
+    } else if (
+      plaidAccount.account_type === "loan" &&
+      plaidAccount.currentBalance
+    ) {
+      balanceLoan = balanceLoan += plaidAccount.currentBalance;
     }
 
     const transactions = await Transaction.find({
@@ -425,90 +429,121 @@ const getCashFlows = async (profile) => {
     );
   }
 
-  /// Calculate current cash flow
-
-  const deposits = allTransactions
-    .filter((transaction) => transaction.amount > 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
-
-  const withdrawals = allTransactions
+  const depositoryDepositsAmount = depositoryTransactions
     .filter((transaction) => transaction.amount < 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
+  const depositoryWithdrawsAmount = depositoryTransactions
+    .filter((transaction) => transaction.amount > 0)
+    .reduce((total, transaction) => total + transaction.amount, 0);
+
+  const creditDepositsAmount = creditTransactions
+    .filter((transaction) => transaction.amount < 0)
+    .reduce((total, transaction) => total + transaction.amount, 0);
+
+  const creditWithdrawsAmount = creditTransactions
+    .filter((transaction) => transaction.amount > 0)
+    .reduce((total, transaction) => total + transaction.amount, 0);
+
+  const depositoryDepositTransactions = depositoryTransactions.filter(
+    (transaction) => transaction.amount < 0
+  );
+  const depositoryWithdrawTransactions = depositoryTransactions.filter(
+    (transaction) => transaction.amount > 0
+  );
+  const creditDepositTransactions = creditTransactions.filter(
+    (transaction) => transaction.amount < 0
+  );
+  const creditWithdrawTransactions = creditTransactions.filter(
+    (transaction) => transaction.amount > 0
+  );
+
+  /// Calculate current cash flow
+
+  const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
+  const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
+  const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
+  const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
+
+  const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
+  const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
+
   let currentCashFlow = 0;
-  if (deposits !== 0 || withdrawals !== 0) {
-    currentCashFlow = ((deposits + withdrawals) / deposits).toFixed(2);
+  if (totalDeposits !== 0 || totalWithdrawls !== 0) {
+    currentCashFlow = (
+      (totalDeposits - totalWithdrawls) /
+      totalDeposits
+    ).toFixed(2);
   } else {
     currentCashFlow = 0;
   }
+
+  currentCashFlow = currentCashFlow * 100;
 
   /// Calculate average daily spend
 
   let averageDailySpend = 0;
 
-  const creditWithdrawals = creditTransactions
-    .filter((transaction) => transaction.amount < 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
-  const depositWithdrawals = depositoryTransactions
-    .filter((transaction) => transaction.amount < 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
+  const oldestCreditWithdrawDate =
+    creditWithdrawTransactions[0]?.transactionDate || null;
+  const oldestDepositWithdrawDate =
+    depositoryWithdrawTransactions[0]?.transactionDate || null;
 
-  const oldestCreditTransactionDate =
-    creditTransactions[0]?.transactionDate || null;
-  const oldestDepositTransactionDate =
-    depositoryTransactions[0]?.transactionDate || null;
+  let oldestWithdrawDate = null;
 
-  let oldestTransactionDate = null;
-
-  if (oldestCreditTransactionDate && oldestDepositTransactionDate) {
-    oldestTransactionDate =
-      oldestDepositTransactionDate < oldestCreditTransactionDate
-        ? oldestDepositTransactionDate
-        : oldestCreditTransactionDate;
-  } else if (oldestCreditTransactionDate) {
-    oldestTransactionDate = oldestCreditTransactionDate;
-  } else if (oldestDepositTransactionDate) {
-    oldestTransactionDate = oldestDepositTransactionDate;
+  if (oldestCreditWithdrawDate && oldestDepositWithdrawDate) {
+    oldestWithdrawDate =
+      oldestDepositWithdrawDate < oldestCreditWithdrawDate
+        ? oldestDepositWithdrawDate
+        : oldestCreditWithdrawDate;
+  } else if (oldestCreditWithdrawDate) {
+    oldestWithdrawDate = oldestCreditWithdrawDate;
+  } else if (oldestDepositWithdrawDate) {
+    oldestWithdrawDate = oldestDepositWithdrawDate;
   }
 
-  if (oldestTransactionDate) {
+  if (oldestWithdrawDate) {
     const today = new Date();
-    const days = Math.ceil(
-      (today - oldestTransactionDate) / (1000 * 60 * 60 * 24)
-    );
+    // const days = Math.ceil(
+    //   (today - oldestWithdrawDate) / (1000 * 60 * 60 * 24)
+    // );
 
-    const totalWithdrawals = creditWithdrawals + depositWithdrawals;
-    averageDailySpend = ((totalWithdrawals / days) * -1).toFixed(2);
+    const totalWithdrawals = creditWithdrawsAmount + depositoryWithdrawsAmount;
+    averageDailySpend = Math.abs((totalWithdrawals / 90) * -1).toFixed(2);
   }
 
   /// Calculate average daily income
 
   let averageDailyIncome = 0;
 
-  const depositDeposits = depositoryTransactions
-    .filter((transaction) => transaction.amount > 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
-
-  const oldestDepositDepositDate =
-    depositoryTransactions[0]?.transactionDate || null;
+  const oldestCreditDepositDate =
+    creditDepositTransactions[0]?.transactionDate || null;
+  const oldestDepositoryDepositDate =
+    depositoryDepositTransactions[0]?.transactionDate || null;
 
   let oldestDepositDate = null;
 
-  if (oldestDepositDepositDate) {
-    oldestDepositDate = oldestDepositDepositDate;
+  if (oldestCreditDepositDate && oldestDepositoryDepositDate) {
+    oldestDepositDate =
+      oldestDepositoryDepositDate < oldestCreditDepositDate
+        ? oldestDepositoryDepositDate
+        : oldestCreditDepositDate;
+  } else if (oldestCreditDepositDate) {
+    oldestDepositDate = oldestCreditDepositDate;
+  } else if (oldestDepositoryDepositDate) {
+    oldestDepositDate = oldestDepositoryDepositDate;
   }
 
   if (oldestDepositDate) {
-    const today = new Date();
-    const days = Math.ceil((today - oldestDepositDate) / (1000 * 60 * 60 * 24));
-
-    const totalDeposits = depositDeposits;
-    averageDailyIncome = (totalDeposits / days).toFixed(2);
+    // const today = new Date();
+    // const days = Math.ceil((today - oldestDepositDate) / (1000 * 60 * 60 * 24));
+    const totalDeposits = depositoryDepositsAmount;
+    averageDailyIncome = Math.abs(totalDeposits / 90).toFixed(2);
   }
 
   /// Calculate total cash balance
 
-  const totalCashBalance = balanceCredit + balanceDebit;
+  const totalCashBalance = balanceDebit + balanceAvailableInvestment;
 
   /// Calculate net worth
   // (bank accounts + investments accounts + assets - credit accounts - loan accounts)

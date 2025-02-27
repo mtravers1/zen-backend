@@ -7,5 +7,6 @@ router.post("/", businessController.addBusiness);
 router.get("/", businessController.getUserProfiles);
 router.post("/assign", businessController.assignsAccountsToProfiles);
 router.post("/unlink", businessController.unlinkAccounts);
+router.post("/assign-account", businessController.assignAccountToProfile);
 
 export default router;
