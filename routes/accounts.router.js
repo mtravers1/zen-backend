@@ -12,5 +12,7 @@ router.get(
   accountsController.getTransactionsByAccount
 );
 router.get("/", accountsController.getAllUserAccounts);
+router.post("/add-photo", accountsController.addAccountPhoto);
+router.post("/get-photo", accountsController.getAccountPhoto);
 
 export default router;

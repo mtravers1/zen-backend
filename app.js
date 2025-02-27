@@ -35,6 +35,8 @@ app.use(
       "/api/plaid/institutions",
       "/api/auth/sendCode",
       "/api/auth/resetPassword",
+      "/api/account/add-photo",
+      "/api/account/get-photo",
     ],
   })
 );

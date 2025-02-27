@@ -65,6 +65,30 @@ const getTransactionsByAccount = async (req, res) => {
   }
 };
 
+const addAccountPhoto = async (req, res) => {
+  try {
+    const { fileName } = req.body;
+    console.log(fileName);
+    const url = await accountsService.generateUploadUrl(fileName);
+    res.status(200).send({ uploadUrl: url });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
+const getAccountPhoto = async (req, res) => {
+  try {
+    const { fileName } = req.body;
+    console.log(fileName);
+    const url = await accountsService.generateSignedUrl(fileName);
+    res.status(200).send({ downloadUrl: url });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const accountsController = {
   addAccount,
   getAccounts,
@@ -72,6 +96,8 @@ const accountsController = {
   getUserTransactions,
   getTransactionsByAccount,
   getAllUserAccounts,
+  addAccountPhoto,
+  getAccountPhoto,
 };
 
 export default accountsController;

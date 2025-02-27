@@ -3,6 +3,12 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import businessService from "./businesses.service.js";
+import { Storage } from "@google-cloud/storage";
+
+const storage = new Storage({
+  keyFilename: "./config/zentavos-d6c79-24978c4e7fff.json",
+});
+const bucketName = "zentavos-bucket";
 
 const addAccount = async (accessToken, email) => {
   const user = await User.findOne({
@@ -423,6 +429,43 @@ const getTransactionsByAccount = async (accountId) => {
   return account.transactions;
 };
 
+const generateUploadUrl = async (fileName) => {
+  try {
+    const [url] = await storage
+      .bucket(bucketName)
+      .file(fileName)
+      .getSignedUrl({
+        action: "write",
+        expires: Date.now() + 15 * 60 * 1000,
+        contentType: "image/jpeg",
+      });
+    return url;
+  } catch (error) {
+    console.error("Error generating signed URL:", error);
+    return null;
+  }
+};
+
+const generateSignedUrl = async (fileName) => {
+  try {
+    const options = {
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000,
+    };
+
+    const [url] = await storage
+      .bucket(bucketName)
+      .file(fileName)
+      .getSignedUrl(options);
+
+    return url;
+  } catch (error) {
+    console.error("Error generating signed URL:", error);
+    return null;
+  }
+};
+
 const accountsService = {
   addAccount,
   getAccounts,
@@ -430,6 +473,8 @@ const accountsService = {
   getUserTransactions,
   getTransactionsByAccount,
   getAllUserAccounts,
+  generateUploadUrl,
+  generateSignedUrl,
 };
 
 export default accountsService;
