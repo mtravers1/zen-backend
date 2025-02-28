@@ -4,8 +4,9 @@ import plaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 
-const plaidClientId = process.env.PLAID_CLIENT_ID_PROD;
-const plaidSecret = process.env.PLAID_SECRET_PROD;
+//TODO: change to production
+const plaidClientId = process.env.PLAID_CLIENT_ID;
+const plaidSecret = process.env.PLAID_SECRET;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 
 const createLinkToken = async (email, isAndroid) => {
