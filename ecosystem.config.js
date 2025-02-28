@@ -18,5 +18,11 @@ module.exports = {
             watch: true,
             node_args: "--env-file=.env"
         },
+        {
+            name: "prod",
+            script: "./index.js",
+            watch: true,
+            node_args: "--env-file=.env"
+        },
     ]
 }
