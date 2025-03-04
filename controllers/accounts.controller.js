@@ -53,6 +53,21 @@ const getUserTransactions = async (req, res) => {
   }
 };
 
+const getProfileTransactions = async (req, res) => {
+  try {
+    const email = req.user.email;
+    const { profileId } = req.params;
+    const transactions = await accountsService.getProfileTransactions(
+      email,
+      profileId
+    );
+    res.status(200).send(transactions);
+  } catch (e) {
+    console.log(e);
+    res.status(500).send(e);
+  }
+};
+
 const getTransactionsByAccount = async (req, res) => {
   try {
     const { accountId } = req.params;
@@ -98,6 +113,7 @@ const accountsController = {
   getAllUserAccounts,
   addAccountPhoto,
   getAccountPhoto,
+  getProfileTransactions,
 };
 
 export default accountsController;

@@ -4,6 +4,8 @@ import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
+import { get } from "mongoose";
+import businessService from "./businesses.service.js";
 
 const storage = new Storage({
   credentials: {
@@ -391,23 +393,10 @@ const getCashFlows = async (profile) => {
   };
 };
 
-const getUserTransactions = async (email, page = 1, limit = 10) => {
-  const user = await User.findOne({ "email.email": email })
-    .populate("plaidAccounts")
-    .exec();
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  let totalTransactions = 0;
+const getTransactions = async (accounts) => {
   const allTransactions = [];
 
-  for (const plaidAccount of user.plaidAccounts) {
-    totalTransactions += await Transaction.countDocuments({
-      plaidAccountId: plaidAccount.plaid_account_id,
-    });
-
+  for (const plaidAccount of accounts) {
     const transactions = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
     })
@@ -423,6 +412,38 @@ const getUserTransactions = async (email, page = 1, limit = 10) => {
   }
 
   return allTransactions;
+};
+
+const getUserTransactions = async (email) => {
+  const user = await User.findOne({ "email.email": email })
+    .populate("plaidAccounts")
+    .exec();
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (!user.plaidAccounts.length) {
+    return [];
+  }
+
+  const accounts = user.plaidAccounts;
+
+  return getTransactions(accounts);
+};
+
+const getProfileTransactions = async (email, profileId) => {
+  const profiles = await businessService.getUserProfiles(email);
+  const profile = profiles.find((p) => String(p.id) === profileId);
+  if (!profile) {
+    throw new Error("Profile not found");
+  }
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccounts = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).exec();
+
+  return await getTransactions(plaidAccounts);
 };
 
 const getTransactionsByAccount = async (accountId) => {
@@ -489,6 +510,7 @@ const accountsService = {
   getAllUserAccounts,
   generateUploadUrl,
   generateSignedUrl,
+  getProfileTransactions,
 };
 
 export default accountsService;
