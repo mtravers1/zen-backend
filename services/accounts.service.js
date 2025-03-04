@@ -43,11 +43,8 @@ const addAccount = async (accessToken, email) => {
   const institutionName = accountsResponse.item.institution_name;
 
   const userAccounts = user.plaidAccounts;
-  let bankingAccounts = 0;
-  let creditAccounts = 0;
-  let investmentAccounts = 0;
-  let loanAccounts = 0;
-  let otherAccounts = 0;
+  let savedAccounts = [];
+  const accountTypes = {};
 
   for (let account of accounts) {
     const existingAccount = await PlaidAccount.findOne({
@@ -85,16 +82,24 @@ const addAccount = async (accessToken, email) => {
       mask: account.mask,
     });
 
+    if (!accountTypes[account.type])
+      accountTypes[account.account_id] = account.type;
+
     userAccounts.push(newAccount._id);
 
     await user.save();
     await newAccount.save();
+    savedAccounts.push(newAccount);
   }
 
   const transactionsResponse =
     await plaidService.getTransactionsWithAccessToken(accessToken);
+  const investmentTransactionsResponse =
+    await plaidService.getInvestmentTransactionsWithAccessToken(accessToken);
   const nextCursor = transactionsResponse.next_cursor;
   const transactions = transactionsResponse.added;
+  const investmentTransactions =
+    investmentTransactionsResponse.investment_transactions;
 
   const transactionsByAccount = {};
 
@@ -104,6 +109,8 @@ const addAccount = async (accessToken, email) => {
     });
 
     if (existingTransaction) continue;
+
+    const accountType = accountTypes[transaction.account_id];
 
     const merchant = {
       merchantName: transaction.merchant_name,
@@ -124,6 +131,42 @@ const addAccount = async (accessToken, email) => {
       description: null,
       transactionCode: transaction.transaction_code,
       tags: transaction.category,
+      accountType,
+    });
+
+    await newTransaction.save();
+
+    if (!transactionsByAccount[transaction.account_id]) {
+      transactionsByAccount[transaction.account_id] = [];
+    }
+
+    transactionsByAccount[transaction.account_id].push(newTransaction._id);
+  }
+
+  for (const transaction of investmentTransactions) {
+    const existingTransaction = await Transaction.findOne({
+      plaidTransactionId: transaction.investment_transaction_id,
+    });
+
+    if (existingTransaction) continue;
+
+    const accountType = accountTypes[transaction.account_id];
+
+    const newTransaction = new Transaction({
+      plaidTransactionId: transaction.investment_transaction_id,
+      plaidAccountId: transaction.account_id,
+      transactionDate: transaction.date,
+      amount: transaction.amount,
+      currency: transaction.iso_currency_code,
+      isInvestment: true,
+      name: transaction.name,
+      fees: transaction.fees,
+      price: transaction.price,
+      quantity: transaction.quantity,
+      securityId: transaction.security_id,
+      type: transaction.type,
+      subtype: transaction.subtype,
+      accountType,
     });
 
     await newTransaction.save();
@@ -411,7 +454,11 @@ const getTransactions = async (accounts) => {
     allTransactions.push(...transactions);
   }
 
-  return allTransactions;
+  const sortedTransactions = allTransactions.sort(
+    (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+  );
+
+  return sortedTransactions;
 };
 
 const getUserTransactions = async (email) => {

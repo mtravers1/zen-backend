@@ -193,6 +193,16 @@ const getTransactionsWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
+const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
+  const response = await plaidClient.investmentsTransactionsGet({
+    access_token: accessToken,
+    start_date: "2021-01-01",
+    end_date: new Date().toISOString().split("T")[0],
+  });
+  console.log(response.data);
+  return response.data;
+};
+
 const updateTransactions = async (item) => {
   const access = await AccessToken.findOne({ itemId: item });
   if (!access) {
@@ -326,6 +336,7 @@ const plaidService = {
   detectInternalTransfers,
   getAccountsWithAccessToken,
   getTransactionsWithAccessToken,
+  getInvestmentTransactionsWithAccessToken,
 };
 
 export default plaidService;

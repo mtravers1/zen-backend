@@ -27,6 +27,10 @@ const transactionSchema = new Schema({
     type: String,
     required: true,
   },
+  accountType: {
+    type: String,
+    required: true,
+  },
   transactionDate: {
     type: Date,
     required: true,
@@ -64,6 +68,33 @@ const transactionSchema = new Schema({
   },
   updated_at: {
     type: Date,
+  },
+
+  //fields only for investment transactions
+  name: {
+    type: String,
+  },
+  fees: {
+    type: Number,
+  },
+  price: {
+    type: Number,
+  },
+  type: {
+    type: String,
+  },
+  subtype: {
+    type: String,
+  },
+  quantity: {
+    type: Number,
+  },
+  securityId: {
+    type: String,
+  },
+  isInvestment: {
+    type: Boolean,
+    default: false,
   },
 });
 
