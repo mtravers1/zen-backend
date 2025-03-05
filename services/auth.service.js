@@ -107,6 +107,15 @@ const checkEmail = async (email, method) => {
   return user;
 };
 
+const checkEmailFirebase = async (email) => {
+  try {
+    const user = await admin.auth().getUserByEmail(email);
+    return user;
+  } catch (error) {
+    throw new Error("User not found");
+  }
+};
+
 const changeUserPassword = async (email, newPassword) => {
   try {
     const user = await admin.auth().getUserByEmail(email);
@@ -119,7 +128,7 @@ const changeUserPassword = async (email, newPassword) => {
   } catch (error) {
     console.error("Error updating password:", error);
   }
-}
+};
 
 const authService = {
   signUp,
@@ -127,6 +136,7 @@ const authService = {
   checkEmail,
   own,
   changeUserPassword,
+  checkEmailFirebase,
 };
 
 export default authService;

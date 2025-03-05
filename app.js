@@ -29,6 +29,7 @@ app.use(
       "/api/auth/signup",
       "/api/auth/signin",
       "/api/auth/check-email",
+      "/api/auth/check-email-firebase",
       "/api/auth/recoverypassword",
       "/api/_info/version",
       "/api/webhook/plaid",
