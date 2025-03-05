@@ -199,7 +199,13 @@ const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
     start_date: "2021-01-01",
     end_date: new Date().toISOString().split("T")[0],
   });
-  console.log(response.data);
+  return response.data;
+};
+
+const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
+  const response = await plaidClient.liabilitiesGet({
+    access_token: accessToken,
+  });
   return response.data;
 };
 
@@ -337,6 +343,7 @@ const plaidService = {
   getAccountsWithAccessToken,
   getTransactionsWithAccessToken,
   getInvestmentTransactionsWithAccessToken,
+  getLoanLiabilitiesWithAccessToken,
 };
 
 export default plaidService;

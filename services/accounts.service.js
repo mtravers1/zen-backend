@@ -39,6 +39,7 @@ const addAccount = async (accessToken, email) => {
   const accountsResponse = await plaidService.getAccountsWithAccessToken(
     accessToken
   );
+
   const accounts = accountsResponse.accounts;
   const institutionId = accountsResponse.item.institution_id;
   const institutionName = accountsResponse.item.institution_name;
