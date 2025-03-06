@@ -25,9 +25,9 @@ const signUp = async (req, res) => {
 };
 
 const signIn = async (req, res) => {
-  const { email, password, method } = req.body;
+  const { uid } = req.user;
   try {
-    const user = await authService.signIn(email.toLowerCase());
+    const user = await authService.signIn(uid);
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {

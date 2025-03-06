@@ -71,10 +71,10 @@ const signUp = async (data) => {
   }
 };
 
-const signIn = async (email) => {
+const signIn = async (uid) => {
   try {
     const user = await User.findOne({
-      "email.email": email,
+      authUid: uid,
     });
 
     if (!user) {
