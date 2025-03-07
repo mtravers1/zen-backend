@@ -5,7 +5,7 @@ import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 
 const addBusinesses = async (businessList, email) => {
-  const user = await User.findOne({ "email.email": email });
+  const user = await User.findOne({ "email.email": email.toLowerCase() });
 
   if (!user) {
     throw new Error("User not found");
@@ -62,7 +62,7 @@ const addBusinesses = async (businessList, email) => {
 };
 
 const getUserProfiles = async (email) => {
-  const user = await User.findOne({ "email.email": email });
+  const user = await User.findOne({ "email.email": email.toLowerCase() });
 
   if (!user) {
     throw new Error("User not found");
@@ -144,7 +144,7 @@ const assignsAccountsToProfiles = async (data, email) => {
 };
 
 const unlinkAccounts = async (data, email) => {
-  const user = await User.findOne({ "email.email": email });
+  const user = await User.findOne({ "email.email": email.toLowerCase() });
   const businesses = await Business.find({ userId: user._id });
 
   for (const account of data) {

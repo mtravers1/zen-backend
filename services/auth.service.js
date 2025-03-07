@@ -3,7 +3,7 @@ import admin from "../lib/firebaseAdmin.js";
 
 const own = async (email) => {
   const user = await User.findOne({
-    "email.email": email,
+    "email.email": email.toLowerCase(),
   }).select("-password");
   return user;
 };
@@ -11,7 +11,7 @@ const own = async (email) => {
 const signUp = async (data) => {
   try {
     const existingUser = await User.findOne({
-      "email.email": data.email,
+      "email.email": data.email.toLowerCase(),
     });
 
     if (existingUser) {
@@ -19,7 +19,7 @@ const signUp = async (data) => {
     }
 
     const emailSchema = {
-      email: data.email,
+      email: data.email.toLowerCase(),
       //TODO: add email type to the schema
       emailType: "personal",
       isPrimary: true,
@@ -112,7 +112,7 @@ const signIn = async (uid) => {
 
 const checkEmail = async (email, method) => {
   const user = await User.findOne({
-    "email.email": email,
+    "email.email": email.toLowerCase(),
   });
   if (!user) {
     throw new Error("User not found");
