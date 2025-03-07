@@ -63,7 +63,20 @@ const signUp = async (data) => {
 
     await user.save();
 
-    return user;
+    const newUser = await User.findOne({
+      authUid: data.authUid,
+    });
+
+    const retrievedUser = {
+      id: newUser._id,
+      email: newUser.email,
+      phone: newUser.phone,
+      role: newUser.role,
+      profilePhotoUrl: newUser.profilePhotoUrl,
+      name: newUser.name,
+    };
+
+    return retrievedUser;
   } catch (error) {
     console.log("error in signup", error);
 
