@@ -411,7 +411,7 @@ const getCashFlows = async (profile) => {
   //TODO: Add assets
 
   const netWorth =
-    balanceDebit + balanceInvestment - balanceCredit - balanceLoan;
+    balanceDebit + balanceAvailableInvestment - balanceCredit - balanceLoan;
 
   /// Calculate cash runway
   let cashRunway = null;
