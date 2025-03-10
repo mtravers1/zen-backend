@@ -84,10 +84,10 @@ const signUp = async (data) => {
   }
 };
 
-const signIn = async (uid) => {
+const signIn = async (email) => {
   try {
     const user = await User.findOne({
-      authUid: uid,
+      "email.email": email.toLowerCase(),
     });
 
     if (!user) {
