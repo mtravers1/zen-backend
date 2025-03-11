@@ -73,6 +73,13 @@ const getUserProfiles = async (email) => {
   const personalProfile = {
     id: user._id,
     name: user.name.firstName + " " + user.name.lastName,
+    nameParts: {
+      firstName: user.name.firstName,
+      lastName: user.name.lastName,
+      middleName: user.name.middleName,
+      prefix: user.name.prefix,
+      suffix: user.name.suffix,
+    },
     photo: user.profilePhotoUrl,
     plaidAccounts: user.plaidAccounts,
     isPersonal: true,
