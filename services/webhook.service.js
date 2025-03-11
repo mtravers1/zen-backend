@@ -10,6 +10,16 @@ const webhookHandler = async (event) => {
       const response = await plaidService.updateTransactions(event.item_id);
       console.log(response);
     }
+
+    if (event.webhook_code === "DEFAULT_UPDATE") {
+      //TODO: Handle default update
+    }
+    if (event.webhook_code === "HISTORICAL_UPDATE") {
+      //TODO: Handle historical update
+    }
+    if (event.webhook_code === "TRANSACTIONS_REMOVED") {
+      //TODO: Handle transactions removed
+    }
   }
   return "Webhook received";
 };

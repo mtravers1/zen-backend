@@ -6,6 +6,7 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import { get } from "mongoose";
 import businessService from "./businesses.service.js";
+import Liability from "../database/models/Liability.js";
 
 const storage = new Storage({
   credentials: {
@@ -91,15 +92,33 @@ const addAccount = async (accessToken, email) => {
     await newAccount.save();
     savedAccounts.push(newAccount);
   }
+  let transactionsResponse;
+  let investmentTransactionsResponse;
+  let liabilitiesResponse;
+  if (accountsResponse.item.products.includes("transactions")) {
+    transactionsResponse = await plaidService.getTransactionsWithAccessToken(
+      accessToken
+    );
+  }
 
-  const transactionsResponse =
-    await plaidService.getTransactionsWithAccessToken(accessToken);
-  const investmentTransactionsResponse =
-    await plaidService.getInvestmentTransactionsWithAccessToken(accessToken);
-  const nextCursor = transactionsResponse.next_cursor;
-  const transactions = transactionsResponse.added;
-  const investmentTransactions =
-    investmentTransactionsResponse.investment_transactions;
+  if (accountsResponse.item.products.includes("investments")) {
+    investmentTransactionsResponse =
+      await plaidService.getInvestmentTransactionsWithAccessToken(accessToken);
+  }
+
+  if (accountsResponse.item.products.includes("liabilities")) {
+    liabilitiesResponse = await plaidService.getLoanLiabilitiesWithAccessToken(
+      accessToken
+    );
+  }
+
+  const nextCursor = transactionsResponse
+    ? transactionsResponse.next_cursor
+    : null;
+  const transactions = transactionsResponse ? transactionsResponse.added : [];
+  const investmentTransactions = investmentTransactionsResponse
+    ? investmentTransactionsResponse.investment_transactions
+    : [];
 
   const transactionsByAccount = {};
 
@@ -177,6 +196,62 @@ const addAccount = async (accessToken, email) => {
 
     transactionsByAccount[transaction.account_id].push(newTransaction._id);
   }
+
+  Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach(async (item) => {
+        const liability = new Liability({
+          liabilityType: key,
+          accountId: item.account_id,
+          accountNumber: item.account_number,
+          lastPaymentAmount: item.last_payment_amount,
+          lastPaymentDate: item.last_payment_date,
+          nextPaymentDueDate: item.next_payment_due_date,
+          minimumPaymentAmount: item.minimum_payment_amount,
+          lastStatementBalance: item.last_statement_balance,
+          lastStatementIssueDate: item.last_statement_issue_date,
+          isOverdue: item.is_overdue,
+
+          // Credit-specific fields
+          aprs: item.aprs,
+
+          // Mortgage-specific fields
+          loanTypeDescription: item.loan_type_description,
+          loanTerm: item.loan_term,
+          maturityDate: item.maturity_date,
+          nextMonthlyPayment: item.next_monthly_payment,
+          originationDate: item.origination_date,
+          originationPrincipalAmount: item.origination_principal_amount,
+          pastDueAmount: item.past_due_amount,
+          escrowBalance: item.escrow_balance,
+          hasPmi: item.has_pmi,
+          hasPrepaymentPenalty: item.has_prepayment_penalty,
+          propertyAddress: item.property_address,
+          interestRate: item.interest_rate,
+
+          // Student-specific fields
+          disbursementDates: item.disbursement_dates,
+          expectedPayoffDate: item.expected_payoff_date,
+          guarantor: item.guarantor,
+          interestRatePercentage: item.interest_rate_percentage,
+          loanName: item.loan_name,
+
+          // Loan status
+          loanStatus: item.loan_status,
+          outstandingInterestAmount: item.outstanding_interest_amount,
+          paymentReferenceNumber: item.payment_reference_number,
+          pslfStatus: item.pslf_status,
+          repaymentPlan: item.repayment_plan,
+          sequenceNumber: item.sequence_number,
+          servicerAddress: item.servicer_address,
+          ytdInterestPaid: item.ytd_interest_paid,
+          ytdPrincipalPaid: item.ytd_principal_paid,
+        });
+
+        await liability.save();
+      });
+    }
+  });
 
   const internalTransfers = await plaidService.detectInternalTransfers(email);
 

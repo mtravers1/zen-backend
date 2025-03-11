@@ -42,8 +42,8 @@ const createLinkToken = async (email, isAndroid) => {
   };
   const response = await plaidClient
     .linkTokenCreate(plaidRequest)
-    .catch((err) => {
-      console.log(err);
+    .catch((error) => {
+      console.log(error);
     });
   return response.data;
 };
