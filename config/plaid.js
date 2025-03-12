@@ -2,7 +2,7 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 const plaidConfig = new Configuration({
   //TODO: change to production
-  basePath: PlaidEnvironments.sandbox,
+  basePath: PlaidEnvironments.production,
   baseOptions: {
     headers: {
       //TODO: change to production
