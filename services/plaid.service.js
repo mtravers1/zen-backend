@@ -40,7 +40,11 @@ const createLinkToken = async (email, isAndroid) => {
       days_requested: 730,
     },
   };
-  const response = await plaidClient.linkTokenCreate(plaidRequest);
+  const response = await plaidClient
+    .linkTokenCreate(plaidRequest)
+    .catch((err) => {
+      console.log(err);
+    });
   return response.data;
 };
 
