@@ -14,7 +14,7 @@ const assetsSchema = new Schema({
   },
   type: String,
   basis: String,
-  purchaseDate: Date,
+  purchaseDate: String,
   info: {},
   updatedAt: Date,
 });
