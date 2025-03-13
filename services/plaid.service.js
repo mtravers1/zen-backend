@@ -223,13 +223,29 @@ const updateTransactions = async (item) => {
   const transactions = response.data.added;
   const nextCursor = response.data.next_cursor;
 
+  const accountTypes = {};
+
   const transactionsByAccount = {};
 
+  console.log(transactions.length);
+
   for (let transaction of transactions) {
+    console.log(transaction.transaction_id);
     const existingTransaction = await Transaction.findOne({
       transaction_id: transaction.transaction_id,
     });
-    if (existingTransaction) continue;
+    if (existingTransaction) {
+      console.log("Transaction already exists");
+      continue;
+    }
+
+    if (!accountTypes[transaction.account_id]) {
+      const plaidAccount = await PlaidAccount.findOne({
+        plaid_account_id: transaction.account_id,
+      });
+      if (!plaidAccount) continue;
+      accountTypes[transaction.account_id] = plaidAccount.accountType;
+    }
 
     const merchant = {
       merchantName: transaction.merchant_name,
@@ -250,9 +266,11 @@ const updateTransactions = async (item) => {
       description: null,
       transactionCode: transaction.transaction_code,
       tags: transaction.category,
+      accountType: accountTypes[transaction.account_id],
     });
 
     await newTransaction.save();
+    console.log("Transaction saved");
 
     if (!transactionsByAccount[transaction.account_id]) {
       transactionsByAccount[transaction.account_id] = [];
