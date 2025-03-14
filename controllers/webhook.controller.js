@@ -8,7 +8,7 @@ const plaidWebhook = async (req, res) => {
     const authorization = req.headers["plaid-verification"];
     console.log(authorization);
     webhookService.verifyPlaidToken(authorization, event);
-    const response = webhookService.webhookHandler(event);
+    webhookService.webhookHandler(event);
     return res.status(200).send("Webhook received");
   } catch (error) {
     return res.status(500).send("Webhook error");

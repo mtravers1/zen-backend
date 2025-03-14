@@ -7,8 +7,16 @@ const webhookHandler = async (event) => {
   console.log(event);
   if (event.webhook_type === "TRANSACTIONS") {
     if (event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
-      const response = await plaidService.updateTransactions(event.item_id);
-      console.log(response);
+      await plaidService.updateTransactions(event.item_id);
+    }
+  } else if (event.webhook_type === "INVESTMENTS_TRANSACTIONS") {
+    if (event.webhook_code === "DEFAULT_UPDATE") {
+      await plaidService.updateInvestmentTransactions(event.item_id);
+    }
+  } else if (event.webhook_type === "LIABILITIES") {
+    if (event.webhook_code === "DEFAULT_UPDATE") {
+      //TODO: Implement this
+      await plaidService.updateLiabilities(event.item_id);
     }
 
     if (event.webhook_code === "DEFAULT_UPDATE") {

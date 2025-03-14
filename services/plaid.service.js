@@ -209,16 +209,35 @@ const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
-const updateTransactions = async (item) => {
-  const access = await AccessToken.findOne({ itemId: item });
+const getAccessTokenFromItemId = async (itemId) => {
+  const access = await AccessToken.findOne({ itemId });
   if (!access) {
-    console.log("Access token not found");
     return;
   }
   const accessToken = access.accessToken;
+  return accessToken;
+};
+
+const updateTransactions = async (item) => {
+  const accessToken = await getAccessTokenFromItemId(item);
+  const accountResponse = await plaidClient.accountsGet({
+    access_token: accessToken,
+  });
+  const firstAccountId = accountResponse.data.accounts[0].account_id;
+
+  const account = await PlaidAccount.findOne({
+    plaid_account_id: firstAccountId,
+  });
+  if (!account) {
+    return;
+  }
+
+  const cursor = account.nextCursor;
+
   const response = await plaidClient.transactionsSync({
     access_token: accessToken,
     count: 250,
+    cursor: cursor,
   });
   const transactions = response.data.added;
   const nextCursor = response.data.next_cursor;
@@ -227,15 +246,11 @@ const updateTransactions = async (item) => {
 
   const transactionsByAccount = {};
 
-  console.log(transactions.length);
-
   for (let transaction of transactions) {
-    console.log(transaction.transaction_id);
     const existingTransaction = await Transaction.findOne({
       transaction_id: transaction.transaction_id,
     });
     if (existingTransaction) {
-      console.log("Transaction already exists");
       continue;
     }
 
@@ -244,7 +259,7 @@ const updateTransactions = async (item) => {
         plaid_account_id: transaction.account_id,
       });
       if (!plaidAccount) continue;
-      accountTypes[transaction.account_id] = plaidAccount.accountType;
+      accountTypes[transaction.account_id] = plaidAccount.account_type;
     }
 
     const merchant = {
@@ -270,7 +285,6 @@ const updateTransactions = async (item) => {
     });
 
     await newTransaction.save();
-    console.log("Transaction saved");
 
     if (!transactionsByAccount[transaction.account_id]) {
       transactionsByAccount[transaction.account_id] = [];
@@ -288,6 +302,53 @@ const updateTransactions = async (item) => {
   }
 
   return transactions;
+};
+
+const updateInvestmentTransactions = async (item) => {
+  const accessToken = await getAccessTokenFromItemId(item);
+
+  const response = await plaidClient.investmentsTransactionsGet({
+    access_token: accessToken,
+
+    //TODO: enhance this
+    start_date: "2021-01-01",
+    end_date: new Date().toISOString().split("T")[0],
+  });
+  const transactions = response.data.investment_transactions;
+
+  for (let transaction of transactions) {
+    const existingTransaction = await Transaction.findOne({
+      transaction_id: transaction.transaction_id,
+    });
+    if (existingTransaction) {
+      continue;
+    }
+
+    const newTransaction = new Transaction({
+      plaidTransactionId: transaction.transaction_id,
+      plaidAccountId: transaction.account_id,
+      transactionDate: transaction.date,
+      amount: transaction.amount,
+      currency: transaction.iso_currency_code,
+      isInvestment: true,
+      name: transaction.name,
+      fees: transaction.fees,
+      price: transaction.price,
+      quantity: transaction.quantity,
+      securityId: transaction.security_id,
+      type: transaction.type,
+      subType: transaction.subtype,
+      accountType: "investment",
+    });
+
+    await newTransaction.save();
+  }
+
+  return transactions;
+};
+
+const updateLiabilities = async (item) => {
+  const accessToken = await getAccessTokenFromItemId(item);
 };
 
 const getCurrentCashflow = async (email) => {
@@ -362,6 +423,8 @@ const plaidService = {
   getTransactionsWithAccessToken,
   getInvestmentTransactionsWithAccessToken,
   getLoanLiabilitiesWithAccessToken,
+  updateInvestmentTransactions,
+  updateLiabilities,
 };
 
 export default plaidService;
