@@ -97,20 +97,42 @@ const addAccount = async (accessToken, email) => {
   let investmentTransactionsResponse;
   let liabilitiesResponse;
   if (accountsResponse.item.products.includes("transactions")) {
-    transactionsResponse = await plaidService.getTransactionsWithAccessToken(
-      accessToken
-    );
+    try {
+      transactionsResponse = await plaidService.getTransactionsWithAccessToken(
+        accessToken
+      );
+    } catch (error) {
+      console.error(
+        "Error fetching transactions:",
+        error.response?.data || error
+      );
+    }
   }
 
   if (accountsResponse.item.products.includes("investments")) {
-    investmentTransactionsResponse =
-      await plaidService.getInvestmentTransactionsWithAccessToken(accessToken);
+    try {
+      investmentTransactionsResponse =
+        await plaidService.getInvestmentTransactionsWithAccessToken(
+          accessToken
+        );
+    } catch (error) {
+      console.error(
+        "Error fetching investment transactions:",
+        error.response?.data || error
+      );
+    }
   }
 
   if (accountsResponse.item.products.includes("liabilities")) {
-    liabilitiesResponse = await plaidService.getLoanLiabilitiesWithAccessToken(
-      accessToken
-    );
+    try {
+      liabilitiesResponse =
+        await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+    } catch (error) {
+      console.error(
+        "Error fetching liabilities:",
+        error.response?.data || error
+      );
+    }
   }
 
   const nextCursor = transactionsResponse
