@@ -84,8 +84,7 @@ const addAccount = async (accessToken, email) => {
       mask: account.mask,
     });
 
-    if (!accountTypes[account.type])
-      accountTypes[account.account_id] = account.type;
+    accountTypes[account.account_id] = account.type;
 
     userAccounts.push(newAccount._id);
 
@@ -154,6 +153,13 @@ const addAccount = async (accessToken, email) => {
 
     const accountType = accountTypes[transaction.account_id];
 
+    if (!accountType) {
+      console.error(
+        `Account type ${transaction.account_id} not found for transaction ${transaction.transaction_id}`
+      );
+      continue;
+    }
+
     const merchant = {
       merchantName: transaction.merchant_name,
       name: transaction.name,
@@ -220,61 +226,63 @@ const addAccount = async (accessToken, email) => {
     transactionsByAccount[transaction.account_id].push(newTransaction._id);
   }
 
-  Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
-    if (Array.isArray(value)) {
-      value.forEach(async (item) => {
-        const liability = new Liability({
-          liabilityType: key,
-          accountId: item.account_id,
-          accountNumber: item.account_number,
-          lastPaymentAmount: item.last_payment_amount,
-          lastPaymentDate: item.last_payment_date,
-          nextPaymentDueDate: item.next_payment_due_date,
-          minimumPaymentAmount: item.minimum_payment_amount,
-          lastStatementBalance: item.last_statement_balance,
-          lastStatementIssueDate: item.last_statement_issue_date,
-          isOverdue: item.is_overdue,
+  if (liabilitiesResponse) {
+    Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach(async (item) => {
+          const liability = new Liability({
+            liabilityType: key,
+            accountId: item.account_id,
+            accountNumber: item.account_number,
+            lastPaymentAmount: item.last_payment_amount,
+            lastPaymentDate: item.last_payment_date,
+            nextPaymentDueDate: item.next_payment_due_date,
+            minimumPaymentAmount: item.minimum_payment_amount,
+            lastStatementBalance: item.last_statement_balance,
+            lastStatementIssueDate: item.last_statement_issue_date,
+            isOverdue: item.is_overdue,
 
-          // Credit-specific fields
-          aprs: item.aprs,
+            // Credit-specific fields
+            aprs: item.aprs,
 
-          // Mortgage-specific fields
-          loanTypeDescription: item.loan_type_description,
-          loanTerm: item.loan_term,
-          maturityDate: item.maturity_date,
-          nextMonthlyPayment: item.next_monthly_payment,
-          originationDate: item.origination_date,
-          originationPrincipalAmount: item.origination_principal_amount,
-          pastDueAmount: item.past_due_amount,
-          escrowBalance: item.escrow_balance,
-          hasPmi: item.has_pmi,
-          hasPrepaymentPenalty: item.has_prepayment_penalty,
-          propertyAddress: item.property_address,
-          interestRate: item.interest_rate,
+            // Mortgage-specific fields
+            loanTypeDescription: item.loan_type_description,
+            loanTerm: item.loan_term,
+            maturityDate: item.maturity_date,
+            nextMonthlyPayment: item.next_monthly_payment,
+            originationDate: item.origination_date,
+            originationPrincipalAmount: item.origination_principal_amount,
+            pastDueAmount: item.past_due_amount,
+            escrowBalance: item.escrow_balance,
+            hasPmi: item.has_pmi,
+            hasPrepaymentPenalty: item.has_prepayment_penalty,
+            propertyAddress: item.property_address,
+            interestRate: item.interest_rate,
 
-          // Student-specific fields
-          disbursementDates: item.disbursement_dates,
-          expectedPayoffDate: item.expected_payoff_date,
-          guarantor: item.guarantor,
-          interestRatePercentage: item.interest_rate_percentage,
-          loanName: item.loan_name,
+            // Student-specific fields
+            disbursementDates: item.disbursement_dates,
+            expectedPayoffDate: item.expected_payoff_date,
+            guarantor: item.guarantor,
+            interestRatePercentage: item.interest_rate_percentage,
+            loanName: item.loan_name,
 
-          // Loan status
-          loanStatus: item.loan_status,
-          outstandingInterestAmount: item.outstanding_interest_amount,
-          paymentReferenceNumber: item.payment_reference_number,
-          pslfStatus: item.pslf_status,
-          repaymentPlan: item.repayment_plan,
-          sequenceNumber: item.sequence_number,
-          servicerAddress: item.servicer_address,
-          ytdInterestPaid: item.ytd_interest_paid,
-          ytdPrincipalPaid: item.ytd_principal_paid,
+            // Loan status
+            loanStatus: item.loan_status,
+            outstandingInterestAmount: item.outstanding_interest_amount,
+            paymentReferenceNumber: item.payment_reference_number,
+            pslfStatus: item.pslf_status,
+            repaymentPlan: item.repayment_plan,
+            sequenceNumber: item.sequence_number,
+            servicerAddress: item.servicer_address,
+            ytdInterestPaid: item.ytd_interest_paid,
+            ytdPrincipalPaid: item.ytd_principal_paid,
+          });
+
+          await liability.save();
         });
-
-        await liability.save();
-      });
-    }
-  });
+      }
+    });
+  }
 
   const internalTransfers = await plaidService.detectInternalTransfers(email);
 
