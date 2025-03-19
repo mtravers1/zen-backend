@@ -6,6 +6,7 @@ import webhookRouter from "./webhook.router.js";
 import accountRouter from "./accounts.router.js";
 import businessRouter from "./businesses.router.js";
 import assetsRouter from "./assets.router.js";
+import permissionsRouter from "./permissions.router.js";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use("/webhook", webhookRouter);
 router.use("/account", accountRouter);
 router.use("/business", businessRouter);
 router.use("/assets", assetsRouter);
+router.use("/permissions", permissionsRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));
