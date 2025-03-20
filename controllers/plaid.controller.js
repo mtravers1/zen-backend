@@ -60,7 +60,8 @@ const saveAccessToken = async (req, res) => {
 
 const getAccounts = async (req, res) => {
   try {
-    const { email } = req.user;
+    // const { email } = req.user;
+    const email = "galvanerick27@gmail.com";
 
     const accounts = await plaidService.getAccounts(email);
     res.status(200).send(accounts);
@@ -115,6 +116,16 @@ const detectInternalTransfers = async (req, res) => {
   }
 };
 
+const repairAccessToken = async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    const response = await plaidService.repairAccessToken(accountId);
+    res.status(200).send(response);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const plaidController = {
   createLinkToken,
   getPublicToken,
@@ -125,6 +136,7 @@ const plaidController = {
   getInstitutions,
   getTransactions,
   detectInternalTransfers,
+  repairAccessToken,
 };
 
 export default plaidController;

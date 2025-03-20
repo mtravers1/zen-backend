@@ -88,6 +88,7 @@ const webhookService = {
   webhookHandler,
   testWebhook,
   verifyPlaidToken,
+  testResetLogin,
 };
 
 export default webhookService;

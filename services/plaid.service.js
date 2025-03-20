@@ -55,6 +55,9 @@ const createLinkToken = async (email, isAndroid, accountId, uid) => {
       days_requested: 730,
     },
   };
+  if (accessToken) {
+    plaidRequest.access_token = accessToken;
+  }
   const response = await plaidClient
     .linkTokenCreate(plaidRequest)
     .catch((error) => {
@@ -142,7 +145,6 @@ const getAccounts = async (email, uid) => {
       const response = await plaidClient.accountsGet({
         access_token: token.accessToken,
       });
-      console.log(response.data);
       return response.data.accounts.map((account) => ({
         ...account,
         institutionId: token.institutionId,
@@ -683,6 +685,80 @@ const updateLiabilities = async (item) => {
   const accessToken = await getAccessTokenFromItemId(item);
 };
 
+const updateInvadlidAccessToken = async (item) => {
+  const accessToken = await getAccessTokenFromItemId(item);
+  const accounts = await PlaidAccount.find({ accessToken });
+  for (const account of accounts) {
+    account.isAccessTokenExpired = true;
+    await account.save();
+  }
+
+  return accounts;
+};
+
+const repairAccessTokenWebhook = async (item) => {
+  const accessToken = await getAccessTokenFromItemId(item);
+  const accounts = await PlaidAccount.find({
+    accessToken,
+    isAccessTokenExpired: true,
+  });
+  for (const account of accounts) {
+    account.isAccessTokenExpired = false;
+    await account.save();
+  }
+  return accounts;
+};
+
+const repairAccessToken = async (accountId) => {
+  const account = await PlaidAccount.findById(accountId);
+  if (!account) {
+    return;
+  }
+  const accessToken = account.accessToken;
+
+  const plaidAccountsResponse = await plaidClient.accountsGet({
+    access_token: accessToken,
+  });
+  const plaidAccounts = plaidAccountsResponse.data.accounts;
+  const plaidIds = [];
+  const accountIds = [];
+  for (const plaidAccount of plaidAccounts) {
+    plaidIds.push(plaidAccount.account_id);
+  }
+
+  const accounts = await PlaidAccount.find({
+    accessToken,
+    // isAccessTokenExpired: true,
+  });
+  for (const account of accounts) {
+    accountIds.push(account.plaid_account_id);
+    // account.isAccessTokenExpired = false;
+    // await account.save();
+  }
+
+  const plaidSet = new Set(plaidIds);
+  const localSet = new Set(accountIds);
+  const newAccounts = plaidIds.filter((id) => !localSet.has(id));
+  const removedAccounts = accountIds.filter((id) => !plaidSet.has(id));
+  const unchangedAccounts = accountIds.filter((id) => plaidSet.has(id));
+
+  console.log("New accounts", newAccounts);
+  console.log("Removed accounts", removedAccounts);
+  console.log("Unchanged accounts", unchangedAccounts);
+
+  for (const account of unchangedAccounts) {
+    const plaidAccount = await PlaidAccount.findOne({
+      plaid_account_id: account,
+    });
+    plaidAccount.isAccessTokenExpired = false;
+    await plaidAccount.save();
+  }
+
+  //TODO: add and remove accounts
+
+  return accounts;
+};
+
 const getCurrentCashflow = async (email) => {
   const transactionsResponse = await getTransactions(email);
   const transactions = transactionsResponse.added;
@@ -761,6 +837,9 @@ const plaidService = {
   updateInvestmentTransactions,
   updateLiabilities,
   getAccessTokenFromItemId,
+  updateInvadlidAccessToken,
+  repairAccessTokenWebhook,
+  repairAccessToken,
 };
 
 export default plaidService;

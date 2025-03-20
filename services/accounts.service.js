@@ -676,6 +676,11 @@ const getAccounts = async (profile, uid) => {
     });
   }
 
+  const tokens = await plaidService.getUserAccessTokens(
+    "galvanerick27@gmail.com"
+  );
+  console.log(tokens);
+
   const depositoryAccounts = plaidAccounts.filter(
     (account) => account.account_type === "depository"
   );

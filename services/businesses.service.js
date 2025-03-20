@@ -258,11 +258,9 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 
   for (const accountId of accountIds) {
     try {
-      console.log(accountId);
       const plaidAccount = await PlaidAccount.findOne({
         plaid_account_id: accountId,
       });
-      console.log(plaidAccount);
       if (!plaidAccount) {
         throw new Error("Plaid account not found");
       }

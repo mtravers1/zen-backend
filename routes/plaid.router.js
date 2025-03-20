@@ -6,6 +6,7 @@ const router = Router();
 router.post("/access", plaidController.createLinkToken);
 router.post("/public-token", plaidController.getPublicToken);
 router.post("/access-token", plaidController.getAccessToken);
+router.post("/repair-token", plaidController.repairAccessToken);
 router.get("/accounts", plaidController.getAccounts);
 router.post("/save-token", plaidController.saveAccessToken);
 router.post("/balance", plaidController.getBalance);
