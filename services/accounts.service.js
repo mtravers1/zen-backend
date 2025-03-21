@@ -366,11 +366,12 @@ const getCashFlows = async (profile) => {
   for (const plaidAccount of plaidAccounts) {
     if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
       balanceCredit = balanceCredit += plaidAccount.currentBalance;
-    } else if (
-      plaidAccount.account_type === "depository" &&
-      plaidAccount.availableBalance
-    ) {
-      balanceDebit = balanceDebit += plaidAccount.availableBalance;
+    } else if (plaidAccount.account_type === "depository") {
+      if (plaidAccount.availableBalance) {
+        balanceDebit = balanceDebit += plaidAccount.availableBalance;
+      } else if (plaidAccount.currentBalance) {
+        balanceDebit = balanceDebit += plaidAccount.currentBalance;
+      }
     } else if (plaidAccount.account_type === "investment") {
       if (
         plaidAccount.account_subtype === "brokerage" ||
