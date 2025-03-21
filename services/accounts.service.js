@@ -990,16 +990,19 @@ const getCashFlows = async (profile, uid) => {
   const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
   let currentCashFlow = 0;
-  if (totalDeposits !== 0 || totalWithdrawls !== 0) {
+  if (totalDeposits === 0) {
+    currentCashFlow = -999;
+  } else if (totalDeposits === 0 && totalWithdrawls === 0) {
+    currentCashFlow = 0;
+  } else {
     currentCashFlow = (
       (totalDeposits - totalWithdrawls) /
       totalDeposits
     ).toFixed(2);
-  } else {
-    currentCashFlow = 0;
   }
-
-  currentCashFlow = currentCashFlow * 100;
+  if (totalDeposits !== 0) {
+    currentCashFlow = currentCashFlow * 100;
+  }
 
   /// Calculate average daily spend
 
@@ -1088,6 +1091,101 @@ const getCashFlows = async (profile, uid) => {
   // average daily net
   const averageDailyNet = averageDailyIncome - averageDailySpend;
 
+  // weekly cash flow
+
+  const ninetyDaysAgoDate = new Date();
+  ninetyDaysAgoDate.setDate(ninetyDaysAgoDate.getDate() - 86);
+  const weeklyCashFlow = {};
+
+  const today = new Date();
+
+  let currentStart = new Date(ninetyDaysAgoDate);
+  const ranges = [];
+
+  while (currentStart <= today) {
+    let currentEnd = new Date(currentStart);
+
+    if (ranges.length === 0 && currentStart.getDay() === 6) {
+      currentEnd.setDate(currentEnd.getDate() + 1);
+    } else {
+      const daysToSunday = 7 - currentStart.getDay();
+      currentEnd.setDate(currentEnd.getDate() + daysToSunday);
+    }
+
+    weeklyCashFlow[currentStart.toISOString().split("T")[0]] = 0;
+
+    ranges.push({
+      start: currentStart.toISOString().split("T")[0],
+      end: currentEnd.toISOString().split("T")[0],
+    });
+
+    currentStart = new Date(currentEnd);
+    currentStart.setDate(currentStart.getDate() + 1);
+  }
+
+  const categorizedTransactionByWeek = ranges.map((range) => {
+    const rangeStart = new Date(range.start);
+    const rangeEnd = new Date(range.end);
+
+    const filteredTransactions = allTransactions.filter((transaction) => {
+      const transactionDate = new Date(transaction.transactionDate);
+      return transactionDate >= rangeStart && transactionDate <= rangeEnd;
+    });
+
+    return filteredTransactions;
+  });
+
+  let index = 0;
+  for (const weekTransactions of categorizedTransactionByWeek) {
+    const weekDepositoryTransactions = weekTransactions.filter(
+      (transaction) => transaction.accountType === "depository"
+    );
+    const weekCreditTransactions = weekTransactions.filter(
+      (transaction) => transaction.accountType === "credit"
+    );
+    const depositoryDepositsAmount = weekDepositoryTransactions
+      .filter((transaction) => transaction.amount < 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const depositoryWithdrawsAmount = weekDepositoryTransactions
+      .filter((transaction) => transaction.amount > 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const creditDepositsAmount = weekCreditTransactions
+      .filter((transaction) => transaction.amount < 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const creditWithdrawsAmount = weekCreditTransactions
+      .filter((transaction) => transaction.amount > 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
+    const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
+    const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
+    const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
+
+    const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
+    const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
+
+    let currentCashFlow = 0;
+    if (totalDeposits === 0) {
+      currentCashFlow = -999;
+    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
+      currentCashFlow = 0;
+    } else {
+      currentCashFlow = (
+        (totalDeposits - totalWithdrawls) /
+        totalDeposits
+      ).toFixed(2);
+    }
+    if (totalDeposits !== 0) {
+      currentCashFlow = currentCashFlow * 100;
+    }
+
+    weeklyCashFlow[ranges[index].start] = currentCashFlow;
+    index++;
+  }
+
   return {
     currentCashFlow,
     totalCashBalance,
@@ -1097,6 +1195,7 @@ const getCashFlows = async (profile, uid) => {
     cashRunway,
     advice,
     averageDailyNet,
+    weeklyCashFlow,
   };
 };
 
