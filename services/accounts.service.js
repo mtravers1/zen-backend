@@ -1085,6 +1085,9 @@ const getCashFlows = async (profile, uid) => {
       Math.ceil(((averageDailySpend - averageDailyIncome) * 1.05) / 10) * 10;
   }
 
+  // average daily net
+  const averageDailyNet = averageDailyIncome - averageDailySpend;
+
   return {
     currentCashFlow,
     totalCashBalance,
@@ -1093,6 +1096,7 @@ const getCashFlows = async (profile, uid) => {
     netWorth,
     cashRunway,
     advice,
+    averageDailyNet,
   };
 };
 
