@@ -119,7 +119,8 @@ const detectInternalTransfers = async (req, res) => {
 const repairAccessToken = async (req, res) => {
   try {
     const { accountId } = req.body;
-    const response = await plaidService.repairAccessToken(accountId);
+    const email = req.user.email;
+    const response = await plaidService.repairAccessToken(accountId, email);
     res.status(200).send(response);
   } catch (error) {
     res.status(500).send({ message: error.message });

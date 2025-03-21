@@ -1809,6 +1809,7 @@ const accountsService = {
   generateUploadUrl,
   generateSignedUrl,
   getProfileTransactions,
+  removeAccount,
 };
 
 export default accountsService;
