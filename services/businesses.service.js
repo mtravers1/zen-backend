@@ -173,6 +173,18 @@ const getUserProfiles = async (email, uid) => {
     profile.photo = photo ? photo : profile.photo;
   }
 
+  for (const profile of profiles) {
+    const photoPath = profile.isPersonal
+      ? `profilePhotos/${email}.jpg`
+      : `profilePhotos/${profile.name}.jpg`;
+
+    let photo;
+    if (!profile.photo) {
+      photo = await accountsService.generateSignedUrl(photoPath);
+    }
+    profile.photo = photo ? photo : profile.photo;
+  }
+
   return profiles;
 };
 
