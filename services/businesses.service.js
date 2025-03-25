@@ -3,6 +3,7 @@ import Business from "../database/models/Businesses.js";
 import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
+import accountsService from "./accounts.service.js";
 
 const addBusinesses = async (businessList, email) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() });
@@ -113,6 +114,18 @@ const getUserProfiles = async (email) => {
         personalProfile.plaidAccounts.splice(index, 1);
       }
     }
+  }
+
+  for (const profile of profiles) {
+    const photoPath = profile.isPersonal
+      ? `profilePhotos/${email}.jpg`
+      : `profilePhotos/${profile.name}.jpg`;
+
+    let photo;
+    if (!profile.photo) {
+      photo = await accountsService.generateSignedUrl(photoPath);
+    }
+    profile.photo = photo ? photo : profile.photo;
   }
 
   return profiles;
