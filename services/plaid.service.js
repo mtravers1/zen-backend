@@ -248,7 +248,7 @@ const updateTransactions = async (item) => {
 
   for (let transaction of transactions) {
     const existingTransaction = await Transaction.findOne({
-      transaction_id: transaction.transaction_id,
+      plaidTransactionId: transaction.transaction_id,
     });
     if (existingTransaction) {
       continue;
