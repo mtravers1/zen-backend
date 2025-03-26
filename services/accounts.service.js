@@ -12,6 +12,7 @@ import {
   encryptValue,
   getUserDek,
 } from "../database/encryption.js";
+import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
 const storage = new Storage({
   credentials: {
@@ -777,7 +778,89 @@ const getAllUserAccounts = async (email, uid) => {
   return accounts;
 };
 
-const getCashFlows = async (profile, uid) => {
+const getCashFlowsWeekly = async (profile) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccounts = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).exec();
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const allTransactions = [];
+  let balanceCredit = 0;
+  let balanceDebit = 0;
+  let balanceCurrentInvestment = 0;
+  let balanceAvailableInvestment = 0;
+  let balanceLoan = 0;
+  const depositoryTransactions = [];
+  const creditTransactions = [];
+
+  for (const plaidAccount of plaidAccounts) {
+    if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
+      balanceCredit = balanceCredit += plaidAccount.currentBalance;
+    } else if (
+      plaidAccount.account_type === "depository" &&
+      plaidAccount.availableBalance
+    ) {
+      balanceDebit = balanceDebit += plaidAccount.availableBalance;
+    } else if (plaidAccount.account_type === "investment") {
+      if (
+        plaidAccount.account_subtype === "brokerage" ||
+        plaidAccount.account_subtype === "isa" ||
+        plaidAccount.account_subtype === "crypto exchange" ||
+        plaidAccount.account_subtype === "fixed annuity" ||
+        plaidAccount.account_subtype === "non-custodial wallet" ||
+        plaidAccount.account_subtype === "non-taxable brokerage account" ||
+        plaidAccount.account_subtype === "retirement" ||
+        plaidAccount.account_subtype === "trust"
+      ) {
+        if (plaidAccount.currentBalance) {
+          balanceCurrentInvestment = balanceCurrentInvestment +=
+            plaidAccount.currentBalance;
+        }
+        if (plaidAccount.availableBalance) {
+          balanceAvailableInvestment = balanceAvailableInvestment +=
+            plaidAccount.availableBalance;
+        }
+      }
+    } else if (
+      plaidAccount.account_type === "loan" &&
+      plaidAccount.currentBalance
+    ) {
+      balanceLoan = balanceLoan += plaidAccount.currentBalance;
+    }
+
+    const transactions = await Transaction.find({
+      plaidAccountId: plaidAccount.plaid_account_id,
+      transactionDate: { $gte: ninetyDaysAgo },
+      isInternal: false,
+    })
+      .sort({ transactionDate: 1 })
+      .lean();
+
+    allTransactions.push(...transactions);
+    depositoryTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "depository"
+      )
+    );
+    creditTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "credit"
+      )
+    );
+  }
+
+  const groupedTransactions = groupByWeek([
+    ...depositoryTransactions,
+    ...creditTransactions,
+  ]);
+
+  const result = calculateWeeklyTotals(groupedTransactions);
+  return { weeklyCashFlow: result };
+};
+
+const getCashFlows = async (profile) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
@@ -1906,6 +1989,7 @@ const accountsService = {
   addAccount,
   getAccounts,
   getCashFlows,
+  getCashFlowsWeekly,
   getUserTransactions,
   getTransactionsByAccount,
   getAllUserAccounts,

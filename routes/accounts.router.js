@@ -6,6 +6,7 @@ const router = Router();
 router.post("/add-account", accountsController.addAccount);
 router.post("/", accountsController.getAccounts);
 router.post("/cash-flows", accountsController.getCashFlows);
+router.post("/cash-flows-weekly", accountsController.getCashFlowsWeekly);
 router.get(
   "/profile-transactions/:profileId",
   accountsController.getProfileTransactions
