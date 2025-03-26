@@ -70,10 +70,6 @@ const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const existingToken = await AccessToken.findOne({ userId, institutionId });
-  if (existingToken) {
-    return existingToken;
-  }
   const newToken = new AccessToken({
     userId,
     accessToken,
@@ -220,88 +216,155 @@ const getAccessTokenFromItemId = async (itemId) => {
 
 const updateTransactions = async (item) => {
   const accessToken = await getAccessTokenFromItemId(item);
-  const accountResponse = await plaidClient.accountsGet({
-    access_token: accessToken,
-  });
-  const firstAccountId = accountResponse.data.accounts[0].account_id;
 
-  const account = await PlaidAccount.findOne({
-    plaid_account_id: firstAccountId,
-  });
-  if (!account) {
+  if (!accessToken) {
+    //TODO: remove item
     return;
   }
 
-  const cursor = account.nextCursor;
+  // Obtener todas las cuentas asociadas a ese accessToken
+  const accounts = await PlaidAccount.find({ accessToken });
 
-  const response = await plaidClient.transactionsSync({
-    access_token: accessToken,
-    count: 250,
-    cursor: cursor,
-  });
-  const transactions = response.data.added;
-  const nextCursor = response.data.next_cursor;
+  if (!accounts.length) {
+    //TODO: remove item
+    return;
+  }
 
-  const accountTypes = {};
+  let cursor = accounts[0].nextCursor || null;
+  let hasMore = true;
+  let transactionsByAccount = {};
+  let oldCursor = cursor;
 
-  const transactionsByAccount = {};
-
-  for (let transaction of transactions) {
-    const existingTransaction = await Transaction.findOne({
-      plaidTransactionId: transaction.transaction_id,
-    });
-    if (existingTransaction) {
-      continue;
-    }
-
-    if (!accountTypes[transaction.account_id]) {
-      const plaidAccount = await PlaidAccount.findOne({
-        plaid_account_id: transaction.account_id,
+  while (hasMore) {
+    transactionsByAccount = {};
+    oldCursor = cursor;
+    try {
+      const response = await plaidClient.transactionsSync({
+        access_token: accessToken,
+        cursor: cursor,
+        count: 250,
       });
-      if (!plaidAccount) continue;
-      accountTypes[transaction.account_id] = plaidAccount.account_type;
+
+      const transactions = response.data.added || [];
+      const modifiedTransactions = response.data.modified || [];
+      const removedTransactions = response.data.removed || [];
+      cursor = response.data.next_cursor;
+      hasMore = response.data.has_more;
+
+      // console.log(
+      //   `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
+      // );
+
+      const accountMap = new Map();
+      for (const account of accounts) {
+        accountMap.set(account.plaid_account_id, account);
+      }
+
+      for (let transaction of transactions) {
+        if (!accountMap.has(transaction.account_id)) continue;
+
+        const existingTransaction = await Transaction.findOne({
+          plaidTransactionId: transaction.transaction_id,
+        });
+        if (existingTransaction) continue;
+
+        const accountType = accountMap.get(transaction.account_id).account_type;
+
+        const merchant = {
+          merchantName: transaction.merchant_name,
+          name: transaction.name,
+          merchantCategory: transaction.category?.[0],
+          website: transaction.website,
+          logo: transaction.logo_url,
+        };
+
+        const newTransaction = new Transaction({
+          plaidTransactionId: transaction.transaction_id,
+          plaidAccountId: transaction.account_id,
+          transactionDate: transaction.date,
+          amount: transaction.amount,
+          currency: transaction.iso_currency_code,
+          notes: null,
+          merchant,
+          description: null,
+          transactionCode: transaction.transaction_code,
+          tags: transaction.category,
+          accountType,
+        });
+
+        await newTransaction.save();
+
+        if (!transactionsByAccount[transaction.account_id]) {
+          transactionsByAccount[transaction.account_id] = [];
+        }
+        transactionsByAccount[transaction.account_id].push(newTransaction._id);
+      }
+
+      for (let removed of removedTransactions) {
+        await Transaction.deleteOne({
+          plaidTransactionId: removed.transaction_id,
+        });
+      }
+
+      for (let modified of modifiedTransactions) {
+        await Transaction.findOneAndUpdate(
+          { plaidTransactionId: modified.transaction_id },
+          {
+            amount: modified.amount,
+            transactionDate: modified.date,
+            tags: modified.category,
+          }
+        );
+      }
+
+      const newAccountsBalances = await plaidClient.accountsBalanceGet({
+        access_token: accessToken,
+      });
+
+      for (const account of accounts) {
+        if (!transactionsByAccount[account.plaid_account_id]) continue;
+        const newAccountBalance = newAccountsBalances.data.accounts.find(
+          (acc) => acc.account_id === account.plaid_account_id
+        );
+
+        await PlaidAccount.findOneAndUpdate(
+          { _id: account._id },
+          {
+            $push: {
+              transactions: {
+                $each: transactionsByAccount[account.plaid_account_id],
+              },
+            },
+            nextCursor: cursor,
+            ...(newAccountBalance && {
+              currentBalance: newAccountBalance.balances.current,
+              availableBalance: newAccountBalance.balances.available,
+            }),
+          },
+          { new: true }
+        );
+      }
+    } catch (error) {
+      if (
+        error.response?.data?.error_code ===
+        "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
+      ) {
+        console.log(
+          "Mutation detected during pagination, restarting with old cursor..."
+        );
+        cursor = oldCursor; // Reiniciar con el cursor anterior
+      } else {
+        console.error(
+          "Error syncing transactions:",
+          error.response?.data || error
+        );
+        break;
+      }
     }
-
-    const merchant = {
-      merchantName: transaction.merchant_name,
-      name: transaction.name,
-      merchantCategory: transaction.category?.[0],
-      website: transaction.website,
-      logo: transaction.logo_url,
-    };
-
-    const newTransaction = new Transaction({
-      plaidTransactionId: transaction.transaction_id,
-      plaidAccountId: transaction.account_id,
-      transactionDate: transaction.date,
-      amount: transaction.amount,
-      currency: transaction.iso_currency_code,
-      notes: null,
-      merchant: merchant,
-      description: null,
-      transactionCode: transaction.transaction_code,
-      tags: transaction.category,
-      accountType: accountTypes[transaction.account_id],
-    });
-
-    await newTransaction.save();
-
-    if (!transactionsByAccount[transaction.account_id]) {
-      transactionsByAccount[transaction.account_id] = [];
-    }
-
-    transactionsByAccount[transaction.account_id].push(newTransaction._id);
   }
+  console.log("Finished updating transactions");
 
-  for (const accountId in transactionsByAccount) {
-    const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
-    if (!account) continue;
-    account.transactions = transactionsByAccount[accountId];
-    account.nextCursor = nextCursor;
-    await account.save();
-  }
-
-  return transactions;
+  return transactionsByAccount;
 };
 
 const updateInvestmentTransactions = async (item) => {

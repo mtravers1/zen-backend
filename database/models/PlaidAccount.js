@@ -19,6 +19,9 @@ const plaidAccountSchema = new Schema({
     type: String,
     required: true,
   },
+  account_official_name: {
+    type: String,
+  },
   account_type: {
     type: String,
     required: true,

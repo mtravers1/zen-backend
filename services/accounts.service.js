@@ -47,8 +47,11 @@ const addAccount = async (accessToken, email) => {
   const accountTypes = {};
 
   for (let account of accounts) {
+    const mask = account.mask;
     const existingAccount = await PlaidAccount.findOne({
-      plaid_account_id: account.account_id,
+      institution_id: institutionId,
+      institution_name: institutionName,
+      mask: mask,
     });
 
     console.log("EXISTING ACCOUNT", existingAccount);
@@ -59,6 +62,7 @@ const addAccount = async (accessToken, email) => {
       owner_type: userType,
       plaid_account_id: account.account_id,
       account_name: account.name,
+      account_official_name: account.official_name,
       account_type: account.type,
       account_subtype: account.subtype,
       institution_name: institutionName,
@@ -141,10 +145,11 @@ const addAccount = async (accessToken, email) => {
 
     const accountType = accountTypes[transaction.account_id];
 
-    if (!accountType) {
-      console.error(
-        `Account type ${transaction.account_id} not found for transaction ${transaction.transaction_id}`
-      );
+    const existingAccount = await PlaidAccount.findOne({
+      plaid_account_id: transaction.account_id,
+    });
+
+    if (!accountType || !existingAccount) {
       continue;
     }
 
@@ -218,6 +223,14 @@ const addAccount = async (accessToken, email) => {
     Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
       if (Array.isArray(value)) {
         value.forEach(async (item) => {
+          //if accountid is not in savedaccounts, then skip
+          if (
+            !savedAccounts.find(
+              (account) => account.plaid_account_id === item.account_id
+            )
+          )
+            return;
+
           const liability = new Liability({
             liabilityType: key,
             accountId: item.account_id,
@@ -286,7 +299,7 @@ const addAccount = async (accessToken, email) => {
   for (const accountId in transactionsByAccount) {
     const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
     if (!account) continue;
-    account.transactions = transactionsByAccount[accountId];
+    account.transactions.push(...transactionsByAccount[accountId]);
     account.nextCursor = nextCursor;
     await account.save();
   }
