@@ -173,6 +173,7 @@ const getTransactions = async (email) => {
   const transactionsPromises = tokens.map(async (token) => {
     const response = await plaidClient.transactionsSync({
       access_token: token.accessToken,
+      count: 500,
     });
     return response.data.added;
   });
@@ -243,7 +244,7 @@ const updateTransactions = async (item) => {
       const response = await plaidClient.transactionsSync({
         access_token: accessToken,
         cursor: cursor,
-        count: 250,
+        count: 500,
       });
 
       const transactions = response.data.added || [];
