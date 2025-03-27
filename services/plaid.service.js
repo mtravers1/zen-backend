@@ -133,6 +133,7 @@ const getBalance = async (email) => {
     const balancePromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsBalanceGet({
         access_token: token.accessToken,
+        // min_last_updated_datetime: new Date().toISOString(),
       });
       return response.data.accounts.map((account) => ({
         ...account,
@@ -215,8 +216,8 @@ const getAccessTokenFromItemId = async (itemId) => {
 };
 
 const updateTransactions = async (item) => {
+  console.log("Updating transactions for item", item);
   const accessToken = await getAccessTokenFromItemId(item);
-
   if (!accessToken) {
     //TODO: remove item
     return;
@@ -251,9 +252,9 @@ const updateTransactions = async (item) => {
       cursor = response.data.next_cursor;
       hasMore = response.data.has_more;
 
-      // console.log(
-      //   `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
-      // );
+      console.log(
+        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
+      );
 
       const accountMap = new Map();
       for (const account of accounts) {
@@ -317,13 +318,20 @@ const updateTransactions = async (item) => {
         );
       }
 
-      const newAccountsBalances = await plaidClient.accountsBalanceGet({
-        access_token: accessToken,
-      });
+      let newAccountsBalances;
+
+      try {
+        newAccountsBalances = await plaidClient.accountsBalanceGet({
+          access_token: accessToken,
+          // min_last_updated_datetime: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error fetching account balances:", error);
+      }
 
       for (const account of accounts) {
         if (!transactionsByAccount[account.plaid_account_id]) continue;
-        const newAccountBalance = newAccountsBalances.data.accounts.find(
+        const newAccountBalance = newAccountsBalances?.data.accounts.find(
           (acc) => acc.account_id === account.plaid_account_id
         );
 
