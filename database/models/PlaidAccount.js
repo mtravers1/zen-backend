@@ -6,6 +6,10 @@ const plaidAccountSchema = new Schema({
     ref: "User",
     required: true,
   },
+  accessToken: {
+    type: String,
+    required: true,
+  },
   owner_type: {
     type: String,
     enum: ["business_owner", "individual"],

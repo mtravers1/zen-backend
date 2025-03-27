@@ -60,6 +60,7 @@ const addAccount = async (accessToken, email) => {
     if (existingAccount) continue;
     const newAccount = new PlaidAccount({
       owner_id: userId,
+      accessToken,
       owner_type: userType,
       plaid_account_id: account.account_id,
       account_name: account.name,
