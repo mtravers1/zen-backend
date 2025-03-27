@@ -52,6 +52,7 @@ const addAccount = async (accessToken, email) => {
       institution_id: institutionId,
       institution_name: institutionName,
       mask: mask,
+      owner_id: user._id,
     });
 
     console.log("EXISTING ACCOUNT", existingAccount);
