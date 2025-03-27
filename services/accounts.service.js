@@ -173,7 +173,7 @@ const addAccount = async (accessToken, email) => {
       description: null,
       transactionCode: transaction.transaction_code,
       tags: transaction.category,
-      accountType,
+      accountType: accountType ?? "",
     });
 
     await newTransaction.save();
@@ -208,7 +208,7 @@ const addAccount = async (accessToken, email) => {
       securityId: transaction.security_id,
       type: transaction.type,
       subtype: transaction.subtype,
-      accountType,
+      accountType: accountType ?? "",
     });
 
     await newTransaction.save();

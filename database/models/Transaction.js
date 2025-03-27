@@ -29,7 +29,6 @@ const transactionSchema = new Schema({
   },
   accountType: {
     type: String,
-    required: true,
   },
   transactionDate: {
     type: Date,
