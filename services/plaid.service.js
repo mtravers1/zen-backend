@@ -224,7 +224,6 @@ const updateTransactions = async (item) => {
     return;
   }
 
-  // Obtener todas las cuentas asociadas a ese accessToken
   const accounts = await PlaidAccount.find({ accessToken });
 
   if (!accounts.length) {
@@ -232,14 +231,72 @@ const updateTransactions = async (item) => {
     return;
   }
 
+  let newAccountsBalances;
+
+  try {
+    newAccountsBalances = await plaidClient.accountsBalanceGet({
+      access_token: accessToken,
+      // min_last_updated_datetime: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error fetching account balances:", error);
+  }
+
+  if (newAccountsBalances) {
+    const bulkOps = [];
+    for (const account of newAccountsBalances.data.accounts) {
+      const accountBalance = account.balances;
+      const accountType = account.type;
+      const accountSubtype = account.subtype;
+      const accountName = account.name;
+      const accountPlaidId = account.account_id;
+
+      const existingAccount = accounts.find(
+        (a) => a.plaid_account_id === accountPlaidId
+      );
+
+      if (existingAccount) {
+        existingAccount.balance = accountBalance.current;
+        existingAccount.availableBalance = accountBalance.available;
+        existingAccount.account_type = accountType;
+        existingAccount.account_subtype = accountSubtype;
+        existingAccount.account_name = accountName;
+        bulkOps.push({
+          updateOne: {
+            filter: { plaid_account_id: accountPlaidId },
+            update: {
+              balance: accountBalance.current,
+              availableBalance: accountBalance.available,
+              accountType,
+              accountSubtype,
+              accountName,
+            },
+          },
+        });
+      }
+    }
+
+    if (bulkOps.length) {
+      await PlaidAccount.bulkWrite(bulkOps);
+    }
+  }
+
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
   let transactionsByAccount = {};
   let oldCursor = cursor;
+  let iterationCoounter = 0;
+  const maxIterations = 10;
 
   while (hasMore) {
     transactionsByAccount = {};
     oldCursor = cursor;
+    iterationCoounter++;
+    if (iterationCoounter > maxIterations) {
+      console.log("Max iterations reached, stopping");
+      hasMore = false;
+      break;
+    }
     try {
       const response = await plaidClient.transactionsSync({
         access_token: accessToken,
@@ -262,15 +319,9 @@ const updateTransactions = async (item) => {
         accountMap.set(account.plaid_account_id, account);
       }
 
+      const bulkOps = [];
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
-
-        const existingTransaction = await Transaction.findOne({
-          plaidTransactionId: transaction.transaction_id,
-        });
-        if (existingTransaction) continue;
-
-        const accountType = accountMap.get(transaction.account_id).account_type;
 
         const merchant = {
           merchantName: transaction.merchant_name,
@@ -280,78 +331,87 @@ const updateTransactions = async (item) => {
           logo: transaction.logo_url,
         };
 
-        const newTransaction = new Transaction({
-          plaidTransactionId: transaction.transaction_id,
-          plaidAccountId: transaction.account_id,
-          transactionDate: transaction.date,
-          amount: transaction.amount,
-          currency: transaction.iso_currency_code,
-          notes: null,
-          merchant,
-          description: null,
-          transactionCode: transaction.transaction_code,
-          tags: transaction.category,
-          accountType,
+        bulkOps.push({
+          updateOne: {
+            filter: { plaidTransactionId: transaction.transaction_id },
+            update: {
+              $setOnInsert: {
+                plaidTransactionId: transaction.transaction_id,
+                plaidAccountId: transaction.account_id,
+                transactionDate: transaction.date,
+                amount: transaction.amount,
+                currency: transaction.iso_currency_code,
+                notes: null,
+                merchant,
+                description: null,
+                transactionCode: transaction.transaction_code,
+                tags: transaction.category,
+                accountType: accountMap.get(transaction.account_id)
+                  .account_type,
+              },
+            },
+            upsert: true,
+          },
         });
-
-        await newTransaction.save();
 
         if (!transactionsByAccount[transaction.account_id]) {
           transactionsByAccount[transaction.account_id] = [];
         }
-        transactionsByAccount[transaction.account_id].push(newTransaction._id);
-      }
-
-      for (let removed of removedTransactions) {
-        await Transaction.deleteOne({
-          plaidTransactionId: removed.transaction_id,
-        });
-      }
-
-      for (let modified of modifiedTransactions) {
-        await Transaction.findOneAndUpdate(
-          { plaidTransactionId: modified.transaction_id },
-          {
-            amount: modified.amount,
-            transactionDate: modified.date,
-            tags: modified.category,
-          }
+        transactionsByAccount[transaction.account_id].push(
+          transaction.transaction_id
         );
       }
 
-      let newAccountsBalances;
-
-      try {
-        newAccountsBalances = await plaidClient.accountsBalanceGet({
-          access_token: accessToken,
-          // min_last_updated_datetime: new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error("Error fetching account balances:", error);
+      if (bulkOps.length) {
+        await Transaction.bulkWrite(bulkOps);
       }
 
-      for (const account of accounts) {
-        if (!transactionsByAccount[account.plaid_account_id]) continue;
-        const newAccountBalance = newAccountsBalances?.data.accounts.find(
-          (acc) => acc.account_id === account.plaid_account_id
-        );
-
-        await PlaidAccount.findOneAndUpdate(
-          { _id: account._id },
-          {
-            $push: {
-              transactions: {
-                $each: transactionsByAccount[account.plaid_account_id],
-              },
-            },
-            nextCursor: cursor,
-            ...(newAccountBalance && {
-              currentBalance: newAccountBalance.balances.current,
-              availableBalance: newAccountBalance.balances.available,
-            }),
+      if (removedTransactions.length) {
+        await Transaction.deleteMany({
+          plaidTransactionId: {
+            $in: removedTransactions.map((t) => t.transaction_id),
           },
-          { new: true }
-        );
+        });
+      }
+
+      if (modifiedTransactions.length > 0) {
+        const bulkModifyOps = modifiedTransactions.map((transaction) => ({
+          updateOne: {
+            filter: { plaidTransactionId: transaction.transaction_id },
+            update: {
+              amount: transaction.amount,
+              transactionDate: transaction.date,
+              tags: transaction.category,
+            },
+          },
+        }));
+
+        await Transaction.bulkWrite(bulkModifyOps);
+      }
+
+      const bulkUpdateAccountsOps = [];
+      for (const [accountId] of Object.entries(transactionsByAccount)) {
+        const accountTransaction = await Transaction.find({
+          plaidAccountId: accountId,
+        })
+          .sort({ transactionDate: -1 })
+          .select("_id")
+          .lean()
+          .then((transactions) => transactions.map((t) => t._id));
+
+        bulkUpdateAccountsOps.push({
+          updateOne: {
+            filter: { plaid_account_id: accountId },
+            update: {
+              $addToSet: { transactions: { $each: accountTransaction } },
+              nextCursor: cursor,
+            },
+          },
+        });
+      }
+
+      if (bulkUpdateAccountsOps.length > 0) {
+        await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
       }
     } catch (error) {
       if (
