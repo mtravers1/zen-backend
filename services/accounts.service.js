@@ -663,7 +663,10 @@ const getTransactionsByAccount = async (accountId) => {
     transaction.institutionId = account.institution_id;
   });
 
-  return account.transactions;
+  const sortedTransactions = account.transactions.sort(
+    (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+  );
+  return sortedTransactions;
 };
 
 const generateUploadUrl = async (fileName) => {
