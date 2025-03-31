@@ -336,6 +336,7 @@ const updateTransactions = async (item) => {
             filter: { plaidTransactionId: transaction.transaction_id },
             update: {
               $setOnInsert: {
+                accountId: accountMap.get(transaction.account_id)._id,
                 plaidTransactionId: transaction.transaction_id,
                 plaidAccountId: transaction.account_id,
                 transactionDate: transaction.date,

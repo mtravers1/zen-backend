@@ -154,6 +154,13 @@ const addAccount = async (accessToken, email) => {
     if (!accountType || !existingAccount) {
       continue;
     }
+    const account = savedAccounts.find(
+      (account) => account.plaid_account_id === transaction.account_id
+    );
+
+    if (!account) {
+      continue;
+    }
 
     const merchant = {
       merchantName: transaction.merchant_name,
@@ -164,6 +171,7 @@ const addAccount = async (accessToken, email) => {
     };
 
     const newTransaction = new Transaction({
+      accountId: account._id,
       plaidTransactionId: transaction.transaction_id,
       plaidAccountId: transaction.account_id,
       transactionDate: transaction.date,
