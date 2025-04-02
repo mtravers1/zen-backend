@@ -1988,6 +1988,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 const accountsService = {
   addAccount,
   getAccounts,
+  getAccountDetails,
   getCashFlows,
   getCashFlowsWeekly,
   getUserTransactions,

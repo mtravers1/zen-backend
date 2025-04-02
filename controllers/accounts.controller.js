@@ -60,17 +60,6 @@ const getCashFlowsWeekly = async (req, res) => {
   }
 };
 
-const getCashFlowsWeekly = async (req, res) => {
-  try {
-    const { profile } = req.body;
-    const cashFlows = await accountsService.getCashFlowsWeekly(profile);
-    res.status(200).send(cashFlows);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: error.message });
-  }
-};
-
 const getUserTransactions = async (req, res) => {
   try {
     const email = req.user.email;
@@ -154,6 +143,7 @@ const getAccountPhoto = async (req, res) => {
 const accountsController = {
   addAccount,
   getAccounts,
+  getAccountDetails,
   getCashFlows,
   getCashFlowsWeekly,
   getUserTransactions,

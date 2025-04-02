@@ -16,6 +16,7 @@ router.get(
   "/transactions/:accountId",
   accountsController.getTransactionsByAccount
 );
+router.get("/details/:accountId", accountsController.getAccountDetails);
 router.get("/", accountsController.getAllUserAccounts);
 router.post("/add-photo", accountsController.addAccountPhoto);
 router.post("/get-photo", accountsController.getAccountPhoto);
