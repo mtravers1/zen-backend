@@ -1998,6 +1998,7 @@ const accountsService = {
   generateSignedUrl,
   getProfileTransactions,
   removeAccount,
+  getCashFlowsByPlaidAccount,
 };
 
 export default accountsService;

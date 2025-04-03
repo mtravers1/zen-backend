@@ -7,6 +7,7 @@ router.post("/add-account", accountsController.addAccount);
 router.post("/", accountsController.getAccounts);
 router.post("/cash-flows", accountsController.getCashFlows);
 router.post("/cash-flows-weekly", accountsController.getCashFlowsWeekly);
+router.post("/cash-flows-by-plaidaccount", accountsController.getCashFlowsByPlaidAccount);
 router.get(
   "/profile-transactions/:profileId",
   accountsController.getProfileTransactions
@@ -16,7 +17,7 @@ router.get(
   "/transactions/:accountId",
   accountsController.getTransactionsByAccount
 );
-router.get("/details/:accountId", accountsController.getAccountDetails);
+router.get("/details/:accountId/:profileId", accountsController.getAccountDetails);
 router.get("/", accountsController.getAllUserAccounts);
 router.post("/add-photo", accountsController.addAccountPhoto);
 router.post("/get-photo", accountsController.getAccountPhoto);

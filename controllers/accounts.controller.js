@@ -1,4 +1,5 @@
 import accountsService from "../services/accounts.service.js";
+import plaidService from "../services/plaid.service.js";
 
 const addAccount = async (req, res) => {
   try {
@@ -53,6 +54,17 @@ const getCashFlowsWeekly = async (req, res) => {
     const { profile } = req.body;
     const uid = req.user.uid;
     const cashFlows = await accountsService.getCashFlowsWeekly(profile, uid);
+    res.status(200).send(cashFlows);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
+const getCashFlowsByPlaidAccount = async (req, res) => {
+  try {
+    const { account } = req.body;
+    const cashFlows = await accountsService.getCashFlowsByPlaidAccount(account);
     res.status(200).send(cashFlows);
   } catch (error) {
     console.log(error);
@@ -152,6 +164,7 @@ const accountsController = {
   addAccountPhoto,
   getAccountPhoto,
   getProfileTransactions,
+  getCashFlowsByPlaidAccount,
 };
 
 export default accountsController;
