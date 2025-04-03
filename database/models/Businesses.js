@@ -31,7 +31,7 @@ const businessSchema = new Schema({
     },
   ],
   name: {
-    type: String,
+    type: Buffer,
     required: true,
   },
   legalName: {
@@ -48,7 +48,7 @@ const businessSchema = new Schema({
   addresses: [addressSchema],
   website: String,
   phoneNumbers: [phoneNumberSchema],
-  industryDesc: String,
+  industryDesc: Buffer,
   plaidAccountIds: [{ type: Schema.Types.ObjectId, ref: "PlaidAccount" }],
   documentIds: [{ type: Schema.Types.ObjectId, ref: "Document" }],
   goalIds: [{ type: Schema.Types.ObjectId, ref: "Goal" }],

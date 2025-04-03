@@ -2,10 +2,10 @@ import { model, Schema } from "mongoose";
 
 export const merchantSchema = new Schema({
   merchantName: {
-    type: String,
+    type: Buffer,
   },
   name: {
-    type: String,
+    type: Buffer,
   },
   merchantCategory: {
     type: String,
@@ -28,14 +28,14 @@ const transactionSchema = new Schema({
     required: true,
   },
   accountType: {
-    type: String,
+    type: Buffer,
   },
   transactionDate: {
     type: Date,
     required: true,
   },
   amount: {
-    type: Number,
+    type: Buffer,
     required: true,
   },
   currency: {
@@ -52,7 +52,7 @@ const transactionSchema = new Schema({
     type: String,
   },
   transactionCode: {
-    type: Number,
+    type: Buffer,
   },
   isInternal: {
     type: Boolean,
@@ -71,25 +71,25 @@ const transactionSchema = new Schema({
 
   //fields only for investment transactions
   name: {
-    type: String,
+    type: Buffer,
   },
   fees: {
-    type: Number,
+    type: Buffer,
   },
   price: {
-    type: Number,
+    type: Buffer,
   },
   type: {
-    type: String,
+    type: Buffer,
   },
   subtype: {
-    type: String,
+    type: Buffer,
   },
   quantity: {
-    type: Number,
+    type: Buffer,
   },
   securityId: {
-    type: String,
+    type: Buffer,
   },
   isInvestment: {
     type: Boolean,

@@ -3,6 +3,8 @@ import User from "../database/models/User.js";
 import plaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
+import accountsService from "./accounts.service.js";
+import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
@@ -15,6 +17,16 @@ const createLinkToken = async (email, isAndroid) => {
   });
   if (!user) {
     throw new Error("User not found");
+  }
+  let accessToken;
+  if (accountId) {
+    const account = await PlaidAccount.findOne({ _id: accountId });
+    if (!account) {
+      throw new Error("Account not found");
+    }
+    accessToken = await kmsDecrypt({
+      value: account.accessToken,
+    });
   }
   const userId = user._id.toString();
   const plaidRequest = {
@@ -70,14 +82,24 @@ const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
+
+  const encryptedToken = await kmsEncrypt({
+    value: accessToken,
+  });
+
   const newToken = new AccessToken({
     userId,
-    accessToken,
+    accessToken: encryptedToken,
     itemId,
     institutionId,
   });
   await newToken.save();
-  return newToken;
+  return {
+    userId,
+    accessToken,
+    itemId,
+    institutionId,
+  };
 };
 
 const getUserAccessTokens = async (email) => {
@@ -89,7 +111,21 @@ const getUserAccessTokens = async (email) => {
   }
   const userId = user._id.toString();
   const tokens = await AccessToken.find({ userId });
-  return tokens;
+
+  const decryptedTokens = [];
+
+  for (const token of tokens) {
+    const decryptedAccessToken = await kmsDecrypt({
+      value: token.accessToken,
+    });
+
+    decryptedTokens.push({
+      ...token.toObject(),
+      accessToken: decryptedAccessToken,
+    });
+  }
+
+  return decryptedTokens;
 };
 
 const getAccounts = async (email) => {
@@ -213,18 +249,21 @@ const getAccessTokenFromItemId = async (itemId) => {
     return;
   }
   const accessToken = access.accessToken;
-  return accessToken;
+
+  const decryptedToken = await kmsDecrypt({
+    value: accessToken,
+  });
+  return decryptedToken;
 };
 
 const updateTransactions = async (item) => {
-  console.log("Updating transactions for item", item);
   const accessToken = await getAccessTokenFromItemId(item);
   if (!accessToken) {
     //TODO: remove item
     return;
   }
 
-  const accounts = await PlaidAccount.find({ accessToken });
+  const accounts = await PlaidAccount.find({ itemId: item });
 
   if (!accounts.length) {
     //TODO: remove item
@@ -256,20 +295,40 @@ const updateTransactions = async (item) => {
       );
 
       if (existingAccount) {
-        existingAccount.balance = accountBalance.current;
+        // Encriptar valores antes de actualizar
+        const [
+          encryptedAccountName,
+          encryptedAccountType,
+          encryptedAccountSubtype,
+          encryptedCurrentBalance,
+          encryptedAvailableBalance,
+        ] = await Promise.all([
+          kmsEncrypt({ value: accountName }),
+          kmsEncrypt({ value: accountType }),
+          kmsEncrypt({ value: accountSubtype }),
+          accountBalance.current
+            ? kmsEncrypt({ value: accountBalance.current.toString() })
+            : null,
+          accountBalance.available
+            ? kmsEncrypt({ value: accountBalance.available.toString() })
+            : null,
+        ]);
+
+        existingAccount.currentBalance = accountBalance.current;
         existingAccount.availableBalance = accountBalance.available;
         existingAccount.account_type = accountType;
         existingAccount.account_subtype = accountSubtype;
         existingAccount.account_name = accountName;
+
         bulkOps.push({
           updateOne: {
             filter: { plaid_account_id: accountPlaidId },
             update: {
-              balance: accountBalance.current,
-              availableBalance: accountBalance.available,
-              accountType,
-              accountSubtype,
-              accountName,
+              currentBalance: encryptedCurrentBalance,
+              availableBalance: encryptedAvailableBalance,
+              accountType: encryptedAccountType,
+              accountSubtype: encryptedAccountSubtype,
+              accountName: encryptedAccountName,
             },
           },
         });
@@ -323,13 +382,32 @@ const updateTransactions = async (item) => {
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
 
+        const encryptedMerchantName = await kmsEncrypt({
+          value: transaction.merchant_name,
+        });
+        const encryptedName = await kmsEncrypt({
+          value: transaction.name,
+        });
+
         const merchant = {
-          merchantName: transaction.merchant_name,
-          name: transaction.name,
+          merchantName: encryptedMerchantName,
+          name: encryptedName,
           merchantCategory: transaction.category?.[0],
           website: transaction.website,
           logo: transaction.logo_url,
         };
+
+        const encryptedAmount = await kmsEncrypt({
+          value: transaction.amount,
+        });
+
+        const encryptedAccountType = await kmsEncrypt({
+          value: accountMap.get(transaction.account_id).account_type,
+        });
+
+        const transactionCode = await kmsEncrypt({
+          value: transaction.transaction_code,
+        });
 
         bulkOps.push({
           updateOne: {
@@ -340,15 +418,14 @@ const updateTransactions = async (item) => {
                 plaidTransactionId: transaction.transaction_id,
                 plaidAccountId: transaction.account_id,
                 transactionDate: transaction.date,
-                amount: transaction.amount,
+                amount: encryptedAmount,
                 currency: transaction.iso_currency_code,
                 notes: null,
                 merchant,
                 description: null,
-                transactionCode: transaction.transaction_code,
+                transactionCode: transactionCode,
                 tags: transaction.category,
-                accountType: accountMap.get(transaction.account_id)
-                  .account_type,
+                accountType: encryptedAccountType,
               },
             },
             upsert: true,
@@ -376,18 +453,27 @@ const updateTransactions = async (item) => {
       }
 
       if (modifiedTransactions.length > 0) {
-        const bulkModifyOps = modifiedTransactions.map((transaction) => ({
-          updateOne: {
-            filter: { plaidTransactionId: transaction.transaction_id },
-            update: {
-              amount: transaction.amount,
-              transactionDate: transaction.date,
-              tags: transaction.category,
-            },
-          },
-        }));
+        const modifiedBulkOps = [];
+        for (const transaction of modifiedTransactions) {
+          const encryptedAmount = await kmsEncrypt({
+            value: transaction.amount,
+          });
 
-        await Transaction.bulkWrite(bulkModifyOps);
+          modifiedBulkOps.push({
+            updateOne: {
+              filter: { plaidTransactionId: transaction.transaction_id },
+              update: {
+                $set: {
+                  amount: encryptedAmount,
+                  transactionDate: transaction.date,
+                  tags: transaction.category,
+                },
+              },
+            },
+          });
+        }
+
+        await Transaction.bulkWrite(modifiedBulkOps);
       }
 
       const bulkUpdateAccountsOps = [];
@@ -413,6 +499,36 @@ const updateTransactions = async (item) => {
 
       if (bulkUpdateAccountsOps.length > 0) {
         await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
+      }
+
+      const savedToken = await AccessToken.findOne({
+        itemId: item,
+      });
+
+      if (!savedToken) return;
+      const userId = savedToken.userId;
+      const user = await User.findById(userId);
+      if (!user) return;
+
+      console.log("User found:", user);
+      console.log("User email:", user.email);
+
+      const emails = user.email;
+      console.log("Email:", emails);
+
+      const emailObject = emails.find((email) => email.isPrimary === true);
+      if (!emailObject) return;
+      const email = emailObject.email;
+
+      const internalTransfers = await detectInternalTransfers(email);
+
+      for (const transactionId of internalTransfers) {
+        const transaction = await Transaction.findOne({
+          plaidTransactionId: transactionId,
+        });
+        if (!transaction) continue;
+        transaction.isInternal = true;
+        await transaction.save();
       }
     } catch (error) {
       if (

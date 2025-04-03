@@ -4,6 +4,7 @@ import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
+import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 
 const addBusinesses = async (businessList, email) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() });
@@ -45,12 +46,24 @@ const addBusinesses = async (businessList, email) => {
       businessOwners.push(owner.name);
     }
 
+    const encryptedName = await kmsEncrypt({
+      value: businessData.name,
+    });
+
+    const encryptedIndustry = await kmsEncrypt({
+      value: businessData.industry,
+    });
+
+    const encryptedBusinessLogo = await kmsEncrypt({
+      value: businessData.businessLogo,
+    });
+
     const newBusiness = new Business({
       userId: userId,
-      name: businessData.name,
-      industryDesc: businessData.industry,
+      name: encryptedName,
+      industryDesc: encryptedIndustry,
       ownership: ownership,
-      businessLogo: businessData.businessLogo,
+      businessLogo: encryptedBusinessLogo,
       numAccounts: businessData.accounts,
       color: color,
       businessOwners: businessOwners,
@@ -63,7 +76,9 @@ const addBusinesses = async (businessList, email) => {
 };
 
 const getUserProfiles = async (email) => {
-  const user = await User.findOne({ "email.email": email.toLowerCase() });
+  const user = await User.findOne({
+    "email.email": email.toLowerCase(),
+  }).lean();
 
   if (!user) {
     throw new Error("User not found");
@@ -71,17 +86,33 @@ const getUserProfiles = async (email) => {
 
   const profiles = [];
 
+  const decryptedFirstName = await kmsDecrypt({
+    value: user.name.firstName,
+  });
+
+  const decryptedLastName = await kmsDecrypt({
+    value: user.name.lastName,
+  });
+
+  const decryptedMiddleName = await kmsDecrypt({
+    value: user.name.middleName,
+  });
+
+  const decryptedPhotoUrl = await kmsDecrypt({
+    value: user.profilePhotoUrl,
+  });
+
   const personalProfile = {
     id: user._id,
-    name: user.name.firstName + " " + user.name.lastName,
+    name: decryptedFirstName + " " + decryptedLastName,
     nameParts: {
-      firstName: user.name.firstName,
-      lastName: user.name.lastName,
-      middleName: user.name.middleName,
+      firstName: decryptedFirstName,
+      lastName: decryptedLastName,
+      middleName: decryptedMiddleName,
       prefix: user.name.prefix,
       suffix: user.name.suffix,
     },
-    photo: user.profilePhotoUrl,
+    photo: decryptedPhotoUrl,
     plaidAccounts: user.plaidAccounts,
     isPersonal: true,
     color: null,
@@ -91,17 +122,29 @@ const getUserProfiles = async (email) => {
 
   const userId = user._id.toString();
 
-  const businesses = await Business.find({ userId });
+  const businesses = await Business.find({ userId }).lean();
 
   if (!businesses.length) {
     return profiles;
   }
 
   for (const business of businesses) {
+    const decryptedName = await kmsDecrypt({
+      value: business.name,
+    });
+
+    const decryptedIndustry = await kmsDecrypt({
+      value: business.industryDesc,
+    });
+
+    const decryptedBusinessLogo = await kmsDecrypt({
+      value: business.businessLogo,
+    });
+
     const businessProfile = {
       id: business._id,
-      name: business.name,
-      photo: business.businessLogo,
+      name: decryptedName,
+      photo: decryptedBusinessLogo,
       plaidAccounts: business.plaidAccountIds,
       isPersonal: false,
       color: business.color,

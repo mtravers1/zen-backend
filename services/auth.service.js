@@ -1,4 +1,5 @@
 import User from "../database/models/User.js";
+import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 import admin from "../lib/firebaseAdmin.js";
 
 const own = async (email) => {
@@ -25,16 +26,32 @@ const signUp = async (data) => {
       isPrimary: true,
     };
 
+    const encryptedFirstName = await kmsEncrypt({
+      value: data.firstName,
+    });
+
+    const encryptedLastName = await kmsEncrypt({
+      value: data.lastName,
+    });
+
+    const encryptedMiddleName = await kmsEncrypt({
+      value: data.middleName,
+    });
+
     const nameSchema = {
-      firstName: data.firstName,
-      lastName: data.lastName,
+      firstName: encryptedFirstName,
+      lastName: encryptedLastName,
       prefix: data.prefix,
       suffix: data.suffix,
-      middleName: data.middleName,
+      middleName: encryptedMiddleName,
     };
 
+    const encryptedPhone = await kmsEncrypt({
+      value: data.phone,
+    });
+
     const phoneNumbersSchema = {
-      phone: data.phone,
+      phone: encryptedPhone,
     };
 
     const addressSchema = {
@@ -45,20 +62,32 @@ const signUp = async (data) => {
       country: data.country,
     };
 
+    const encryptedPhotoUrl = await kmsEncrypt({
+      value: data.photoUrl,
+    });
+
+    const encryptedAnnualIncome = await kmsEncrypt({
+      value: data.annualIncome,
+    });
+
+    const encryptedSSn = await kmsEncrypt({
+      value: data.ssn,
+    });
+
     const user = new User({
       email: [emailSchema],
       phones: [phoneNumbersSchema],
       role: data.role,
       authUid: data.authUid,
-      profilePhotoUrl: data.photoUrl,
+      profilePhotoUrl: encryptedPhotoUrl,
       numAccounts: data.numAccounts,
       name: nameSchema,
       maritalStatus: data.maritalStatus,
       address: [addressSchema],
       dateOfBirth: data.dob ? Date.parse(data.dob) : data.dob,
       occupation: data.occupation,
-      annualIncome: data.annualIncome,
-      ssn: data.ssn,
+      annualIncome: encryptedAnnualIncome,
+      ssn: encryptedSSn,
     });
 
     await user.save();
@@ -67,13 +96,33 @@ const signUp = async (data) => {
       authUid: data.authUid,
     });
 
+    const decryptedFirstName = await kmsDecrypt({
+      value: newUser.name.firstName,
+    });
+    const decryptedLastName = await kmsDecrypt({
+      value: newUser.name.lastName,
+    });
+    const decryptedMiddleName = await kmsDecrypt({
+      value: newUser.name.middleName,
+    });
+    const decryptedPhone = await kmsDecrypt({
+      value: newUser.phones[0].phone,
+    });
+    const decryptedPhotoUrl = await kmsDecrypt({
+      value: newUser.profilePhotoUrl,
+    });
+
     const retrievedUser = {
       id: newUser._id,
       email: newUser.email,
       phone: newUser.phone,
       role: newUser.role,
-      profilePhotoUrl: newUser.profilePhotoUrl,
-      name: newUser.name,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
     };
 
     return retrievedUser;
@@ -94,13 +143,36 @@ const signIn = async (email) => {
       throw new Error("User not found");
     }
 
+    const decryptedFirstName = await kmsDecrypt({
+      value: user.name.firstName,
+    });
+    const decryptedLastName = await kmsDecrypt({
+      value: user.name.lastName,
+    });
+    const decryptedMiddleName = await kmsDecrypt({
+      value: user.name.middleName,
+    });
+    const decryptedPhone = await kmsDecrypt({
+      value: user.phones[0].phone,
+    });
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await kmsDecrypt({
+        value: user.profilePhotoUrl,
+      });
+    }
+
     const retrievedUser = {
       id: user._id,
       email: user.email,
-      phone: user.phone,
+      phone: decryptedPhone,
       role: user.role,
-      profilePhotoUrl: user.profilePhotoUrl,
-      name: user.name,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
     };
 
     return retrievedUser;

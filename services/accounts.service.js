@@ -5,6 +5,7 @@ import Transaction from "../database/models/Transaction.js";
 import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
+import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 
 const storage = new Storage({
   credentials: {
@@ -47,7 +48,9 @@ const addAccount = async (accessToken, email) => {
   const accountTypes = {};
 
   for (let account of accounts) {
-    const mask = account.mask;
+    const mask = await kmsEncrypt({
+      value: account.mask,
+    });
     const existingAccount = await PlaidAccount.findOne({
       institution_id: institutionId,
       institution_name: institutionName,
@@ -58,24 +61,78 @@ const addAccount = async (accessToken, email) => {
     console.log("EXISTING ACCOUNT", existingAccount);
 
     if (existingAccount) continue;
+
+    const encryptedToken = await kmsEncrypt({
+      value: accessToken,
+    });
+
+    const encriptedName = await kmsEncrypt({
+      value: account.name,
+    });
+
+    let encriptedOfficialName;
+
+    if (account.official_name) {
+      encriptedOfficialName = await kmsEncrypt({
+        value: account.official_name,
+      });
+    }
+
+    const encriptedType = await kmsEncrypt({
+      value: account.type,
+    });
+
+    const encriptedSubtype = await kmsEncrypt({
+      value: account.subtype,
+    });
+
+    let encriptedInstitutionName;
+
+    if (account.institution_name) {
+      encriptedInstitutionName = await kmsEncrypt({
+        value: account.institution_name,
+      });
+    }
+
+    const encriptedMask = await kmsEncrypt({
+      value: account.mask,
+    });
+
+    let encriptedCurrentBalance;
+    let encriptedAvailableBalance;
+
+    if (account.balances) {
+      if (account.balances.current) {
+        encriptedCurrentBalance = await kmsEncrypt({
+          value: account.balances.current,
+        });
+      }
+
+      if (account.balances.available) {
+        encriptedAvailableBalance = await kmsEncrypt({
+          value: account.balances.available.toString(),
+        });
+      }
+    }
     const newAccount = new PlaidAccount({
       owner_id: userId,
-      accessToken,
+      itemId: accountsResponse.item.item_id,
+      accessToken: encryptedToken,
       owner_type: userType,
       plaid_account_id: account.account_id,
-      account_name: account.name,
-      account_official_name: account.official_name,
-      account_type: account.type,
-      account_subtype: account.subtype,
-      institution_name: institutionName,
+      account_name: encriptedName,
+      account_official_name: encriptedOfficialName,
+      account_type: encriptedType,
+      account_subtype: encriptedSubtype,
+      institution_name: encriptedInstitutionName,
       institution_id: institutionId,
       image_url: account.institution_name,
-      currentBalance: account.balances.current,
-      availableBalance: account.balances.available,
+      currentBalance: encriptedCurrentBalance,
+      availableBalance: encriptedAvailableBalance,
       currency: account.balances.iso_currency_code,
       transactions: [],
       nextCursor: null,
-      mask: account.mask,
+      mask: encriptedMask,
     });
 
     accountTypes[account.account_id] = account.type;
@@ -162,27 +219,60 @@ const addAccount = async (accessToken, email) => {
       continue;
     }
 
+    let merchantName;
+    let name;
+
+    if (transaction.merchant_name) {
+      merchantName = await kmsEncrypt({
+        value: transaction.merchant_name,
+      });
+    }
+
+    if (transaction.name) {
+      name = await kmsEncrypt({
+        value: transaction.name,
+      });
+    }
+
     const merchant = {
-      merchantName: transaction.merchant_name,
-      name: transaction.name,
+      merchantName: merchantName,
+      name: name,
       merchantCategory: transaction.category?.[0],
       website: transaction.website,
       logo: transaction.logo_url,
     };
+
+    let transactionCode;
+
+    const encyptedAmount = await kmsEncrypt({
+      value: transaction.amount,
+    });
+
+    if (transaction.transaction_code) {
+      transactionCode = await kmsEncrypt({
+        value: transaction.transaction_code,
+      });
+    }
+    let encryptedAccountType;
+    if (accountType) {
+      encryptedAccountType = await kmsEncrypt({
+        value: accountType,
+      });
+    }
 
     const newTransaction = new Transaction({
       accountId: account._id,
       plaidTransactionId: transaction.transaction_id,
       plaidAccountId: transaction.account_id,
       transactionDate: transaction.date,
-      amount: transaction.amount,
+      amount: encyptedAmount,
       currency: transaction.iso_currency_code,
       notes: null,
       merchant: merchant,
       description: null,
-      transactionCode: transaction.transaction_code,
+      transactionCode: transactionCode,
       tags: transaction.category,
-      accountType: accountType ?? "",
+      accountType: encryptedAccountType,
     });
 
     await newTransaction.save();
@@ -203,20 +293,74 @@ const addAccount = async (accessToken, email) => {
 
     const accountType = accountTypes[transaction.account_id];
 
+    const encryptedAmount = await kmsEncrypt({
+      value: transaction.amount,
+    });
+
+    let name;
+    let fees;
+    let price;
+    let quantity;
+    let securityId;
+    let type;
+    let subtype;
+
+    if (transaction.name) {
+      name = await kmsEncrypt({
+        value: transaction.name,
+      });
+    }
+
+    if (transaction.fees) {
+      fees = await kmsEncrypt({
+        value: transaction.fees,
+      });
+    }
+
+    if (transaction.price) {
+      price = await kmsEncrypt({
+        value: transaction.price,
+      });
+    }
+
+    if (transaction.quantity) {
+      quantity = await kmsEncrypt({
+        value: transaction.quantity,
+      });
+    }
+
+    if (transaction.security_id) {
+      securityId = await kmsEncrypt({
+        value: transaction.security_id,
+      });
+    }
+
+    if (transaction.type) {
+      type = await kmsEncrypt({
+        value: transaction.type,
+      });
+    }
+
+    if (transaction.subtype) {
+      subtype = await kmsEncrypt({
+        value: transaction.subtype,
+      });
+    }
+
     const newTransaction = new Transaction({
       plaidTransactionId: transaction.investment_transaction_id,
       plaidAccountId: transaction.account_id,
       transactionDate: transaction.date,
-      amount: transaction.amount,
+      amount: encryptedAmount,
       currency: transaction.iso_currency_code,
       isInvestment: true,
-      name: transaction.name,
-      fees: transaction.fees,
-      price: transaction.price,
-      quantity: transaction.quantity,
-      securityId: transaction.security_id,
-      type: transaction.type,
-      subtype: transaction.subtype,
+      name: name,
+      fees: fees,
+      price: price,
+      quantity: quantity,
+      securityId: securityId,
+      type: type,
+      subtype: subtype,
       accountType: accountType ?? "",
     });
 
@@ -241,52 +385,298 @@ const addAccount = async (accessToken, email) => {
           )
             return;
 
+          let encryptedAccountNumber;
+          let encryptedLastPaymentAmount;
+          let encryptedLastPaymentDate;
+          let encryptedNextPaymentDueDate;
+          let encryptedMinimumPaymentAmount;
+          let encryptedLastStatementBalance;
+          let encryptedLastStatementIssueDate;
+          let encryptedIsOverdue;
+          let encryptedAprs;
+          let encryptedLoanTypeDescription;
+          let encryptedLoanTerm;
+          let encryptedMaturityDate;
+          let encryptedNextMonthlyPayment;
+          let encryptedOriginationDate;
+          let encryptedOriginationPrincipalAmount;
+          let encryptedPastDueAmount;
+          let encryptedEscrowBalance;
+          let encryptedHasPmi;
+          let encryptedHasPrepaymentPenalty;
+          let encryptedPropertyAddress;
+          let encryptedInterestRate;
+          let encryptedDisbursementDates;
+          let encryptedExpectedPayoffDate;
+          let encryptedGuarantor;
+          let encryptedInterestRatePercentage;
+          let encryptedLoanName;
+          let encryptedLoanStatus;
+          let encryptedOutstandingInterestAmount;
+          let encryptedPaymentReferenceNumber;
+          let encryptedPslfStatus;
+          let encryptedRepaymentPlan;
+          let encryptedSequenceNumber;
+          let encryptedServicerAddress;
+          let encryptedYtdInterestPaid;
+          let encryptedYtdPrincipalPaid;
+
+          if (item.account_number) {
+            encryptedAccountNumber = await kmsEncrypt({
+              value: item.account_number,
+            });
+          }
+
+          if (item.last_payment_amount) {
+            encryptedLastPaymentAmount = await kmsEncrypt({
+              value: item.last_payment_amount,
+            });
+          }
+
+          if (item.last_payment_date) {
+            encryptedLastPaymentDate = await kmsEncrypt({
+              value: item.last_payment_date,
+            });
+          }
+
+          if (item.next_payment_due_date) {
+            encryptedNextPaymentDueDate = await kmsEncrypt({
+              value: item.next_payment_due_date,
+            });
+          }
+
+          if (item.minimum_payment_amount) {
+            encryptedMinimumPaymentAmount = await kmsEncrypt({
+              value: item.minimum_payment_amount,
+            });
+          }
+
+          if (item.last_statement_balance) {
+            encryptedLastStatementBalance = await kmsEncrypt({
+              value: item.last_statement_balance,
+            });
+          }
+
+          if (item.last_statement_issue_date) {
+            encryptedLastStatementIssueDate = await kmsEncrypt({
+              value: item.last_statement_issue_date,
+            });
+          }
+
+          if (item.is_overdue) {
+            encryptedIsOverdue = await kmsEncrypt({
+              value: item.is_overdue,
+            });
+          }
+
+          if (item.aprs) {
+            encryptedAprs = await kmsEncrypt({
+              value: item.aprs,
+            });
+          }
+
+          if (item.loan_type_description) {
+            encryptedLoanTypeDescription = await kmsEncrypt({
+              value: item.loan_type_description,
+            });
+          }
+
+          if (item.loan_term) {
+            encryptedLoanTerm = await kmsEncrypt({
+              value: item.loan_term,
+            });
+          }
+
+          if (item.maturity_date) {
+            encryptedMaturityDate = await kmsEncrypt({
+              value: item.maturity_date,
+            });
+          }
+
+          if (item.next_monthly_payment) {
+            encryptedNextMonthlyPayment = await kmsEncrypt({
+              value: item.next_monthly_payment,
+            });
+          }
+
+          if (item.origination_date) {
+            encryptedOriginationDate = await kmsEncrypt({
+              value: item.origination_date,
+            });
+          }
+
+          if (item.origination_principal_amount) {
+            encryptedOriginationPrincipalAmount = await kmsEncrypt({
+              value: item.origination_principal_amount,
+            });
+          }
+
+          if (item.past_due_amount) {
+            encryptedPastDueAmount = await kmsEncrypt({
+              value: item.past_due_amount,
+            });
+          }
+
+          if (item.escrow_balance) {
+            encryptedEscrowBalance = await kmsEncrypt({
+              value: item.escrow_balance,
+            });
+          }
+
+          if (item.has_pmi) {
+            encryptedHasPmi = await kmsEncrypt({
+              value: item.has_pmi,
+            });
+          }
+
+          if (item.has_prepayment_penalty) {
+            encryptedHasPrepaymentPenalty = await kmsEncrypt({
+              value: item.has_prepayment_penalty,
+            });
+          }
+
+          if (item.property_address) {
+            encryptedPropertyAddress = await kmsEncrypt({
+              value: item.property_address,
+            });
+          }
+
+          if (item.interest_rate) {
+            encryptedInterestRate = await kmsEncrypt({
+              value: item.interest_rate,
+            });
+          }
+
+          if (item.disbursement_dates) {
+            encryptedDisbursementDates = await kmsEncrypt({
+              value: item.disbursement_dates,
+            });
+          }
+
+          if (item.expected_payoff_date) {
+            encryptedExpectedPayoffDate = await kmsEncrypt({
+              value: item.expected_payoff_date,
+            });
+          }
+
+          if (item.guarantor) {
+            encryptedGuarantor = await kmsEncrypt({
+              value: item.guarantor,
+            });
+          }
+
+          if (item.interest_rate_percentage) {
+            encryptedInterestRatePercentage = await kmsEncrypt({
+              value: item.interest_rate_percentage,
+            });
+          }
+
+          if (item.loan_name) {
+            encryptedLoanName = await kmsEncrypt({
+              value: item.loan_name,
+            });
+          }
+
+          if (item.loan_status) {
+            encryptedLoanStatus = await kmsEncrypt({
+              value: item.loan_status,
+            });
+          }
+
+          if (item.outstanding_interest_amount) {
+            encryptedOutstandingInterestAmount = await kmsEncrypt({
+              value: item.outstanding_interest_amount,
+            });
+          }
+
+          if (item.payment_reference_number) {
+            encryptedPaymentReferenceNumber = await kmsEncrypt({
+              value: item.payment_reference_number,
+            });
+          }
+
+          if (item.pslf_status) {
+            encryptedPslfStatus = await kmsEncrypt({
+              value: item.pslf_status,
+            });
+          }
+
+          if (item.repayment_plan) {
+            encryptedRepaymentPlan = await kmsEncrypt({
+              value: item.repayment_plan,
+            });
+          }
+
+          if (item.sequence_number) {
+            encryptedSequenceNumber = await kmsEncrypt({
+              value: item.sequence_number,
+            });
+          }
+
+          if (item.servicer_address) {
+            encryptedServicerAddress = await kmsEncrypt({
+              value: item.servicer_address,
+            });
+          }
+
+          if (item.ytd_interest_paid) {
+            encryptedYtdInterestPaid = await kmsEncrypt({
+              value: item.ytd_interest_paid,
+            });
+          }
+
+          if (item.ytd_principal_paid) {
+            encryptedYtdPrincipalPaid = await kmsEncrypt({
+              value: item.ytd_principal_paid,
+            });
+          }
+
           const liability = new Liability({
             liabilityType: key,
             accountId: item.account_id,
-            accountNumber: item.account_number,
-            lastPaymentAmount: item.last_payment_amount,
-            lastPaymentDate: item.last_payment_date,
-            nextPaymentDueDate: item.next_payment_due_date,
-            minimumPaymentAmount: item.minimum_payment_amount,
-            lastStatementBalance: item.last_statement_balance,
-            lastStatementIssueDate: item.last_statement_issue_date,
-            isOverdue: item.is_overdue,
+            accountNumber: encryptedAccountNumber,
+            lastPaymentAmount: encryptedLastPaymentAmount,
+            lastPaymentDate: encryptedLastPaymentDate,
+            nextPaymentDueDate: encryptedNextPaymentDueDate,
+            minimumPaymentAmount: encryptedMinimumPaymentAmount,
+            lastStatementBalance: encryptedLastStatementBalance,
+            lastStatementIssueDate: encryptedLastStatementIssueDate,
+            isOverdue: encryptedIsOverdue,
 
             // Credit-specific fields
-            aprs: item.aprs,
+            aprs: encryptedAprs,
 
             // Mortgage-specific fields
-            loanTypeDescription: item.loan_type_description,
-            loanTerm: item.loan_term,
-            maturityDate: item.maturity_date,
-            nextMonthlyPayment: item.next_monthly_payment,
-            originationDate: item.origination_date,
-            originationPrincipalAmount: item.origination_principal_amount,
-            pastDueAmount: item.past_due_amount,
-            escrowBalance: item.escrow_balance,
-            hasPmi: item.has_pmi,
-            hasPrepaymentPenalty: item.has_prepayment_penalty,
-            propertyAddress: item.property_address,
-            interestRate: item.interest_rate,
+            loanTypeDescription: encryptedLoanTypeDescription,
+            loanTerm: encryptedLoanTerm,
+            maturityDate: encryptedMaturityDate,
+            nextMonthlyPayment: encryptedNextMonthlyPayment,
+            originationDate: encryptedOriginationDate,
+            originationPrincipalAmount: encryptedOriginationPrincipalAmount,
+            pastDueAmount: encryptedPastDueAmount,
+            escrowBalance: encryptedEscrowBalance,
+            hasPmi: encryptedHasPmi,
+            hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+            propertyAddress: encryptedPropertyAddress,
+            interestRate: encryptedInterestRate,
 
             // Student-specific fields
-            disbursementDates: item.disbursement_dates,
-            expectedPayoffDate: item.expected_payoff_date,
-            guarantor: item.guarantor,
-            interestRatePercentage: item.interest_rate_percentage,
-            loanName: item.loan_name,
+            disbursementDates: encryptedDisbursementDates,
+            expectedPayoffDate: encryptedExpectedPayoffDate,
+            guarantor: encryptedGuarantor,
+            interestRatePercentage: encryptedInterestRatePercentage,
+            loanName: encryptedLoanName,
 
             // Loan status
-            loanStatus: item.loan_status,
-            outstandingInterestAmount: item.outstanding_interest_amount,
-            paymentReferenceNumber: item.payment_reference_number,
-            pslfStatus: item.pslf_status,
-            repaymentPlan: item.repayment_plan,
-            sequenceNumber: item.sequence_number,
-            servicerAddress: item.servicer_address,
-            ytdInterestPaid: item.ytd_interest_paid,
-            ytdPrincipalPaid: item.ytd_principal_paid,
+            loanStatus: encryptedLoanStatus,
+            outstandingInterestAmount: encryptedOutstandingInterestAmount,
+            paymentReferenceNumber: encryptedPaymentReferenceNumber,
+            pslfStatus: encryptedPslfStatus,
+            repaymentPlan: encryptedRepaymentPlan,
+            sequenceNumber: encryptedSequenceNumber,
+            servicerAddress: encryptedServicerAddress,
+            ytdInterestPaid: encryptedYtdInterestPaid,
+            ytdPrincipalPaid: encryptedYtdPrincipalPaid,
           });
 
           await liability.save();
@@ -319,9 +709,50 @@ const addAccount = async (accessToken, email) => {
 
 const getAccounts = async (profile) => {
   const plaidIds = profile.plaidAccounts;
-  const plaidAccounts = await PlaidAccount.find({
+
+  const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
-  }).lean();
+  })
+    .lean()
+    .select("-accessToken")
+    .exec();
+
+  let plaidAccounts = [];
+
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+    });
+    const decryptedAccountName = await kmsDecrypt({
+      value: plaidAccount.account_name,
+    });
+    const decryptedAccountOfficialName = await kmsDecrypt({
+      value: plaidAccount.account_official_name,
+    });
+    const decryptedMask = await kmsDecrypt({
+      value: plaidAccount.mask,
+    });
+
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+      account_name: decryptedAccountName,
+      account_official_name: decryptedAccountOfficialName,
+      mask: decryptedMask,
+    });
+  }
 
   const depositoryAccounts = plaidAccounts.filter(
     (account) => account.account_type === "depository"
@@ -362,16 +793,203 @@ const getAllUserAccounts = async (email) => {
     return [];
   }
 
-  const accounts = user.plaidAccounts;
+  const accountsResponse = user.plaidAccounts;
+
+  let accounts = [];
+
+  for (const plaidAccount of accountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+    });
+
+    const decryptedAccountName = await kmsDecrypt({
+      value: plaidAccount.account_name,
+    });
+    const decryptedAccountOfficialName = await kmsDecrypt({
+      value: plaidAccount.account_official_name,
+    });
+    const decryptedMask = await kmsDecrypt({
+      value: plaidAccount.mask,
+    });
+
+    accounts.push({
+      ...plaidAccount._doc,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+      account_name: decryptedAccountName,
+      account_official_name: decryptedAccountOfficialName,
+      mask: decryptedMask,
+    });
+  }
 
   return accounts;
 };
 
+const getCashFlowsWeekly = async (profile) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccountsResponse = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).lean();
+
+  let plaidAccounts = [];
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+    });
+
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+    });
+  }
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const allTransactions = [];
+  let balanceCredit = 0;
+  let balanceDebit = 0;
+  let balanceCurrentInvestment = 0;
+  let balanceAvailableInvestment = 0;
+  let balanceLoan = 0;
+  const depositoryTransactions = [];
+  const creditTransactions = [];
+
+  for (const plaidAccount of plaidAccounts) {
+    const currentBalance = Number(plaidAccount.currentBalance) || 0;
+    const availableBalance = Number(plaidAccount.availableBalance) || 0;
+
+    if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
+      balanceCredit = balanceCredit += currentBalance;
+    } else if (
+      plaidAccount.account_type === "depository" &&
+      plaidAccount.availableBalance
+    ) {
+      balanceDebit = balanceDebit += availableBalance;
+    } else if (plaidAccount.account_type === "investment") {
+      if (
+        plaidAccount.account_subtype === "brokerage" ||
+        plaidAccount.account_subtype === "isa" ||
+        plaidAccount.account_subtype === "crypto exchange" ||
+        plaidAccount.account_subtype === "fixed annuity" ||
+        plaidAccount.account_subtype === "non-custodial wallet" ||
+        plaidAccount.account_subtype === "non-taxable brokerage account" ||
+        plaidAccount.account_subtype === "retirement" ||
+        plaidAccount.account_subtype === "trust"
+      ) {
+        if (plaidAccount.currentBalance) {
+          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
+        }
+        if (plaidAccount.availableBalance) {
+          balanceAvailableInvestment = balanceAvailableInvestment +=
+            availableBalance;
+        }
+      }
+    } else if (
+      plaidAccount.account_type === "loan" &&
+      plaidAccount.currentBalance
+    ) {
+      balanceLoan = balanceLoan += currentBalance;
+    }
+
+    const transactionsResponse = await Transaction.find({
+      plaidAccountId: plaidAccount.plaid_account_id,
+      transactionDate: { $gte: ninetyDaysAgo },
+      isInternal: false,
+    })
+      .sort({ transactionDate: 1 })
+      .lean();
+
+    const transactions = [];
+
+    for (const transaction of transactionsResponse) {
+      const decryptedAmount = await kmsDecrypt({
+        value: transaction.amount,
+      });
+
+      transactions.push({
+        ...transaction,
+        amount: decryptedAmount,
+      });
+    }
+
+    allTransactions.push(...transactions);
+    depositoryTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "depository"
+      )
+    );
+    creditTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "credit"
+      )
+    );
+  }
+
+  console.log("depositoryTransactions", depositoryTransactions);
+  console.log("creditTransactions", creditTransactions);
+
+  const groupedTransactions = groupByWeek([
+    ...depositoryTransactions,
+    ...creditTransactions,
+  ]);
+
+  const result = calculateWeeklyTotals(groupedTransactions);
+  console.log("result", result);
+  return { weeklyCashFlow: result };
+};
+
 const getCashFlows = async (profile) => {
   const plaidIds = profile.plaidAccounts;
-  const plaidAccounts = await PlaidAccount.find({
+  const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
-  }).exec();
+  }).lean();
+
+  let plaidAccounts = [];
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+    });
+
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: parseInt(decryptedAvailableBalance),
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+    });
+  }
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -387,13 +1005,16 @@ const getCashFlows = async (profile) => {
   const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
+    const currentBalance = Number(plaidAccount.currentBalance) || 0;
+    const availableBalance = Number(plaidAccount.availableBalance) || 0;
+
     if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
-      balanceCredit = balanceCredit += plaidAccount.currentBalance;
+      balanceCredit = balanceCredit += currentBalance;
     } else if (plaidAccount.account_type === "depository") {
       if (plaidAccount.availableBalance) {
-        balanceDebit = balanceDebit += plaidAccount.availableBalance;
+        balanceDebit = balanceDebit += availableBalance;
       } else if (plaidAccount.currentBalance) {
-        balanceDebit = balanceDebit += plaidAccount.currentBalance;
+        balanceDebit = balanceDebit += currentBalance;
       }
     } else if (plaidAccount.account_type === "investment") {
       if (
@@ -407,28 +1028,40 @@ const getCashFlows = async (profile) => {
         plaidAccount.account_subtype === "trust"
       ) {
         if (plaidAccount.currentBalance) {
-          balanceCurrentInvestment = balanceCurrentInvestment +=
-            plaidAccount.currentBalance;
+          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
         }
         if (plaidAccount.availableBalance) {
           balanceAvailableInvestment = balanceAvailableInvestment +=
-            plaidAccount.availableBalance;
+            availableBalance;
         }
       }
     } else if (
       plaidAccount.account_type === "loan" &&
       plaidAccount.currentBalance
     ) {
-      balanceLoan = balanceLoan += plaidAccount.currentBalance;
+      balanceLoan = balanceLoan += currentBalance;
     }
 
-    const transactions = await Transaction.find({
+    const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
       transactionDate: { $gte: ninetyDaysAgo },
       isInternal: false,
     })
       .sort({ transactionDate: 1 })
       .lean();
+
+    const transactions = [];
+
+    for (const transaction of transactionsResponse) {
+      const decryptedAmount = await kmsDecrypt({
+        value: transaction.amount,
+      });
+
+      transactions.push({
+        ...transaction,
+        amount: decryptedAmount,
+      });
+    }
 
     allTransactions.push(...transactions);
     depositoryTransactions.push(
@@ -603,12 +1236,75 @@ const getTransactions = async (accounts) => {
   const allTransactions = [];
 
   for (const plaidAccount of accounts) {
-    const transactions = await Transaction.find({
+    const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
     })
       .sort({ transactionDate: -1 })
       .lean();
 
+    const transactions = [];
+
+    for (const transaction of transactionsResponse) {
+      const decryptedAmount = await kmsDecrypt({
+        value: transaction.amount,
+      });
+      const decryptedName = await kmsDecrypt({
+        value: transaction.name,
+      });
+
+      let decryptedMerchantName;
+      let decryptedMerchantMerchantName;
+      if (transaction.merchant) {
+        decryptedMerchantName = await kmsDecrypt({
+          value: transaction.merchant.name,
+        });
+
+        decryptedMerchantMerchantName = await kmsDecrypt({
+          value: transaction.merchant.merchantName,
+        });
+      }
+
+      const decryptedFees = await kmsDecrypt({
+        value: transaction.fees,
+      });
+
+      const decryptedPrice = await kmsDecrypt({
+        value: transaction.price,
+      });
+
+      const decryptedType = await kmsDecrypt({
+        value: transaction.type,
+      });
+
+      const decryptedSubtype = await kmsDecrypt({
+        value: transaction.subtype,
+      });
+
+      const decryptedQuantity = await kmsDecrypt({
+        value: transaction.quantity,
+      });
+
+      const decryptedSecurityId = await kmsDecrypt({
+        value: transaction.securityId,
+      });
+
+      transactions.push({
+        ...transaction,
+        amount: decryptedAmount,
+        name: decryptedName,
+        merchant: {
+          ...transaction.merchant,
+          name: decryptedMerchantName,
+          merchantName: decryptedMerchantMerchantName,
+        },
+        fees: decryptedFees,
+        price: decryptedPrice,
+        type: decryptedType,
+        subtype: decryptedSubtype,
+        quantity: decryptedQuantity,
+        securityId: decryptedSecurityId,
+      });
+    }
     transactions.forEach((transaction) => {
       transaction.institutionName = plaidAccount.institution_name;
       transaction.institutionId = plaidAccount.institution_id;
@@ -649,9 +1345,34 @@ const getProfileTransactions = async (email, profileId) => {
     throw new Error("Profile not found");
   }
   const plaidIds = profile.plaidAccounts;
-  const plaidAccounts = await PlaidAccount.find({
+  const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
-  }).exec();
+  }).lean();
+
+  let plaidAccounts = [];
+
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+    });
+
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+    });
+  }
 
   return await getTransactions(plaidAccounts);
 };
@@ -666,12 +1387,71 @@ const getTransactionsByAccount = async (accountId) => {
     throw new Error("Account not found");
   }
 
-  account.transactions.forEach((transaction) => {
+  let allTransactions = [];
+
+  for (const transaction of account.transactions) {
+    const decryptedAmount = await kmsDecrypt({
+      value: transaction.amount,
+    });
+    const decryptedName = await kmsDecrypt({
+      value: transaction.name,
+    });
+
+    let decryptedMerchantName;
+    let decryptedMerchantMerchantName;
+    if (transaction.merchant) {
+      decryptedMerchantName = await kmsDecrypt({
+        value: transaction.merchant.name,
+      });
+
+      decryptedMerchantMerchantName = await kmsDecrypt({
+        value: transaction.merchant.merchantName,
+      });
+    }
+
+    const decryptedFees = await kmsDecrypt({
+      value: transaction.fees,
+    });
+
+    const decryptedPrice = await kmsDecrypt({
+      value: transaction.price,
+    });
+
+    const decryptedType = await kmsDecrypt({
+      value: transaction.type,
+    });
+
+    const decryptedSubtype = await kmsDecrypt({
+      value: transaction.subtype,
+    });
+
+    const decryptedQuantity = await kmsDecrypt({
+      value: transaction.quantity,
+    });
+
+    allTransactions.push({
+      ...transaction,
+      amount: decryptedAmount,
+      name: decryptedName,
+      merchant: {
+        ...transaction.merchant,
+        name: decryptedMerchantName,
+        merchantName: decryptedMerchantMerchantName,
+      },
+      fees: decryptedFees,
+      price: decryptedPrice,
+      type: decryptedType,
+      subtype: decryptedSubtype,
+      quantity: decryptedQuantity,
+    });
+  }
+
+  allTransactions.forEach((transaction) => {
     transaction.institutionName = account.institution_name;
     transaction.institutionId = account.institution_id;
   });
 
-  const sortedTransactions = account.transactions.sort(
+  const sortedTransactions = allTransactions.sort(
     (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
   );
   return sortedTransactions;

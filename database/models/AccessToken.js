@@ -3,7 +3,7 @@ import { Schema, model } from "mongoose";
 const accessTokenSchema = new Schema(
   {
     accessToken: {
-      type: String,
+      type: Buffer,
       required: true,
     },
     itemId: {
