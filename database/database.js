@@ -48,36 +48,53 @@ const client = new MongoClient(mongoDB, {
   },
 });
 
-let db;
-let dataKeyId;
 let encryption;
+let cacheDataKeys = new Map(); // Caché de claves para evitar llamadas repetidas
 
-async function connectEncryption() {
-  if (!db) {
-    try {
+export async function connectEncryption(uid) {
+  if (cacheDataKeys.has(uid)) {
+    return cacheDataKeys.get(uid);
+  }
+
+  try {
+    if (!encryption) {
       encryption = new ClientEncryption(client, {
         keyVaultNamespace: "encryption.__keys",
         kmsProviders,
       });
-
-      dataKeyId = await encryption.createDataKey("gcp", {
-        masterKey: {
-          projectId: process.env.GCP_PROJECT_ID,
-          location: process.env.GCP_KEY_LOCATION,
-          keyRing: process.env.GCP_KEY_RING,
-          keyName: process.env.GCP_KEY_NAME,
-        },
-      });
-    } catch (error) {
-      console.error("MongoDB connection error:", error);
-      throw error;
     }
+
+    if (!uid) {
+      return null;
+    }
+
+    const existingKey = await client
+      .db("encryption")
+      .collection("__keys")
+      .findOne({ keyAltNames: [uid] });
+
+    if (existingKey) {
+      cacheDataKeys.set(uid, existingKey._id);
+      return existingKey._id;
+    }
+    const dataKeyId = await encryption.createDataKey("gcp", {
+      masterKey: {
+        projectId: process.env.GCP_PROJECT_ID,
+        location: process.env.GCP_KEY_LOCATION,
+        keyRing: process.env.GCP_KEY_RING,
+        keyName: process.env.GCP_KEY_NAME,
+      },
+      keyAltNames: [uid],
+    });
+
+    cacheDataKeys.set(uid, dataKeyId);
+    return dataKeyId;
+  } catch (error) {
+    console.error("MongoDB encryption setup error:", error);
+    throw error;
   }
-  return { db, client };
 }
 
 client.on("close", () => console.log("MongoDB disconnected!"));
 
-connectEncryption();
-
-export { encryption, dataKeyId, mongoDBConnection };
+export { encryption, mongoDBConnection };

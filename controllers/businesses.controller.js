@@ -4,7 +4,8 @@ const addBusiness = async (req, res) => {
   try {
     const data = req.body;
     const email = req.user.email;
-    const response = await businessService.addBusinesses(data, email);
+    const uid = req.user.uid;
+    const response = await businessService.addBusinesses(data, email, uid);
     res.status(201).json(response);
   } catch (error) {
     console.error(error);
@@ -15,7 +16,8 @@ const addBusiness = async (req, res) => {
 const getUserProfiles = async (req, res) => {
   try {
     const email = req.user.email;
-    const response = await businessService.getUserProfiles(email);
+    const uid = req.user.uid;
+    const response = await businessService.getUserProfiles(email, uid);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);

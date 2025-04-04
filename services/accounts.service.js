@@ -6,6 +6,7 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
+import { connectEncryption } from "../database/database.js";
 
 const storage = new Storage({
   credentials: {
@@ -26,7 +27,8 @@ const storage = new Storage({
 });
 const bucketName = "zentavos-bucket";
 
-const addAccount = async (accessToken, email) => {
+const addAccount = async (accessToken, email, uid) => {
+  const dataKeyId = await connectEncryption(uid);
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   });
@@ -50,6 +52,7 @@ const addAccount = async (accessToken, email) => {
   for (let account of accounts) {
     const mask = await kmsEncrypt({
       value: account.mask,
+      dataKeyId,
     });
     const existingAccount = await PlaidAccount.findOne({
       institution_id: institutionId,
@@ -64,10 +67,12 @@ const addAccount = async (accessToken, email) => {
 
     const encryptedToken = await kmsEncrypt({
       value: accessToken,
+      dataKeyId,
     });
 
     const encriptedName = await kmsEncrypt({
       value: account.name,
+      dataKeyId,
     });
 
     let encriptedOfficialName;
@@ -75,15 +80,18 @@ const addAccount = async (accessToken, email) => {
     if (account.official_name) {
       encriptedOfficialName = await kmsEncrypt({
         value: account.official_name,
+        dataKeyId,
       });
     }
 
     const encriptedType = await kmsEncrypt({
       value: account.type,
+      dataKeyId,
     });
 
     const encriptedSubtype = await kmsEncrypt({
       value: account.subtype,
+      dataKeyId,
     });
 
     let encriptedInstitutionName;
@@ -91,11 +99,13 @@ const addAccount = async (accessToken, email) => {
     if (account.institution_name) {
       encriptedInstitutionName = await kmsEncrypt({
         value: account.institution_name,
+        dataKeyId,
       });
     }
 
     const encriptedMask = await kmsEncrypt({
       value: account.mask,
+      dataKeyId,
     });
 
     let encriptedCurrentBalance;
@@ -105,12 +115,14 @@ const addAccount = async (accessToken, email) => {
       if (account.balances.current) {
         encriptedCurrentBalance = await kmsEncrypt({
           value: account.balances.current,
+          dataKeyId,
         });
       }
 
       if (account.balances.available) {
         encriptedAvailableBalance = await kmsEncrypt({
           value: account.balances.available.toString(),
+          dataKeyId,
         });
       }
     }
@@ -225,12 +237,14 @@ const addAccount = async (accessToken, email) => {
     if (transaction.merchant_name) {
       merchantName = await kmsEncrypt({
         value: transaction.merchant_name,
+        dataKeyId,
       });
     }
 
     if (transaction.name) {
       name = await kmsEncrypt({
         value: transaction.name,
+        dataKeyId,
       });
     }
 
@@ -246,17 +260,20 @@ const addAccount = async (accessToken, email) => {
 
     const encyptedAmount = await kmsEncrypt({
       value: transaction.amount,
+      dataKeyId,
     });
 
     if (transaction.transaction_code) {
       transactionCode = await kmsEncrypt({
         value: transaction.transaction_code,
+        dataKeyId,
       });
     }
     let encryptedAccountType;
     if (accountType) {
       encryptedAccountType = await kmsEncrypt({
         value: accountType,
+        dataKeyId,
       });
     }
 
@@ -295,6 +312,7 @@ const addAccount = async (accessToken, email) => {
 
     const encryptedAmount = await kmsEncrypt({
       value: transaction.amount,
+      dataKeyId,
     });
 
     let name;
@@ -308,42 +326,49 @@ const addAccount = async (accessToken, email) => {
     if (transaction.name) {
       name = await kmsEncrypt({
         value: transaction.name,
+        dataKeyId,
       });
     }
 
     if (transaction.fees) {
       fees = await kmsEncrypt({
         value: transaction.fees,
+        dataKeyId,
       });
     }
 
     if (transaction.price) {
       price = await kmsEncrypt({
         value: transaction.price,
+        dataKeyId,
       });
     }
 
     if (transaction.quantity) {
       quantity = await kmsEncrypt({
         value: transaction.quantity,
+        dataKeyId,
       });
     }
 
     if (transaction.security_id) {
       securityId = await kmsEncrypt({
         value: transaction.security_id,
+        dataKeyId,
       });
     }
 
     if (transaction.type) {
       type = await kmsEncrypt({
         value: transaction.type,
+        dataKeyId,
       });
     }
 
     if (transaction.subtype) {
       subtype = await kmsEncrypt({
         value: transaction.subtype,
+        dataKeyId,
       });
     }
 
@@ -424,210 +449,241 @@ const addAccount = async (accessToken, email) => {
           if (item.account_number) {
             encryptedAccountNumber = await kmsEncrypt({
               value: item.account_number,
+              dataKeyId,
             });
           }
 
           if (item.last_payment_amount) {
             encryptedLastPaymentAmount = await kmsEncrypt({
               value: item.last_payment_amount,
+              dataKeyId,
             });
           }
 
           if (item.last_payment_date) {
             encryptedLastPaymentDate = await kmsEncrypt({
               value: item.last_payment_date,
+              dataKeyId,
             });
           }
 
           if (item.next_payment_due_date) {
             encryptedNextPaymentDueDate = await kmsEncrypt({
               value: item.next_payment_due_date,
+              dataKeyId,
             });
           }
 
           if (item.minimum_payment_amount) {
             encryptedMinimumPaymentAmount = await kmsEncrypt({
               value: item.minimum_payment_amount,
+              dataKeyId,
             });
           }
 
           if (item.last_statement_balance) {
             encryptedLastStatementBalance = await kmsEncrypt({
               value: item.last_statement_balance,
+              dataKeyId,
             });
           }
 
           if (item.last_statement_issue_date) {
             encryptedLastStatementIssueDate = await kmsEncrypt({
               value: item.last_statement_issue_date,
+              dataKeyId,
             });
           }
 
           if (item.is_overdue) {
             encryptedIsOverdue = await kmsEncrypt({
               value: item.is_overdue,
+              dataKeyId,
             });
           }
 
           if (item.aprs) {
             encryptedAprs = await kmsEncrypt({
               value: item.aprs,
+              dataKeyId,
             });
           }
 
           if (item.loan_type_description) {
             encryptedLoanTypeDescription = await kmsEncrypt({
               value: item.loan_type_description,
+              dataKeyId,
             });
           }
 
           if (item.loan_term) {
             encryptedLoanTerm = await kmsEncrypt({
               value: item.loan_term,
+              dataKeyId,
             });
           }
 
           if (item.maturity_date) {
             encryptedMaturityDate = await kmsEncrypt({
               value: item.maturity_date,
+              dataKeyId,
             });
           }
 
           if (item.next_monthly_payment) {
             encryptedNextMonthlyPayment = await kmsEncrypt({
               value: item.next_monthly_payment,
+              dataKeyId,
             });
           }
 
           if (item.origination_date) {
             encryptedOriginationDate = await kmsEncrypt({
               value: item.origination_date,
+              dataKeyId,
             });
           }
 
           if (item.origination_principal_amount) {
             encryptedOriginationPrincipalAmount = await kmsEncrypt({
               value: item.origination_principal_amount,
+              dataKeyId,
             });
           }
 
           if (item.past_due_amount) {
             encryptedPastDueAmount = await kmsEncrypt({
               value: item.past_due_amount,
+              dataKeyId,
             });
           }
 
           if (item.escrow_balance) {
             encryptedEscrowBalance = await kmsEncrypt({
               value: item.escrow_balance,
+              dataKeyId,
             });
           }
 
-          if (item.has_pmi) {
-            encryptedHasPmi = await kmsEncrypt({
-              value: item.has_pmi,
-            });
-          }
+          encryptedHasPmi = await kmsEncrypt({
+            value: item.has_pmi,
+            dataKeyId,
+          });
 
-          if (item.has_prepayment_penalty) {
-            encryptedHasPrepaymentPenalty = await kmsEncrypt({
-              value: item.has_prepayment_penalty,
-            });
-          }
+          encryptedHasPrepaymentPenalty = await kmsEncrypt({
+            value: item.has_prepayment_penalty,
+            dataKeyId,
+          });
 
           if (item.property_address) {
             encryptedPropertyAddress = await kmsEncrypt({
               value: item.property_address,
+              dataKeyId,
             });
           }
 
           if (item.interest_rate) {
             encryptedInterestRate = await kmsEncrypt({
               value: item.interest_rate,
+              dataKeyId,
             });
           }
 
           if (item.disbursement_dates) {
             encryptedDisbursementDates = await kmsEncrypt({
               value: item.disbursement_dates,
+              dataKeyId,
             });
           }
 
           if (item.expected_payoff_date) {
             encryptedExpectedPayoffDate = await kmsEncrypt({
               value: item.expected_payoff_date,
+              dataKeyId,
             });
           }
 
           if (item.guarantor) {
             encryptedGuarantor = await kmsEncrypt({
               value: item.guarantor,
+              dataKeyId,
             });
           }
 
           if (item.interest_rate_percentage) {
             encryptedInterestRatePercentage = await kmsEncrypt({
               value: item.interest_rate_percentage,
+              dataKeyId,
             });
           }
 
           if (item.loan_name) {
             encryptedLoanName = await kmsEncrypt({
               value: item.loan_name,
+              dataKeyId,
             });
           }
 
           if (item.loan_status) {
             encryptedLoanStatus = await kmsEncrypt({
               value: item.loan_status,
+              dataKeyId,
             });
           }
 
           if (item.outstanding_interest_amount) {
             encryptedOutstandingInterestAmount = await kmsEncrypt({
               value: item.outstanding_interest_amount,
+              dataKeyId,
             });
           }
 
           if (item.payment_reference_number) {
             encryptedPaymentReferenceNumber = await kmsEncrypt({
               value: item.payment_reference_number,
+              dataKeyId,
             });
           }
 
           if (item.pslf_status) {
             encryptedPslfStatus = await kmsEncrypt({
               value: item.pslf_status,
+              dataKeyId,
             });
           }
 
           if (item.repayment_plan) {
             encryptedRepaymentPlan = await kmsEncrypt({
               value: item.repayment_plan,
+              dataKeyId,
             });
           }
 
           if (item.sequence_number) {
             encryptedSequenceNumber = await kmsEncrypt({
               value: item.sequence_number,
+              dataKeyId,
             });
           }
 
           if (item.servicer_address) {
             encryptedServicerAddress = await kmsEncrypt({
               value: item.servicer_address,
+              dataKeyId,
             });
           }
 
           if (item.ytd_interest_paid) {
             encryptedYtdInterestPaid = await kmsEncrypt({
               value: item.ytd_interest_paid,
+              dataKeyId,
             });
           }
 
           if (item.ytd_principal_paid) {
             encryptedYtdPrincipalPaid = await kmsEncrypt({
               value: item.ytd_principal_paid,
+              dataKeyId,
             });
           }
 
@@ -707,7 +763,28 @@ const addAccount = async (accessToken, email) => {
   return savedAccounts;
 };
 
-const getAccounts = async (profile) => {
+const removeAccount = async (accountId, email) => {
+  const user = await User.findOne({
+    "email.email": email.toLowerCase(),
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const plaidAccounts = user.plaidAccounts;
+
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  user.plaidAccounts = plaidAccounts.filter(
+    (id) => id.toString() !== account._id.toString()
+  );
+
+  await user.save();
+
+  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
+  await Transaction.deleteMany({ plaidAccountId: accountId });
+  await Liability.deleteMany({ accountId });
+};
+
+const getAccounts = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
 
   const plaidAccountsResponse = await PlaidAccount.find({
@@ -719,27 +796,36 @@ const getAccounts = async (profile) => {
 
   let plaidAccounts = [];
 
+  const dataKeyId = await connectEncryption(uid);
+
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await kmsDecrypt({
       value: plaidAccount.currentBalance,
+      dataKeyId,
     });
     const decryptedAvailableBalance = await kmsDecrypt({
       value: plaidAccount.availableBalance,
+      dataKeyId,
     });
     const decryptedAccountType = await kmsDecrypt({
       value: plaidAccount.account_type,
+      dataKeyId,
     });
     const decryptedAccountSubtype = await kmsDecrypt({
       value: plaidAccount.account_subtype,
+      dataKeyId,
     });
     const decryptedAccountName = await kmsDecrypt({
       value: plaidAccount.account_name,
+      dataKeyId,
     });
     const decryptedAccountOfficialName = await kmsDecrypt({
       value: plaidAccount.account_official_name,
+      dataKeyId,
     });
     const decryptedMask = await kmsDecrypt({
       value: plaidAccount.mask,
+      dataKeyId,
     });
 
     plaidAccounts.push({
@@ -779,7 +865,7 @@ const getAccounts = async (profile) => {
   };
 };
 
-const getAllUserAccounts = async (email) => {
+const getAllUserAccounts = async (email, uid) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   })
@@ -797,28 +883,37 @@ const getAllUserAccounts = async (email) => {
 
   let accounts = [];
 
+  const dataKeyId = await connectEncryption(uid);
+
   for (const plaidAccount of accountsResponse) {
     const decryptedCurrentBalance = await kmsDecrypt({
       value: plaidAccount.currentBalance,
+      dataKeyId,
     });
     const decryptedAvailableBalance = await kmsDecrypt({
       value: plaidAccount.availableBalance,
+      dataKeyId,
     });
     const decryptedAccountType = await kmsDecrypt({
       value: plaidAccount.account_type,
+      dataKeyId,
     });
     const decryptedAccountSubtype = await kmsDecrypt({
       value: plaidAccount.account_subtype,
+      dataKeyId,
     });
 
     const decryptedAccountName = await kmsDecrypt({
       value: plaidAccount.account_name,
+      dataKeyId,
     });
     const decryptedAccountOfficialName = await kmsDecrypt({
       value: plaidAccount.account_official_name,
+      dataKeyId,
     });
     const decryptedMask = await kmsDecrypt({
       value: plaidAccount.mask,
+      dataKeyId,
     });
 
     accounts.push({
@@ -836,25 +931,30 @@ const getAllUserAccounts = async (email) => {
   return accounts;
 };
 
-const getCashFlowsWeekly = async (profile) => {
+const getCashFlowsWeekly = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
   }).lean();
 
   let plaidAccounts = [];
+  const dataKeyId = await connectEncryption(uid);
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await kmsDecrypt({
       value: plaidAccount.currentBalance,
+      dataKeyId,
     });
     const decryptedAvailableBalance = await kmsDecrypt({
       value: plaidAccount.availableBalance,
+      dataKeyId,
     });
     const decryptedAccountType = await kmsDecrypt({
       value: plaidAccount.account_type,
+      dataKeyId,
     });
     const decryptedAccountSubtype = await kmsDecrypt({
       value: plaidAccount.account_subtype,
+      dataKeyId,
     });
 
     plaidAccounts.push({
@@ -927,6 +1027,12 @@ const getCashFlowsWeekly = async (profile) => {
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await kmsDecrypt({
         value: transaction.amount,
+        dataKeyId,
+      });
+
+      const decryptedAccountType = await kmsDecrypt({
+        value: transaction.accountType,
+        dataKeyId,
       });
 
       transactions.push({
@@ -958,25 +1064,31 @@ const getCashFlowsWeekly = async (profile) => {
   return { weeklyCashFlow: result };
 };
 
-const getCashFlows = async (profile) => {
+const getCashFlows = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
   }).lean();
 
+  const dataKeyId = await connectEncryption(uid);
+
   let plaidAccounts = [];
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await kmsDecrypt({
       value: plaidAccount.currentBalance,
+      dataKeyId,
     });
     const decryptedAvailableBalance = await kmsDecrypt({
       value: plaidAccount.availableBalance,
+      dataKeyId,
     });
     const decryptedAccountType = await kmsDecrypt({
       value: plaidAccount.account_type,
+      dataKeyId,
     });
     const decryptedAccountSubtype = await kmsDecrypt({
       value: plaidAccount.account_subtype,
+      dataKeyId,
     });
 
     plaidAccounts.push({
@@ -1052,6 +1164,7 @@ const getCashFlows = async (profile) => {
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await kmsDecrypt({
         value: transaction.amount,
+        dataKeyId,
       });
 
       transactions.push({
@@ -1229,7 +1342,7 @@ const getCashFlows = async (profile) => {
   };
 };
 
-const getTransactions = async (accounts) => {
+const getTransactions = async (accounts, uid) => {
   const allTransactions = [];
 
   for (const plaidAccount of accounts) {
@@ -1240,13 +1353,16 @@ const getTransactions = async (accounts) => {
       .lean();
 
     const transactions = [];
+    const dataKeyId = await connectEncryption(uid);
 
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await kmsDecrypt({
         value: transaction.amount,
+        dataKeyId,
       });
       const decryptedName = await kmsDecrypt({
         value: transaction.name,
+        dataKeyId,
       });
 
       let decryptedMerchantName;
@@ -1254,35 +1370,43 @@ const getTransactions = async (accounts) => {
       if (transaction.merchant) {
         decryptedMerchantName = await kmsDecrypt({
           value: transaction.merchant.name,
+          dataKeyId,
         });
 
         decryptedMerchantMerchantName = await kmsDecrypt({
           value: transaction.merchant.merchantName,
+          dataKeyId,
         });
       }
 
       const decryptedFees = await kmsDecrypt({
         value: transaction.fees,
+        dataKeyId,
       });
 
       const decryptedPrice = await kmsDecrypt({
         value: transaction.price,
+        dataKeyId,
       });
 
       const decryptedType = await kmsDecrypt({
         value: transaction.type,
+        dataKeyId,
       });
 
       const decryptedSubtype = await kmsDecrypt({
         value: transaction.subtype,
+        dataKeyId,
       });
 
       const decryptedQuantity = await kmsDecrypt({
         value: transaction.quantity,
+        dataKeyId,
       });
 
       const decryptedSecurityId = await kmsDecrypt({
         value: transaction.securityId,
+        dataKeyId,
       });
 
       transactions.push({
@@ -1317,7 +1441,7 @@ const getTransactions = async (accounts) => {
   return sortedTransactions;
 };
 
-const getUserTransactions = async (email) => {
+const getUserTransactions = async (email, uid) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() })
     .populate("plaidAccounts")
     .exec();
@@ -1332,11 +1456,11 @@ const getUserTransactions = async (email) => {
 
   const accounts = user.plaidAccounts;
 
-  return getTransactions(accounts);
+  return getTransactions(accounts, uid);
 };
 
-const getProfileTransactions = async (email, profileId) => {
-  const profiles = await businessService.getUserProfiles(email);
+const getProfileTransactions = async (email, profileId, uid) => {
+  const profiles = await businessService.getUserProfiles(email, uid);
   const profile = profiles.find((p) => String(p.id) === profileId);
   if (!profile) {
     throw new Error("Profile not found");
@@ -1347,19 +1471,24 @@ const getProfileTransactions = async (email, profileId) => {
   }).lean();
 
   let plaidAccounts = [];
+  const dataKeyId = await connectEncryption(uid);
 
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await kmsDecrypt({
       value: plaidAccount.currentBalance,
+      dataKeyId,
     });
     const decryptedAvailableBalance = await kmsDecrypt({
       value: plaidAccount.availableBalance,
+      dataKeyId,
     });
     const decryptedAccountType = await kmsDecrypt({
       value: plaidAccount.account_type,
+      dataKeyId,
     });
     const decryptedAccountSubtype = await kmsDecrypt({
       value: plaidAccount.account_subtype,
+      dataKeyId,
     });
 
     plaidAccounts.push({
@@ -1371,10 +1500,10 @@ const getProfileTransactions = async (email, profileId) => {
     });
   }
 
-  return await getTransactions(plaidAccounts);
+  return await getTransactions(plaidAccounts, uid);
 };
 
-const getTransactionsByAccount = async (accountId) => {
+const getTransactionsByAccount = async (accountId, uid) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
     .lean()
@@ -1385,13 +1514,15 @@ const getTransactionsByAccount = async (accountId) => {
   }
 
   let allTransactions = [];
-
+  const dataKeyId = await connectEncryption(uid);
   for (const transaction of account.transactions) {
     const decryptedAmount = await kmsDecrypt({
       value: transaction.amount,
+      dataKeyId,
     });
     const decryptedName = await kmsDecrypt({
       value: transaction.name,
+      dataKeyId,
     });
 
     let decryptedMerchantName;
@@ -1399,31 +1530,38 @@ const getTransactionsByAccount = async (accountId) => {
     if (transaction.merchant) {
       decryptedMerchantName = await kmsDecrypt({
         value: transaction.merchant.name,
+        dataKeyId,
       });
 
       decryptedMerchantMerchantName = await kmsDecrypt({
         value: transaction.merchant.merchantName,
+        dataKeyId,
       });
     }
 
     const decryptedFees = await kmsDecrypt({
       value: transaction.fees,
+      dataKeyId,
     });
 
     const decryptedPrice = await kmsDecrypt({
       value: transaction.price,
+      dataKeyId,
     });
 
     const decryptedType = await kmsDecrypt({
       value: transaction.type,
+      dataKeyId,
     });
 
     const decryptedSubtype = await kmsDecrypt({
       value: transaction.subtype,
+      dataKeyId,
     });
 
     const decryptedQuantity = await kmsDecrypt({
       value: transaction.quantity,
+      dataKeyId,
     });
 
     allTransactions.push({

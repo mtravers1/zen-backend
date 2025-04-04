@@ -1,3 +1,4 @@
+import { connectEncryption } from "../database/database.js";
 import User from "../database/models/User.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 import admin from "../lib/firebaseAdmin.js";
@@ -26,16 +27,22 @@ const signUp = async (data) => {
       isPrimary: true,
     };
 
+    const uid = data.authUid;
+    const dataKeyId = await connectEncryption(uid);
+
     const encryptedFirstName = await kmsEncrypt({
       value: data.firstName,
+      dataKeyId,
     });
 
     const encryptedLastName = await kmsEncrypt({
       value: data.lastName,
+      dataKeyId,
     });
 
     const encryptedMiddleName = await kmsEncrypt({
       value: data.middleName,
+      dataKeyId,
     });
 
     const nameSchema = {
@@ -48,6 +55,7 @@ const signUp = async (data) => {
 
     const encryptedPhone = await kmsEncrypt({
       value: data.phone,
+      dataKeyId,
     });
 
     const phoneNumbersSchema = {
@@ -64,14 +72,17 @@ const signUp = async (data) => {
 
     const encryptedPhotoUrl = await kmsEncrypt({
       value: data.photoUrl,
+      dataKeyId,
     });
 
     const encryptedAnnualIncome = await kmsEncrypt({
       value: data.annualIncome,
+      dataKeyId,
     });
 
     const encryptedSSn = await kmsEncrypt({
       value: data.ssn,
+      dataKeyId,
     });
 
     const user = new User({
@@ -98,18 +109,23 @@ const signUp = async (data) => {
 
     const decryptedFirstName = await kmsDecrypt({
       value: newUser.name.firstName,
+      dataKeyId,
     });
     const decryptedLastName = await kmsDecrypt({
       value: newUser.name.lastName,
+      dataKeyId,
     });
     const decryptedMiddleName = await kmsDecrypt({
       value: newUser.name.middleName,
+      dataKeyId,
     });
     const decryptedPhone = await kmsDecrypt({
       value: newUser.phones[0].phone,
+      dataKeyId,
     });
     const decryptedPhotoUrl = await kmsDecrypt({
       value: newUser.profilePhotoUrl,
+      dataKeyId,
     });
 
     const retrievedUser = {
@@ -143,22 +159,30 @@ const signIn = async (email) => {
       throw new Error("User not found");
     }
 
+    const uid = user.authUid;
+    const dataKeyId = await connectEncryption(uid);
+
     const decryptedFirstName = await kmsDecrypt({
       value: user.name.firstName,
+      dataKeyId,
     });
     const decryptedLastName = await kmsDecrypt({
       value: user.name.lastName,
+      dataKeyId,
     });
     const decryptedMiddleName = await kmsDecrypt({
       value: user.name.middleName,
+      dataKeyId,
     });
     const decryptedPhone = await kmsDecrypt({
       value: user.phones[0].phone,
+      dataKeyId,
     });
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
       decryptedPhotoUrl = await kmsDecrypt({
         value: user.profilePhotoUrl,
+        dataKeyId,
       });
     }
 

@@ -5,13 +5,14 @@ import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
+import { connectEncryption } from "../database/database.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 
-const createLinkToken = async (email, isAndroid) => {
+const createLinkToken = async (email, isAndroid, accountId, uid) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   });
@@ -19,6 +20,7 @@ const createLinkToken = async (email, isAndroid) => {
     throw new Error("User not found");
   }
   let accessToken;
+  const dataKeyId = await connectEncryption(uid);
   if (accountId) {
     const account = await PlaidAccount.findOne({ _id: accountId });
     if (!account) {
@@ -26,6 +28,7 @@ const createLinkToken = async (email, isAndroid) => {
     }
     accessToken = await kmsDecrypt({
       value: account.accessToken,
+      dataKeyId,
     });
   }
   const userId = user._id.toString();
@@ -74,7 +77,13 @@ const getAccessToken = async (publicToken) => {
   return response.data;
 };
 
-const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
+const saveAccessToken = async (
+  email,
+  accessToken,
+  itemId,
+  institutionId,
+  uid
+) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   });
@@ -82,9 +91,11 @@ const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
+  const dataKeyId = await connectEncryption(uid);
 
   const encryptedToken = await kmsEncrypt({
     value: accessToken,
+    dataKeyId,
   });
 
   const newToken = new AccessToken({
@@ -102,7 +113,7 @@ const saveAccessToken = async (email, accessToken, itemId, institutionId) => {
   };
 };
 
-const getUserAccessTokens = async (email) => {
+const getUserAccessTokens = async (email, uid) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   });
@@ -113,10 +124,11 @@ const getUserAccessTokens = async (email) => {
   const tokens = await AccessToken.find({ userId });
 
   const decryptedTokens = [];
-
+  const dataKeyId = await connectEncryption(uid);
   for (const token of tokens) {
     const decryptedAccessToken = await kmsDecrypt({
       value: token.accessToken,
+      dataKeyId,
     });
 
     decryptedTokens.push({
@@ -128,9 +140,9 @@ const getUserAccessTokens = async (email) => {
   return decryptedTokens;
 };
 
-const getAccounts = async (email) => {
+const getAccounts = async (email, uid) => {
   try {
-    const tokens = await getUserAccessTokens(email);
+    const tokens = await getUserAccessTokens(email, uid);
     if (!tokens.length) return [];
     const accountsPromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsGet({
@@ -201,8 +213,8 @@ const getInstitutions = async () => {
   return institutions;
 };
 
-const getTransactions = async (email) => {
-  const tokens = await getUserAccessTokens(email);
+const getTransactions = async (email, uid) => {
+  const tokens = await getUserAccessTokens(email, uid);
   if (!tokens.length) return [];
 
   const transactionsPromises = tokens.map(async (token) => {
@@ -242,15 +254,16 @@ const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
-const getAccessTokenFromItemId = async (itemId) => {
+const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await AccessToken.findOne({ itemId });
   if (!access) {
     return;
   }
   const accessToken = access.accessToken;
-
+  const dataKeyId = await connectEncryption(uid);
   const decryptedToken = await kmsDecrypt({
     value: accessToken,
+    dataKeyId,
   });
   return decryptedToken;
 };
@@ -280,6 +293,20 @@ const updateTransactions = async (item) => {
     console.error("Error fetching account balances:", error);
   }
 
+  const savedToken = await AccessToken.findOne({
+    itemId: item,
+  });
+
+  const userId = savedToken?.userId;
+  const user = await User.findById(userId);
+  const uid = user?.authUid;
+  const emails = user?.email;
+
+  const emailObject = emails?.find((email) => email.isPrimary === true);
+
+  const email = emailObject?.email;
+  const dataKeyId = await connectEncryption(uid);
+
   if (newAccountsBalances) {
     const bulkOps = [];
     for (const account of newAccountsBalances.data.accounts) {
@@ -302,14 +329,20 @@ const updateTransactions = async (item) => {
           encryptedCurrentBalance,
           encryptedAvailableBalance,
         ] = await Promise.all([
-          kmsEncrypt({ value: accountName }),
-          kmsEncrypt({ value: accountType }),
-          kmsEncrypt({ value: accountSubtype }),
+          kmsEncrypt({ value: accountName, dataKeyId }),
+          kmsEncrypt({ value: accountType, dataKeyId }),
+          kmsEncrypt({ value: accountSubtype, dataKeyId }),
           accountBalance.current
-            ? kmsEncrypt({ value: accountBalance.current.toString() })
+            ? kmsEncrypt({
+                value: accountBalance.current.toString(),
+                dataKeyId,
+              })
             : null,
           accountBalance.available
-            ? kmsEncrypt({ value: accountBalance.available.toString() })
+            ? kmsEncrypt({
+                value: accountBalance.available.toString(),
+                dataKeyId,
+              })
             : null,
         ]);
 
@@ -383,9 +416,11 @@ const updateTransactions = async (item) => {
 
         const encryptedMerchantName = await kmsEncrypt({
           value: transaction.merchant_name,
+          dataKeyId,
         });
         const encryptedName = await kmsEncrypt({
           value: transaction.name,
+          dataKeyId,
         });
 
         const merchant = {
@@ -398,14 +433,17 @@ const updateTransactions = async (item) => {
 
         const encryptedAmount = await kmsEncrypt({
           value: transaction.amount,
+          dataKeyId,
         });
 
         const encryptedAccountType = await kmsEncrypt({
           value: accountMap.get(transaction.account_id).account_type,
+          dataKeyId,
         });
 
         const transactionCode = await kmsEncrypt({
           value: transaction.transaction_code,
+          dataKeyId,
         });
 
         bulkOps.push({
@@ -456,6 +494,7 @@ const updateTransactions = async (item) => {
         for (const transaction of modifiedTransactions) {
           const encryptedAmount = await kmsEncrypt({
             value: transaction.amount,
+            dataKeyId,
           });
 
           modifiedBulkOps.push({
@@ -499,32 +538,6 @@ const updateTransactions = async (item) => {
       if (bulkUpdateAccountsOps.length > 0) {
         await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
       }
-
-      const savedToken = await AccessToken.findOne({
-        itemId: item,
-      });
-
-      if (!savedToken) return;
-      const userId = savedToken.userId;
-      const user = await User.findById(userId);
-      if (!user) return;
-
-      const emails = user.email;
-
-      const emailObject = emails.find((email) => email.isPrimary === true);
-      if (!emailObject) return;
-      const email = emailObject.email;
-
-      const internalTransfers = await detectInternalTransfers(email);
-
-      for (const transactionId of internalTransfers) {
-        const transaction = await Transaction.findOne({
-          plaidTransactionId: transactionId,
-        });
-        if (!transaction) continue;
-        transaction.isInternal = true;
-        await transaction.save();
-      }
     } catch (error) {
       if (
         error.response?.data?.error_code ===
@@ -541,6 +554,19 @@ const updateTransactions = async (item) => {
         );
         break;
       }
+    }
+  }
+
+  if (email) {
+    const internalTransfers = await detectInternalTransfers(email);
+
+    for (const transactionId of internalTransfers) {
+      const transaction = await Transaction.findOne({
+        plaidTransactionId: transactionId,
+      });
+      if (!transaction) continue;
+      transaction.isInternal = true;
+      await transaction.save();
     }
   }
   console.log("Finished updating transactions");

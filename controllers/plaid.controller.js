@@ -3,9 +3,14 @@ import plaidService from "../services/plaid.service.js";
 const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
-    const { isAndroid } = req.body;
-    const linkToken = await plaidService.createLinkToken(email, isAndroid);
-    console.log(linkToken);
+    const uid = req.user.uid;
+    const { isAndroid, accountId } = req.body;
+    const linkToken = await plaidService.createLinkToken(
+      email,
+      isAndroid,
+      accountId,
+      uid
+    );
     res.status(200).send({ linkToken });
   } catch (error) {
     console.log(error.message);
@@ -37,12 +42,14 @@ const getAccessToken = async (req, res) => {
 const saveAccessToken = async (req, res) => {
   try {
     const email = req.user.email;
+    const uid = req.user.uid;
     const { accessToken, itemId, institutionId } = req.body;
     const token = await plaidService.saveAccessToken(
       email,
       accessToken,
       itemId,
-      institutionId
+      institutionId,
+      uid
     );
     res.status(200).send(token);
   } catch (error) {
@@ -84,7 +91,11 @@ const getInstitutions = async (req, res) => {
 
 const getTransactions = async (req, res) => {
   try {
-    const transactions = await plaidService.getTransactions(req.user.email);
+    const uid = req.user.uid;
+    const transactions = await plaidService.getTransactions(
+      req.user.email,
+      uid
+    );
 
     res.status(200).send(transactions);
   } catch (error) {

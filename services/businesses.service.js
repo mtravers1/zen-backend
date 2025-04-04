@@ -5,9 +5,11 @@ import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
+import { connectEncryption } from "../database/database.js";
 
-const addBusinesses = async (businessList, email) => {
+const addBusinesses = async (businessList, email, uid) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() });
+  const dataKeyId = await connectEncryption(uid);
 
   if (!user) {
     throw new Error("User not found");
@@ -48,14 +50,17 @@ const addBusinesses = async (businessList, email) => {
 
     const encryptedName = await kmsEncrypt({
       value: businessData.name,
+      dataKeyId,
     });
 
     const encryptedIndustry = await kmsEncrypt({
       value: businessData.industry,
+      dataKeyId,
     });
 
     const encryptedBusinessLogo = await kmsEncrypt({
       value: businessData.businessLogo,
+      dataKeyId,
     });
 
     const newBusiness = new Business({
@@ -75,7 +80,7 @@ const addBusinesses = async (businessList, email) => {
   return { message: "Businesses added successfully" };
 };
 
-const getUserProfiles = async (email) => {
+const getUserProfiles = async (email, uid) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   }).lean();
@@ -85,21 +90,26 @@ const getUserProfiles = async (email) => {
   }
 
   const profiles = [];
+  const dataKeyId = await connectEncryption(uid);
 
   const decryptedFirstName = await kmsDecrypt({
     value: user.name.firstName,
+    dataKeyId,
   });
 
   const decryptedLastName = await kmsDecrypt({
     value: user.name.lastName,
+    dataKeyId,
   });
 
   const decryptedMiddleName = await kmsDecrypt({
     value: user.name.middleName,
+    dataKeyId,
   });
 
   const decryptedPhotoUrl = await kmsDecrypt({
     value: user.profilePhotoUrl,
+    dataKeyId,
   });
 
   const personalProfile = {
@@ -131,14 +141,17 @@ const getUserProfiles = async (email) => {
   for (const business of businesses) {
     const decryptedName = await kmsDecrypt({
       value: business.name,
+      dataKeyId,
     });
 
     const decryptedIndustry = await kmsDecrypt({
       value: business.industryDesc,
+      dataKeyId,
     });
 
     const decryptedBusinessLogo = await kmsDecrypt({
       value: business.businessLogo,
+      dataKeyId,
     });
 
     const businessProfile = {
