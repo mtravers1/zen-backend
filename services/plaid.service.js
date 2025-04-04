@@ -132,7 +132,6 @@ const getAccounts = async (email) => {
   try {
     const tokens = await getUserAccessTokens(email);
     if (!tokens.length) return [];
-
     const accountsPromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsGet({
         access_token: token.accessToken,
@@ -510,11 +509,7 @@ const updateTransactions = async (item) => {
       const user = await User.findById(userId);
       if (!user) return;
 
-      console.log("User found:", user);
-      console.log("User email:", user.email);
-
       const emails = user.email;
-      console.log("Email:", emails);
 
       const emailObject = emails.find((email) => email.isPrimary === true);
       if (!emailObject) return;
@@ -603,7 +598,6 @@ const updateLiabilities = async (item) => {
 const getCurrentCashflow = async (email) => {
   const transactionsResponse = await getTransactions(email);
   const transactions = transactionsResponse.added;
-  console.log(transactions);
   return transactions;
 };
 

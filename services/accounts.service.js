@@ -948,9 +948,6 @@ const getCashFlowsWeekly = async (profile) => {
     );
   }
 
-  console.log("depositoryTransactions", depositoryTransactions);
-  console.log("creditTransactions", creditTransactions);
-
   const groupedTransactions = groupByWeek([
     ...depositoryTransactions,
     ...creditTransactions,
