@@ -129,7 +129,6 @@ const getUserProfiles = async (email, uid) => {
   };
 
   profiles.push(personalProfile);
-
   const userId = user._id.toString();
 
   const businesses = await Business.find({ userId }).lean();
@@ -163,14 +162,16 @@ const getUserProfiles = async (email, uid) => {
       color: business.color,
     };
     profiles.push(businessProfile);
-
-    for (const account of business.plaidAccountIds) {
-      const index = personalProfile.plaidAccounts.indexOf(account);
-      if (index > -1) {
-        personalProfile.plaidAccounts.splice(index, 1);
-      }
-    }
   }
+
+  const businessAccounts = businesses.flatMap((b) => b.plaidAccountIds || []);
+  const uniqueBusinessAccountIds = new Set(
+    businessAccounts.map((id) => id.toString())
+  );
+
+  personalProfile.plaidAccounts = (user.plaidAccounts || []).filter(
+    (acc) => !uniqueBusinessAccountIds.has(acc.toString())
+  );
 
   for (const profile of profiles) {
     const photoPath = profile.isPersonal
@@ -187,8 +188,8 @@ const getUserProfiles = async (email, uid) => {
   return profiles;
 };
 
-const assignsAccountsToProfiles = async (data, email) => {
-  const profiles = await getUserProfiles(email);
+const assignsAccountsToProfiles = async (data, email, uid) => {
+  const profiles = await getUserProfiles(email, uid);
   for (const [key, value] of Object.entries(data)) {
     const profile = profiles.find((p) => String(p.id) === value);
     if (!profile) {
@@ -248,8 +249,8 @@ const unlinkAccounts = async (data, email) => {
   return { message: "Accounts unlinked successfully" };
 };
 
-const assignAccountToProfile = async (email, profileId, accountIds) => {
-  const profiles = await getUserProfiles(email);
+const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
+  const profiles = await getUserProfiles(email, uid);
   const profile = profiles.find((p) => String(p.id) === profileId);
   if (!profile) {
     throw new Error("Profile not found");

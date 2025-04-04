@@ -741,7 +741,10 @@ const addAccount = async (accessToken, email, uid) => {
     });
   }
 
-  const internalTransfers = await plaidService.detectInternalTransfers(email);
+  const internalTransfers = await plaidService.detectInternalTransfers(
+    email,
+    uid
+  );
 
   for (const transactionId of internalTransfers) {
     const transaction = await Transaction.findOne({
@@ -786,7 +789,6 @@ const removeAccount = async (accountId, email) => {
 
 const getAccounts = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
-
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
   })

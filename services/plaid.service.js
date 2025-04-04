@@ -269,7 +269,14 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
 };
 
 const updateTransactions = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
+  console.log("Updating transactions for item:", item);
+  const accessInfo = await AccessToken.findOne({ itemId: item });
+  if (!accessInfo) return;
+  const userId = accessInfo.userId;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const uid = user?.authUid;
+  const accessToken = await getAccessTokenFromItemId(item, uid);
   if (!accessToken) {
     //TODO: remove item
     return;
@@ -293,13 +300,6 @@ const updateTransactions = async (item) => {
     console.error("Error fetching account balances:", error);
   }
 
-  const savedToken = await AccessToken.findOne({
-    itemId: item,
-  });
-
-  const userId = savedToken?.userId;
-  const user = await User.findById(userId);
-  const uid = user?.authUid;
   const emails = user?.email;
 
   const emailObject = emails?.find((email) => email.isPrimary === true);
@@ -558,7 +558,7 @@ const updateTransactions = async (item) => {
   }
 
   if (email) {
-    const internalTransfers = await detectInternalTransfers(email);
+    const internalTransfers = await detectInternalTransfers(email, uid);
 
     for (const transactionId of internalTransfers) {
       const transaction = await Transaction.findOne({
@@ -575,7 +575,28 @@ const updateTransactions = async (item) => {
 };
 
 const updateInvestmentTransactions = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
+  const accessInfo = await AccessToken.findOne({ itemId: item });
+  if (!accessInfo) return;
+  const userId = accessInfo.userId;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const uid = user?.authUid;
+  const accessToken = await getAccessTokenFromItemId(item, uid);
+
+  if (!accessToken) {
+    return;
+  }
+
+  const savedToken = await AccessToken.findOne({
+    itemId: item,
+  });
+
+  const emails = user?.email;
+
+  const emailObject = emails?.find((email) => email.isPrimary === true);
+
+  const email = emailObject?.email;
+  const dataKeyId = await connectEncryption(uid);
 
   const response = await plaidClient.investmentsTransactionsGet({
     access_token: accessToken,
@@ -593,22 +614,65 @@ const updateInvestmentTransactions = async (item) => {
     if (existingTransaction) {
       continue;
     }
+    const accountType = "investment";
+    const encryptedAccountType = await kmsEncrypt({
+      value: accountType,
+      dataKeyId,
+    });
+    const encryptedName = await kmsEncrypt({
+      value: transaction.name,
+      dataKeyId,
+    });
+
+    const encryptedAmount = await kmsEncrypt({
+      value: transaction.amount,
+      dataKeyId,
+    });
+
+    const encryptedSecurityId = await kmsEncrypt({
+      value: transaction.security_id,
+      dataKeyId,
+    });
+    const encryptedPrice = await kmsEncrypt({
+      value: transaction.price,
+      dataKeyId,
+    });
+
+    const encryptedQuantity = await kmsEncrypt({
+      value: transaction.quantity,
+      dataKeyId,
+    });
+
+    const encryptedFees = await kmsEncrypt({
+      value: transaction.fees,
+      dataKeyId,
+    });
+
+    const encryptedType = await kmsEncrypt({
+      value: transaction.type,
+      dataKeyId,
+    });
+
+    const encryptedSubType = await kmsEncrypt({
+      value: transaction.subtype,
+      dataKeyId,
+    });
 
     const newTransaction = new Transaction({
       plaidTransactionId: transaction.transaction_id,
       plaidAccountId: transaction.account_id,
       transactionDate: transaction.date,
-      amount: transaction.amount,
+      amount: encryptedAmount,
       currency: transaction.iso_currency_code,
       isInvestment: true,
-      name: transaction.name,
-      fees: transaction.fees,
-      price: transaction.price,
-      quantity: transaction.quantity,
-      securityId: transaction.security_id,
-      type: transaction.type,
-      subType: transaction.subtype,
-      accountType: "investment",
+      name: encryptedName,
+      fees: encryptedFees,
+      price: encryptedPrice,
+      quantity: encryptedQuantity,
+      securityId: encryptedSecurityId,
+      type: encryptedType,
+      subType: encryptedSubType,
+      accountType: encryptedAccountType,
     });
 
     await newTransaction.save();
@@ -627,8 +691,8 @@ const getCurrentCashflow = async (email) => {
   return transactions;
 };
 
-const detectInternalTransfers = async (email) => {
-  const transactions = await getTransactions(email);
+const detectInternalTransfers = async (email, uid) => {
+  const transactions = await getTransactions(email, uid);
 
   const transfers = [];
   const groupedByAmount = new Map();

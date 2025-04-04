@@ -29,9 +29,11 @@ const assignsAccountsToProfiles = async (req, res) => {
   try {
     const data = req.body;
     const email = req.user.email;
+    const uid = req.user.uid;
     const response = await businessService.assignsAccountsToProfiles(
       data,
-      email
+      email,
+      uid
     );
     res.status(200).json(response);
   } catch (error) {
@@ -56,10 +58,12 @@ const assignAccountToProfile = async (req, res) => {
   try {
     const { profileId, accountIds } = req.body;
     const email = req.user.email;
+    const uid = req.user.uid;
     const response = await businessService.assignAccountToProfile(
       email,
       profileId,
-      accountIds
+      accountIds,
+      uid
     );
     res.status(200).json(response);
   } catch (error) {
