@@ -708,7 +708,6 @@ const getAccounts = async (profile, uid) => {
 };
 
 const getAllUserAccounts = async (email, uid) => {
-  console.time("getAllUserAccounts");
   const user = await User.findOne({
     authUid: uid,
   })
@@ -910,7 +909,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
   return { weeklyCashFlow: result };
 };
 
-const getCashFlows = async (profile) => {
+const getCashFlows = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },

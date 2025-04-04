@@ -287,6 +287,17 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
     return;
   }
 
+  const savedToken = await AccessToken.findOne({
+    itemId: item,
+  });
+
+  const userId = savedToken?.userId;
+  const user = await User.findById(userId);
+  const uid = user?.authUid;
+  const emails = user?.email;
+
+  const emailObject = emails?.find((email) => email.isPrimary === true);
+
   if (newAccountsBalances) {
     const bulkOps = [];
     for (const account of newAccountsBalances.data.accounts) {
