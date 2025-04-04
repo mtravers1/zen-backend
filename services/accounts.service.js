@@ -777,13 +777,18 @@ const getAllUserAccounts = async (email, uid) => {
   console.timeEnd("getAllUserAccounts");
   return accounts;
 };
+const calculateCashFlowsWeekly = async (
+  depositoryTransactions,
+  creditTransactions
+) => {
+  const groupedTransactions = groupByWeek([
+    ...depositoryTransactions,
+    ...creditTransactions,
+  ]);
 
-const getCashFlowsWeekly = async (profile) => {
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccounts = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  }).exec();
-
+  return calculateWeeklyTotals(groupedTransactions);
+};
+const weeklyCashFlowPlaidAccountSetUpTransactions = async (plaidAccounts) => {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const allTransactions = [];
@@ -850,13 +855,19 @@ const getCashFlowsWeekly = async (profile) => {
       )
     );
   }
-
-  const groupedTransactions = groupByWeek([
-    ...depositoryTransactions,
-    ...creditTransactions,
-  ]);
-
-  const result = calculateWeeklyTotals(groupedTransactions);
+  return { depositoryTransactions, creditTransactions };
+};
+const getCashFlowsWeekly = async (profile) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccounts = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).exec();
+  const plaidWeeklyTransactions =
+    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts);
+  const result = await calculateCashFlowsWeekly(
+    plaidWeeklyTransactions.depositoryTransactions,
+    plaidWeeklyTransactions.creditTransactions
+  );
   return { weeklyCashFlow: result };
 };
 
@@ -1652,7 +1663,6 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     plaidWeeklyTransactions.creditTransactions
   );
   //----------WEEKLY-cashflow-chart calculations
-
   if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
     balanceCredit = balanceCredit += plaidAccount.currentBalance;
   } else if (plaidAccount.account_type === "depository") {
