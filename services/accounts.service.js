@@ -94,14 +94,10 @@ const addAccount = async (accessToken, email, uid) => {
       dataKeyId,
     });
 
-    let encriptedInstitutionName;
-
-    if (account.institution_name) {
-      encriptedInstitutionName = await kmsEncrypt({
-        value: account.institution_name,
-        dataKeyId,
-      });
-    }
+    const encriptedInstitutionName = await kmsEncrypt({
+      value: institutionName,
+      dataKeyId,
+    });
 
     const encriptedMask = await kmsEncrypt({
       value: account.mask,
@@ -830,6 +826,11 @@ const getAccounts = async (profile, uid) => {
       dataKeyId,
     });
 
+    const decryptedInstitutionName = await kmsDecrypt({
+      value: plaidAccount.institution_name,
+      dataKeyId,
+    });
+
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
@@ -839,6 +840,7 @@ const getAccounts = async (profile, uid) => {
       account_name: decryptedAccountName,
       account_official_name: decryptedAccountOfficialName,
       mask: decryptedMask,
+      institution_name: decryptedInstitutionName,
     });
   }
 
@@ -918,6 +920,11 @@ const getAllUserAccounts = async (email, uid) => {
       dataKeyId,
     });
 
+    const decryptedInstitutionName = await kmsDecrypt({
+      value: plaidAccount.institution_name,
+      dataKeyId,
+    });
+
     accounts.push({
       ...plaidAccount._doc,
       currentBalance: decryptedCurrentBalance,
@@ -927,6 +934,7 @@ const getAllUserAccounts = async (email, uid) => {
       account_name: decryptedAccountName,
       account_official_name: decryptedAccountOfficialName,
       mask: decryptedMask,
+      institution_name: decryptedInstitutionName,
     });
   }
 
