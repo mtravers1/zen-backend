@@ -76,7 +76,7 @@ jobs:
         run: |
           echo "$OVPN_CONFIG" > client.ovpn
       - name: Connect to VPN
-        uses: kota65535/github-openvpn-connect-action@v2
+        uses: kota65535/github-openvpn-connect-action@v3.1.0
         with:
           config_file: client.ovpn
           echo_config: false
@@ -108,7 +108,8 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
+          rsync -avzr --delete --include="./dist/.env" -e 'ssh -o StrictHostKeyChecking=no -i private_key.pem -p ${{ secrets.DEPLOYMENT_PORT }}' ./dist/* ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }}
+          # scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             source ~/.nvm/nvm.sh
             cd ${{ secrets.DEPLOYMENT_PATH }}
