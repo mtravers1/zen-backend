@@ -20,7 +20,6 @@ jobs:
         node-version: [20.x]
     steps:
       - name: Install OpenVPN
-<<<<<<< HEAD
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: openvpn openvpn-systemd-resolved rsync
@@ -29,11 +28,6 @@ jobs:
       #   run: |
       #     sudo apt update
       #     sudo apt install -y openvpn openvpn-systemd-resolved rsync
-=======
-        run: |
-          sudo apt update
-          sudo apt install -y openvpn openvpn-systemd-resolved
->>>>>>> 0030123 (Architecture - Updated dev deployment config)
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache node modules
@@ -66,19 +60,12 @@ jobs:
           sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_DEV }}|g" .env.sample
           sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ secrets.GCP_PROJECT_ID }}|g" .env.sample
           sed -i -e "s|GCP_EMAIL\=.*|GCP_EMAIL\=${{ secrets.GCP_EMAIL }}|g" .env.sample
-<<<<<<< HEAD
           sed -i -e "s|GCP_PRIVATE_KEY\=.*|GCP_PRIVATE_KEY\=\"${{ secrets.GCP_PRIVATE_KEY }}\"|g" .env.sample
           sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env.sample
           sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env.sample
           sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env.sample
           sed -i -e "s|GCP_BUCKET_KEY\=.*|GCP_BUCKET_KEY\=${{ secrets.GCP_BUCKET_KEY}}|g" .env.sample
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT}}|g" .env.sample
-=======
-          sed -i -e "s|GCP_PRIVATE_KEY\=.*|GCP_PRIVATE_KEY\=${{ secrets.GCP_PRIVATE_KEY }}|g" .env.sample
-          sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env.sample
-          sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env.sample
-          sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env.sample
->>>>>>> 0030123 (Architecture - Updated dev deployment config)
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           echo "$GCP_BUCKET_JSON" > GCPKey.json
@@ -98,7 +85,6 @@ jobs:
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.1
         with:
-<<<<<<< HEAD
           config_file: client.ovpn
           echo_config: false
           username: ${{ secrets.OVPN_USERNAME }}
@@ -108,18 +94,12 @@ jobs:
         with:
           switches: -avzr --delete
           path: ./dist/
-=======
-          switches: -avzr --delete --include ".env"
-          path: ./dist/*
->>>>>>> 0030123 (Architecture - Updated dev deployment config)
           remote_path: ${{ secrets.DEPLOYMENT_PATH }}
           remote_host: ${{ secrets.DEPLOYMENT_HOST_DEV }}
           remote_user: ${{ secrets.DEPLOYMENT_USER_DEV }}
           remote_key: ${{ secrets.DEPLOYMENT_KEY_DEV }}
-<<<<<<< HEAD
           remote_port: ${{ secrets.DEPLOYMENT_PORT }}
-=======
->>>>>>> 0030123 (Architecture - Updated dev deployment config)
+
       - name: SSH config
         env:
           PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_DEV }}
@@ -128,15 +108,15 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-<<<<<<< HEAD
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
-=======
           scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }}
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -o StrictHostKeyChecking=no <<EOF
-            source ~/.nvm/nvm.sh
->>>>>>> 0030123 (Architecture - Updated dev deployment config)
+          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+
             cd ${{ secrets.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
+          rm -f client.ovpn # Remove ovpn file after use for security
