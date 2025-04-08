@@ -1697,7 +1697,6 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const loanTransactions = [];
 
   //----------WEEKLY-cashflow-chart calculations
-
   const plaidWeeklyTransactions =
     await weeklyCashFlowPlaidAccountSetUpTransactions([plaidAccount], uid);
 
@@ -1706,6 +1705,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     plaidWeeklyTransactions.creditTransactions
   );
   //----------WEEKLY-cashflow-chart calculations
+
   if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
     balanceCredit = balanceCredit += plaidAccount.currentBalance;
   } else if (plaidAccount.account_type === "depository") {
