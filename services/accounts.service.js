@@ -788,7 +788,13 @@ const calculateCashFlowsWeekly = async (
 
   return calculateWeeklyTotals(groupedTransactions);
 };
-const weeklyCashFlowPlaidAccountSetUpTransactions = async (plaidAccounts) => {
+
+const weeklyCashFlowPlaidAccountSetUpTransactions = async (
+  plaidAccounts,
+  uid
+) => {
+  const dataKeyId = await connectEncryption(uid);
+
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const allTransactions = [];
@@ -857,17 +863,52 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (plaidAccounts) => {
   }
   return { depositoryTransactions, creditTransactions };
 };
-const getCashFlowsWeekly = async (profile) => {
+
+const getCashFlowsWeekly = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
-  const plaidAccounts = await PlaidAccount.find({
+  const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
-  }).exec();
-  const plaidWeeklyTransactions =
-    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts);
-  const result = await calculateCashFlowsWeekly(
-    plaidWeeklyTransactions.depositoryTransactions,
-    plaidWeeklyTransactions.creditTransactions
-  );
+  }).lean();
+
+  let plaidAccounts = [];
+
+  const dataKeyId = await connectEncryption(uid);
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await kmsDecrypt({
+      value: plaidAccount.currentBalance,
+      dataKeyId,
+    });
+    const decryptedAvailableBalance = await kmsDecrypt({
+      value: plaidAccount.availableBalance,
+      dataKeyId,
+    });
+    const decryptedAccountType = await kmsDecrypt({
+      value: plaidAccount.account_type,
+      dataKeyId,
+    });
+    const decryptedAccountSubtype = await kmsDecrypt({
+      value: plaidAccount.account_subtype,
+      dataKeyId,
+    });
+
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+    });
+  }
+
+  const { depositoryTransactions, creditTransactions } =
+    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
+
+  const groupedTransactions = groupByWeek([
+    ...depositoryTransactions,
+    ...creditTransactions,
+  ]);
+
+  const result = calculateWeeklyTotals(groupedTransactions);
   return { weeklyCashFlow: result };
 };
 
@@ -1536,6 +1577,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const response = await plaidService.getLoanLiabilitiesWithAccessToken(
     decryptAccessToken
   );
+
   const accountPlaid = response.accounts.find(
     (account) => account.account_id === accountId
   );
@@ -1655,6 +1697,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const loanTransactions = [];
 
   //----------WEEKLY-cashflow-chart calculations
+
   const plaidWeeklyTransactions =
     await weeklyCashFlowPlaidAccountSetUpTransactions([plaidAccount], uid);
 

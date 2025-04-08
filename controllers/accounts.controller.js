@@ -64,7 +64,12 @@ const getCashFlowsWeekly = async (req, res) => {
 const getCashFlowsByPlaidAccount = async (req, res) => {
   try {
     const { account } = req.body;
-    const cashFlows = await accountsService.getCashFlowsByPlaidAccount(account);
+    const uid = req.user.uid;
+
+    const cashFlows = await accountsService.getCashFlowsByPlaidAccount(
+      account,
+      uid
+    );
     res.status(200).send(cashFlows);
   } catch (error) {
     console.log(error);
@@ -117,9 +122,12 @@ const getTransactionsByAccount = async (req, res) => {
 const getAccountDetails = async (req, res) => {
   try {
     const { accountId, profileId } = req.params;
+    const uid = req.user.uid;
+
     const accountData = await accountsService.getAccountDetails(
       accountId,
-      profileId
+      profileId,
+      uid
     );
     res.status(200).send(accountData);
   } catch (error) {
