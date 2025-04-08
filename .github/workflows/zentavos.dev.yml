@@ -99,7 +99,6 @@ jobs:
           remote_user: ${{ secrets.DEPLOYMENT_USER_DEV }}
           remote_key: ${{ secrets.DEPLOYMENT_KEY_DEV }}
           remote_port: ${{ secrets.DEPLOYMENT_PORT }}
-
       - name: SSH config
         env:
           PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_DEV }}
@@ -108,12 +107,9 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
-          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }}
-          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -o StrictHostKeyChecking=no <<EOF
           scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
-
+            source ~/.nvm/nvm.sh
             cd ${{ secrets.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
