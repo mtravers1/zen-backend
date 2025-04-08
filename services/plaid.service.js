@@ -174,7 +174,7 @@ const getBalance = async (email) => {
     if (!tokens.length) return [];
 
     const balancePromises = tokens.map(async (token) => {
-      const response = await plaidClient.accountsBalanceGet({
+      const response = await plaidClient.accountsGet({
         access_token: token.accessToken,
         // min_last_updated_datetime: new Date().toISOString(),
       });
