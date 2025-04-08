@@ -76,9 +76,10 @@ jobs:
         run: |
           echo "$OVPN_CONFIG" > client.ovpn
       - name: Connect to VPN
-        uses: "kota65535/github-openvpn-connect-action@v2"
+        uses: kota65535/github-openvpn-connect-action@v2
         with:
           config_file: client.ovpn
+          echo_config: false
           username: ${{ secrets.OVPN_USERNAME }}
           password: ${{ secrets.OVPN_PASSWORD }}
           # client_key: ${{ secrets.OVPN_CLIENT_KEY }}
