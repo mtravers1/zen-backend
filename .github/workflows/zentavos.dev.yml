@@ -19,6 +19,10 @@ jobs:
       matrix:
         node-version: [20.x]
     steps:
+      - name: Install OpenVPN
+        run: |
+          sudo apt update
+          sudo apt install -y openvpn openvpn-systemd-resolved rsync
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Install dependencies
@@ -42,12 +46,21 @@ jobs:
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete --include ".env"
+          config_file: client.ovpn
+          echo_config: false
+          username: ${{ secrets.OVPN_USERNAME }}
+          password: ${{ secrets.OVPN_PASSWORD }}
+      - name: rsync deployment
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          switches: -avzr --delete --include="./dist/.env"
           path: ./dist/*
-          remote_path: ${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
-          remote_host: ${{ secrets.EC2_SSH_HOST }}
-          remote_user: ${{ secrets.EC2_SSH_USER }}
-          remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          legacy_allow_rsa_hostkeys: "true"
+          remote_path: ${{ secrets.DEPLOYMENT_PATH }}
+          remote_host: ${{ secrets.DEPLOYMENT_HOST_DEV }}
+          remote_user: ${{ secrets.DEPLOYMENT_USER_DEV }}
+          remote_key: ${{ secrets.DEPLOYMENT_KEY_DEV }}
+          remote_port: ${{ secrets.DEPLOYMENT_PORT }}
       - name: SSH config
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -56,10 +69,10 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }}:${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
-          ssh -i private_key.pem ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_HOST }} -o StrictHostKeyChecking=no <<EOF
-            source ~/.nvm/nvm.sh
-            cd ${{ secrets.EC2_DEPLOYMENT_PATH }}/${{ env.DEPLOYMENT_NAME }}
+          # rsync -avzr --delete --include="./dist/.env" -e 'ssh -o StrictHostKeyChecking=no -i private_key.pem -p ${{ secrets.DEPLOYMENT_PORT }}' ./dist/* ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }}
+          # scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+            cd ${{ secrets.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
           EOF
