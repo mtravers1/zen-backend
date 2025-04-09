@@ -53,7 +53,7 @@ jobs:
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.2
         with:
-          switches: -avzrb --delete --backup-dir=./old
+          switches: -avzr --delete
           path: ./dist/
           remote_path: ${{ secrets.DEPLOYMENT_PATH }}
           remote_host: ${{ secrets.DEPLOYMENT_HOST_DEV }}
