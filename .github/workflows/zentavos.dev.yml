@@ -53,7 +53,7 @@ jobs:
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.2
         with:
-          switches: -avzrbI --delete --include="./dist/.env" --backup-dir=./old
+          switches: -avzrbI --delete --include=".env" --backup-dir=./old
           path: ./dist/*
           legacy_allow_rsa_hostkeys: "true"
           remote_path: ${{ secrets.DEPLOYMENT_PATH }}
@@ -69,7 +69,6 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          # rsync -avzr --delete --include="./dist/.env" -e 'ssh -o StrictHostKeyChecking=no -i private_key.pem -p ${{ secrets.DEPLOYMENT_PORT }}' ./dist/* ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }}
           # scp -i private_key.pem -o StrictHostKeyChecking=no ./dist/.env ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }}:${{ secrets.DEPLOYMENT_PATH }} -P ${{ secrets.DEPLOYMENT_PORT }}
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ secrets.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ secrets.DEPLOYMENT_PATH }}
