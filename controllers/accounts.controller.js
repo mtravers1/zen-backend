@@ -110,6 +110,7 @@ const getAccountDetails = async (req, res) => {
     );
     res.status(200).send(accountData);
   } catch (error) {
+    console.error(error.message);
     res.status(500).send({ message: error.message });
   }
 };
