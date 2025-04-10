@@ -1604,6 +1604,9 @@ const getTransactionsByAccount = async (accountId, uid) => {
 
 const findLiabilityByAccountId = (accountId, liabilities) => {
   for (const category in liabilities) {
+    if (!liabilities[category]) {
+      return null;
+    }
     const found = liabilities[category].find(
       (item) => item.account_id === accountId
     );
@@ -1615,27 +1618,20 @@ const findLiabilityByAccountId = (accountId, liabilities) => {
 };
 
 const getAccountDetails = async (accountId, profileId, uid) => {
-  console.log("Getting user access token");
   const access_token = await AccessToken.findOne({ userId: profileId })
     .lean()
     .exec();
 
-  console.log("Getting encryption key");
   const dataKeyId = await connectEncryption(uid);
 
-  console.log("Decrypting access token");
   const decryptAccessToken = await kmsDecrypt({
     value: access_token.accessToken,
     dataKeyId,
   });
 
-  console.log("Starting plaid request...");
   const response = await plaidService.getLoanLiabilitiesWithAccessToken(
     decryptAccessToken
   );
-  console.log("Plaid request finished.");
-
-  console.log("Decrypting liabilities");
   const accountPlaid = response.accounts.find(
     (account) => account.account_id === accountId
   );
@@ -1648,7 +1644,6 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     decryptLiabilities
   );
 
-  console.log("Getting plaid account");
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .lean()
     .exec();
