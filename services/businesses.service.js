@@ -5,7 +5,7 @@ import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
-import { connectEncryption } from "../database/database.js";
+import { connectEncryption } from "../database/encryption.js";
 
 const addBusinesses = async (businessList, email, uid) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() });

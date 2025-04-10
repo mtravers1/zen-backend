@@ -1,4 +1,4 @@
-import { connectEncryption } from "../database/database.js";
+import { connectEncryption } from "../database/encryption.js";
 import User from "../database/models/User.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 import admin from "../lib/firebaseAdmin.js";

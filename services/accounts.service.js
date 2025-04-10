@@ -6,7 +6,7 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
-import { connectEncryption } from "../database/database.js";
+import { connectEncryption } from "../database/encryption.js";
 
 const storage = new Storage({
   credentials: {

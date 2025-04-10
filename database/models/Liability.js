@@ -29,7 +29,7 @@ const liabilitySchema = new Schema({
     enum: ["credit", "mortgage", "student"],
     required: true,
   },
-  accountId: { type: Buffer, default: null },
+  accountId: { type: String, default: null },
   accountNumber: { type: Buffer, default: null },
   lastPaymentAmount: { type: Buffer, default: null },
   lastPaymentDate: { type: Buffer, default: null },

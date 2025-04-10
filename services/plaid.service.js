@@ -5,7 +5,7 @@ import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
 import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
-import { connectEncryption } from "../database/database.js";
+import { connectEncryption } from "../database/encryption.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
