@@ -1602,6 +1602,118 @@ const getTransactionsByAccount = async (accountId, uid) => {
   return sortedTransactions;
 };
 
+const findLiabilityByAccountId = (accountId, liabilities) => {
+  for (const category in liabilities) {
+    const found = liabilities[category].find(
+      (item) => item.account_id === accountId
+    );
+    if (found) {
+      return { category, ...found };
+    }
+  }
+  return null;
+};
+
+const getAccountDetails = async (accountId, profileId, uid) => {
+  console.log("Getting user access token");
+  const access_token = await AccessToken.findOne({ userId: profileId })
+    .lean()
+    .exec();
+
+  console.log("Getting encryption key");
+  const dataKeyId = await connectEncryption(uid);
+
+  console.log("Decrypting access token");
+  const decryptAccessToken = await kmsDecrypt({
+    value: access_token.accessToken,
+    dataKeyId,
+  });
+
+  console.log("Starting plaid request...");
+  const response = await plaidService.getLoanLiabilitiesWithAccessToken(
+    decryptAccessToken
+  );
+  console.log("Plaid request finished.");
+
+  console.log("Decrypting liabilities");
+  const accountPlaid = response.accounts.find(
+    (account) => account.account_id === accountId
+  );
+  const decryptLiabilities = await kmsDecrypt({
+    value: response.liabilities,
+    dataKeyId,
+  });
+  const liabilityPlaid = await findLiabilityByAccountId(
+    accountId,
+    decryptLiabilities
+  );
+
+  console.log("Getting plaid account");
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+    .lean()
+    .exec();
+  if (!account) {
+    throw new Error("Account not found");
+  }
+  const deac = await getDecryptedAccount(account, dataKeyId);
+  const accountPlaidDec = await kmsDecrypt({
+    value: accountPlaid,
+    dataKeyId,
+  });
+
+  const liabilityDec = await kmsDecrypt({
+    value: liabilityPlaid,
+    dataKeyId,
+  });
+
+  const result = {
+    account: deac,
+    accountPlaid: accountPlaidDec,
+    liabilityPlaid: liabilityDec,
+  };
+  return { ...result };
+};
+
+async function getDecryptedAccount(account, dataKeyId) {
+  const decryptedAccount = {
+    _id: account._id,
+    owner_id: account.owner_id,
+    itemId: account.itemId,
+    isAccessTokenExpired: account.isAccessTokenExpired,
+    owner_type: account.owner_type,
+    plaid_account_id: account.plaid_account_id,
+    institution_id: account.institution_id,
+    currency: account.currency,
+    transactions: account.transactions,
+    nextCursor: account.nextCursor,
+    created_at: account.created_at,
+    __v: account.__v,
+  };
+
+  const binaryFields = [
+    "accessToken",
+    "account_name",
+    "account_official_name",
+    "account_type",
+    "account_subtype",
+    "institution_name",
+    "currentBalance",
+    "availableBalance",
+    "mask",
+  ];
+
+  for (const field of binaryFields) {
+    if (account[field]) {
+      decryptedAccount[field] = await kmsDecrypt({
+        value: account[field],
+        dataKeyId,
+      });
+    }
+  }
+
+  return decryptedAccount;
+}
+
 const generateUploadUrl = async (fileName) => {
   try {
     const [url] = await storage
