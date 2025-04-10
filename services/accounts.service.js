@@ -1566,6 +1566,7 @@ const findLiabilityByAccountId = (accountId, liabilities) => {
 };
 
 const getAccountDetails = async (accountId, profileId, uid) => {
+  console.log("Getting user access token");
   const access_token = await AccessToken.findOne({ userId: profileId })
     .lean()
     .exec();
@@ -1574,10 +1575,13 @@ const getAccountDetails = async (accountId, profileId, uid) => {
 
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
+  console.log("Starting plaid request...");
   const response = await plaidService.getLoanLiabilitiesWithAccessToken(
     decryptAccessToken
   );
+  console.log("Plaid request finished.");
 
+  console.log("Decrypting liabilities");
   const accountPlaid = response.accounts.find(
     (account) => account.account_id === accountId
   );
@@ -1587,6 +1591,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     decryptLiabilities
   );
 
+  console.log("Getting plaid account");
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .lean()
     .exec();
