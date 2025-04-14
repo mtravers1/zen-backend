@@ -1,26 +1,26 @@
 import { model, Schema } from "mongoose";
 
 const addressSchema = new Schema({
-  city: { type: Buffer, default: null },
-  country: { type: Buffer, default: null },
-  postalCode: { type: Buffer, default: null },
-  region: { type: Buffer, default: null },
-  street: { type: Buffer, default: null },
+  city: { type: String, default: null },
+  country: { type: String, default: null },
+  postalCode: { type: String, default: null },
+  region: { type: String, default: null },
+  street: { type: String, default: null },
 });
 
 const interestRateSchema = new Schema({
-  percentage: { type: Buffer, default: null },
-  type: { type: Buffer, default: null },
+  percentage: { type: String, default: null },
+  type: { type: String, default: null },
 });
 
 const loanStatusSchema = new Schema({
-  endDate: { type: Buffer, default: null },
-  type: { type: Buffer, default: null },
+  endDate: { type: String, default: null },
+  type: { type: String, default: null },
 });
 
 const repaymentPlanSchema = new Schema({
-  description: { type: Buffer, default: null },
-  type: { type: Buffer, default: null },
+  description: { type: String, default: null },
+  type: { type: String, default: null },
 });
 
 const liabilitySchema = new Schema({
@@ -30,52 +30,52 @@ const liabilitySchema = new Schema({
     required: true,
   },
   accountId: { type: String, default: null },
-  accountNumber: { type: Buffer, default: null },
-  lastPaymentAmount: { type: Buffer, default: null },
-  lastPaymentDate: { type: Buffer, default: null },
-  nextPaymentDueDate: { type: Buffer, default: null },
-  minimumPaymentAmount: { type: Buffer, default: null },
-  lastStatementBalance: { type: Buffer, default: null },
-  lastStatementIssueDate: { type: Buffer, default: null },
-  isOverdue: { type: Buffer, default: null },
+  accountNumber: { type: String, default: null },
+  lastPaymentAmount: { type: String, default: null },
+  lastPaymentDate: { type: String, default: null },
+  nextPaymentDueDate: { type: String, default: null },
+  minimumPaymentAmount: { type: String, default: null },
+  lastStatementBalance: { type: String, default: null },
+  lastStatementIssueDate: { type: String, default: null },
+  isOverdue: { type: String, default: null },
 
   aprs: [
     {
-      aprPercentage: { type: Buffer, default: null },
-      aprType: { type: Buffer, default: null },
-      balanceSubjectToApr: { type: Buffer, default: null },
-      interestChargeAmount: { type: Buffer, default: null },
+      aprPercentage: { type: String, default: null },
+      aprType: { type: String, default: null },
+      balanceSubjectToApr: { type: String, default: null },
+      interestChargeAmount: { type: String, default: null },
     },
   ],
 
-  loanTypeDescription: { type: Buffer, default: null },
-  loanTerm: { type: Buffer, default: null },
-  maturityDate: { type: Buffer, default: null },
-  nextMonthlyPayment: { type: Buffer, default: null },
-  originationDate: { type: Buffer, default: null },
-  originationPrincipalAmount: { type: Buffer, default: null },
-  pastDueAmount: { type: Buffer, default: null },
-  escrowBalance: { type: Buffer, default: null },
-  hasPmi: { type: Buffer, default: null },
-  hasPrepaymentPenalty: { type: Buffer, default: null },
+  loanTypeDescription: { type: String, default: null },
+  loanTerm: { type: String, default: null },
+  maturityDate: { type: String, default: null },
+  nextMonthlyPayment: { type: String, default: null },
+  originationDate: { type: String, default: null },
+  originationPrincipalAmount: { type: String, default: null },
+  pastDueAmount: { type: String, default: null },
+  escrowBalance: { type: String, default: null },
+  hasPmi: { type: String, default: null },
+  hasPrepaymentPenalty: { type: String, default: null },
   propertyAddress: addressSchema,
   interestRate: interestRateSchema,
 
-  disbursementDates: [{ type: Buffer, default: null }],
-  expectedPayoffDate: { type: Buffer, default: null },
-  guarantor: { type: Buffer, default: null },
-  interestRatePercentage: { type: Buffer, default: null },
-  loanName: { type: Buffer, default: null },
+  disbursementDates: [{ type: String, default: null }],
+  expectedPayoffDate: { type: String, default: null },
+  guarantor: { type: String, default: null },
+  interestRatePercentage: { type: String, default: null },
+  loanName: { type: String, default: null },
   loanStatus: loanStatusSchema,
-  outstandingInterestAmount: { type: Buffer, default: null },
-  paymentReferenceNumber: { type: Buffer, default: null },
-  pslfStatus: { type: Buffer, default: null },
+  outstandingInterestAmount: { type: String, default: null },
+  paymentReferenceNumber: { type: String, default: null },
+  pslfStatus: { type: String, default: null },
   repaymentPlan: repaymentPlanSchema,
-  sequenceNumber: { type: Buffer, default: null },
+  sequenceNumber: { type: String, default: null },
   servicerAddress: addressSchema,
 
-  ytdInterestPaid: { type: Buffer, default: null },
-  ytdPrincipalPaid: { type: Buffer, default: null },
+  ytdInterestPaid: { type: String, default: null },
+  ytdPrincipalPaid: { type: String, default: null },
 });
 
 const Liability = model("Liability", liabilitySchema);

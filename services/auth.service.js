@@ -1,6 +1,9 @@
-import { connectEncryption } from "../database/encryption.js";
+import {
+  decryptValue,
+  encryptValue,
+  getUserDek,
+} from "../database/encryption.js";
 import User from "../database/models/User.js";
-import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
 import admin from "../lib/firebaseAdmin.js";
 
 const own = async (email) => {
@@ -28,22 +31,14 @@ const signUp = async (data) => {
     };
 
     const uid = data.authUid;
-    const dataKeyId = await connectEncryption(uid);
 
-    const encryptedFirstName = await kmsEncrypt({
-      value: data.firstName,
-      dataKeyId,
-    });
+    const dek = await getUserDek(uid);
 
-    const encryptedLastName = await kmsEncrypt({
-      value: data.lastName,
-      dataKeyId,
-    });
+    const encryptedFirstName = await encryptValue(data.firstName, dek);
 
-    const encryptedMiddleName = await kmsEncrypt({
-      value: data.middleName,
-      dataKeyId,
-    });
+    const encryptedLastName = await encryptValue(data.lastName, dek);
+
+    const encryptedMiddleName = await encryptValue(data.middleName, dek);
 
     const nameSchema = {
       firstName: encryptedFirstName,
@@ -53,10 +48,7 @@ const signUp = async (data) => {
       middleName: encryptedMiddleName,
     };
 
-    const encryptedPhone = await kmsEncrypt({
-      value: data.phone,
-      dataKeyId,
-    });
+    const encryptedPhone = await encryptValue(data.phone, dek);
 
     const phoneNumbersSchema = {
       phone: encryptedPhone,
@@ -70,20 +62,11 @@ const signUp = async (data) => {
       country: data.country,
     };
 
-    const encryptedPhotoUrl = await kmsEncrypt({
-      value: data.photoUrl,
-      dataKeyId,
-    });
+    const encryptedPhotoUrl = await encryptValue(data.profilePhotoUrl, dek);
 
-    const encryptedAnnualIncome = await kmsEncrypt({
-      value: data.annualIncome,
-      dataKeyId,
-    });
+    const encryptedAnnualIncome = await encryptValue(data.annualIncome, dek);
 
-    const encryptedSSn = await kmsEncrypt({
-      value: data.ssn,
-      dataKeyId,
-    });
+    const encryptedSSn = await encryptValue(data.ssn, dek);
 
     const user = new User({
       email: [emailSchema],
@@ -107,26 +90,14 @@ const signUp = async (data) => {
       authUid: data.authUid,
     });
 
-    const decryptedFirstName = await kmsDecrypt({
-      value: newUser.name.firstName,
-      dataKeyId,
-    });
-    const decryptedLastName = await kmsDecrypt({
-      value: newUser.name.lastName,
-      dataKeyId,
-    });
-    const decryptedMiddleName = await kmsDecrypt({
-      value: newUser.name.middleName,
-      dataKeyId,
-    });
-    const decryptedPhone = await kmsDecrypt({
-      value: newUser.phones[0].phone,
-      dataKeyId,
-    });
-    const decryptedPhotoUrl = await kmsDecrypt({
-      value: newUser.profilePhotoUrl,
-      dataKeyId,
-    });
+    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek);
+    const decryptedLastName = await decryptValue(newUser.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(
+      newUser.name.middleName,
+      dek
+    );
+    const decryptedPhone = await decryptValue(newUser.phones[0].phone, dek);
+    const decryptedPhotoUrl = await decryptValue(newUser.profilePhotoUrl, dek);
 
     const retrievedUser = {
       id: newUser._id,
@@ -160,30 +131,15 @@ const signIn = async (email) => {
     }
 
     const uid = user.authUid;
-    const dataKeyId = await connectEncryption(uid);
+    const dek = await getUserDek(uid);
 
-    const decryptedFirstName = await kmsDecrypt({
-      value: user.name.firstName,
-      dataKeyId,
-    });
-    const decryptedLastName = await kmsDecrypt({
-      value: user.name.lastName,
-      dataKeyId,
-    });
-    const decryptedMiddleName = await kmsDecrypt({
-      value: user.name.middleName,
-      dataKeyId,
-    });
-    const decryptedPhone = await kmsDecrypt({
-      value: user.phones[0].phone,
-      dataKeyId,
-    });
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedPhone = await decryptValue(user.phones[0].phone, dek);
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await kmsDecrypt({
-        value: user.profilePhotoUrl,
-        dataKeyId,
-      });
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
     }
 
     const retrievedUser = {

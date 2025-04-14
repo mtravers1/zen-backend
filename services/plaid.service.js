@@ -4,8 +4,11 @@ import plaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
-import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
-import { connectEncryption } from "../database/encryption.js";
+import {
+  decryptValue,
+  encryptValue,
+  getUserDek,
+} from "../database/encryption.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
@@ -20,16 +23,13 @@ const createLinkToken = async (email, isAndroid, accountId, uid) => {
     throw new Error("User not found");
   }
   let accessToken;
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
   if (accountId) {
     const account = await PlaidAccount.findOne({ _id: accountId });
     if (!account) {
       throw new Error("Account not found");
     }
-    accessToken = await kmsDecrypt({
-      value: account.accessToken,
-      dataKeyId,
-    });
+    accessToken = await decryptValue(account.accessToken, dek);
   }
   const userId = user._id.toString();
   const plaidRequest = {
@@ -91,12 +91,9 @@ const saveAccessToken = async (
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
 
-  const encryptedToken = await kmsEncrypt({
-    value: accessToken,
-    dataKeyId,
-  });
+  const encryptedToken = await encryptValue(accessToken, dek);
 
   const newToken = new AccessToken({
     userId,
@@ -124,12 +121,9 @@ const getUserAccessTokens = async (email, uid) => {
   const tokens = await AccessToken.find({ userId });
 
   const decryptedTokens = [];
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
   for (const token of tokens) {
-    const decryptedAccessToken = await kmsDecrypt({
-      value: token.accessToken,
-      dataKeyId,
-    });
+    const decryptedAccessToken = await decryptValue(token.accessToken, dek);
 
     decryptedTokens.push({
       ...token.toObject(),
@@ -260,11 +254,8 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     return;
   }
   const accessToken = access.accessToken;
-  const dataKeyId = await connectEncryption(uid);
-  const decryptedToken = await kmsDecrypt({
-    value: accessToken,
-    dataKeyId,
-  });
+  const dek = await getUserDek(uid);
+  const decryptedToken = await decryptValue(accessToken, dek);
   return decryptedToken;
 };
 
@@ -305,7 +296,7 @@ const updateTransactions = async (item) => {
   const emailObject = emails?.find((email) => email.isPrimary === true);
 
   const email = emailObject?.email;
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
 
   if (newAccountsBalances) {
     const bulkOps = [];
@@ -329,20 +320,14 @@ const updateTransactions = async (item) => {
           encryptedCurrentBalance,
           encryptedAvailableBalance,
         ] = await Promise.all([
-          kmsEncrypt({ value: accountName, dataKeyId }),
-          kmsEncrypt({ value: accountType, dataKeyId }),
-          kmsEncrypt({ value: accountSubtype, dataKeyId }),
+          encryptValue(accountName, dek),
+          encryptValue(accountType, dek),
+          encryptValue(accountSubtype, dek),
           accountBalance.current
-            ? kmsEncrypt({
-                value: accountBalance.current.toString(),
-                dataKeyId,
-              })
+            ? encryptValue(accountBalance.current, dek)
             : null,
           accountBalance.available
-            ? kmsEncrypt({
-                value: accountBalance.available.toString(),
-                dataKeyId,
-              })
+            ? encryptValue(accountBalance.available, dek)
             : null,
         ]);
 
@@ -414,15 +399,11 @@ const updateTransactions = async (item) => {
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
 
-        const encryptedMerchantName = await kmsEncrypt({
-          value: transaction.merchant_name,
-          dataKeyId,
-        });
-        const encryptedName = await kmsEncrypt({
-          value: transaction.name,
-          dataKeyId,
-        });
-
+        const encryptedMerchantName = await encryptValue(
+          transaction.merchant_name,
+          dek
+        );
+        const encryptedName = await encryptValue(transaction.name, dek);
         const merchant = {
           merchantName: encryptedMerchantName,
           name: encryptedName,
@@ -431,20 +412,17 @@ const updateTransactions = async (item) => {
           logo: transaction.logo_url,
         };
 
-        const encryptedAmount = await kmsEncrypt({
-          value: transaction.amount,
-          dataKeyId,
-        });
+        const encryptedAmount = await encryptValue(transaction.amount, dek);
 
-        const encryptedAccountType = await kmsEncrypt({
-          value: accountMap.get(transaction.account_id).account_type,
-          dataKeyId,
-        });
+        const encryptedAccountType = await encryptValue(
+          accountMap.get(transaction.account_id).account_type,
+          dek
+        );
 
-        const transactionCode = await kmsEncrypt({
-          value: transaction.transaction_code,
-          dataKeyId,
-        });
+        const transactionCode = await encryptValue(
+          transaction.transaction_code,
+          dek
+        );
 
         bulkOps.push({
           updateOne: {
@@ -492,10 +470,7 @@ const updateTransactions = async (item) => {
       if (modifiedTransactions.length > 0) {
         const modifiedBulkOps = [];
         for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await kmsEncrypt({
-            value: transaction.amount,
-            dataKeyId,
-          });
+          const encryptedAmount = await encryptValue(transaction.amount, dek);
 
           modifiedBulkOps.push({
             updateOne: {
@@ -596,7 +571,7 @@ const updateInvestmentTransactions = async (item) => {
   const emailObject = emails?.find((email) => email.isPrimary === true);
 
   const email = emailObject?.email;
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
 
   const response = await plaidClient.investmentsTransactionsGet({
     access_token: accessToken,
@@ -615,49 +590,23 @@ const updateInvestmentTransactions = async (item) => {
       continue;
     }
     const accountType = "investment";
-    const encryptedAccountType = await kmsEncrypt({
-      value: accountType,
-      dataKeyId,
-    });
-    const encryptedName = await kmsEncrypt({
-      value: transaction.name,
-      dataKeyId,
-    });
+    const encryptedAccountType = await encryptValue(accountType, dek);
+    const encryptedName = await encryptValue(transaction.name, dek);
+    const encryptedAmount = await encryptValue(transaction.amount, dek);
 
-    const encryptedAmount = await kmsEncrypt({
-      value: transaction.amount,
-      dataKeyId,
-    });
+    const encryptedSecurityId = await encryptValue(
+      transaction.security_id,
+      dek
+    );
+    const encryptedPrice = await encryptValue(transaction.price, dek);
 
-    const encryptedSecurityId = await kmsEncrypt({
-      value: transaction.security_id,
-      dataKeyId,
-    });
-    const encryptedPrice = await kmsEncrypt({
-      value: transaction.price,
-      dataKeyId,
-    });
+    const encryptedQuantity = await encryptValue(transaction.quantity, dek);
 
-    const encryptedQuantity = await kmsEncrypt({
-      value: transaction.quantity,
-      dataKeyId,
-    });
+    const encryptedFees = await encryptValue(transaction.fees, dek);
 
-    const encryptedFees = await kmsEncrypt({
-      value: transaction.fees,
-      dataKeyId,
-    });
+    const encryptedType = await encryptValue(transaction.type, dek);
 
-    const encryptedType = await kmsEncrypt({
-      value: transaction.type,
-      dataKeyId,
-    });
-
-    const encryptedSubType = await kmsEncrypt({
-      value: transaction.subtype,
-      dataKeyId,
-    });
-
+    const encryptedSubType = await encryptValue(transaction.subtype, dek);
     const newTransaction = new Transaction({
       plaidTransactionId: transaction.transaction_id,
       plaidAccountId: transaction.account_id,

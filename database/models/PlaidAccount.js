@@ -11,7 +11,7 @@ const plaidAccountSchema = new Schema({
     required: true,
   },
   accessToken: {
-    type: Buffer,
+    type: String,
     required: true,
   },
   isAccessTokenExpired: {
@@ -28,22 +28,22 @@ const plaidAccountSchema = new Schema({
     required: true,
   },
   account_name: {
-    type: Buffer,
+    type: String,
     required: true,
   },
   account_official_name: {
-    type: Buffer,
+    type: String,
   },
   account_type: {
-    type: Buffer,
+    type: String,
     required: true,
   },
   account_subtype: {
-    type: Buffer,
+    type: String,
     required: true,
   },
   institution_name: {
-    type: Buffer,
+    type: String,
   },
   institution_id: {
     type: String,
@@ -53,17 +53,17 @@ const plaidAccountSchema = new Schema({
     type: String,
   },
   currentBalance: {
-    type: Buffer,
+    type: String,
   },
   availableBalance: {
-    type: Buffer,
+    type: String,
   },
   currency: {
     type: String,
     required: true,
   },
   mask: {
-    type: Buffer,
+    type: String,
   },
   transactions: [
     {

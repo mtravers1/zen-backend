@@ -1,77 +1,164 @@
 import dotenv from "dotenv";
-import { MongoClient, ClientEncryption } from "mongodb";
 import { LimitedMap } from "../lib/limitedMap.js";
+import { KeyManagementServiceClient } from "@google-cloud/kms";
+import { Storage } from "@google-cloud/storage";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import path from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 dotenv.config();
 
-const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
-
-const kmsProviders = {
-  gcp: {
-    email: process.env.GCP_EMAIL,
-    privateKey: process.env.GCP_PRIVATE_KEY,
-  },
-};
-const client = new MongoClient(mongoDB, {
-  monitorCommands: true,
-  autoEncryption: {
-    keyVaultNamespace: "encryption.__keys",
-    kmsProviders,
-    bypassAutoEncryption: true,
-  },
-  auth: {
-    username: process.env.MONGODB_USER,
-    password: process.env.MONGODB_PASS,
+const kmsClient = new KeyManagementServiceClient({
+  options: {
+    credentials: {
+      client_email: process.env.GCP_EMAIL,
+      private_key: process.env.GCP_PRIVATE_KEY,
+    },
+    projectId: process.env.GCP_PROJECT_ID,
   },
 });
 
-let encryption;
-let cacheDataKeys = new LimitedMap(100);
+const storagePath = path.join(__dirname, "../GcpKey.json");
+const storage = new Storage({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: storagePath,
+});
+const BUCKET_NAME = "zentavos-bucket";
+const KEY_PATH = kmsClient.cryptoKeyPath(
+  process.env.GCP_PROJECT_ID,
+  process.env.GCP_KEY_LOCATION,
+  process.env.GCP_KEY_RING,
+  process.env.GCP_KEY_NAME
+);
 
-export async function connectEncryption(uid) {
-  if (cacheDataKeys.has(uid)) {
-    return cacheDataKeys.get(uid);
+// DEK cache in memory
+const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
+
+async function generateAndStoreEncryptedDEK(uid) {
+  const dek = crypto.randomBytes(32);
+
+  const [encryptResponse] = await kmsClient.encrypt({
+    name: KEY_PATH,
+    plaintext: dek,
+  });
+
+  const encryptedDEK = encryptResponse.ciphertext;
+  const file = storage.bucket(BUCKET_NAME).file(`keys/${uid}.key`);
+  await file.save(encryptedDEK);
+
+  // Cache the DEK
+  dekCache.set(uid, dek);
+
+  return dek;
+}
+
+async function getDEKFromBucket(uid) {
+  const file = storage.bucket(BUCKET_NAME).file(`keys/${uid}.key`);
+  if (!(await file.exists())[0]) {
+    return null;
   }
+  const [encryptedDEK] = await file.download();
 
+  const [decryptResponse] = await kmsClient.decrypt({
+    name: KEY_PATH,
+    ciphertext: encryptedDEK,
+  });
+
+  return decryptResponse.plaintext;
+}
+
+async function getUserDek(uid) {
   try {
-    if (!encryption) {
-      encryption = new ClientEncryption(client, {
-        keyVaultNamespace: "encryption.__keys",
-        kmsProviders,
-      });
+    // Check in-memory cache first
+    if (dekCache.has(uid)) {
+      return dekCache.get(uid);
     }
 
-    if (!uid) {
-      return null;
+    let dek = await getDEKFromBucket(uid);
+
+    if (!dek) {
+      dek = await generateAndStoreEncryptedDEK(uid);
+    } else {
+      dekCache.set(uid, dek); // Cache it once retrieved
     }
 
-    const existingKey = await client
-      .db("encryption")
-      .collection("__keys")
-      .findOne({ keyAltNames: [uid] });
-
-    if (existingKey) {
-      cacheDataKeys.set(uid, existingKey._id);
-      return existingKey._id;
-    }
-    const dataKeyId = await encryption.createDataKey("gcp", {
-      masterKey: {
-        projectId: process.env.GCP_PROJECT_ID,
-        location: process.env.GCP_KEY_LOCATION,
-        keyRing: process.env.GCP_KEY_RING,
-        keyName: process.env.GCP_KEY_NAME,
-      },
-      keyAltNames: [uid],
-    });
-
-    cacheDataKeys.set(uid, dataKeyId);
-    return dataKeyId;
-  } catch (error) {
-    console.error("MongoDB encryption setup error:", error);
-    throw error;
+    return dek;
+  } catch (e) {
+    console.error("Error getting DEK:", e);
+    throw e;
   }
 }
 
-client.on("close", () => console.log("MongoDB disconnected!"));
+// Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
+async function encryptValue(value, dek) {
+  if (value === null || value === undefined) return value;
 
-export { encryption };
+  try {
+    // Convert the value to a JSON string to ensure it's properly formatted
+    const jsonString = JSON.stringify(value);
+
+    // Generate a random 16-byte initialization vector (IV)
+    const iv = crypto.randomBytes(16);
+
+    // Create an AES-256-GCM cipher using the DEK and IV
+    const cipher = crypto.createCipheriv("aes-256-gcm", dek, iv);
+
+    // Encrypt the JSON string
+    const encrypted = Buffer.concat([
+      cipher.update(jsonString, "utf8"),
+      cipher.final(),
+    ]);
+
+    // Get the authentication tag to ensure integrity during decryption
+    const tag = cipher.getAuthTag();
+
+    // Combine IV + Auth Tag + Encrypted content, and return as base64 string
+    return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  } catch (e) {
+    console.error("Error encrypting value:", e);
+    return value;
+  }
+}
+
+// Decrypts a base64-encoded ciphertext using AES-256-GCM and a provided DEK
+async function decryptValue(cipherTextBase64, dek) {
+  if (
+    cipherTextBase64 === null ||
+    cipherTextBase64 === undefined ||
+    cipherTextBase64 === ""
+  )
+    return cipherTextBase64;
+
+  try {
+    // Decode the base64-encoded ciphertext
+    const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+
+    // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
+    const iv = cipherBuffer.slice(0, 16);
+    const tag = cipherBuffer.slice(16, 32);
+    const encrypted = cipherBuffer.slice(32);
+
+    // Create a decipher using AES-256-GCM with the same DEK and IV
+    const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
+
+    // Set the authentication tag
+    decipher.setAuthTag(tag);
+
+    // Decrypt the content and convert it back to UTF-8 string
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString("utf8");
+
+    // Parse the decrypted JSON string and return the original value
+    return JSON.parse(decrypted);
+  } catch (e) {
+    console.error("Error decrypting value:", e);
+    return cipherTextBase64;
+  }
+}
+export { encryptValue, decryptValue, getUserDek };

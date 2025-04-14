@@ -4,16 +4,21 @@ import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
-import { kmsDecrypt, kmsEncrypt } from "../lib/encrypt.js";
-import { connectEncryption } from "../database/encryption.js";
+
+import {
+  encryptValue,
+  getUserDek,
+  decryptValue,
+} from "../database/encryption.js";
 
 const addBusinesses = async (businessList, email, uid) => {
   const user = await User.findOne({ "email.email": email.toLowerCase() });
-  const dataKeyId = await connectEncryption(uid);
 
   if (!user) {
     throw new Error("User not found");
   }
+
+  const dek = await getUserDek(uid);
 
   const userId = user._id.toString();
 
@@ -48,20 +53,14 @@ const addBusinesses = async (businessList, email, uid) => {
       businessOwners.push(owner.name);
     }
 
-    const encryptedName = await kmsEncrypt({
-      value: businessData.name,
-      dataKeyId,
-    });
+    const encryptedName = await encryptValue(businessData.name, dek);
 
-    const encryptedIndustry = await kmsEncrypt({
-      value: businessData.industry,
-      dataKeyId,
-    });
+    const encryptedIndustry = await encryptValue(businessData.industry, dek);
 
-    const encryptedBusinessLogo = await kmsEncrypt({
-      value: businessData.businessLogo,
-      dataKeyId,
-    });
+    const encryptedBusinessLogo = await encryptValue(
+      businessData.businessLogo,
+      dek
+    );
 
     const newBusiness = new Business({
       userId: userId,
@@ -90,27 +89,15 @@ const getUserProfiles = async (email, uid) => {
   }
 
   const profiles = [];
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
 
-  const decryptedFirstName = await kmsDecrypt({
-    value: user.name.firstName,
-    dataKeyId,
-  });
+  const decryptedFirstName = await decryptValue(user.name.firstName, dek);
 
-  const decryptedLastName = await kmsDecrypt({
-    value: user.name.lastName,
-    dataKeyId,
-  });
+  const decryptedLastName = await decryptValue(user.name.lastName, dek);
 
-  const decryptedMiddleName = await kmsDecrypt({
-    value: user.name.middleName,
-    dataKeyId,
-  });
+  const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
 
-  const decryptedPhotoUrl = await kmsDecrypt({
-    value: user.profilePhotoUrl,
-    dataKeyId,
-  });
+  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
 
   const personalProfile = {
     id: user._id,
@@ -138,20 +125,14 @@ const getUserProfiles = async (email, uid) => {
   }
 
   for (const business of businesses) {
-    const decryptedName = await kmsDecrypt({
-      value: business.name,
-      dataKeyId,
-    });
+    const decryptedName = await decryptValue(business.name, dek);
 
-    const decryptedIndustry = await kmsDecrypt({
-      value: business.industryDesc,
-      dataKeyId,
-    });
+    const decryptedIndustry = await decryptValue(business.industryDesc, dek);
 
-    const decryptedBusinessLogo = await kmsDecrypt({
-      value: business.businessLogo,
-      dataKeyId,
-    });
+    const decryptedBusinessLogo = await decryptValue(
+      business.businessLogo,
+      dek
+    );
 
     const businessProfile = {
       id: business._id,

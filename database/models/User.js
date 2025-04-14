@@ -48,13 +48,13 @@ const nameSchema = new Schema({
     type: String,
   },
   firstName: {
-    type: Buffer,
+    type: String,
   },
   middleName: {
-    type: Buffer,
+    type: String,
   },
   lastName: {
-    type: Buffer,
+    type: String,
   },
   suffix: {
     type: String,
@@ -63,7 +63,7 @@ const nameSchema = new Schema({
 
 const phoneNumbersSchema = new Schema({
   phone: {
-    type: Buffer,
+    type: String,
   },
   phoneType: {
     type: String,
@@ -118,13 +118,13 @@ const userSchema = new Schema({
     type: Number,
   },
   profilePhotoUrl: {
-    type: Buffer,
+    type: String,
   },
   dateOfBirth: {
     type: Date,
   },
   annualIncome: {
-    type: Buffer,
+    type: String,
   },
   maritalStatus: {
     type: String,
@@ -141,7 +141,7 @@ const userSchema = new Schema({
     type: String,
   },
   encryptedSSN: {
-    type: Buffer,
+    type: String,
   },
   dependents: {
     type: Number,
