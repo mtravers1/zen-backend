@@ -793,7 +793,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   plaidAccounts,
   uid
 ) => {
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -872,25 +872,24 @@ const getCashFlowsWeekly = async (profile, uid) => {
 
   let plaidAccounts = [];
 
-  const dataKeyId = await connectEncryption(uid);
+  const dek = await getUserDek(uid);
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await kmsDecrypt({
-      value: plaidAccount.currentBalance,
-      dataKeyId,
-    });
-    const decryptedAvailableBalance = await kmsDecrypt({
-      value: plaidAccount.availableBalance,
-      dataKeyId,
-    });
-    const decryptedAccountType = await kmsDecrypt({
-      value: plaidAccount.account_type,
-      dataKeyId,
-    });
-    const decryptedAccountSubtype = await kmsDecrypt({
-      value: plaidAccount.account_subtype,
-      dataKeyId,
-    });
-
+    const decryptedCurrentBalance = await decryptValue(
+      plaidAccount.currentBalance,
+      dek
+    );
+    const decryptedAvailableBalance = await decryptValue(
+      plaidAccount.availableBalance,
+      dek
+    );
+    const decryptedAccountType = await decryptValue(
+      plaidAccount.account_type,
+      dek
+    );
+    const decryptedAccountSubtype = await decryptValue(
+      plaidAccount.account_subtype,
+      dek
+    );
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
@@ -907,7 +906,6 @@ const getCashFlowsWeekly = async (profile, uid) => {
     ...depositoryTransactions,
     ...creditTransactions,
   ]);
-
   const result = calculateWeeklyTotals(groupedTransactions);
   return { weeklyCashFlow: result };
 };

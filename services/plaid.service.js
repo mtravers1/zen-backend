@@ -846,7 +846,7 @@ const plaidService = {
   updateInvadlidAccessToken,
   repairAccessTokenWebhook,
   repairAccessToken,
-  getInvestmentsHoldingsWithAccessToken
+  getInvestmentsHoldingsWithAccessToken,
 };
 
 export default plaidService;
