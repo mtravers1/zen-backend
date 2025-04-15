@@ -35,7 +35,7 @@ const bucketName = "zentavos-bucket";
 const addAccount = async (accessToken, email, uid) => {
   const dek = await getUserDek(uid);
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   });
   if (!user) {
     throw new Error("User not found");
@@ -699,7 +699,7 @@ const getAccounts = async (profile, uid) => {
 const getAllUserAccounts = async (email, uid) => {
   console.time("getAllUserAccounts");
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   })
     .populate("plaidAccounts", "-transactions")
     .exec();
@@ -1119,7 +1119,7 @@ const getTransactions = async (accounts, uid) => {
 };
 
 const getUserTransactions = async (email, uid) => {
-  const user = await User.findOne({ "email.email": email.toLowerCase() })
+  const user = await User.findOne({ authUid: uid })
     .populate("plaidAccounts")
     .exec();
 

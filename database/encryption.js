@@ -24,7 +24,6 @@ const kmsClient = new KeyManagementServiceClient({
   },
 });
 
-const storagePath = path.join(__dirname, "../GcpKey.json");
 const storage = new Storage({
   credentials: {
     type: "service_account",

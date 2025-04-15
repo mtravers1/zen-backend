@@ -66,9 +66,9 @@ const signUp = async (data) => {
       }
     }
 
-    if (existingUser) {
-      throw new Error("User already exists");
-    }
+    // if (existingUser) {
+    //   throw new Error("User already exists");
+    // }
 
     const uid = data.authUid;
     const existingUid = await User.findOne({
