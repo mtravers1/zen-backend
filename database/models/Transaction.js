@@ -54,6 +54,9 @@ const transactionSchema = new Schema({
   transactionCode: {
     type: String,
   },
+  pending_transaction_id: {
+    type: String,
+  },
   isInternal: {
     type: Boolean,
     default: false,
