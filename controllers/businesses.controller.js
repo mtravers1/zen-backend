@@ -45,8 +45,8 @@ const assignsAccountsToProfiles = async (req, res) => {
 const unlinkAccounts = async (req, res) => {
   try {
     const data = req.body;
-    const email = req.user.email;
-    const response = await businessService.unlinkAccounts(data, email);
+    const uid = req.user.uid;
+    const response = await businessService.unlinkAccounts(data, uid);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);

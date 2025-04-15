@@ -17,7 +17,7 @@ const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 
 const createLinkToken = async (email, isAndroid, accountId, uid) => {
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   });
   if (!user) {
     throw new Error("User not found");
@@ -85,7 +85,7 @@ const saveAccessToken = async (
   uid
 ) => {
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   });
   if (!user) {
     throw new Error("User not found");
@@ -112,7 +112,7 @@ const saveAccessToken = async (
 
 const getUserAccessTokens = async (email, uid) => {
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   });
   if (!user) {
     throw new Error("User not found");

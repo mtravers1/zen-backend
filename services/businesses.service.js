@@ -12,7 +12,7 @@ import {
 } from "../database/encryption.js";
 
 const addBusinesses = async (businessList, email, uid) => {
-  const user = await User.findOne({ "email.email": email.toLowerCase() });
+  const user = await User.findOne({ authUid: uid });
 
   if (!user) {
     throw new Error("User not found");
@@ -81,7 +81,7 @@ const addBusinesses = async (businessList, email, uid) => {
 
 const getUserProfiles = async (email, uid) => {
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   }).lean();
 
   if (!user) {
@@ -200,8 +200,8 @@ const assignsAccountsToProfiles = async (data, email, uid) => {
   return { message: "Accounts assigned successfully" };
 };
 
-const unlinkAccounts = async (data, email) => {
-  const user = await User.findOne({ "email.email": email.toLowerCase() });
+const unlinkAccounts = async (data, uid) => {
+  const user = await User.findOne({ authUid: uid });
   const businesses = await Business.find({ userId: user._id });
 
   for (const account of data) {

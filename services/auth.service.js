@@ -6,22 +6,21 @@ import {
 import User from "../database/models/User.js";
 import admin from "../lib/firebaseAdmin.js";
 
-const own = async (email) => {
+const own = async (uid) => {
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    authUid: uid,
   }).select("-password");
   return user;
 };
 
 const signUp = async (data) => {
   try {
-    const existingUser = await User.findOne({
-      "email.email": data.email.toLowerCase(),
-    });
+    // const existingUser = await checkEmailFirebase(data.email);
+    // console.log("existingUser", existingUser);
 
-    if (existingUser) {
-      throw new Error("User already exists");
-    }
+    // if (existingUser) {
+    //   throw new Error("User already exists");
+    // }
 
     const emailSchema = {
       email: data.email.toLowerCase(),
@@ -120,12 +119,11 @@ const signUp = async (data) => {
   }
 };
 
-const signIn = async (email) => {
+const signIn = async (uid) => {
   try {
     const user = await User.findOne({
-      "email.email": email.toLowerCase(),
-    });
-
+      authUid: uid,
+    }).select("-password");
     if (!user) {
       throw new Error("User not found");
     }

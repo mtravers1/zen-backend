@@ -2,9 +2,9 @@ import authService from "../services/auth.service.js";
 import { emailValidation } from "../lib/mailer/mailer.js";
 
 const own = async (req, res) => {
-  const { email } = req.user;
+  const { uid } = req.user;
   try {
-    const user = await authService.own(email);
+    const user = await authService.own(uid);
     res.status(200).send(user);
   } catch (error) {
     res.status(500).send(error.message);
@@ -25,9 +25,9 @@ const signUp = async (req, res) => {
 };
 
 const signIn = async (req, res) => {
-  const email = req.user.email;
+  const uid = req.user.uid;
   try {
-    const user = await authService.signIn(email);
+    const user = await authService.signIn(uid);
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {
@@ -41,8 +41,7 @@ const checkEmail = async (req, res) => {
   const { email, method } = req.body;
 
   try {
-    const user = await authService.checkEmail(email, method);
-    console.log(user);
+    const user = await authService.checkEmailFirebase(email);
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {
