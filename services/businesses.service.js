@@ -99,9 +99,16 @@ const getUserProfiles = async (email, uid) => {
 
   const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
 
+  let name;
+  if (!decryptedFirstName && !decryptedLastName) {
+    name = email;
+  } else {
+    name = decryptedFirstName + " " + decryptedLastName;
+  }
+
   const personalProfile = {
     id: user._id,
-    name: decryptedFirstName + " " + decryptedLastName,
+    name,
     nameParts: {
       firstName: decryptedFirstName,
       lastName: decryptedLastName,

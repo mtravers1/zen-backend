@@ -3,12 +3,6 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-import path from "path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 dotenv.config();
 
@@ -182,4 +176,12 @@ async function decryptValue(cipherTextBase64, dek) {
     return cipherTextBase64;
   }
 }
-export { encryptValue, decryptValue, getUserDek };
+
+function hashEmail(email) {
+  const salt = process.env.HASH_SALT;
+  return crypto
+    .createHash("sha256")
+    .update(email.trim().toLowerCase() + salt)
+    .digest("hex");
+}
+export { encryptValue, decryptValue, getUserDek, hashEmail };

@@ -24,6 +24,10 @@ jobs:
         with:
           packages: openvpn openvpn-systemd-resolved rsync
           version: 1.0
+      # - name: Install OpenVPN
+      #   run: |
+      #     sudo apt update
+      #     sudo apt install -y openvpn openvpn-systemd-resolved rsync
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache node modules

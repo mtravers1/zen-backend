@@ -41,7 +41,7 @@ const checkEmail = async (req, res) => {
   const { email, method } = req.body;
 
   try {
-    const user = await authService.checkEmailFirebase(email);
+    const user = await authService.checkEmail(email);
     res.status(200).send(user);
   } catch (error) {
     if (error.message === "User not found") {

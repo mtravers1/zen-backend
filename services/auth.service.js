@@ -2,36 +2,98 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
+  hashEmail,
 } from "../database/encryption.js";
 import User from "../database/models/User.js";
 import admin from "../lib/firebaseAdmin.js";
 
 const own = async (uid) => {
-  const user = await User.findOne({
+  const userResponse = await User.findOne({
     authUid: uid,
   }).select("-password");
-  return user;
+
+  const dek = await getUserDek(uid);
+  const emails = await Promise.all(
+    userResponse.email.map(async (email) => {
+      return {
+        email: await decryptValue(email.email, dek),
+        emailType: email.emailType,
+        isPrimary: email.isPrimary,
+      };
+    })
+  );
+
+  const decryptedFirstName = await decryptValue(
+    userResponse.name.firstName,
+    dek
+  );
+  const decryptedLastName = await decryptValue(userResponse.name.lastName, dek);
+  const decryptedMiddleName = await decryptValue(
+    userResponse.name.middleName,
+    dek
+  );
+  const decryptedPhone = await decryptValue(userResponse.phones[0].phone, dek);
+  let decryptedPhotoUrl;
+  if (userResponse.profilePhotoUrl) {
+    decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek);
+  }
+
+  const retrievedUser = {
+    _id: userResponse._id,
+    email: emails,
+    phone: decryptedPhone,
+    role: userResponse.role,
+    profilePhotoUrl: decryptedPhotoUrl,
+    name: {
+      firstName: decryptedFirstName,
+      lastName: decryptedLastName,
+      middleName: decryptedMiddleName,
+    },
+  };
+
+  return retrievedUser;
 };
 
 const signUp = async (data) => {
   try {
-    // const existingUser = await checkEmailFirebase(data.email);
-    // console.log("existingUser", existingUser);
+    let existingUser = null;
 
-    // if (existingUser) {
-    //   throw new Error("User already exists");
-    // }
+    try {
+      existingUser = await checkEmail(data.email);
+    } catch (err) {
+      if (err.message !== "User not found") {
+        throw err;
+      }
+    }
+
+    if (existingUser) {
+      throw new Error("User already exists");
+    }
+
+    const uid = data.authUid;
+    const existingUid = await User.findOne({
+      authUid: uid,
+    });
+    if (existingUid) {
+      throw new Error("User already exists");
+    }
+
+    const dek = await getUserDek(uid);
+    console.log("data", data);
+
+    const encryptedEmail = await encryptValue(
+      data.email.trim().toLowerCase(),
+      dek
+    );
+
+    console.log("encryptedEmail", encryptedEmail);
 
     const emailSchema = {
-      email: data.email.toLowerCase(),
+      email: encryptedEmail,
       //TODO: add email type to the schema
       emailType: "personal",
       isPrimary: true,
     };
-
-    const uid = data.authUid;
-
-    const dek = await getUserDek(uid);
 
     const encryptedFirstName = await encryptValue(data.firstName, dek);
 
@@ -81,6 +143,7 @@ const signUp = async (data) => {
       occupation: data.occupation,
       annualIncome: encryptedAnnualIncome,
       ssn: encryptedSSn,
+      emailHash: hashEmail(data.email),
     });
 
     await user.save();
@@ -121,14 +184,13 @@ const signUp = async (data) => {
 
 const signIn = async (uid) => {
   try {
+    console.log("uid", uid);
     const user = await User.findOne({
       authUid: uid,
     }).select("-password");
     if (!user) {
       throw new Error("User not found");
     }
-
-    const uid = user.authUid;
     const dek = await getUserDek(uid);
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
@@ -161,8 +223,9 @@ const signIn = async (uid) => {
 };
 
 const checkEmail = async (email, method) => {
+  const emailHash = hashEmail(email);
   const user = await User.findOne({
-    "email.email": email.toLowerCase(),
+    emailHash,
   });
   if (!user) {
     throw new Error("User not found");
