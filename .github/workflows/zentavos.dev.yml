@@ -24,10 +24,6 @@ jobs:
         with:
           packages: openvpn openvpn-systemd-resolved rsync
           version: 1.0
-      # - name: Install OpenVPN
-      #   run: |
-      #     sudo apt update
-      #     sudo apt install -y openvpn openvpn-systemd-resolved rsync
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache node modules
@@ -44,6 +40,8 @@ jobs:
       - name: Build backend
         run: npm run build
       - name: Replace environment variables
+        env:
+          GCP_BUCKET_JSON: ${{ secrets.GCP_BUCKET_KEY }}
         run: |
           cd dist
           sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
@@ -60,8 +58,11 @@ jobs:
           sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env.sample
           sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env.sample
           sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env.sample
+          sed -i -e "s|GCP_BUCKET_KEY\=.*|GCP_BUCKET_KEY\=./GCPKey.json|g" .env.sample
+          sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT }}|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
+          echo "$GCP_BUCKET_JSON" > GCPKey.json
           cd ..
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.1
