@@ -54,6 +54,10 @@ const transactionSchema = new Schema({
   transactionCode: {
     type: String,
   },
+  pending: {
+    type: Boolean,
+    default: false,
+  },
   pending_transaction_id: {
     type: String,
   },
