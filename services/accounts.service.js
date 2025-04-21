@@ -1580,10 +1580,9 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const accountPlaid = response.accounts.find(
     (account) => account.account_id === accountId
   );
-  const decryptLiabilities = await decryptValue(response.liabilities, dek);
   const liabilityPlaid = await findLiabilityByAccountId(
     accountId,
-    decryptLiabilities
+    response.liabilities
   );
 
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
@@ -1595,12 +1594,19 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const deac = await getDecryptedAccount(account, dek);
   const accountPlaidDec = await decryptValue(accountPlaid, dek);
 
-  const liabilityDec = await decryptValue(liabilityPlaid, dek);
+  let investmentData;
+
+  if(deac.account_type === "investment") {
+    investmentData = await plaidService.getInvestmentsHoldingsWithAccessToken(decryptAccessToken);
+  }
+
+
 
   const result = {
     account: deac,
     accountPlaid: accountPlaidDec,
-    liabilityPlaid: liabilityDec,
+    liabilityPlaid: liabilityPlaid,
+    investmentData: investmentData,
   };
   return { ...result };
 };

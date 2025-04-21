@@ -256,6 +256,13 @@ const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
+const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
+  const response = await plaidClient.investmentsHoldingsGet({
+    access_token: accessToken,
+  });
+  return response.data;
+};
+
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await AccessToken.findOne({ itemId });
   if (!access) {
@@ -839,6 +846,7 @@ const plaidService = {
   updateInvadlidAccessToken,
   repairAccessTokenWebhook,
   repairAccessToken,
+  getInvestmentsHoldingsWithAccessToken
 };
 
 export default plaidService;
