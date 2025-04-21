@@ -202,9 +202,19 @@ const signIn = async (uid) => {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
     }
 
+    const emails = await Promise.all(
+      user.email.map(async (email) => {
+        return {
+          email: await decryptValue(email.email, dek),
+          emailType: email.emailType,
+          isPrimary: email.isPrimary,
+        };
+      })
+    );
+
     const retrievedUser = {
       id: user._id,
-      email: user.email,
+      email: emails,
       phone: decryptedPhone,
       role: user.role,
       profilePhotoUrl: decryptedPhotoUrl,
