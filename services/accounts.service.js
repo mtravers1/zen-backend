@@ -6,7 +6,6 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
-import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
 import {
   decryptValue,
@@ -36,7 +35,7 @@ const bucketName = "zentavos-bucket";
 const addAccount = async (accessToken, email, uid) => {
   const dek = await getUserDek(uid);
   const user = await User.findOne({
-    authUid: uid,
+    "email.email": email.toLowerCase(),
   });
   if (!user) {
     throw new Error("User not found");
@@ -250,8 +249,6 @@ const addAccount = async (accessToken, email, uid) => {
       transactionCode: transactionCode,
       tags: transaction.category,
       accountType: encryptedAccountType,
-      pending: transaction.pending,
-      pending_transaction_id: transaction.pending_transaction_id,
     });
 
     await newTransaction.save();
@@ -702,7 +699,7 @@ const getAccounts = async (profile, uid) => {
 const getAllUserAccounts = async (email, uid) => {
   console.time("getAllUserAccounts");
   const user = await User.findOne({
-    authUid: uid,
+    "email.email": email.toLowerCase(),
   })
     .populate("plaidAccounts", "-transactions")
     .exec();
@@ -768,156 +765,6 @@ const getAllUserAccounts = async (email, uid) => {
 
   console.timeEnd("getAllUserAccounts");
   return accounts;
-};
-const calculateCashFlowsWeekly = async (
-  depositoryTransactions,
-  creditTransactions
-) => {
-  const groupedTransactions = groupByWeek([
-    ...depositoryTransactions,
-    ...creditTransactions,
-  ]);
-
-  return calculateWeeklyTotals(groupedTransactions);
-};
-
-const weeklyCashFlowPlaidAccountSetUpTransactions = async (
-  plaidAccounts,
-  uid
-) => {
-  const dek = await getUserDek(uid);
-
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const allTransactions = [];
-  let balanceCredit = 0;
-  let balanceDebit = 0;
-  let balanceCurrentInvestment = 0;
-  let balanceAvailableInvestment = 0;
-  let balanceLoan = 0;
-  const depositoryTransactions = [];
-  const creditTransactions = [];
-
-  for (const plaidAccount of plaidAccounts) {
-    const currentBalance = Number(plaidAccount.currentBalance) || 0;
-    const availableBalance = Number(plaidAccount.availableBalance) || 0;
-
-    if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
-      balanceCredit = balanceCredit += currentBalance;
-    } else if (
-      plaidAccount.account_type === "depository" &&
-      plaidAccount.availableBalance
-    ) {
-      balanceDebit = balanceDebit += availableBalance;
-    } else if (plaidAccount.account_type === "investment") {
-      if (
-        plaidAccount.account_subtype === "brokerage" ||
-        plaidAccount.account_subtype === "isa" ||
-        plaidAccount.account_subtype === "crypto exchange" ||
-        plaidAccount.account_subtype === "fixed annuity" ||
-        plaidAccount.account_subtype === "non-custodial wallet" ||
-        plaidAccount.account_subtype === "non-taxable brokerage account" ||
-        plaidAccount.account_subtype === "retirement" ||
-        plaidAccount.account_subtype === "trust"
-      ) {
-        if (plaidAccount.currentBalance) {
-          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
-        }
-        if (plaidAccount.availableBalance) {
-          balanceAvailableInvestment = balanceAvailableInvestment +=
-            availableBalance;
-        }
-      }
-    } else if (
-      plaidAccount.account_type === "loan" &&
-      plaidAccount.currentBalance
-    ) {
-      balanceLoan = balanceLoan += currentBalance;
-    }
-
-    const transactionsResponse = await Transaction.find({
-      plaidAccountId: plaidAccount.plaid_account_id,
-      transactionDate: { $gte: ninetyDaysAgo },
-      isInternal: false,
-    })
-      .sort({ transactionDate: 1 })
-      .lean();
-
-    const transactions = [];
-
-    for (const transaction of transactionsResponse) {
-      const decryptedAmount = await decryptValue(transaction.amount, dek);
-      const decryptedAccountType = await decryptValue(
-        transaction.accountType,
-        dek
-      );
-
-      transactions.push({
-        ...transaction,
-        amount: decryptedAmount,
-        accountType: decryptedAccountType,
-      });
-    }
-
-    allTransactions.push(...transactions);
-    depositoryTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "depository"
-      )
-    );
-    creditTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "credit"
-      )
-    );
-  }
-  return { depositoryTransactions, creditTransactions };
-};
-
-const getCashFlowsWeekly = async (profile, uid) => {
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccountsResponse = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  }).lean();
-
-  let plaidAccounts = [];
-
-  const dek = await getUserDek(uid);
-  for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
-      plaidAccount.currentBalance,
-      dek
-    );
-    const decryptedAvailableBalance = await decryptValue(
-      plaidAccount.availableBalance,
-      dek
-    );
-    const decryptedAccountType = await decryptValue(
-      plaidAccount.account_type,
-      dek
-    );
-    const decryptedAccountSubtype = await decryptValue(
-      plaidAccount.account_subtype,
-      dek
-    );
-    plaidAccounts.push({
-      ...plaidAccount,
-      currentBalance: decryptedCurrentBalance,
-      availableBalance: decryptedAvailableBalance,
-      account_type: decryptedAccountType,
-      account_subtype: decryptedAccountSubtype,
-    });
-  }
-
-  const { depositoryTransactions, creditTransactions } =
-    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
-
-  const groupedTransactions = groupByWeek([
-    ...depositoryTransactions,
-    ...creditTransactions,
-  ]);
-  const result = calculateWeeklyTotals(groupedTransactions);
-  return { weeklyCashFlow: result };
 };
 
 const getCashFlows = async (profile, uid) => {
@@ -1088,19 +935,16 @@ const getCashFlows = async (profile, uid) => {
   const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
   let currentCashFlow = 0;
-  if (totalDeposits === 0) {
-    currentCashFlow = -999;
-  } else if (totalDeposits === 0 && totalWithdrawls === 0) {
-    currentCashFlow = 0;
-  } else {
+  if (totalDeposits !== 0 || totalWithdrawls !== 0) {
     currentCashFlow = (
       (totalDeposits - totalWithdrawls) /
       totalDeposits
     ).toFixed(2);
+  } else {
+    currentCashFlow = 0;
   }
-  if (totalDeposits !== 0) {
-    currentCashFlow = currentCashFlow * 100;
-  }
+
+  currentCashFlow = currentCashFlow * 100;
 
   /// Calculate average daily spend
 
@@ -1186,104 +1030,6 @@ const getCashFlows = async (profile, uid) => {
       Math.ceil(((averageDailySpend - averageDailyIncome) * 1.05) / 10) * 10;
   }
 
-  // average daily net
-  const averageDailyNet = averageDailyIncome - averageDailySpend;
-
-  // weekly cash flow
-
-  const ninetyDaysAgoDate = new Date();
-  ninetyDaysAgoDate.setDate(ninetyDaysAgoDate.getDate() - 86);
-  const weeklyCashFlow = {};
-
-  const today = new Date();
-
-  let currentStart = new Date(ninetyDaysAgoDate);
-  const ranges = [];
-
-  while (currentStart <= today) {
-    let currentEnd = new Date(currentStart);
-
-    if (ranges.length === 0 && currentStart.getDay() === 6) {
-      currentEnd.setDate(currentEnd.getDate() + 1);
-    } else {
-      const daysToSunday = 7 - currentStart.getDay();
-      currentEnd.setDate(currentEnd.getDate() + daysToSunday);
-    }
-
-    weeklyCashFlow[currentStart.toISOString().split("T")[0]] = 0;
-
-    ranges.push({
-      start: currentStart.toISOString().split("T")[0],
-      end: currentEnd.toISOString().split("T")[0],
-    });
-
-    currentStart = new Date(currentEnd);
-    currentStart.setDate(currentStart.getDate() + 1);
-  }
-
-  const categorizedTransactionByWeek = ranges.map((range) => {
-    const rangeStart = new Date(range.start);
-    const rangeEnd = new Date(range.end);
-
-    const filteredTransactions = allTransactions.filter((transaction) => {
-      const transactionDate = new Date(transaction.transactionDate);
-      return transactionDate >= rangeStart && transactionDate <= rangeEnd;
-    });
-
-    return filteredTransactions;
-  });
-
-  let index = 0;
-  for (const weekTransactions of categorizedTransactionByWeek) {
-    const weekDepositoryTransactions = weekTransactions.filter(
-      (transaction) => transaction.accountType === "depository"
-    );
-    const weekCreditTransactions = weekTransactions.filter(
-      (transaction) => transaction.accountType === "credit"
-    );
-    const depositoryDepositsAmount = weekDepositoryTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-
-    const depositoryWithdrawsAmount = weekDepositoryTransactions
-      .filter((transaction) => transaction.amount > 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-
-    const creditDepositsAmount = weekCreditTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-
-    const creditWithdrawsAmount = weekCreditTransactions
-      .filter((transaction) => transaction.amount > 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-
-    const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
-    const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
-    const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-    const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
-
-    const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
-    const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
-
-    let currentCashFlow = 0;
-    if (totalDeposits === 0) {
-      currentCashFlow = -999;
-    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
-      currentCashFlow = 0;
-    } else {
-      currentCashFlow = (
-        (totalDeposits - totalWithdrawls) /
-        totalDeposits
-      ).toFixed(2);
-    }
-    if (totalDeposits !== 0) {
-      currentCashFlow = currentCashFlow * 100;
-    }
-
-    weeklyCashFlow[ranges[index].start] = currentCashFlow;
-    index++;
-  }
-
   return {
     currentCashFlow,
     totalCashBalance,
@@ -1292,8 +1038,6 @@ const getCashFlows = async (profile, uid) => {
     netWorth,
     cashRunway,
     advice,
-    averageDailyNet,
-    weeklyCashFlow,
   };
 };
 
@@ -1375,7 +1119,7 @@ const getTransactions = async (accounts, uid) => {
 };
 
 const getUserTransactions = async (email, uid) => {
-  const user = await User.findOne({ authUid: uid })
+  const user = await User.findOne({ "email.email": email.toLowerCase() })
     .populate("plaidAccounts")
     .exec();
 
@@ -1993,17 +1737,13 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 const accountsService = {
   addAccount,
   getAccounts,
-  getAccountDetails,
   getCashFlows,
-  getCashFlowsWeekly,
   getUserTransactions,
   getTransactionsByAccount,
   getAllUserAccounts,
   generateUploadUrl,
   generateSignedUrl,
   getProfileTransactions,
-  removeAccount,
-  getCashFlowsByPlaidAccount,
 };
 
 export default accountsService;
