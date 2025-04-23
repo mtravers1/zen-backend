@@ -159,6 +159,8 @@ const addAccount = async (accessToken, email, uid) => {
     }
   }
 
+  console.log("investmentTransactionsResponse", investmentTransactionsResponse);
+
   if (accountsResponse.item.products.includes("liabilities")) {
     try {
       liabilitiesResponse =

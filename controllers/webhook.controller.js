@@ -16,8 +16,9 @@ const plaidWebhook = async (req, res) => {
 };
 
 const testWebhook = async (req, res) => {
-  const { email } = req.user;
-  const response = webhookService.testWebhook(email);
+  // const { email } = req.user;
+  const { itemId, uid } = req.body;
+  await webhookService.testWebhook(itemId, uid);
   return res.status(200).send("test webhook");
 };
 

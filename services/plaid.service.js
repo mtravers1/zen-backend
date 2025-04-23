@@ -233,10 +233,16 @@ const getTransactionsWithAccessToken = async (accessToken) => {
 };
 
 const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
+  const today = new Date();
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(today.getFullYear() - 2);
   const response = await plaidClient.investmentsTransactionsGet({
     access_token: accessToken,
-    start_date: "2021-01-01",
-    end_date: new Date().toISOString().split("T")[0],
+    start_date: twoYearsAgo.toISOString().split("T")[0],
+    end_date: today.toISOString().split("T")[0],
+    options: {
+      async_update: true,
+    },
   });
   return response.data;
 };
@@ -259,27 +265,7 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
   return decryptedToken;
 };
 
-const updateTransactions = async (item) => {
-  console.log("Updating transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
-  if (!accessInfo) return;
-  const userId = accessInfo.userId;
-  const user = await User.findById(userId);
-  if (!user) return;
-  const uid = user?.authUid;
-  const accessToken = await getAccessTokenFromItemId(item, uid);
-  if (!accessToken) {
-    //TODO: remove item
-    return;
-  }
-
-  const accounts = await PlaidAccount.find({ itemId: item });
-
-  if (!accounts.length) {
-    //TODO: remove item
-    return;
-  }
-
+const updateAccountBalances = async (dek, accessToken, accounts) => {
   let newAccountsBalances;
 
   try {
@@ -289,14 +275,8 @@ const updateTransactions = async (item) => {
     });
   } catch (error) {
     console.error("Error fetching account balances:", error);
+    return;
   }
-
-  const emails = user?.email;
-
-  const emailObject = emails?.find((email) => email.isPrimary === true);
-
-  const email = emailObject?.email;
-  const dek = await getUserDek(uid);
 
   if (newAccountsBalances) {
     const bulkOps = [];
@@ -356,6 +336,38 @@ const updateTransactions = async (item) => {
       await PlaidAccount.bulkWrite(bulkOps);
     }
   }
+};
+
+const updateTransactions = async (item) => {
+  console.log("Updating transactions for item:", item);
+  const accessInfo = await AccessToken.findOne({ itemId: item });
+  if (!accessInfo) return;
+  const userId = accessInfo.userId;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const uid = user?.authUid;
+  const accessToken = await getAccessTokenFromItemId(item, uid);
+  if (!accessToken) {
+    //TODO: remove item
+    return;
+  }
+
+  const accounts = await PlaidAccount.find({ itemId: item });
+
+  if (!accounts.length) {
+    //TODO: remove item
+    return;
+  }
+
+  const emails = user?.email;
+
+  const emailObject = emails?.find((email) => email.isPrimary === true);
+
+  const email = emailObject?.email;
+
+  const dek = await getUserDek(uid);
+
+  await updateAccountBalances(dek, accessToken, accounts);
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
@@ -554,6 +566,7 @@ const updateTransactions = async (item) => {
 };
 
 const updateInvestmentTransactions = async (item) => {
+  console.log("Updating investment transactions for item:", item);
   const accessInfo = await AccessToken.findOne({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
@@ -565,73 +578,100 @@ const updateInvestmentTransactions = async (item) => {
   if (!accessToken) {
     return;
   }
+  const accounts = await PlaidAccount.find({ itemId: item });
 
-  const savedToken = await AccessToken.findOne({
-    itemId: item,
-  });
-
-  const emails = user?.email;
-
-  const emailObject = emails?.find((email) => email.isPrimary === true);
-
-  const email = emailObject?.email;
   const dek = await getUserDek(uid);
+  await updateAccountBalances(dek, accessToken, accounts);
+  let offset = 0;
+  let hasMore = true;
+  const plaidAccountIds = accounts.map((account) => account.plaid_account_id);
 
-  const response = await plaidClient.investmentsTransactionsGet({
-    access_token: accessToken,
+  const lastTransaction = await Transaction.findOne({
+    plaidAccountId: { $in: plaidAccountIds },
+    isInvestment: true,
+  })
+    .sort({ transactionDate: -1 })
+    .limit(1);
 
-    //TODO: enhance this
-    start_date: "2021-01-01",
-    end_date: new Date().toISOString().split("T")[0],
-  });
-  const transactions = response.data.investment_transactions;
+  const today = new Date();
+  const end_date = today.toISOString().split("T")[0];
 
-  for (let transaction of transactions) {
-    const existingTransaction = await Transaction.findOne({
-      transaction_id: transaction.transaction_id,
-    });
-    if (existingTransaction) {
-      continue;
+  let start_date;
+
+  if (lastTransaction) {
+    const safeStart = new Date(lastTransaction.transactionDate);
+    safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
+    if (safeStart > today) {
+      start_date = end_date;
+    } else {
+      start_date = safeStart.toISOString().split("T")[0];
     }
-    const accountType = "investment";
-    const encryptedAccountType = await encryptValue(accountType, dek);
-    const encryptedName = await encryptValue(transaction.name, dek);
-    const encryptedAmount = await encryptValue(transaction.amount, dek);
-
-    const encryptedSecurityId = await encryptValue(
-      transaction.security_id,
-      dek
-    );
-    const encryptedPrice = await encryptValue(transaction.price, dek);
-
-    const encryptedQuantity = await encryptValue(transaction.quantity, dek);
-
-    const encryptedFees = await encryptValue(transaction.fees, dek);
-
-    const encryptedType = await encryptValue(transaction.type, dek);
-
-    const encryptedSubType = await encryptValue(transaction.subtype, dek);
-    const newTransaction = new Transaction({
-      plaidTransactionId: transaction.transaction_id,
-      plaidAccountId: transaction.account_id,
-      transactionDate: transaction.date,
-      amount: encryptedAmount,
-      currency: transaction.iso_currency_code,
-      isInvestment: true,
-      name: encryptedName,
-      fees: encryptedFees,
-      price: encryptedPrice,
-      quantity: encryptedQuantity,
-      securityId: encryptedSecurityId,
-      type: encryptedType,
-      subType: encryptedSubType,
-      accountType: encryptedAccountType,
-    });
-
-    await newTransaction.save();
+  } else {
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(today.getFullYear() - 2);
+    start_date = twoYearsAgo.toISOString().split("T")[0];
   }
 
-  return transactions;
+  while (hasMore) {
+    const response = await plaidClient.investmentsTransactionsGet({
+      access_token: accessToken,
+      start_date,
+      end_date,
+      options: {
+        count: 500,
+        offset,
+      },
+    });
+    const transactions = response.data.investment_transactions;
+    const totalInvestments = response.data.total_investment_transactions;
+    hasMore = offset + transactions.length < totalInvestments;
+    offset += transactions.length;
+    for (let transaction of transactions) {
+      const existingTransaction = await Transaction.findOne({
+        plaidTransactionId: transaction.investment_transaction_id,
+      });
+      if (existingTransaction) {
+        continue;
+      }
+      const accountType = "investment";
+      const encryptedAccountType = await encryptValue(accountType, dek);
+      const encryptedName = await encryptValue(transaction.name, dek);
+      const encryptedAmount = await encryptValue(transaction.amount, dek);
+
+      const encryptedSecurityId = await encryptValue(
+        transaction.security_id,
+        dek
+      );
+      const encryptedPrice = await encryptValue(transaction.price, dek);
+
+      const encryptedQuantity = await encryptValue(transaction.quantity, dek);
+
+      const encryptedFees = await encryptValue(transaction.fees, dek);
+
+      const encryptedType = await encryptValue(transaction.type, dek);
+
+      const encryptedSubType = await encryptValue(transaction.subtype, dek);
+      const newTransaction = new Transaction({
+        plaidTransactionId: transaction.investment_transaction_id,
+        plaidAccountId: transaction.account_id,
+        transactionDate: transaction.date,
+        amount: encryptedAmount,
+        currency: transaction.iso_currency_code,
+        isInvestment: true,
+        name: encryptedName,
+        fees: encryptedFees,
+        price: encryptedPrice,
+        quantity: encryptedQuantity,
+        securityId: encryptedSecurityId,
+        type: encryptedType,
+        subType: encryptedSubType,
+        accountType: encryptedAccountType,
+      });
+
+      await newTransaction.save();
+    }
+  }
+  return "Investment transactions updated";
 };
 
 const updateLiabilities = async (item) => {
@@ -711,6 +751,7 @@ const plaidService = {
   getLoanLiabilitiesWithAccessToken,
   updateInvestmentTransactions,
   updateLiabilities,
+  getAccessTokenFromItemId,
 };
 
 export default plaidService;
