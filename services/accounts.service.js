@@ -272,6 +272,7 @@ const addAccount = async (accessToken, email, uid) => {
     const accountType = accountTypes[transaction.account_id];
 
     const encryptedAmount = await encryptValue(transaction.amount, dek);
+    const encryptedAccountType = await encryptValue(accountType, dek);
 
     const name = await encryptValue(transaction.name, dek);
 
@@ -301,7 +302,7 @@ const addAccount = async (accessToken, email, uid) => {
       securityId: securityId,
       type: type,
       subtype: subtype,
-      accountType: accountType ?? "",
+      accountType: encryptedAccountType,
     });
 
     await newTransaction.save();
@@ -867,10 +868,15 @@ const getCashFlows = async (profile, uid) => {
 
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await decryptValue(transaction.amount, dek);
+      const decryptedAccountType = await decryptValue(
+        transaction.accountType,
+        dek
+      );
 
       transactions.push({
         ...transaction,
         amount: decryptedAmount,
+        accountType: decryptedAccountType,
       });
     }
 
@@ -1059,6 +1065,10 @@ const getTransactions = async (accounts, uid) => {
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await decryptValue(transaction.amount, dek);
       const decryptedName = await decryptValue(transaction.name, dek);
+      const decryptedAccountType = await decryptValue(
+        transaction.accountType,
+        dek
+      );
 
       let decryptedMerchantName;
       let decryptedMerchantMerchantName;
@@ -1103,6 +1113,7 @@ const getTransactions = async (accounts, uid) => {
         subtype: decryptedSubtype,
         quantity: decryptedQuantity,
         securityId: decryptedSecurityId,
+        accountType: decryptedAccountType,
       });
     }
     transactions.forEach((transaction) => {
@@ -1197,6 +1208,10 @@ const getTransactionsByAccount = async (accountId, uid) => {
   for (const transaction of account.transactions) {
     const decryptedAmount = await decryptValue(transaction.amount, dek);
     const decryptedName = await decryptValue(transaction.name, dek);
+    const decryptedAccountType = await decryptValue(
+      transaction.accountType,
+      dek
+    );
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
@@ -1235,6 +1250,7 @@ const getTransactionsByAccount = async (accountId, uid) => {
       type: decryptedType,
       subtype: decryptedSubtype,
       quantity: decryptedQuantity,
+      accountType: decryptedAccountType,
     });
   }
 
