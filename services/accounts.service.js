@@ -1565,13 +1565,65 @@ const findLiabilityByAccountId = (accountId, liabilities) => {
   return null;
 };
 
-const getAccountDetails = async (accountId, profileId, uid) => {
-  const access_token = await AccessToken.findOne({ userId: profileId })
-    .lean()
-    .exec();
+function summarizeHoldingsByAccountId(
+  holdings,
+  securities,
+  accounts,
+  targetAccountId
+) {
+  const securityMap = Object.fromEntries(
+    securities.map((sec) => [sec.security_id, sec])
+  );
 
+  const accountMap = Object.fromEntries(
+    accounts.map((acc) => [acc.account_id, acc])
+  );
+
+  const filteredHoldings = holdings.filter(
+    (h) => h.account_id === targetAccountId
+  );
+  const account = accountMap[targetAccountId];
+
+  if (!account) {
+    return null;
+  }
+
+  const summary = {
+    account_id: targetAccountId,
+    account_name: account.name,
+    account_type: account.type,
+    holdings: filteredHoldings.map((holding) => {
+      const security = securityMap[holding.security_id];
+      return {
+        security_name: security.name,
+        ticker: security.ticker_symbol,
+        quantity: holding.quantity,
+        price: holding.institution_value / holding.quantity,
+        value: holding.institution_value,
+      };
+    }),
+  };
+
+  return summary;
+}
+
+const getAccountDetails = async (accountId, profileId, uid) => {
   const dek = await getUserDek(uid);
 
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+    .lean()
+    .exec();
+  if (!account) {
+    throw new Error("Account not found");
+  }
+  const deac = await getDecryptedAccount(account, dek);
+
+  const access_token = await AccessToken.findOne({
+    userId: profileId,
+    institutionId: deac.institution_id,
+  })
+    .lean()
+    .exec();
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
   const response = await plaidService.getLoanLiabilitiesWithAccessToken(
@@ -1585,26 +1637,30 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     response.liabilities
   );
 
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
-    .lean()
-    .exec();
-  if (!account) {
-    throw new Error("Account not found");
-  }
-  const deac = await getDecryptedAccount(account, dek);
-  const accountPlaidDec = await decryptValue(accountPlaid, dek);
-
   let investmentData;
 
-  if(deac.account_type === "investment") {
-    investmentData = await plaidService.getInvestmentsHoldingsWithAccessToken(decryptAccessToken);
+  if (deac.account_type === "investment") {
+    try {
+      const data = await plaidService.getInvestmentsHoldingsWithAccessToken(
+        decryptAccessToken
+      );
+      investmentData = summarizeHoldingsByAccountId(
+        data.holdings,
+        data.securities,
+        data.accounts,
+        deac.plaid_account_id
+      );
+    } catch (error) {
+      console.error(
+        "Error fetching investment data:",
+        error.response?.data || error.message
+      );
+    }
   }
-
-
 
   const result = {
     account: deac,
-    accountPlaid: accountPlaidDec,
+    accountPlaid: accountPlaid,
     liabilityPlaid: liabilityPlaid,
     investmentData: investmentData,
   };
