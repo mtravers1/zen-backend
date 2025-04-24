@@ -375,6 +375,7 @@ const updateTransactions = async (item) => {
   let oldCursor = cursor;
   let iterationCoounter = 0;
   const maxIterations = 10;
+  const newTransactions = [];
 
   while (hasMore) {
     transactionsByAccount = {};
@@ -397,6 +398,7 @@ const updateTransactions = async (item) => {
       const removedTransactions = response.data.removed || [];
       cursor = response.data.next_cursor;
       hasMore = response.data.has_more;
+      newTransactions.push(...transactions);
 
       console.log(
         `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
@@ -549,14 +551,17 @@ const updateTransactions = async (item) => {
   }
 
   if (email) {
-    const internalTransfers = await detectInternalTransfers(email, uid);
+    const internalTransfers = await detectInternalTransfers(newTransactions);
 
-    for (const transactionId of internalTransfers) {
+    for (const internalTransaction of internalTransfers) {
+      const transactionId = internalTransaction.transactionId;
+      const transactionRef = internalTransaction.transactionRef;
       const transaction = await Transaction.findOne({
         plaidTransactionId: transactionId,
       });
       if (!transaction) continue;
       transaction.isInternal = true;
+      transaction.internalReference = transactionRef;
       await transaction.save();
     }
   }
@@ -684,9 +689,7 @@ const getCurrentCashflow = async (email) => {
   return transactions;
 };
 
-const detectInternalTransfers = async (email, uid) => {
-  const transactions = await getTransactions(email, uid);
-
+const detectInternalTransfers = async (transactions) => {
   const transfers = [];
   const groupedByAmount = new Map();
 
@@ -718,10 +721,16 @@ const detectInternalTransfers = async (email, uid) => {
 
         if (isOppositeAmount && isDifferentAccount && isDateClose) {
           if (!transfers.includes(txn1.transaction_id)) {
-            transfers.push(txn1.transaction_id);
+            transfers.push({
+              transactionId: txn1.transaction_id,
+              transactionRef: txn2.transaction_id,
+            });
           }
           if (!transfers.includes(txn2.transaction_id)) {
-            transfers.push(txn2.transaction_id);
+            transfers.push({
+              transactionId: txn2.transaction_id,
+              transactionRef: txn1.transaction_id,
+            });
           }
         }
       }

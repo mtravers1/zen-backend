@@ -65,6 +65,10 @@ const transactionSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  internalReference: {
+    type: String,
+    default: null,
+  },
   tags: {
     type: [String],
   },

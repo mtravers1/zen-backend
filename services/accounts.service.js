@@ -572,16 +572,18 @@ const addAccount = async (accessToken, email, uid) => {
   }
 
   const internalTransfers = await plaidService.detectInternalTransfers(
-    email,
-    uid
+    transactions
   );
 
-  for (const transactionId of internalTransfers) {
+  for (const internalTransaction of internalTransfers) {
+    const transactionId = internalTransaction.transactionId;
+    const transactionRef = internalTransaction.transactionRef;
     const transaction = await Transaction.findOne({
       plaidTransactionId: transactionId,
     });
     if (!transaction) continue;
     transaction.isInternal = true;
+    transaction.internalReference = transactionRef;
     await transaction.save();
   }
 
@@ -907,33 +909,68 @@ const getCashFlows = async (profile, uid) => {
       )
     );
   }
+  const internalTxns = allTransactions.filter((txn) => txn.isInternal);
 
-  const depositoryDepositsAmount = depositoryTransactions
+  const txnMap = new Map(internalTxns.map((txn) => [String(txn._id), txn]));
+
+  const toRemove = new Set();
+
+  internalTxns.forEach((txn) => {
+    const refId = txn.internalReference?.toString();
+    if (refId && txnMap.has(refId)) {
+      toRemove.add(String(txn._id));
+      toRemove.add(refId);
+    }
+  });
+
+  const filteredTxns = internalTxns.filter(
+    (txn) => !toRemove.has(String(txn._id))
+  );
+
+  const filteredOutIds = new Set(filteredTxns.map((txn) => String(txn._id)));
+
+  const cleanDepositoryTxns = depositoryTransactions.filter(
+    (txn) => !filteredOutIds.has(String(txn._id))
+  );
+
+  const cleanCreditTxns = creditTransactions.filter(
+    (txn) => !filteredOutIds.has(String(txn._id))
+  );
+
+  const cleanInvestmentTxns = investmentTransactions.filter(
+    (txn) => !filteredOutIds.has(String(txn._id))
+  );
+
+  const cleanLoanTxns = loanTransactions.filter(
+    (txn) => !filteredOutIds.has(String(txn._id))
+  );
+
+  const depositoryDepositsAmount = cleanDepositoryTxns
     .filter((transaction) => transaction.amount < 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
-  const depositoryWithdrawsAmount = depositoryTransactions
+  const depositoryWithdrawsAmount = cleanDepositoryTxns
     .filter((transaction) => transaction.amount > 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
-  const creditDepositsAmount = creditTransactions
+  const creditDepositsAmount = cleanCreditTxns
     .filter((transaction) => transaction.amount < 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
-  const creditWithdrawsAmount = creditTransactions
+  const creditWithdrawsAmount = cleanCreditTxns
     .filter((transaction) => transaction.amount > 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
-  const depositoryDepositTransactions = depositoryTransactions.filter(
+  const depositoryDepositTransactions = cleanDepositoryTxns.filter(
     (transaction) => transaction.amount < 0
   );
-  const depositoryWithdrawTransactions = depositoryTransactions.filter(
+  const depositoryWithdrawTransactions = cleanDepositoryTxns.filter(
     (transaction) => transaction.amount > 0
   );
-  const creditDepositTransactions = creditTransactions.filter(
+  const creditDepositTransactions = cleanCreditTxns.filter(
     (transaction) => transaction.amount < 0
   );
-  const creditWithdrawTransactions = creditTransactions.filter(
+  const creditWithdrawTransactions = cleanCreditTxns.filter(
     (transaction) => transaction.amount > 0
   );
 
