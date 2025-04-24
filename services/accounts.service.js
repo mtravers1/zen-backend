@@ -812,6 +812,7 @@ const getCashFlows = async (profile, uid) => {
   let balanceDebit = 0;
   let balanceCurrentInvestment = 0;
   let balanceAvailableInvestment = 0;
+  let allInvestmentsCurrentBalance = 0;
   let balanceLoan = 0;
   const depositoryTransactions = [];
   const creditTransactions = [];
@@ -831,6 +832,10 @@ const getCashFlows = async (profile, uid) => {
         balanceDebit = balanceDebit += currentBalance;
       }
     } else if (plaidAccount.account_type === "investment") {
+      if (plaidAccount.currentBalance) {
+        allInvestmentsCurrentBalance = allInvestmentsCurrentBalance +=
+          currentBalance;
+      }
       if (
         plaidAccount.account_subtype === "brokerage" ||
         plaidAccount.account_subtype === "isa" ||
@@ -1024,7 +1029,7 @@ const getCashFlows = async (profile, uid) => {
   //TODO: Add assets
 
   const netWorth =
-    balanceDebit + balanceCurrentInvestment - balanceCredit - balanceLoan;
+    balanceDebit + allInvestmentsCurrentBalance - balanceCredit - balanceLoan;
 
   /// Calculate cash runway
   let cashRunway = null;
