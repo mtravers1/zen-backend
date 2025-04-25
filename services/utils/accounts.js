@@ -1,10 +1,3 @@
-export const getStartOfWeek = (date) => {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // Domingo = 0, Lunes = 1
-  return d.toISOString().split("T")[0]; // Devolver solo la fecha
-};
-
 export const calculateWeeklyTotals = (groupedTransactions) => {
   const weeklySummary = [];
   let totalGeneralDeposits = 0;
@@ -66,18 +59,19 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
     let currentCashFlow = 0;
-    if (totalWithdrawls !== 0) {
-      currentCashFlow =
-        totalGeneralDeposits !== 0
-          ? ((totalDeposits - totalWithdrawls) / totalGeneralDeposits).toFixed(
-              2
-            )
-          : -1;
-    } else {
+    if (totalDeposits === 0) {
+      currentCashFlow = -999;
+    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
       currentCashFlow = 0;
+    } else {
+      currentCashFlow = (
+        (totalDeposits - totalWithdrawls) /
+        totalDeposits
+      ).toFixed(2);
     }
-
-    currentCashFlow = currentCashFlow * 100;
+    if (totalDeposits !== 0) {
+      currentCashFlow = currentCashFlow * 100;
+    }
 
     weeklySummary.push({
       week,
@@ -99,10 +93,17 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
   return weeklySummary;
 };
 
+export const getStartOfWeek = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // Domingo=0, Lunes=1, ..., Sábado=6
+  const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().split("T")[0]; // solo la fecha
+};
 export const groupByWeek = (transactions) => {
-  return transactions.reduce((acc, transaction) => {
+  const groupedTrans = transactions.reduce((acc, transaction) => {
     const week = getStartOfWeek(transaction.transactionDate);
-
     if (!acc[week]) {
       acc[week] = [];
     }
@@ -111,4 +112,13 @@ export const groupByWeek = (transactions) => {
 
     return acc;
   }, {});
+
+  const orderedGrouped = Object.keys(groupedTrans)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    .reduce((obj, key) => {
+      obj[key] = groupedTrans[key];
+      return obj;
+    }, {});
+
+  return orderedGrouped;
 };
