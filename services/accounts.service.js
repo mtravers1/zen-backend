@@ -773,14 +773,16 @@ const getAllUserAccounts = async (email, uid) => {
 };
 const calculateCashFlowsWeekly = async (
   depositoryTransactions,
-  creditTransactions
+  creditTransactions,
+  allTransactions
 ) => {
   const groupedTransactions = groupByWeek([
     ...depositoryTransactions,
     ...creditTransactions,
+    ...allTransactions,
   ]);
 
-  return calculateWeeklyTotals(groupedTransactions);
+  return calculateWeeklyTotals(groupedTransactions, allTransactions);
 };
 
 const weeklyCashFlowPlaidAccountSetUpTransactions = async (
@@ -873,7 +875,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
       )
     );
   }
-  return { depositoryTransactions, creditTransactions };
+  return { depositoryTransactions, creditTransactions, allTransactions };
 };
 
 const getCashFlowsWeekly = async (profile, uid) => {
@@ -911,14 +913,14 @@ const getCashFlowsWeekly = async (profile, uid) => {
     });
   }
 
-  const { depositoryTransactions, creditTransactions } =
+  const { depositoryTransactions, creditTransactions, allTransactions } =
     await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
 
   const groupedTransactions = groupByWeek([
     ...depositoryTransactions,
     ...creditTransactions,
   ]);
-  const result = calculateWeeklyTotals(groupedTransactions);
+  const result = calculateWeeklyTotals(groupedTransactions, allTransactions);
   return { weeklyCashFlow: result };
 };
 
@@ -1773,7 +1775,8 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   const resultWeeklyCashFlowwCharts = await calculateCashFlowsWeekly(
     plaidWeeklyTransactions.depositoryTransactions,
-    plaidWeeklyTransactions.creditTransactions
+    plaidWeeklyTransactions.creditTransactions,
+    plaidWeeklyTransactions.allTransactions
   );
   //----------WEEKLY-cashflow-chart calculations
 

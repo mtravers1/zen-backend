@@ -1,4 +1,4 @@
-export const calculateWeeklyTotals = (groupedTransactions) => {
+export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
   const weeklySummary = [];
   let totalGeneralDeposits = 0;
 
@@ -25,6 +25,26 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     totalGeneralDeposits += depositDepositsAmountAbs + creditDepositsAmountAbs;
   }
 
+  const internalTxns = allTransactions.filter((txn) => txn.isInternal);
+
+  const txnMap = new Map(internalTxns.map((txn) => [String(txn._id), txn]));
+
+  const toRemove = new Set();
+
+  internalTxns.forEach((txn) => {
+    const refId = txn.internalReference?.toString();
+    if (refId && txnMap.has(refId)) {
+      toRemove.add(String(txn._id));
+      toRemove.add(refId);
+    }
+  });
+
+  const filteredTxns = internalTxns.filter(
+    (txn) => !toRemove.has(String(txn._id))
+  );
+
+  const filteredOutIds = new Set(filteredTxns.map((txn) => String(txn._id)));
+
   for (const week in groupedTransactions) {
     const weekTransactions = groupedTransactions[week];
     const depositoryTransactions = weekTransactions.filter(
@@ -34,20 +54,28 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
       (t) => t.accountType === "credit"
     );
 
-    const depositoryDepositsAmount = depositoryTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
+    const cleanDepositoryTxns = depositoryTransactions.filter(
+      (txn) => !filteredOutIds.has(String(txn._id))
+    );
 
-    const depositoryWithdrawsAmount = depositoryTransactions
+    const cleanCreditTxns = creditTransactions.filter(
+      (txn) => !filteredOutIds.has(String(txn._id))
+    );
+
+    const depositoryDepositsAmount = cleanDepositoryTxns
       .filter((transaction) => transaction.amount > 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const creditDepositsAmount = creditTransactions
+    const depositoryWithdrawsAmount = cleanDepositoryTxns
       .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const creditWithdrawsAmount = creditTransactions
+    const creditDepositsAmount = cleanCreditTxns
       .filter((transaction) => transaction.amount > 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const creditWithdrawsAmount = cleanCreditTxns
+      .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
     const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
@@ -59,16 +87,22 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
     let currentCashFlow = 0;
+
     if (totalDeposits === 0) {
       currentCashFlow = -999;
-    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
+    }
+
+    if (totalDeposits === 0 && totalWithdrawls === 0) {
       currentCashFlow = 0;
-    } else {
+    }
+
+    if (totalDeposits !== 0) {
       currentCashFlow = (
         (totalDeposits - totalWithdrawls) /
         totalDeposits
       ).toFixed(2);
     }
+
     if (totalDeposits !== 0) {
       currentCashFlow = currentCashFlow * 100;
     }
