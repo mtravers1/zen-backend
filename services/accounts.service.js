@@ -677,11 +677,6 @@ const getAccounts = async (profile, uid) => {
     });
   }
 
-  const tokens = await plaidService.getUserAccessTokens(
-    "galvanerick27@gmail.com"
-  );
-  console.log(tokens);
-
   const depositoryAccounts = plaidAccounts.filter(
     (account) => account.account_type === "depository"
   );
@@ -1550,7 +1545,7 @@ const getTransactionsByAccount = async (accountId, uid) => {
 const findLiabilityByAccountId = (accountId, liabilities) => {
   for (const category in liabilities) {
     if (!liabilities[category]) {
-      return null;
+      continue;
     }
     const found = liabilities[category].find(
       (item) => item.account_id === accountId
