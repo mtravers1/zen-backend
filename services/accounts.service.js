@@ -801,13 +801,16 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const creditTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
+    const currentBalance = Number(plaidAccount.currentBalance) || 0;
+    const availableBalance = Number(plaidAccount.availableBalance) || 0;
+
     if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
-      balanceCredit = balanceCredit += plaidAccount.currentBalance;
+      balanceCredit = balanceCredit += currentBalance;
     } else if (
       plaidAccount.account_type === "depository" &&
       plaidAccount.availableBalance
     ) {
-      balanceDebit = balanceDebit += plaidAccount.availableBalance;
+      balanceDebit = balanceDebit += availableBalance;
     } else if (plaidAccount.account_type === "investment") {
       if (
         plaidAccount.account_subtype === "brokerage" ||
@@ -820,28 +823,43 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         plaidAccount.account_subtype === "trust"
       ) {
         if (plaidAccount.currentBalance) {
-          balanceCurrentInvestment = balanceCurrentInvestment +=
-            plaidAccount.currentBalance;
+          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
         }
         if (plaidAccount.availableBalance) {
           balanceAvailableInvestment = balanceAvailableInvestment +=
-            plaidAccount.availableBalance;
+            availableBalance;
         }
       }
     } else if (
       plaidAccount.account_type === "loan" &&
       plaidAccount.currentBalance
     ) {
-      balanceLoan = balanceLoan += plaidAccount.currentBalance;
+      balanceLoan = balanceLoan += currentBalance;
     }
 
-    const transactions = await Transaction.find({
+    const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
       transactionDate: { $gte: ninetyDaysAgo },
       isInternal: false,
     })
       .sort({ transactionDate: 1 })
       .lean();
+
+    const transactions = [];
+
+    for (const transaction of transactionsResponse) {
+      const decryptedAmount = await decryptValue(transaction.amount, dek);
+      const decryptedAccountType = await decryptValue(
+        transaction.accountType,
+        dek
+      );
+
+      transactions.push({
+        ...transaction,
+        amount: decryptedAmount,
+        accountType: decryptedAccountType,
+      });
+    }
 
     allTransactions.push(...transactions);
     depositoryTransactions.push(
