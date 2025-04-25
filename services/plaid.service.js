@@ -278,7 +278,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
   let newAccountsBalances;
 
   try {
-    newAccountsBalances = await plaidClient.accountsBalanceGet({
+    newAccountsBalances = await plaidClient.accountsGet({
       access_token: accessToken,
       // min_last_updated_datetime: new Date().toISOString(),
     });
@@ -286,17 +286,6 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
     console.error("Error fetching account balances:", error);
     return;
   }
-
-  const savedToken = await AccessToken.findOne({
-    itemId: item,
-  });
-
-  const userId = savedToken?.userId;
-  const user = await User.findById(userId);
-  const uid = user?.authUid;
-  const emails = user?.email;
-
-  const emailObject = emails?.find((email) => email.isPrimary === true);
 
   if (newAccountsBalances) {
     const bulkOps = [];
