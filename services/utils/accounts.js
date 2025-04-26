@@ -71,15 +71,16 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
       .reduce((total, transaction) => total + transaction.amount, 0);
 
     const creditDepositsAmount = cleanCreditTxns
-      .filter((transaction) => transaction.amount > 0)
+      .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
     const creditWithdrawsAmount = cleanCreditTxns
-      .filter((transaction) => transaction.amount < 0)
+      .filter((transaction) => transaction.amount > 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
     const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
     const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
+
     const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
     const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
 
@@ -153,6 +154,26 @@ export const groupByWeek = (transactions) => {
       obj[key] = groupedTrans[key];
       return obj;
     }, {});
+  //console.log(orderedGrouped);
+  /*const keys = Object.keys(orderedGrouped).map((or) => {
+    console.log("WEEK", or);
+    //const weekSet = orderedGroped[or];
+    //console.log("WEEK", or, weekSet);
+    return or;
+  });
+
+  keys.map((dt) => {
+    const og = orderedGrouped[dt];
+    og.map((data) => {
+      console.log(
+        "Weekk Data: ",
+        dt,
+        data.transactionDate,
+        data.accountType,
+        data.amount
+      );
+    });
+  });*/
 
   return orderedGrouped;
 };
