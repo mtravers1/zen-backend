@@ -61,7 +61,7 @@ async function generateAndStoreEncryptedDEK(uid) {
   });
 
   const encryptedDEK = encryptResponse.ciphertext;
-  const file = storage.bucket(BUCKET_NAME).file(`keys/${uid}.key`);
+  const file = storage.bucket(BUCKET_NAME).file(`keys/prod/${uid}.key`);
   await file.save(encryptedDEK);
 
   // Cache the DEK
@@ -71,7 +71,7 @@ async function generateAndStoreEncryptedDEK(uid) {
 }
 
 async function getDEKFromBucket(uid) {
-  const file = storage.bucket(BUCKET_NAME).file(`keys/${uid}.key`);
+  const file = storage.bucket(BUCKET_NAME).file(`keys/prod/${uid}.key`);
   if (!(await file.exists())[0]) {
     return null;
   }
