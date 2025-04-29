@@ -1208,7 +1208,7 @@ const getCashFlows = async (profile, uid) => {
   if (oldestDepositDate) {
     // const today = new Date();
     // const days = Math.ceil((today - oldestDepositDate) / (1000 * 60 * 60 * 24));
-    const totalDeposits = depositoryDepositsAmount;
+    const totalDeposits = depositoryDepositsAmount + creditDepositsAmount;
     averageDailyIncome = Math.abs(totalDeposits / 90).toFixed(2);
   }
 
@@ -1625,6 +1625,11 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .lean()
     .exec();
+
+  const liab = await Liability.find({ accountId: accountId })
+    .lean()
+    .exec();
+
   if (!account) {
     throw new Error("Account not found");
   }
@@ -1638,16 +1643,16 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     .exec();
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
-  const response = await plaidService.getLoanLiabilitiesWithAccessToken(
-    decryptAccessToken
-  );
-  const accountPlaid = response.accounts.find(
-    (account) => account.account_id === accountId
-  );
-  const liabilityPlaid = await findLiabilityByAccountId(
-    accountId,
-    response.liabilities
-  );
+  let liabilityPlaid;
+  let accountPlaid;
+
+  if (deac.account_type === "credit") {
+    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek);
+  }
+
+  if (deac.account_type === "loan") {
+    liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek);
+  }
 
   let investmentData;
 
@@ -1678,6 +1683,77 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   };
   return { ...result };
 };
+
+async function getDecryptedLiabilitiesCredit(liabilities, dek) {
+  const liabilitiesList = liabilities[0];
+  const decryptedLiabilities = {
+    _id: liabilitiesList._id,
+    liabilityType: liabilitiesList.liabilityType,
+    accountNumber: liabilitiesList.accountNumber,
+  }
+  const binaryFields = [
+    "accountId",
+    "lastPaymentAmount",
+    "lastPaymentDate",
+    "lastPaymentDueDate",
+    "nextPaymentDueDate",
+    "minimumPaymentAmount",
+    "lastStatementBalance",
+    "lastStatementIssueDate",
+    "isOverdue"
+  ];
+  for (const field of binaryFields) {
+    if (liabilitiesList[field]) {
+      decryptedLiabilities[field] = await decryptValue(
+        liabilitiesList[field],
+        dek
+      );
+    }
+  }
+  return decryptedLiabilities;
+}
+
+async function getDecryptedLiabilitiesLoan(liabilities, dek) {
+  const liabilitiesList = liabilities[0];
+  const decryptedLiabilities = {
+    _id: liabilitiesList._id,
+    liabilityType: liabilitiesList.liabilityType,
+    accountNumber: liabilitiesList.accountNumber,
+  }
+  const binaryFields = [
+    "accountId",
+    "lastPaymentAmount",
+    "lastPaymentDate",
+    "lastPaymentDueDate",
+    "nextPaymentDueDate",
+    "minimumPaymentAmount",
+    "lastStatementBalance",
+    "lastStatementIssueDate",
+    "isOverdue",
+    "loanTypeDescription",
+    "loanTerm",
+    "maturityDate",
+    "nextMonthlyPayment",
+    "originationDate",
+    "originationPrincipalAmount",
+    "pastDueAmount",
+    "escrowBalance",
+    "hasPmi",
+    "hasPrepaymentPenalty",
+    "ytdInterestPaid",
+    "ytdPrincipalPaid",
+    "interestRatePercentage"
+  ];
+  for (const field of binaryFields) {
+    if (liabilitiesList[field]) {
+      decryptedLiabilities[field] = await decryptValue(
+        liabilitiesList[field],
+        dek
+      );
+    }
+  }
+  return decryptedLiabilities;
+}
 
 async function getDecryptedAccount(account, dek) {
   const decryptedAccount = {
@@ -1973,7 +2049,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   if (oldestDepositDate) {
     // const today = new Date();
     // const days = Math.ceil((today - oldestDepositDate) / (1000 * 60 * 60 * 24));
-    const totalDeposits = depositoryDepositsAmount;
+    const totalDeposits = depositoryDepositsAmount + creditDepositsAmount;
     averageDailyIncome = Math.abs(totalDeposits / 90).toFixed(2);
   }
 
