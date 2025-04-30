@@ -49,6 +49,18 @@ const plaidAccountSchema = new Schema({
     type: String,
     required: true,
   },
+  hashAccountInstitutionId: {
+    type: String,
+    required: true,
+  },
+  hashAccountName: {
+    type: String,
+    required: true,
+  },
+  hashAccountMask: {
+    type: String,
+    required: true,
+  },
   image_url: {
     type: String,
   },

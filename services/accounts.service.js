@@ -11,6 +11,7 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
+  hashValue,
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
@@ -54,16 +55,26 @@ const addAccount = async (accessToken, email, uid) => {
   const userAccounts = user.plaidAccounts;
   let savedAccounts = [];
   const accountTypes = {};
+  const existingAccounts = [];
 
   for (let account of accounts) {
+    const hashAccountName = hashValue(account.name);
+    const hashAccountInstitutionId = hashValue(
+      accountsResponse.item.institution_id
+    );
+    const hashAccountMask = hashValue(account.mask);
+
     const existingAccount = await PlaidAccount.findOne({
-      plaid_account_id: account.account_id,
+      hashAccountName,
+      hashAccountInstitutionId,
+      hashAccountMask,
       owner_id: user._id,
     });
 
-    console.log("EXISTING ACCOUNT", existingAccount);
-
-    if (existingAccount) continue;
+    if (existingAccount) {
+      existingAccounts.push(existingAccount);
+      continue;
+    }
 
     const encryptedMask = await encryptValue(account.mask, dek);
 
@@ -101,6 +112,7 @@ const addAccount = async (accessToken, email, uid) => {
         );
       }
     }
+
     const newAccount = new PlaidAccount({
       owner_id: userId,
       itemId: accountsResponse.item.item_id,
@@ -120,6 +132,9 @@ const addAccount = async (accessToken, email, uid) => {
       transactions: [],
       nextCursor: null,
       mask: encryptedMask,
+      hashAccountName,
+      hashAccountInstitutionId,
+      hashAccountMask,
     });
 
     accountTypes[account.account_id] = account.type;
@@ -130,6 +145,13 @@ const addAccount = async (accessToken, email, uid) => {
     await newAccount.save();
     savedAccounts.push(newAccount);
   }
+
+  const responseExistingAccounts = await Promise.all(
+    existingAccounts.map(async (ec) => {
+      return { id: ec.id, name: await decryptValue(ec.account_name, dek) };
+    })
+  );
+
   let transactionsResponse;
   let investmentTransactionsResponse;
   let liabilitiesResponse;
@@ -159,8 +181,6 @@ const addAccount = async (accessToken, email, uid) => {
       );
     }
   }
-
-  console.log("investmentTransactionsResponse", investmentTransactionsResponse);
 
   if (accountsResponse.item.products.includes("liabilities")) {
     try {
@@ -596,7 +616,7 @@ const addAccount = async (accessToken, email, uid) => {
     await account.save();
   }
 
-  return savedAccounts;
+  return { savedAccounts, existingAccounts: responseExistingAccounts };
 };
 
 const removeAccount = async (accountId, email) => {
@@ -1626,9 +1646,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     .lean()
     .exec();
 
-  const liab = await Liability.find({ accountId: accountId })
-    .lean()
-    .exec();
+  const liab = await Liability.find({ accountId: accountId }).lean().exec();
 
   if (!account) {
     throw new Error("Account not found");
@@ -1690,7 +1708,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
     accountNumber: liabilitiesList.accountNumber,
-  }
+  };
   const binaryFields = [
     "accountId",
     "lastPaymentAmount",
@@ -1700,7 +1718,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
     "minimumPaymentAmount",
     "lastStatementBalance",
     "lastStatementIssueDate",
-    "isOverdue"
+    "isOverdue",
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {
@@ -1719,7 +1737,7 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
     accountNumber: liabilitiesList.accountNumber,
-  }
+  };
   const binaryFields = [
     "accountId",
     "lastPaymentAmount",
@@ -1742,7 +1760,7 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
     "hasPrepaymentPenalty",
     "ytdInterestPaid",
     "ytdPrincipalPaid",
-    "interestRatePercentage"
+    "interestRatePercentage",
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {

@@ -183,4 +183,12 @@ function hashEmail(email) {
     .update(email.trim().toLowerCase() + salt)
     .digest("hex");
 }
-export { encryptValue, decryptValue, getUserDek, hashEmail };
+
+function hashValue(value) {
+  const salt = process.env.HASH_SALT;
+  return crypto
+    .createHash("sha256")
+    .update(value + salt)
+    .digest("hex");
+}
+export { encryptValue, decryptValue, getUserDek, hashEmail, hashValue };

@@ -757,9 +757,9 @@ const repairAccessToken = async (accountId, email) => {
       await accountsService.removeAccount(accountId, email);
     }
 
-    await accountsService.addAccount(accessToken, email);
+    const resAddAcount = await accountsService.addAccount(accessToken, email);
 
-    return accounts;
+    return { accounts, existingAccounts: resAddAcount.existingAccounts };
   } catch (error) {
     console.log(error);
   }
