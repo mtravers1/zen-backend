@@ -19,6 +19,10 @@ export const merchantSchema = new Schema({
 });
 
 const transactionSchema = new Schema({
+  accountId: {
+    type: Schema.Types.ObjectId,
+    ref: "PlaidAccount",
+  },
   plaidTransactionId: {
     type: String,
     required: true,
