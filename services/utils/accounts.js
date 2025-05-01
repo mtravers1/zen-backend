@@ -89,21 +89,7 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
 
     let currentCashFlow = 0;
 
-    if (totalDeposits === 0) {
-      currentCashFlow = -999;
-    }
-
-    if (totalDeposits === 0 && totalWithdrawls === 0) {
-      currentCashFlow = 0;
-    }
-
-    if (totalDeposits !== 0) {
-      currentCashFlow = (totalDeposits - totalWithdrawls).toFixed(2);
-    }
-
-    if (totalDeposits !== 0) {
-      currentCashFlow = currentCashFlow * 100;
-    }
+    currentCashFlow = (totalDeposits - totalWithdrawls).toFixed(2);
 
     weeklySummary.push({
       week,
