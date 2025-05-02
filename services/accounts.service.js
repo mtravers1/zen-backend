@@ -291,6 +291,9 @@ const addAccount = async (accessToken, email, uid) => {
     if (existingTransaction) continue;
 
     const accountType = accountTypes[transaction.account_id];
+    const account = savedAccounts.find(
+      (account) => account.plaid_account_id === transaction.account_id
+    );
 
     const encryptedAmount = await encryptValue(transaction.amount, dek);
     const encryptedAccountType = await encryptValue(accountType, dek);
@@ -310,6 +313,7 @@ const addAccount = async (accessToken, email, uid) => {
     const subtype = await encryptValue(transaction.subtype, dek);
 
     const newTransaction = new Transaction({
+      accountId: account._id,
       plaidTransactionId: transaction.investment_transaction_id,
       plaidAccountId: transaction.account_id,
       transactionDate: transaction.date,

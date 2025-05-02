@@ -665,7 +665,11 @@ const updateInvestmentTransactions = async (item) => {
       const encryptedType = await encryptValue(transaction.type, dek);
 
       const encryptedSubType = await encryptValue(transaction.subtype, dek);
+      const account = accounts.find(
+        (account) => account.plaid_account_id === transaction.account_id
+      );
       const newTransaction = new Transaction({
+        accountId: account._id,
         plaidTransactionId: transaction.investment_transaction_id,
         plaidAccountId: transaction.account_id,
         transactionDate: transaction.date,
