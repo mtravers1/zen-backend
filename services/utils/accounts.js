@@ -100,7 +100,7 @@ export const getStartOfWeek = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const day = d.getUTCDay(); // Domingo = 0, Lunes = 1, ..., Sábado = 6
-  const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1, Domingo = -6 (anterior lunes)
+  const diff = -day; // Para semanas domingo a sábado
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };
