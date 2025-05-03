@@ -822,6 +822,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   let balanceDebit = 0;
   let balanceCurrentInvestment = 0;
   let balanceAvailableInvestment = 0;
+  let allInvestmentsCurrentBalance = 0;
   let balanceLoan = 0;
   const depositoryTransactions = [];
   const creditTransactions = [];
@@ -832,12 +833,17 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
 
     if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
       balanceCredit = balanceCredit += currentBalance;
-    } else if (
-      plaidAccount.account_type === "depository" &&
-      plaidAccount.availableBalance
-    ) {
-      balanceDebit = balanceDebit += availableBalance;
+    } else if (plaidAccount.account_type === "depository") {
+      if (plaidAccount.availableBalance) {
+        balanceDebit = balanceDebit += availableBalance;
+      } else if (plaidAccount.currentBalance) {
+        balanceDebit = balanceDebit += currentBalance;
+      }
     } else if (plaidAccount.account_type === "investment") {
+      if (plaidAccount?.currentBalance) {
+        allInvestmentsCurrentBalance = allInvestmentsCurrentBalance +=
+          currentBalance;
+      }
       if (
         plaidAccount.account_subtype === "brokerage" ||
         plaidAccount.account_subtype === "isa" ||
@@ -931,7 +937,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
-      availableBalance: decryptedAvailableBalance,
+      availableBalance: parseInt(decryptedAvailableBalance),
       account_type: decryptedAccountType,
       account_subtype: decryptedAccountSubtype,
     });
@@ -1085,6 +1091,7 @@ const getCashFlows = async (profile, uid) => {
       )
     );
   }
+
   const internalTxns = allTransactions.filter((txn) => txn.isInternal);
 
   const txnMap = new Map(internalTxns.map((txn) => [String(txn._id), txn]));

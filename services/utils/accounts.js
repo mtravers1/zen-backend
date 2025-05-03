@@ -25,28 +25,9 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
     totalGeneralDeposits += depositDepositsAmountAbs + creditDepositsAmountAbs;
   }
 
-  const internalTxns = allTransactions.filter((txn) => txn.isInternal);
-
-  const txnMap = new Map(internalTxns.map((txn) => [String(txn._id), txn]));
-
-  const toRemove = new Set();
-
-  internalTxns.forEach((txn) => {
-    const refId = txn.internalReference?.toString();
-    if (refId && txnMap.has(refId)) {
-      toRemove.add(String(txn._id));
-      toRemove.add(refId);
-    }
-  });
-
-  const filteredTxns = internalTxns.filter(
-    (txn) => !toRemove.has(String(txn._id))
-  );
-
-  const filteredOutIds = new Set(filteredTxns.map((txn) => String(txn._id)));
-
   for (const week in groupedTransactions) {
     const weekTransactions = groupedTransactions[week];
+
     const depositoryTransactions = weekTransactions.filter(
       (t) => t.accountType === "depository"
     );
@@ -54,27 +35,19 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
       (t) => t.accountType === "credit"
     );
 
-    const cleanDepositoryTxns = depositoryTransactions.filter(
-      (txn) => !filteredOutIds.has(String(txn._id))
-    );
-
-    const cleanCreditTxns = creditTransactions.filter(
-      (txn) => !filteredOutIds.has(String(txn._id))
-    );
-
-    const depositoryDepositsAmount = cleanDepositoryTxns
+    const depositoryDepositsAmount = depositoryTransactions
       .filter((transaction) => transaction.amount > 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const depositoryWithdrawsAmount = cleanDepositoryTxns
+    const depositoryWithdrawsAmount = depositoryTransactions
       .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const creditDepositsAmount = cleanCreditTxns
+    const creditDepositsAmount = creditTransactions
       .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const creditWithdrawsAmount = cleanCreditTxns
+    const creditWithdrawsAmount = creditTransactions
       .filter((transaction) => transaction.amount > 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
@@ -108,47 +81,68 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
     });
   }
 
+  //console.log("WEEKLY", weeklySummary);
+
   return weeklySummary;
 };
 
-export const getStartOfWeek = (date) => {
+/*export const getStartOfWeek = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const day = d.getUTCDay(); // Domingo=0, Lunes=1, ..., Sábado=6
   const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().split("T")[0]; // solo la fecha
+};*/
+
+export const getStartOfWeek = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // Domingo = 0, Lunes = 1, ..., Sábado = 6
+  const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1, Domingo = -6 (anterior lunes)
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };
+
 export const groupByWeek = (transactions) => {
+  if (transactions.length === 0) return {};
+
   const groupedTrans = transactions.reduce((acc, transaction) => {
     const week = getStartOfWeek(transaction.transactionDate);
-    if (!acc[week]) {
-      acc[week] = [];
-    }
-
+    if (!acc[week]) acc[week] = [];
     acc[week].push(transaction);
-
     return acc;
   }, {});
 
-  const orderedGrouped = Object.keys(groupedTrans)
-    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-    .reduce((obj, key) => {
-      obj[key] = groupedTrans[key];
-      return obj;
-    }, {});
-  //console.log(orderedGrouped);
+  // Obtener las semanas mínima y máxima del grupo
+  const allWeeksSorted = Object.keys(groupedTrans).sort(
+    (a, b) => new Date(a) - new Date(b)
+  );
+
+  const start = new Date(allWeeksSorted[0]);
+  const end = new Date(allWeeksSorted[allWeeksSorted.length - 1]);
+
+  // Iterar por todas las semanas entre el inicio y el fin
+  const orderedGrouped = {};
+  const current = new Date(start);
+  while (current <= end) {
+    const key = current.toISOString().split("T")[0];
+    orderedGrouped[key] = groupedTrans[key] || [];
+    current.setUTCDate(current.getUTCDate() + 7); // avanzar a la siguiente semana
+  }
+
   /*const keys = Object.keys(orderedGrouped).map((or) => {
     console.log("WEEK", or);
-    //const weekSet = orderedGroped[or];
-    //console.log("WEEK", or, weekSet);
+    const weekSet = orderedGrouped[or];
+    console.log("WEEK", or, weekSet.length);
     return or;
   });
 
-  keys.map((dt) => {
+  keys.map((dt, index) => {
     const og = orderedGrouped[dt];
     og.map((data) => {
       console.log(
+        index,
         "Weekk Data: ",
         dt,
         data.transactionDate,
