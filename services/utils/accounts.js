@@ -78,6 +78,7 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
       totalWeeklyDeposits: totalDeposits,
       totalWeeklyWithdrawls: totalWithdrawls,
       totalWithdrawls,
+      testing: { depositoryTransactions, creditTransactions },
     });
   }
 
