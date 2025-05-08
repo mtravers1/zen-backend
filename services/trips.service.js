@@ -177,16 +177,20 @@ const fetchFilteredTrips = async (query, uid) => {
       })
     );
 
-    const lowerSearch = search.toLowerCase();
+    const filteredTrips = search
+      ? populatedTrips.filter((trip) => {
+          const lowerSearch = search.toLowerCase();
 
-    const filteredTrips = populatedTrips.filter((trip) => {
-      const { placeName, pickupAddress, dropoffAddress } = trip.metadata;
-      return (
-        (placeName && placeName.toLowerCase().includes(lowerSearch)) ||
-        (pickupAddress && pickupAddress.toLowerCase().includes(lowerSearch)) ||
-        (dropoffAddress && dropoffAddress.toLowerCase().includes(lowerSearch))
-      );
-    });
+          const { placeName, pickupAddress, dropoffAddress } = trip.metadata;
+          return (
+            (placeName && placeName.toLowerCase().includes(lowerSearch)) ||
+            (pickupAddress &&
+              pickupAddress.toLowerCase().includes(lowerSearch)) ||
+            (dropoffAddress &&
+              dropoffAddress.toLowerCase().includes(lowerSearch))
+          );
+        })
+      : populatedTrips;
     return filteredTrips;
   } catch (err) {
     console.error("Error al obtener los viajes filtrados:", err);
