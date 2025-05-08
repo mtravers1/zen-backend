@@ -192,6 +192,35 @@ const fetchFilteredTrips = async (query, uid) => {
   }
 };
 
+const getLastVehicleIdUsed = async (uid) => {
+  try {
+    const user = await User.findOne({ authUid: uid });
+    if (!user) throw new Error("Usuario no encontrado");
+
+    // Buscar los trips más recientes del usuario con vehicle válido
+    const trips = await Trips.find({
+      user: user._id,
+      "metadata.vehicle": { $exists: true, $ne: null, $ne: "Other" },
+    })
+      .sort({ "metadata.dateTime": -1 }) // orden descendente por fecha
+      .limit(1) // solo el más reciente
+      .lean();
+
+    const lastTrip = trips[0];
+
+    // Verificamos que tenga un vehicle válido
+    if (!lastTrip || !lastTrip.metadata?.vehicle) return null;
+
+    const vehicle = lastTrip.metadata.vehicle;
+    return typeof vehicle === "string"
+      ? vehicle
+      : vehicle._id?.toString() || null;
+  } catch (err) {
+    console.error("Error al obtener el último vehicle ID:", err);
+    throw err;
+  }
+};
+
 const updateTrip = async (tripId, updateData, uid) => {
   const dek = await getUserDek(uid);
 
@@ -248,5 +277,6 @@ const tripService = {
   fetchFilteredTrips,
   updateTrip,
   deleteTrip,
+  getLastVehicleIdUsed,
 };
 export default tripService;
