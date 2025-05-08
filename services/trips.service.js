@@ -80,14 +80,6 @@ const fetchFilteredTrips = async (query, uid) => {
     ];
   }
 
-  if (search) {
-    filter.$or = [
-      { "metadata.placeName": { $regex: search, $options: "i" } },
-      { "metadata.pickupAddress": { $regex: search, $options: "i" } },
-      { "metadata.dropoffAddress": { $regex: search, $options: "i" } },
-    ];
-  }
-
   if (minMiles || maxMiles) {
     filter.totalMiles = {};
     if (minMiles) filter.totalMiles.$gte = Number(minMiles);
@@ -185,7 +177,17 @@ const fetchFilteredTrips = async (query, uid) => {
       })
     );
 
-    return populatedTrips;
+    const lowerSearch = search.toLowerCase();
+
+    const filteredTrips = populatedTrips.filter((trip) => {
+      const { placeName, pickupAddress, dropoffAddress } = trip.metadata;
+      return (
+        (placeName && placeName.toLowerCase().includes(lowerSearch)) ||
+        (pickupAddress && pickupAddress.toLowerCase().includes(lowerSearch)) ||
+        (dropoffAddress && dropoffAddress.toLowerCase().includes(lowerSearch))
+      );
+    });
+    return filteredTrips;
   } catch (err) {
     console.error("Error al obtener los viajes filtrados:", err);
     throw err;
