@@ -6,6 +6,8 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
+import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
+import assetsService from "./assets.service.js";
 
 import {
   decryptValue,
@@ -1249,11 +1251,22 @@ const getCashFlows = async (profile, uid) => {
 
   /// Calculate net worth
   // (bank accounts + investments accounts + assets - credit accounts - loan accounts)
-  //TODO: Add assets
+
+  const assets = await assetsService.getAssets(uid);
+  const profileAssets = assets.filter(
+    (asset) => asset.profileId === profile.id.toString()
+  );
+  let totalAssets = 0;
+  for (const asset of profileAssets) {
+    totalAssets += Number(asset.basis) || 0;
+  }
 
   const netWorth =
-    balanceDebit + allInvestmentsCurrentBalance - balanceCredit - balanceLoan;
-
+    balanceDebit +
+    allInvestmentsCurrentBalance +
+    totalAssets -
+    balanceCredit -
+    balanceLoan;
   /// Calculate cash runway
   let cashRunway = null;
   let advice = null;
