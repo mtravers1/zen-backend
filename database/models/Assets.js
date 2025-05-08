@@ -12,6 +12,10 @@ const assetsSchema = new Schema({
     type: String,
     required: true,
   },
+  profileId: {
+    type: String,
+    required: true,
+  },
   type: String,
   basis: String,
   purchaseDate: String,

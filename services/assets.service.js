@@ -7,6 +7,7 @@ const addAsset = async (data, uid) => {
 
   const newAsset = new Assets({
     userId: user._id.toString(),
+    profileId: data.profileId,
     account: data.accountName,
     type: data.type,
     basis: data.basis,
@@ -27,6 +28,7 @@ const getAssets = async (uid) => {
   return assets.map((asset) => ({
     id: asset._id,
     account: asset.account,
+    profileId: asset.profileId,
     type: asset.type,
     basis: asset.basis,
     purchaseDate: asset.purchaseDate,
@@ -45,6 +47,7 @@ const updateAsset = async (data, uid) => {
     { _id: data.id, userId: user._id.toString() },
     {
       account: data.accountName,
+      profileId: data.profileId,
       type: data.type,
       basis: data.basis,
       purchaseDate: data.purchaseDate,
