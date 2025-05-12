@@ -805,7 +805,6 @@ const calculateCashFlowsWeekly = async (
   const groupedTransactions = groupByWeek([
     ...depositoryTransactions,
     ...creditTransactions,
-    ...allTransactions,
   ]);
 
   return calculateWeeklyTotals(groupedTransactions, allTransactions);
