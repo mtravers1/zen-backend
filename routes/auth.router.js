@@ -1,5 +1,8 @@
 import { Router } from "express";
 import authController from "../controllers/auth.controller.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const router = Router();
 
@@ -11,5 +14,18 @@ router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
 router.post("/resetPassword", authController.resetPassword);
 router.delete("/:uid", authController.deleteUser);
+router.get("/test", (req, res) => {
+  const aiurl = process.env.AI_URL;
+  const aimodel = process.env.AI_MODEL;
+  const plaidredirect = process.env.PLAID_REDIRECT_URI;
+  const plaidredirectnew = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
+
+  return res.status(200).json({
+    aiurl,
+    aimodel,
+    plaidredirect,
+    plaidredirectnew,
+  });
+});
 
 export default router;
