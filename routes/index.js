@@ -7,6 +7,8 @@ import accountRouter from "./accounts.router.js";
 import businessRouter from "./businesses.router.js";
 import assetsRouter from "./assets.router.js";
 import permissionsRouter from "./permissions.router.js";
+import tripRoutes from "./trips.router.js";
+import filesRouter from "./files.router.js";
 
 const router = Router();
 
@@ -20,6 +22,8 @@ router.use("/account", accountRouter);
 router.use("/business", businessRouter);
 router.use("/assets", assetsRouter);
 router.use("/permissions", permissionsRouter);
+router.use("/trips", tripRoutes);
+router.use("/files", filesRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));
