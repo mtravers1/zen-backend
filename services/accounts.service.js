@@ -1257,7 +1257,8 @@ const getCashFlows = async (profile, uid) => {
   );
   let totalAssets = 0;
   for (const asset of profileAssets) {
-    totalAssets += Number(asset.basis) || 0;
+    const cleanBasis = String(asset.basis).replace(/,/g, "");
+    totalAssets += Number(cleanBasis) || 0;
   }
 
   const netWorth =
