@@ -6,7 +6,6 @@ import businessService from "./businesses.service.js";
 import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
-import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 import assetsService from "./assets.service.js";
 
 import {
@@ -1390,7 +1389,11 @@ const getCashFlows = async (profile, uid) => {
   };
 };
 
-const getTransactions = async (accounts, uid, pagination = { paginate: false }) => {
+const getTransactions = async (
+  accounts,
+  uid,
+  pagination = { paginate: false }
+) => {
   const allTransactions = [];
 
   for (const plaidAccount of accounts) {
@@ -1479,24 +1482,28 @@ const getTransactions = async (accounts, uid, pagination = { paginate: false }) 
     const { page = 1, limit = 50 } = pagination;
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
-    
+
     const paginatedResults = {
       data: sortedTransactions.slice(startIndex, endIndex),
       pagination: {
         total: sortedTransactions.length,
         page,
         limit,
-        totalPages: Math.ceil(sortedTransactions.length / limit)
-      }
+        totalPages: Math.ceil(sortedTransactions.length / limit),
+      },
     };
-    
+
     return paginatedResults;
   }
 
   return sortedTransactions;
 };
 
-const getUserTransactions = async (email, uid, pagination = { paginate: false }) => {
+const getUserTransactions = async (
+  email,
+  uid,
+  pagination = { paginate: false }
+) => {
   const user = await User.findOne({ authUid: uid })
     .populate("plaidAccounts")
     .exec();
@@ -1506,8 +1513,16 @@ const getUserTransactions = async (email, uid, pagination = { paginate: false })
   }
 
   if (!user.plaidAccounts.length) {
-    return pagination.paginate 
-      ? { data: [], pagination: { total: 0, page: pagination.page || 1, limit: pagination.limit || 50, totalPages: 0 }}
+    return pagination.paginate
+      ? {
+          data: [],
+          pagination: {
+            total: 0,
+            page: pagination.page || 1,
+            limit: pagination.limit || 50,
+            totalPages: 0,
+          },
+        }
       : [];
   }
 
@@ -1516,7 +1531,12 @@ const getUserTransactions = async (email, uid, pagination = { paginate: false })
   return getTransactions(accounts, uid, pagination);
 };
 
-const getProfileTransactions = async (email, profileId, uid, pagination = { paginate: false }) => {
+const getProfileTransactions = async (
+  email,
+  profileId,
+  uid,
+  pagination = { paginate: false }
+) => {
   const profiles = await businessService.getUserProfiles(email, uid);
   const profile = profiles.find((p) => String(p.id) === profileId);
   if (!profile) {
@@ -1560,7 +1580,11 @@ const getProfileTransactions = async (email, profileId, uid, pagination = { pagi
   return await getTransactions(plaidAccounts, uid, pagination);
 };
 
-const getTransactionsByAccount = async (accountId, uid, pagination = { paginate: false }) => {
+const getTransactionsByAccount = async (
+  accountId,
+  uid,
+  pagination = { paginate: false }
+) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
     .lean()
@@ -1629,26 +1653,26 @@ const getTransactionsByAccount = async (accountId, uid, pagination = { paginate:
   const sortedTransactions = allTransactions.sort(
     (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
   );
-  
+
   // Apply pagination if requested
   if (pagination && pagination.paginate) {
     const { page = 1, limit = 50 } = pagination;
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
-    
+
     const paginatedResults = {
       data: sortedTransactions.slice(startIndex, endIndex),
       pagination: {
         total: sortedTransactions.length,
         page,
         limit,
-        totalPages: Math.ceil(sortedTransactions.length / limit)
-      }
+        totalPages: Math.ceil(sortedTransactions.length / limit),
+      },
     };
-    
+
     return paginatedResults;
   }
-  
+
   return sortedTransactions;
 };
 
@@ -1802,7 +1826,12 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
     decryptedLiabilities.aprs = [];
     for (const aprItem of liabilitiesList.aprs) {
       const decryptedAprItem = { _id: aprItem._id };
-      for (const key of ["aprPercentage", "aprType", "balanceSubjectToApr", "interestChargeAmount"]) {
+      for (const key of [
+        "aprPercentage",
+        "aprType",
+        "balanceSubjectToApr",
+        "interestChargeAmount",
+      ]) {
         if (aprItem[key]) {
           decryptedAprItem[key] = await decryptValue(aprItem[key], dek);
         }
