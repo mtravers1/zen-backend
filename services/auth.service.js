@@ -280,6 +280,9 @@ const deleteUser = async (uid) => {
     const user = await User.findOne({
       authUid: uid,
     });
+    if (!user) {
+      throw new Error("User not found");
+    }
     //get dek
     const dek = await getUserDek(uid);
     //get accounts and save ids
