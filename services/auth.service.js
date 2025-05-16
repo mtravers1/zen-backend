@@ -11,7 +11,7 @@ import Transaction from "../database/models/Transaction.js";
 import Liability from "../database/models/Liability.js";
 import Assets from "../database/models/Assets.js";
 import Business from "../database/models/Businesses.js";
-import Trips from "../database/models/Trips.js";
+// import Trips from "../database/models/Trips.js";
 import AccessToken from "../database/models/AccessToken.js";
 import plaidService from "./plaid.service.js";
 
@@ -313,9 +313,10 @@ const deleteUser = async (uid) => {
       userId: user._id,
     });
     //get trips and delete them
-    await Trips.deleteMany({
-      user: user._id,
-    });
+    //TODO uncomment this when trips are implemented
+    // await Trips.deleteMany({
+    //   user: user._id,
+    // });
     //get accesstokens, decrypt and delete them and invalidate them
     const accessToken = await AccessToken.find({
       userId: user._id,
