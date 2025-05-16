@@ -88,6 +88,19 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const deleteUser = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    //TODO: check if user is admin
+
+    const { uid } = req.params;
+    await authService.deleteUser(uid);
+    res.status(200).send({ message: "User deleted successfully" });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+};
+
 const authController = {
   own,
   signUp,
@@ -96,6 +109,7 @@ const authController = {
   sendCode,
   resetPassword,
   checkEmailFirebase,
+  deleteUser,
 };
 
 export default authController;

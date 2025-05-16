@@ -6,6 +6,14 @@ import {
 } from "../database/encryption.js";
 import User from "../database/models/User.js";
 import admin from "../lib/firebaseAdmin.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
+import Transaction from "../database/models/Transaction.js";
+import Liability from "../database/models/Liability.js";
+import Assets from "../database/models/Assets.js";
+import Business from "../database/models/Businesses.js";
+import Trips from "../database/models/Trips.js";
+import AccessToken from "../database/models/AccessToken.js";
+import plaidService from "./plaid.service.js";
 
 const own = async (uid) => {
   const userResponse = await User.findOne({
@@ -266,6 +274,76 @@ const changeUserPassword = async (email, newPassword) => {
   }
 };
 
+const deleteUser = async (uid) => {
+  try {
+    //get user
+    const user = await User.findOne({
+      authUid: uid,
+    });
+    //get dek
+    const dek = await getUserDek(uid);
+    //get accounts and save ids
+    const accounts = await PlaidAccount.find({
+      owner_id: user._id,
+    });
+    const accountIds = accounts.map((account) => account.plaid_account_id);
+
+    await PlaidAccount.deleteMany({
+      owner_id: user._id,
+    });
+
+    //get transactions and delete them
+    for (const accountId of accountIds) {
+      await Transaction.deleteMany({
+        plaidAccountId: accountId,
+      });
+
+      //get liabilities and delete them
+      await Liability.deleteMany({
+        accountId: accountId,
+      });
+    }
+    //get assets and delete them
+
+    await Assets.deleteMany({ userId: user._id });
+
+    //get businesses and delete them
+
+    await Business.deleteMany({
+      userId: user._id,
+    });
+    //get trips and delete them
+    await Trips.deleteMany({
+      user: user._id,
+    });
+    //get accesstokens, decrypt and delete them and invalidate them
+    const accessToken = await AccessToken.find({
+      userId: user._id,
+    });
+    for (const token of accessToken) {
+      const decryptedAccessToken = await decryptValue(token.accessToken, dek);
+      await plaidService.invalidateAccessToken(decryptedAccessToken);
+    }
+    await AccessToken.deleteMany({
+      userId: user._id,
+    });
+
+    //delete dek
+    //TODO: delete dek from bucket
+
+    //delete user from firebase
+    await admin.auth().deleteUser(uid);
+    //delete user from db
+    await User.deleteOne({
+      authUid: uid,
+    });
+
+    return { message: "User deleted successfully" };
+  } catch (error) {
+    throw new Error(error);
+  }
+};
+
 const authService = {
   signUp,
   signIn,
@@ -273,6 +351,7 @@ const authService = {
   own,
   changeUserPassword,
   checkEmailFirebase,
+  deleteUser,
 };
 
 export default authService;

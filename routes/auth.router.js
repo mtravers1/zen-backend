@@ -10,5 +10,6 @@ router.post("/check-email", authController.checkEmail);
 router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
 router.post("/resetPassword", authController.resetPassword);
+router.delete("/:uid", authController.deleteUser);
 
 export default router;

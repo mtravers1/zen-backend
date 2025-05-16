@@ -826,6 +826,18 @@ const detectInternalTransfers = async (transactions) => {
   return transfers;
 };
 
+const invalidateAccessToken = async (accessToken) => {
+  try {
+    await plaidClient.itemRemove({
+      access_token: accessToken,
+      client_id: plaidClientId,
+      secret: plaidSecret,
+    });
+  } catch (error) {
+    console.error("Error invalidating access token:", error);
+  }
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -851,6 +863,7 @@ const plaidService = {
   repairAccessTokenWebhook,
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
+  invalidateAccessToken,
 };
 
 export default plaidService;
