@@ -23,11 +23,10 @@ const addBusinesses = async (businessList, email, uid) => {
   const userId = user._id.toString();
 
   const usedColors = new Set();
-
   for (const businessData of businessList) {
     if (businessData.name === "") continue;
     const ownership = {
-      ownership: businessData.ownership,
+      percentage: businessData.ownership,
     };
 
     let color = null;
@@ -54,7 +53,6 @@ const addBusinesses = async (businessList, email, uid) => {
     }
 
     const encryptedName = await encryptValue(businessData.name, dek);
-
     const encryptedIndustry = await encryptValue(businessData.industry, dek);
 
     const encryptedBusinessLogo = await encryptValue(
@@ -97,6 +95,10 @@ const getUserProfiles = async (email, uid) => {
 
   const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
 
+  const decryptedSuffix = await decryptValue(user.name.suffix, dek);
+
+  const decryptedPrefix = await decryptValue(user.name.prefix, dek);
+
   const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
 
   let name;
@@ -106,6 +108,32 @@ const getUserProfiles = async (email, uid) => {
     name = decryptedFirstName + " " + decryptedLastName;
   }
 
+  const decryptedEmail = await Promise.all(
+    user.email.map((emailData) =>
+      Promise.all([
+        decryptValue(emailData.email, dek),
+        emailData.emailType,
+        emailData.isPrimary,
+      ]).then(([email, emailType, isPrimary]) => ({
+        email,
+        emailType,
+        isPrimary,
+      }))
+    )
+  );
+
+  const decryptedPhones = await Promise.all(
+    user.phones.map((phoneData) =>
+      Promise.all([
+        decryptValue(phoneData.phone, dek),
+        phoneData.phoneType,
+      ]).then(([phone, phoneType]) => ({
+        phoneNumber: phone,
+        phoneType,
+      }))
+    )
+  );
+
   const personalProfile = {
     id: user._id,
     name,
@@ -113,13 +141,15 @@ const getUserProfiles = async (email, uid) => {
       firstName: decryptedFirstName,
       lastName: decryptedLastName,
       middleName: decryptedMiddleName,
-      prefix: user.name.prefix,
-      suffix: user.name.suffix,
+      prefix: decryptedPrefix,
+      suffix: decryptedSuffix,
     },
     photo: decryptedPhotoUrl,
     plaidAccounts: user.plaidAccounts,
     isPersonal: true,
     color: null,
+    personal_emails: decryptedEmail, //<- No need to encrypt
+    personal_phones: decryptedPhones, //<- No need to encrypt
   };
 
   profiles.push(personalProfile);
@@ -141,6 +171,45 @@ const getUserProfiles = async (email, uid) => {
       dek
     );
 
+    const decryptedBusinessOwnersDetails = await Promise.all(
+      business.businessOwnersDetails.map(async (owner) => {
+        return {
+          name: owner.name,
+          email: await decryptValue(owner.email, dek),
+          percentOwned: owner.percentOwned,
+          position: owner.position,
+        };
+      })
+    );
+
+    const decryptedBusinessOwners = await decryptValue(
+      business.businessOwners,
+      dek
+    );
+    const decryptdBusinessAddresses = await decryptValue(
+      business.businessLocations,
+      dek
+    );
+    const decryptdBusinessPhoneNumbers = await decryptValue(
+      business.phoneNumbers,
+      dek
+    );
+    const descyptEntityType = await decryptValue(business.entityType, dek);
+    const descryptsubsidiaries = await decryptValue(business.subsidiaries, dek);
+    const decryptedBusinessDesc = await decryptValue(
+      business.businessDescription,
+      dek
+    );
+    const decryptedWebsite = await decryptValue(business.website, dek);
+
+    const formationDate = await decryptValue(business.formationDate, dek);
+    const taxInformation = await decryptValue(business.taxInformation, dek);
+    const legalName = await decryptValue(business.legalName, dek);
+    const ownership = await decryptValue(business.ownership, dek);
+    const entityType = await decryptValue(decryptedIndustry, dek);
+    const businessType = await decryptValue(business.businessType, dek);
+    const entityTaxType = await decryptValue(business.entityType, dek);
+
     const businessProfile = {
       id: business._id,
       name: decryptedName,
@@ -148,6 +217,21 @@ const getUserProfiles = async (email, uid) => {
       plaidAccounts: business.plaidAccountIds,
       isPersonal: false,
       color: business.color,
+      businessOwnersDetails: decryptedBusinessOwnersDetails,
+      businessOwners: decryptedBusinessOwners,
+      businessAddresses: decryptdBusinessAddresses,
+      businessPhoneNumbers: decryptdBusinessPhoneNumbers,
+      subsidiaries: descryptsubsidiaries,
+      businessDescription: decryptedBusinessDesc,
+      website: decryptedWebsite,
+      formationDate: formationDate,
+      taxInformation: taxInformation,
+      legalBusinessName: legalName,
+      ownership: ownership.percentage,
+      entityType: entityType,
+      businessType: businessType,
+      businessTaxCode: entityTaxType,
+      businessEntityType: entityType,
     };
     profiles.push(businessProfile);
   }
@@ -288,12 +372,129 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
   return { message: "Account assigned successfully" };
 };
 
+const updateBusinessProfile = async (profileId, formData, email, uid) => {
+  const dek = await getUserDek(uid);
+  try {
+    if (!profileId) {
+      throw new Error("No profile selected to update.");
+    }
+
+    if (formData.isPersonal) {
+      const encryptedProfilePhotoUrl = await encryptValue(
+        formData.profilePhotoUrl,
+        dek
+      );
+
+      const updatedPersonalProfile = await User.findByIdAndUpdate(
+        profileId,
+        {
+          name: formData.nameParts,
+          email: formData.email,
+          phones: formData.phones,
+          profilePhotoUrl: encryptedProfilePhotoUrl, //TODO:validate upload in other process
+        },
+        { new: true }
+      );
+      return {
+        message: "Personal profile updated successfully.",
+        updatedPersonalProfile,
+      };
+    }
+
+    const businessOwnersDetails = formData.businessOwnersDetails.map(
+      (owner) => {
+        return {
+          name: owner.name,
+          email: owner.email, //<- No need to encrypt
+          percentOwned: owner.percentOwned,
+          position: owner.position,
+        };
+      }
+    );
+
+    //const encryptedTaxInformation = await encryptValue(formData.taxId, dek);//TODO: not implemented yet
+
+    const encryptedBusinessLogo = await encryptValue(
+      formData.businessLogo,
+      dek
+    );
+
+    const encryptedEntityType = await encryptValue(formData.entityType, dek);
+    const encryptedBusinessTaxType = await encryptValue(
+      formData.businessTaxType,
+      dek
+    );
+    const encryptedLegalName = await encryptValue(
+      formData.legalBusinessName,
+      dek
+    );
+
+    const updatedProfile = await Business.findByIdAndUpdate(
+      profileId,
+      {
+        phoneNumbers: formData.businessPhones,
+        legalName: encryptedLegalName,
+
+        businessLocations: formData.businessAddresses,
+        formationDate: formData.formationDate,
+        businessDescription: formData.businessDescription,
+        businessCode: formData.businessTaxCode,
+        entityType: encryptedBusinessTaxType,
+        industryDesc: encryptedEntityType,
+        businessType: formData.businessType,
+        subsidiaries: formData.subsidiaries.map(
+          (subsidiary) => subsidiary.name
+        ),
+        businessOwners: formData.businessOwners,
+        businessOwnersDetails: businessOwnersDetails,
+        ownership: { percentage: formData.ownership.percentage },
+        //taxInformation: encryptedTaxInformation, //TODO: not implemented yet
+        website: formData.website,
+        businessLogo: encryptedBusinessLogo,
+      },
+      { new: true }
+    );
+
+    if (!updatedProfile) {
+      throw new Error("Business profile not found or update failed.");
+    }
+
+    console.log("Business information updated successfully:", updatedProfile);
+    return {
+      message: "Business information updated successfully.",
+      updatedProfile,
+    };
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    throw new Error(error.message || "Failed to update business information");
+  }
+};
+
+const deleteProfile = async (profileId, uid) => {
+  const dek = await getUserDek(uid);
+  try {
+    if (!profileId) {
+      throw new Error("No profile selected to delete.");
+    }
+    const deletedProfile = await Business.findByIdAndDelete(profileId);
+    if (!deletedProfile) {
+      throw new Error("Profile not found or delete failed.");
+    }
+    return { message: "Profile deleted successfully.", deletedProfile };
+  } catch (error) {
+    console.error("Error deleting profile:", error);
+    throw new Error(error.message || "Failed to delete profile");
+  }
+};
+
 const businessService = {
   addBusinesses,
   getUserProfiles,
   assignsAccountsToProfiles,
   unlinkAccounts,
   assignAccountToProfile,
+  updateBusinessProfile,
+  deleteProfile,
 };
 
 export default businessService;

@@ -72,12 +72,46 @@ const assignAccountToProfile = async (req, res) => {
   }
 };
 
+const updateBusinessProfile = async (req, res) => {
+  console.log("UPDATE BUSINESS PROFILE", req.body);
+  try {
+    const profileId = req.params.profileId;
+    const formData = req.body;
+    const email = req.user.email;
+    const uid = req.user.uid;
+    const response = await businessService.updateBusinessProfile(
+      profileId,
+      formData,
+      email,
+      uid
+    );
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteProfile = async (req, res) => {
+  try {
+    const profileId = req.params.profileId;
+    const uid = req.user.uid;
+    const response = await businessService.deleteProfile(profileId, uid);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const businessController = {
   addBusiness,
   getUserProfiles,
   assignsAccountsToProfiles,
   unlinkAccounts,
   assignAccountToProfile,
+  updateBusinessProfile,
+  deleteProfile,
 };
 
 export default businessController;

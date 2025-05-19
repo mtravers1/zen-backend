@@ -1,17 +1,20 @@
 import { Schema, model } from "mongoose";
 
 const addressSchema = new Schema({
-  street: String,
-  city: String,
-  state: String,
-  postalCode: String,
-  country: String,
-  type: String,
+  name: { type: String, default: null },
+  street: { type: String, default: null },
+  city: { type: String, default: null },
+  state: { type: String, default: null },
+  postalCode: { type: String, default: null },
+  country: { type: String, default: null },
+  addressLine1: { type: String, default: null },
+  addressLine2: { type: String, default: null },
+  type: { type: String, default: null },
 });
 
 const phoneNumberSchema = new Schema({
-  phone: String,
-  phoneType: String,
+  phone: { type: String, default: null },
+  phoneType: { type: String, default: null },
 });
 
 const businessOwnershipSchema = new Schema({
@@ -21,6 +24,15 @@ const businessOwnershipSchema = new Schema({
   },
   percentage: Number,
 });
+
+const businessOwnersDetailsSchema = new Schema([
+  {
+    name: { type: String, default: null },
+    percentOwned: { type: String, default: null },
+    email: { type: String, default: null },
+    position: { type: String, default: null },
+  },
+]);
 
 const businessSchema = new Schema({
   userId: [
@@ -43,8 +55,16 @@ const businessSchema = new Schema({
   businessLogo: String,
   numAccounts: Number,
   businessDesc: String,
+  businessDescription: {
+    type: String,
+    default: null,
+  },
   businessCode: Number,
   entityType: String,
+  businessType: {
+    type: String,
+    default: null,
+  },
   addresses: [addressSchema],
   website: String,
   phoneNumbers: [phoneNumberSchema],
@@ -62,6 +82,7 @@ const businessSchema = new Schema({
   businessHours: [String],
   ownership: businessOwnershipSchema,
   businessOwners: [String],
+  businessOwnersDetails: [businessOwnersDetailsSchema],
   timezone: String,
   color: String,
   createdAt: {
