@@ -968,15 +968,24 @@ Example:
     const localUrl = "http://localhost:11434/api/chat";
     const remoteUrl = "http://192.168.7.29:11434/api/chat";
     console.log("Calling AI service with prompt:", prompt);
-    const ollamaResponse = await ollama.chat({
-      model: "qwen3:1.7b",
-      stream: false,
-      messages,
-      options: {
-        temperature: 0,
+    const response = await fetch(remoteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-      tools,
+      body: JSON.stringify({
+        model: "qwen3:1.7b",
+        messages,
+        stream: false,
+        options: {
+          temperature: 0,
+        },
+        tools,
+      }),
     });
+
+    const ollamaResponse = await response.json();
+
     console.log("AI service response:", ollamaResponse);
 
     const toolCalls = ollamaResponse.message.tool_calls || [];
@@ -1013,10 +1022,27 @@ Example:
       let toolCallsRemaining = true;
 
       while (toolCallsRemaining) {
-        const finalResponse = await ollama.chat({
-          model: "qwen3:1.7b",
-          messages: finalMessages,
+        // const finalResponse = await ollama.chat({
+        //   model: "qwen3:1.7b",
+        //   messages: finalMessages,
+        // });
+
+        const finalOllamaResponse = await fetch(remoteUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "qwen3:1.7b",
+            messages: finalMessages,
+            stream: false,
+            options: {
+              temperature: 0,
+            },
+            tools,
+          }),
         });
+        const finalResponse = await finalOllamaResponse.json();
 
         console.log("🧠 Final LLM response:", finalResponse);
 
