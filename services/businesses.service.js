@@ -244,8 +244,8 @@ const getUserProfiles = async (email, uid) => {
       ownership = await decryptValue(business.ownership, dek);
     }
     let entityType = null;
-    if (business.entityType) {
-      entityType = await decryptValue(business.entityType, dek);
+    if (business.industryDesc) {
+      entityType = await decryptValue(business.industryDesc, dek);
     }
     let businessType = null;
     if (business.businessType) {
