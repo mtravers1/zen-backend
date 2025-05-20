@@ -171,44 +171,90 @@ const getUserProfiles = async (email, uid) => {
       dek
     );
 
-    const decryptedBusinessOwnersDetails = await Promise.all(
-      business.businessOwnersDetails.map(async (owner) => {
-        return {
-          name: owner.name,
-          email: await decryptValue(owner.email, dek),
-          percentOwned: owner.percentOwned,
-          position: owner.position,
-        };
-      })
-    );
+    let decryptedBusinessOwnersDetails = [];
+    if (business.businessOwnersDetails) {
+      decryptedBusinessOwnersDetails = await Promise.all(
+        business.businessOwnersDetails.map(async (owner) => {
+          return {
+            name: owner.name,
+            email: await decryptValue(owner.email, dek),
+            percentOwned: owner.percentOwned,
+            position: owner.position,
+          };
+        })
+      );
+    }
 
-    const decryptedBusinessOwners = await decryptValue(
-      business.businessOwners,
-      dek
-    );
-    const decryptdBusinessAddresses = await decryptValue(
-      business.businessLocations,
-      dek
-    );
-    const decryptdBusinessPhoneNumbers = await decryptValue(
-      business.phoneNumbers,
-      dek
-    );
-    const descyptEntityType = await decryptValue(business.entityType, dek);
-    const descryptsubsidiaries = await decryptValue(business.subsidiaries, dek);
-    const decryptedBusinessDesc = await decryptValue(
-      business.businessDescription,
-      dek
-    );
-    const decryptedWebsite = await decryptValue(business.website, dek);
+    let decryptedBusinessOwners = [];
+    if (business.businessOwners) {
+      decryptedBusinessOwners = await decryptValue(
+        business.businessOwners,
+        dek
+      );
+    }
 
-    const formationDate = await decryptValue(business.formationDate, dek);
-    const taxInformation = await decryptValue(business.taxInformation, dek);
-    const legalName = await decryptValue(business.legalName, dek);
-    const ownership = await decryptValue(business.ownership, dek);
-    const entityType = await decryptValue(decryptedIndustry, dek);
-    const businessType = await decryptValue(business.businessType, dek);
-    const entityTaxType = await decryptValue(business.entityType, dek);
+    let decryptdBusinessAddresses = [];
+    if (business.businessLocations) {
+      decryptdBusinessAddresses = await decryptValue(
+        business.businessLocations,
+        dek
+      );
+    }
+
+    let decryptdBusinessPhoneNumbers = [];
+    if (business.phoneNumbers) {
+      decryptdBusinessPhoneNumbers = await decryptValue(
+        business.phoneNumbers,
+        dek
+      );
+    }
+    let descyptEntityType = null;
+    if (business.entityType) {
+      descyptEntityType = await decryptValue(business.entityType, dek);
+    }
+    let descryptsubsidiaries = [];
+    if (business.subsidiaries) {
+      descryptsubsidiaries = await decryptValue(business.subsidiaries, dek);
+    }
+    let decryptedBusinessDesc = null;
+    if (business.businessDescription) {
+      decryptedBusinessDesc = await decryptValue(
+        business.businessDescription,
+        dek
+      );
+    }
+    let decryptedWebsite = null;
+    if (business.website) {
+      decryptedWebsite = await decryptValue(business.website, dek);
+    }
+    let formationDate = null;
+    if (business.formationDate) {
+      formationDate = await decryptValue(business.formationDate, dek);
+    }
+    let taxInformation = null;
+    if (business.taxInformation) {
+      taxInformation = await decryptValue(business.taxInformation, dek);
+    }
+    let legalName = null;
+    if (business.legalName) {
+      legalName = await decryptValue(business.legalName, dek);
+    }
+    let ownership = null;
+    if (business.ownership) {
+      ownership = await decryptValue(business.ownership, dek);
+    }
+    let entityType = null;
+    if (business.entityType) {
+      entityType = await decryptValue(business.entityType, dek);
+    }
+    let businessType = null;
+    if (business.businessType) {
+      businessType = await decryptValue(business.businessType, dek);
+    }
+    let entityTaxType = null;
+    if (business.entityType) {
+      entityTaxType = await decryptValue(business.entityType, dek);
+    }
 
     const businessProfile = {
       id: business._id,
