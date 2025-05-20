@@ -1085,6 +1085,7 @@ Example:
       response: data.text,
       data: data.data,
       screen: currentScreen,
+      error: null,
     };
   } catch (error) {
     console.error("Error in makeRequest:", error);
@@ -1093,6 +1094,7 @@ Example:
       response: "Could not process your request right now.",
       data: null,
       screen: "",
+      error: error.message,
     };
   }
 };
