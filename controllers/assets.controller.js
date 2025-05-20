@@ -38,8 +38,8 @@ const updateAsset = async (req, res) => {
 const deleteAsset = async (req, res) => {
   try {
     const data = req.body;
-    const email = req.user.email;
-    const response = await assetsService.deleteAsset(data, email);
+    const uid = req.user.uid;
+    const response = await assetsService.deleteAsset(data, uid);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);
