@@ -1400,8 +1400,13 @@ const getTransactions = async (accounts, uid) => {
       .sort({ transactionDate: -1 })
       .lean();
 
-    const transactions = [];
     const dek = await getUserDek(uid);
+
+    const decryptedInstitutionName = await decryptValue(
+      plaidAccount.institution_name,
+      dek
+    );
+    const transactions = [];
 
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await decryptValue(transaction.amount, dek);
@@ -1458,7 +1463,7 @@ const getTransactions = async (accounts, uid) => {
       });
     }
     transactions.forEach((transaction) => {
-      transaction.institutionName = plaidAccount.institution_name;
+      transaction.institutionName = decryptedInstitutionName;
       transaction.institutionId = plaidAccount.institution_id;
     });
 
@@ -2230,6 +2235,39 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   };
 };
 
+const formatTransactionsWithSigns = (transactions) => {
+  for (const transaction of transactions) {
+    if (transaction.accountType === "depository") {
+      transaction.amount = transaction.amount * -1;
+    } else if (transaction.accountType === "investment") {
+      transaction.amount = Math.abs(transaction.amount);
+    }
+    delete transaction.merchant._id;
+    delete transaction.merchant.website;
+    delete transaction.merchant.logo;
+  }
+  return transactions;
+};
+
+const formatAccountsBalances = (accounts) => {
+  for (const account of accounts) {
+    if (
+      account.account_type === "depository" ||
+      account.account_type === "other"
+    ) {
+      account.balance = account.availableBalance
+        ? account.availableBalance
+        : account.currentBalance ?? 0;
+    } else {
+      account.balance = account.currentBalance ?? 0;
+    }
+
+    delete account.availableBalance;
+    delete account.currentBalance;
+  }
+  return accounts;
+};
+
 const accountsService = {
   addAccount,
   getAccounts,
@@ -2244,6 +2282,8 @@ const accountsService = {
   getProfileTransactions,
   removeAccount,
   getCashFlowsByPlaidAccount,
+  formatTransactionsWithSigns,
+  formatAccountsBalances,
 };
 
 export default accountsService;
