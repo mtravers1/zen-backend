@@ -93,11 +93,11 @@ const generateUploadUrl = async (fileName) => {
     }
   };
 
-const getFiles = async (uid) => {
+const getFiles = async (profileId, uid) => {
   const user = await User.findOne({ authUid: uid });
   if (!user) throw new Error("User not found");
 
-  const files = await Files.find({ userId: user._id.toString() });
+  const files = await Files.find({ userId: user._id.toString(), profileId: profileId });
   return files.map((file) => ({
     id: file._id,
     userId: file.userId,

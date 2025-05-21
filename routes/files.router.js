@@ -4,7 +4,7 @@ import filesController from "../controllers/files.controller.js";
 const router = Router();
 
 router.post("/addFile", filesController.addFile);
-router.get("/getFiles", filesController.getFiles);
+router.get("/getFiles/:profileId", filesController.getFiles);
 router.post("/add-file", filesController.generateFileUrl);
 router.post("/get-file", filesController.getFileUrl);
 router.post("/add-image", filesController.genereteImageUrl);

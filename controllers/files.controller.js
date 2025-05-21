@@ -15,7 +15,8 @@ const addFile = async (req, res) => {
 const getFiles = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const response = await filesService.getFiles(uid);
+    const { profileId } = req.params;
+    const response = await filesService.getFiles(profileId, uid);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);
