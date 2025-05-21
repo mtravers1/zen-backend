@@ -6,8 +6,12 @@ import ollama from "ollama";
 import authService from "./auth.service.js";
 import assetsService from "./assets.service.js";
 import tripService from "./trips.service.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const makeRequest = async (prompt, uid, profile, incomingMessages, screen) => {
+  const AI_URL = process.env.AI_URL;
+  const AI_MODEL = process.env.AI_MODEL;
   try {
     const dek = await getUserDek(uid);
     const user = await getUserInfo(uid, dek, profile);
@@ -965,16 +969,14 @@ Example:
       },
     };
 
-    const localUrl = "http://localhost:11434/api/chat";
-    const remoteUrl = "http://192.168.7.29:11434/api/chat";
     console.log("Calling AI service with prompt:", prompt);
-    const response = await fetch(remoteUrl, {
+    const response = await fetch(AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "qwen3:1.7b",
+        model: AI_MODEL,
         messages,
         stream: false,
         options: {
@@ -1027,13 +1029,13 @@ Example:
         //   messages: finalMessages,
         // });
 
-        const finalOllamaResponse = await fetch(remoteUrl, {
+        const finalOllamaResponse = await fetch(AI_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "qwen3:1.7b",
+            model: AI_MODEL,
             messages: finalMessages,
             stream: false,
             options: {
