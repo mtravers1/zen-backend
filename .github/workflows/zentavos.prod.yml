@@ -64,6 +64,8 @@ jobs:
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT }}|g" .env.sample
           sed -i -e "s|AI_URL\=.*|AI_URL\=$AI_URL|g" .env.sample
           sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=$AI_MODEL|g" .env.sample
+          sed -i -e "s|PLAID_REDIRECT_URI\=.*|PLAID_REDIRECT_URI\=${{ secrets.PLAID_REDIRECT_URI_DEV }}|g" .env.sample
+          sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_DEV }}|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           echo "$GCP_BUCKET_JSON" > GCPKey.json
