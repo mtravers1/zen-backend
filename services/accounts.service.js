@@ -938,7 +938,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
-      availableBalance: parseInt(decryptedAvailableBalance),
+      availableBalance: decryptedAvailableBalance,
       account_type: decryptedAccountType,
       account_subtype: decryptedAccountSubtype,
     });
@@ -1390,7 +1390,7 @@ const getCashFlows = async (profile, uid) => {
   };
 };
 
-const getTransactions = async (accounts, uid) => {
+const getTransactions = async (accounts, uid, pagination = { paginate: false }) => {
   const allTransactions = [];
 
   for (const plaidAccount of accounts) {
@@ -1474,10 +1474,29 @@ const getTransactions = async (accounts, uid) => {
     (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
   );
 
+  // Apply pagination if requested
+  if (pagination && pagination.paginate) {
+    const { page = 1, limit = 50 } = pagination;
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    
+    const paginatedResults = {
+      data: sortedTransactions.slice(startIndex, endIndex),
+      pagination: {
+        total: sortedTransactions.length,
+        page,
+        limit,
+        totalPages: Math.ceil(sortedTransactions.length / limit)
+      }
+    };
+    
+    return paginatedResults;
+  }
+
   return sortedTransactions;
 };
 
-const getUserTransactions = async (email, uid) => {
+const getUserTransactions = async (email, uid, pagination = { paginate: false }) => {
   const user = await User.findOne({ authUid: uid })
     .populate("plaidAccounts")
     .exec();
@@ -1487,15 +1506,17 @@ const getUserTransactions = async (email, uid) => {
   }
 
   if (!user.plaidAccounts.length) {
-    return [];
+    return pagination.paginate 
+      ? { data: [], pagination: { total: 0, page: pagination.page || 1, limit: pagination.limit || 50, totalPages: 0 }}
+      : [];
   }
 
   const accounts = user.plaidAccounts;
 
-  return getTransactions(accounts, uid);
+  return getTransactions(accounts, uid, pagination);
 };
 
-const getProfileTransactions = async (email, profileId, uid) => {
+const getProfileTransactions = async (email, profileId, uid, pagination = { paginate: false }) => {
   const profiles = await businessService.getUserProfiles(email, uid);
   const profile = profiles.find((p) => String(p.id) === profileId);
   if (!profile) {
@@ -1536,10 +1557,10 @@ const getProfileTransactions = async (email, profileId, uid) => {
     });
   }
 
-  return await getTransactions(plaidAccounts, uid);
+  return await getTransactions(plaidAccounts, uid, pagination);
 };
 
-const getTransactionsByAccount = async (accountId, uid) => {
+const getTransactionsByAccount = async (accountId, uid, pagination = { paginate: false }) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
     .lean()
@@ -1608,6 +1629,26 @@ const getTransactionsByAccount = async (accountId, uid) => {
   const sortedTransactions = allTransactions.sort(
     (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
   );
+  
+  // Apply pagination if requested
+  if (pagination && pagination.paginate) {
+    const { page = 1, limit = 50 } = pagination;
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    
+    const paginatedResults = {
+      data: sortedTransactions.slice(startIndex, endIndex),
+      pagination: {
+        total: sortedTransactions.length,
+        page,
+        limit,
+        totalPages: Math.ceil(sortedTransactions.length / limit)
+      }
+    };
+    
+    return paginatedResults;
+  }
+  
   return sortedTransactions;
 };
 
@@ -1755,6 +1796,18 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
         liabilitiesList[field],
         dek
       );
+    }
+  }
+  if (Array.isArray(liabilitiesList.aprs)) {
+    decryptedLiabilities.aprs = [];
+    for (const aprItem of liabilitiesList.aprs) {
+      const decryptedAprItem = { _id: aprItem._id };
+      for (const key of ["aprPercentage", "aprType", "balanceSubjectToApr", "interestChargeAmount"]) {
+        if (aprItem[key]) {
+          decryptedAprItem[key] = await decryptValue(aprItem[key], dek);
+        }
+      }
+      decryptedLiabilities.aprs.push(decryptedAprItem);
     }
   }
   return decryptedLiabilities;

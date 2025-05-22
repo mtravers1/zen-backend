@@ -81,7 +81,12 @@ const getUserTransactions = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const transactions = await accountsService.getUserTransactions(email, uid);
+    const { page = 1, limit = 50, paginate = false } = req.query;
+    const transactions = await accountsService.getUserTransactions(email, uid, {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      paginate: paginate === 'true'
+    });
     res.status(200).send(transactions);
   } catch (error) {
     res.status(500).send({ message: error.message });
@@ -93,10 +98,16 @@ const getProfileTransactions = async (req, res) => {
     const email = req.user.email;
     const uid = req.user.uid;
     const { profileId } = req.params;
+    const { page = 1, limit = 50, paginate = false } = req.query;
     const transactions = await accountsService.getProfileTransactions(
       email,
       profileId,
-      uid
+      uid,
+      {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        paginate: paginate === 'true'
+      }
     );
     res.status(200).send(transactions);
   } catch (e) {
@@ -109,9 +120,15 @@ const getTransactionsByAccount = async (req, res) => {
   try {
     const { accountId } = req.params;
     const uid = req.user.uid;
+    const { page = 1, limit = 50, paginate = false } = req.query;
     const transactions = await accountsService.getTransactionsByAccount(
-      accountId,
-      uid
+      accountId, 
+      uid,
+      {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        paginate: paginate === 'true'
+      }
     );
     res.status(200).send(transactions);
   } catch (error) {
