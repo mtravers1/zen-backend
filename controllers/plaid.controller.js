@@ -4,12 +4,13 @@ const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { isAndroid, accountId } = req.body;
+    const { isAndroid, accountId, screen } = req.body;
     const linkToken = await plaidService.createLinkToken(
       email,
       isAndroid,
       accountId,
-      uid
+      uid,
+      screen
     );
     res.status(200).send({ linkToken });
   } catch (error) {
