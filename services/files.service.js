@@ -39,7 +39,7 @@ const addFile = async (data, uid) => {
   return { message: "File uploaded successfully" };
 };
 
-const generateUploadUrl = async (fileName) => {
+const generateUploadUrl = async (fileName, mimeType) => {
     try {
       const [url] = await storage
         .bucket(bucketName)
@@ -47,7 +47,7 @@ const generateUploadUrl = async (fileName) => {
         .getSignedUrl({
           action: "write",
           expires: Date.now() + 15 * 60 * 1000,
-          contentType: "application/pdf",
+          contentType: mimeType,
         });
       return url;
     } catch (error) {
@@ -56,7 +56,9 @@ const generateUploadUrl = async (fileName) => {
     }
   };
 
-  const generateImageUploadUrl = async (fileName) => {
+  const generateImageUploadUrl = async (fileName, mimeType) => {
+    console.log("🚀 ~ generateImageUploadUrl ~ fileName:", fileName)
+    console.log("🚀 ~ generateImageUploadUrl ~ mimeType:", mimeType)
     try {
       const [url] = await storage
         .bucket(bucketName)
@@ -64,7 +66,7 @@ const generateUploadUrl = async (fileName) => {
         .getSignedUrl({
           action: "write",
           expires: Date.now() + 15 * 60 * 1000,
-          contentType: "image/jpeg",
+          contentType: mimeType,
         });
       return url;
     } catch (error) {

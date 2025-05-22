@@ -38,8 +38,8 @@ const deleteFiles = async (req, res) => {
 
 const generateFileUrl = async (req, res) => {
   try {
-    const { fileName } = req.body;
-    const url = await filesService.generateUploadUrl(fileName);
+    const { fileName, mimeType } = req.body;
+    const url = await filesService.generateUploadUrl(fileName, mimeType);
     res.status(200).send({ uploadUrl: url });
   } catch (error) {
     console.log(error);
@@ -49,8 +49,8 @@ const generateFileUrl = async (req, res) => {
 
 const genereteImageUrl = async (req, res) => {
   try {
-    const { fileName } = req.body;
-    const url = await filesService.generateImageUploadUrl(fileName);
+    const { fileName, mimeType } = req.body;
+    const url = await filesService.generateImageUploadUrl(fileName, mimeType);
     res.status(200).send({ uploadUrl: url });
   } catch (error) {
     console.log(error);
