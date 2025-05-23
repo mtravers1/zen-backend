@@ -1006,14 +1006,22 @@ const getCashFlows = async (profile, uid) => {
   for (const plaidAccount of plaidAccounts) {
     const currentBalance = Number(plaidAccount.currentBalance) || 0;
     const availableBalance = Number(plaidAccount.availableBalance) || 0;
-
     if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
       balanceCredit = balanceCredit += currentBalance;
     } else if (plaidAccount.account_type === "depository") {
       if (plaidAccount.availableBalance) {
-        balanceDebit = balanceDebit += availableBalance;
+        if (plaidAccount.account_subtype === "cd") {
+          balanceAvailableInvestment = balanceAvailableInvestment +=
+            availableBalance;
+        } else {
+          balanceDebit = balanceDebit += availableBalance;
+        }
       } else if (plaidAccount.currentBalance) {
-        balanceDebit = balanceDebit += currentBalance;
+        if (plaidAccount.account_subtype === "cd") {
+          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
+        } else {
+          balanceDebit = balanceDebit += currentBalance;
+        }
       }
     } else if (plaidAccount.account_type === "investment") {
       if (plaidAccount.currentBalance) {
@@ -1054,7 +1062,6 @@ const getCashFlows = async (profile, uid) => {
       .lean();
 
     const transactions = [];
-
     for (const transaction of transactionsResponse) {
       const decryptedAmount = await decryptValue(transaction.amount, dek);
       const decryptedAccountType = await decryptValue(
@@ -1070,26 +1077,22 @@ const getCashFlows = async (profile, uid) => {
     }
 
     allTransactions.push(...transactions);
-    depositoryTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "depository"
-      )
-    );
-    creditTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "credit"
-      )
-    );
-    investmentTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "investment"
-      )
-    );
-    loanTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "loan"
-      )
-    );
+
+    if (
+      plaidAccount.account_type === "depository" &&
+      plaidAccount.account_subtype !== "cd"
+    ) {
+      depositoryTransactions.push(...transactions);
+    } else if (plaidAccount.account_type === "credit") {
+      creditTransactions.push(...transactions);
+    } else if (
+      plaidAccount.account_type === "investment" ||
+      plaidAccount.account_subtype === "cd"
+    ) {
+      investmentTransactions.push(...transactions);
+    } else if (plaidAccount.account_type === "loan") {
+      loanTransactions.push(...transactions);
+    }
   }
 
   const internalTxns = allTransactions.filter((txn) => txn.isInternal);

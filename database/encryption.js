@@ -171,7 +171,6 @@ async function decryptValue(cipherTextBase64, dek) {
     // Parse the decrypted JSON string and return the original value
     return JSON.parse(decrypted);
   } catch (e) {
-    console.error("Error decrypting value:", e);
     return cipherTextBase64;
   }
 }
