@@ -162,6 +162,12 @@ const userSchema = new Schema({
   lastLoginAt: {
     type: Date,
   },
+  id_uuid: {
+    type: String,
+  },
+  account_type: {
+    type: String,
+  },
 });
 
 const User = model("User", userSchema);

@@ -57,6 +57,8 @@ const own = async (uid) => {
       lastName: decryptedLastName,
       middleName: decryptedMiddleName,
     },
+    account_type: userResponse.account_type,
+    id_uuid: userResponse.id_uuid
   };
 
   return retrievedUser;

@@ -40,6 +40,9 @@ app.use(
       "/api/plaid/accounts",
       "/api/account/add-photo",
       "/api/account/get-photo",
+      "/api/script/update-transactions",
+      "/api/payments/webhook/android",
+      "/api/payments/webhook/apple",
     ],
   })
 );

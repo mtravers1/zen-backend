@@ -10,6 +10,7 @@ import permissionsRouter from "./permissions.router.js";
 import tripRoutes from "./trips.router.js";
 import filesRouter from "./files.router.js";
 import aiRouter from "./ai.router.js";
+import paymentsRouter from "./payments.router.js";
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use("/permissions", permissionsRouter);
 router.use("/trips", tripRoutes);
 router.use("/files", filesRouter);
 router.use("/ai", aiRouter);
+router.use("/payments", paymentsRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));
