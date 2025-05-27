@@ -2,20 +2,36 @@ import { getUserDek } from "../database/encryption.js";
 import User from "../database/models/User.js";
 import accountsService from "./accounts.service.js";
 import businessService from "./businesses.service.js";
-import ollama from "ollama";
 import authService from "./auth.service.js";
 import assetsService from "./assets.service.js";
 import tripService from "./trips.service.js";
 import dotenv from "dotenv";
+import Groq from "groq-sdk";
+import aiController from "../controllers/ai.controller.js";
 dotenv.config();
 
-const makeRequest = async (prompt, uid, profile, incomingMessages, screen) => {
+const makeRequest = async (
+  prompt,
+  uid,
+  profileId,
+  incomingMessages,
+  screen,
+  res
+) => {
   const AI_URL = process.env.AI_URL;
   const AI_MODEL = process.env.AI_MODEL;
+  const GROQ_AI_MODEL = process.env.GROQ_AI_MODEL;
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  const groqClient = new Groq({
+    apiKey: GROQ_API_KEY,
+    baseUrl: GROQ_AI_MODEL,
+  });
   try {
     const dek = await getUserDek(uid);
-    const user = await getUserInfo(uid, dek, profile);
+    const user = await getUserInfo(uid);
     const email = user.email[0].email;
+    const profiles = await businessService.getUserProfiles(email, uid);
+    const profile = profiles.find((p) => p.id === profileId);
     const baseScreen = screen.split("/")[0];
     const dataScreen = screen.split("/")[1];
     const currentScreen = baseScreen.toLowerCase().trim();
@@ -289,9 +305,11 @@ This ensures clarity and prevents misinterpretation of non-financial inputs.
 ### Output 
 
 You MUST always respond in strict JSON format with two fields:
+And when a text starts you MUST write "¡" before the text.
+When the text ends you MUST write "¡" after the text.
 
 {
-  "text": "<a clear and helpful explanation for the user in natural language>",
+  "text": "¡<a clear and helpful explanation for the user in natural language>¡",
   "data": <an array of objects representing tabular data, or null if there's no structured data>
 }
 
@@ -302,7 +320,7 @@ You MUST always respond in strict JSON format with two fields:
 Example:
 
 {
-  "text": "Here is the summary by category based on your account data.",
+  "text": "¡Here is the summary by category based on your account data.¡",
   "data": [
     { "category": "Debit Accounts", "total": 5950 },
     { "category": "Credit Accounts", "total": 5950 },
@@ -970,151 +988,102 @@ Example:
     };
 
     console.log("Calling AI service with prompt:", prompt);
-    const response = await fetch(AI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages,
-        stream: false,
-        options: {
-          temperature: 0,
-        },
-        tools,
-      }),
+    const response = await groqClient.chat.completions.create({
+      model: AI_MODEL,
+      messages,
+      stream: true, // streaming ahora
+      tools,
     });
+    console.log("AI service response received");
+    console.log("Response body:", response);
 
-    const ollamaResponse = await response.json();
+    let buffer = "";
+    let finalMessages = [...messages];
+    let toolCallsRemaining = true;
+    let completeResponse = "";
 
-    console.log("AI service response:", ollamaResponse);
+    while (toolCallsRemaining) {
+      toolCallsRemaining = false;
+      let started = false;
+      let ended = false;
 
-    const toolCalls = ollamaResponse.message.tool_calls || [];
-    console.log("Tool calls:", JSON.stringify(toolCalls, null, 2));
+      for await (const chunk of response) {
+        const delta = chunk.choices?.[0]?.delta;
+        console.log("Delta received:", delta);
+        const finishReason = chunk.choices?.[0]?.finish_reason;
 
-    const finalMessages = [...messages, ollamaResponse.message];
-
-    for (const toolCall of toolCalls) {
-      const fnName = toolCall.function.name;
-      const args =
-        typeof toolCall.function.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function.arguments;
-
-      const fn = availableFunctions[fnName];
-      if (!fn) {
-        console.error(`Function "${fnName}" not implemented.`);
-        continue;
-      }
-
-      const result = await fn(args);
-      console.log(`Function "${fnName}" result:`, result);
-
-      finalMessages.push({
-        role: "tool",
-        name: fnName,
-        content: JSON.stringify(result),
-      });
-    }
-
-    let finalResponseMessage = ollamaResponse.message;
-
-    if (finalResponseMessage.tool_calls) {
-      let toolCallsRemaining = true;
-
-      while (toolCallsRemaining) {
-        // const finalResponse = await ollama.chat({
-        //   model: "qwen3:1.7b",
-        //   messages: finalMessages,
-        // });
-
-        const finalOllamaResponse = await fetch(AI_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: AI_MODEL,
-            messages: finalMessages,
-            stream: false,
-            options: {
-              temperature: 0,
-            },
-            tools,
-          }),
-        });
-        const finalResponse = await finalOllamaResponse.json();
-
-        console.log("🧠 Final LLM response:", finalResponse);
-
-        finalResponseMessage = finalResponse.message;
-        finalMessages.push(finalResponseMessage);
-
-        const nextToolCalls = finalResponse.message.tool_calls || [];
-
-        if (nextToolCalls.length === 0) {
-          toolCallsRemaining = false;
-          break;
-        }
-
-        for (const toolCall of nextToolCalls) {
-          const fnName = toolCall.function.name;
-          const args =
-            typeof toolCall.function.arguments === "string"
-              ? JSON.parse(toolCall.function.arguments)
-              : toolCall.function.arguments;
-
-          const fn = availableFunctions[fnName];
-          if (!fn) {
-            console.error(`Function "${fnName}" not implemented.`);
-            continue;
+        if (delta?.content) {
+          completeResponse += delta.content;
+          if (!started && delta.content.startsWith("¡")) {
+            started = true;
+            delta.content = delta.content.slice(1);
           }
-
-          const result = await fn(args);
-          console.log(`Function "${fnName}" result:`, result);
-
-          finalMessages.push({
-            role: "tool",
-            name: fnName,
-            content: JSON.stringify(result),
-          });
+          if (!ended && delta.content.endsWith("¡")) {
+            ended = true;
+            delta.content = delta.content.slice(0, -1);
+          }
+          if (started && !ended) {
+            aiController.sendToUser(uid, { text: delta.content });
+            buffer += delta.content;
+          }
         }
+
+        if (delta?.tool_calls) {
+          console.log("Tool calls detected:", delta.tool_calls);
+          console.log("Tool calls detected:", delta.tool_calls.function);
+
+          toolCallsRemaining = true;
+
+          for (const toolCall of delta.tool_calls) {
+            const fnName = toolCall.function.name;
+            const args = JSON.parse(toolCall.function.arguments);
+
+            const fn = availableFunctions[fnName];
+            if (!fn) {
+              console.error(`Function "${fnName}" not implemented.`);
+              continue;
+            }
+
+            const result = await fn(args);
+            console.log(`✅ Result for ${fnName}:`, result);
+
+            finalMessages.push({
+              role: "tool",
+              name: fnName,
+              content: JSON.stringify(result),
+            });
+          }
+        }
+
+        // Cuando el modelo finaliza su respuesta
+        if (finishReason === "stop") break;
+      }
+
+      // Si hubo tool calls, hacer otra llamada con mensajes actualizados
+      if (toolCallsRemaining) {
+        response = await groqClient.chat.completions.create({
+          model: AI_MODEL,
+          messages: finalMessages,
+          stream: true,
+          tools,
+          tool_choice: "auto",
+        });
       }
     }
-    const cleanResponse = finalResponseMessage.content
-      .replace(/<think>[\s\S]*?<\/think>/g, "")
-      .trim();
 
-    let data = {
-      text: null,
-      data: null,
-    };
+    const parsedResponse = JSON.parse(completeResponse);
+    aiController.sendToUser(uid, { data: parsedResponse.data || null });
 
-    try {
-      const jsonResponse = JSON.parse(cleanResponse);
+    aiController.sendToUser(uid, "[DONE]");
+    res.end();
 
-      if (typeof jsonResponse === "object" && jsonResponse !== null) {
-        if (jsonResponse.text) {
-          data.text = jsonResponse.text;
-        }
-        if (jsonResponse.data) {
-          data.data = jsonResponse.data;
-        }
-      } else {
-        data.text = cleanResponse;
-      }
-    } catch (err) {
-      data.text = cleanResponse;
-    }
-
-    return {
-      message: prompt,
-      response: data.text,
-      data: data.data,
-      screen: currentScreen,
-      error: null,
-    };
+    // return {
+    //   message: prompt,
+    //   response: data.text,
+    //   data: data.data,
+    //   screen: currentScreen,
+    //   error: null,
+    // };
   } catch (error) {
     console.error("Error in makeRequest:", error);
     return {
