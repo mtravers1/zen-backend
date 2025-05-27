@@ -97,8 +97,8 @@ const weebhookApple = async (req, res) => {
       }
       break;
     case "CANCEL":
-      console.log("CANCEL STI", signedTransactionInfo);
-      console.log("Initial Buy SRI", signedRenewalInfo);
+      user.account_type = "Free";
+      await user.save();
       break;
     case "DID_RENEW":
       switch (payload.signedTransactionInfo.productId) {
