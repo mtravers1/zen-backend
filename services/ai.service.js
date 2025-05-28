@@ -24,7 +24,6 @@ const makeRequest = async (
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   const groqClient = new Groq({
     apiKey: GROQ_API_KEY,
-    baseUrl: GROQ_AI_MODEL,
   });
   try {
     const dek = await getUserDek(uid);
@@ -989,7 +988,7 @@ Example:
 
     console.log("Calling AI service with prompt:", prompt);
     const response = await groqClient.chat.completions.create({
-      model: AI_MODEL,
+      model: GROQ_AI_MODEL,
       messages,
       stream: true, // streaming ahora
       tools,
@@ -1062,7 +1061,7 @@ Example:
       // Si hubo tool calls, hacer otra llamada con mensajes actualizados
       if (toolCallsRemaining) {
         response = await groqClient.chat.completions.create({
-          model: AI_MODEL,
+          model: GROQ_AI_MODEL,
           messages: finalMessages,
           stream: true,
           tools,

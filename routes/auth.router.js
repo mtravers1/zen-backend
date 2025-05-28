@@ -19,12 +19,16 @@ router.get("/test", (req, res) => {
   const aimodel = process.env.AI_MODEL;
   const plaidredirect = process.env.PLAID_REDIRECT_URI;
   const plaidredirectnew = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
+  const groqModel = process.env.GROQ_AI_MODEL;
+  const groqApiKey = process.env.GROQ_API_KEY;
 
   return res.status(200).json({
     aiurl,
     aimodel,
     plaidredirect,
     plaidredirectnew,
+    groqModel,
+    groqApiKey,
   });
 });
 
