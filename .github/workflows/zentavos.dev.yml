@@ -77,6 +77,7 @@ jobs:
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT }}|g" .env.sample
           sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID }}|g" .env.sample
           sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID }}|g" .env.sample
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           echo "$GCP_BUCKET_JSON" > GCPKey.json
