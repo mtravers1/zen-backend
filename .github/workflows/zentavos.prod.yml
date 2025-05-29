@@ -68,6 +68,11 @@ jobs:
           sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_PROD }}|g" .env.sample
           sed -i -e "s|GROQ_AI_MODEL\=.*|GROQ_AI_MODEL\=${{ secrets.GROQ_AI_MODEL }}|g" .env.sample
           sed -i -e "s|GROQ_API_KEY\=.*|GROQ_API_KEY\=${{ secrets.GROQ_API_KEY }}|g" .env.sample
+          sed -i -e "s|IAP_CERTIFICATE\=.*|IAP_CERTIFICATE\=${{ secrets.IAP_CERTIFICATE }}|g" .env.sample
+          sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT }}|g" .env.sample
+          sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT }}|g" .env.sample
+          sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID }}|g" .env.sample
+          sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID }}|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           echo "$GCP_BUCKET_JSON" > GCPKey.json
