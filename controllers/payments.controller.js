@@ -10,7 +10,9 @@ import dotenv from "dotenv";
 dotenv.config();
 
 //Todo move to secret manager
-const PRIVATE_KEY_PATH = process.env.IAP_CERTIFICATE.replace(/\\n/g, "\n");
+const PRIVATE_KEY_BASE64 = process.env.IAP_CERTIFICATE;
+
+const PRIVATE_KEY = Buffer.from(PRIVATE_KEY_BASE64, "base64").toString("utf8");
 const ISSUER_ID = process.env.ISSUER_ID;
 const KEY_ID = process.env.KEY_ID;
 const ALG = "ES256";
@@ -19,7 +21,7 @@ const BUNLDE_ID = "com.zentavos.zentavosdev";
 const environment = Environment.SANDBOX;
 
 const client = new AppStoreServerAPIClient(
-  PRIVATE_KEY_PATH,
+  PRIVATE_KEY,
   KEY_ID,
   ISSUER_ID,
   BUNLDE_ID,
