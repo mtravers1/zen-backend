@@ -1,3 +1,4 @@
+import { LimitedMap } from "../lib/limitedMap.js";
 import aiService from "../services/ai.service.js";
 
 const makeRequest = async (req, res) => {
@@ -43,7 +44,7 @@ const stream = async (req, res) => {
   });
 };
 
-const sseConnections = new Map();
+const sseConnections = new LimitedMap(1000); // Limit to 1000 connections
 
 function addConnection(uid, res) {
   sseConnections.set(uid, res);
