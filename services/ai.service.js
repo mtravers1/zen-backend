@@ -1085,13 +1085,17 @@ Example:
     // };
   } catch (error) {
     console.error("Error in makeRequest:", error);
-    return {
+    const resp = {
       message: prompt,
       response: "Could not process your request right now.",
       data: null,
       screen: "",
       error: error.message,
     };
+    aiController.sendToUser(uid, resp);
+    res.end();
+
+    return resp;
   }
 };
 

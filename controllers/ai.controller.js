@@ -3,7 +3,9 @@ import aiService from "../services/ai.service.js";
 
 const makeRequest = async (req, res) => {
   try {
-    const { prompt, profileId, messages, screen } = req.body;
+    const body = req.body;
+    console.log("Request body received:", body);
+    const { prompt, profileId, messages, screen } = body;
     const { uid } = req.user;
     if (!prompt || !profileId || !messages || !screen) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -12,6 +14,9 @@ const makeRequest = async (req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
+
+    addConnection(uid, res);
+
     await aiService.makeRequest(prompt, uid, profileId, messages, screen, res);
   } catch (error) {
     res.write(
