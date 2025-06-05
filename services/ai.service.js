@@ -987,7 +987,7 @@ Example:
     };
 
     console.log("Calling AI service with prompt:", prompt);
-    const response = await groqClient.chat.completions.create({
+    let response = await groqClient.chat.completions.create({
       model: GROQ_AI_MODEL,
       messages,
       stream: true, // streaming ahora
@@ -1008,7 +1008,7 @@ Example:
 
       for await (const chunk of response) {
         const delta = chunk.choices?.[0]?.delta;
-        console.log("Delta received:", delta);
+        // console.log("Delta received:", delta);
         const finishReason = chunk.choices?.[0]?.finish_reason;
 
         if (delta?.content) {
@@ -1028,29 +1028,61 @@ Example:
         }
 
         if (delta?.tool_calls) {
-          console.log("Tool calls detected:", delta.tool_calls);
-          console.log("Tool calls detected:", delta.tool_calls.function);
-
+          console.log("Tool calls detected:", JSON.stringify(delta.tool_calls, null, 2));
+          
           toolCallsRemaining = true;
 
           for (const toolCall of delta.tool_calls) {
-            const fnName = toolCall.function.name;
-            const args = JSON.parse(toolCall.function.arguments);
+            try {
+              if (!toolCall.function) {
+                console.error('Tool call missing function property:', toolCall);
+                continue;
+              }
+              
+              const fnName = toolCall.function?.name;
+              if (!fnName) {
+                console.error('Tool call missing function name:', toolCall);
+                continue;
+              }
 
-            const fn = availableFunctions[fnName];
-            if (!fn) {
-              console.error(`Function "${fnName}" not implemented.`);
-              continue;
+              let args = {};
+              try {
+                args = toolCall.function.arguments 
+                  ? JSON.parse(toolCall.function.arguments)
+                  : {};
+              } catch (e) {
+                console.error(`Failed to parse arguments for ${fnName}:`, toolCall.function.arguments);
+                console.error('Error:', e);
+                continue;
+              }
+
+              const fn = availableFunctions[fnName];
+              if (!fn) {
+                console.error(`Function "${fnName}" not implemented.`);
+                continue;
+              }
+
+              console.time(`tool_call_${fnName}`);
+              const result = await fn(args);
+              console.timeEnd(`tool_call_${fnName}`);
+              console.log(`✅ Result for ${fnName}:`, result);
+
+              finalMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                name: fnName,
+                content: JSON.stringify(result),
+              });
+            } catch (error) {
+              console.error(`Error executing tool ${fnName}:`, error);
+              // Push an error response back to the model
+              finalMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                name: fnName,
+                content: JSON.stringify({ error: error.message }),
+              });
             }
-
-            const result = await fn(args);
-            console.log(`✅ Result for ${fnName}:`, result);
-
-            finalMessages.push({
-              role: "tool",
-              name: fnName,
-              content: JSON.stringify(result),
-            });
           }
         }
 
@@ -1070,8 +1102,18 @@ Example:
       }
     }
 
-    const parsedResponse = JSON.parse(completeResponse);
-    aiController.sendToUser(uid, { data: parsedResponse.data || null });
+    try {
+      // Only try to parse if there's content to parse
+      if (completeResponse && completeResponse.trim()) {
+        const parsedResponse = JSON.parse(completeResponse);
+        aiController.sendToUser(uid, { data: parsedResponse.data || null });
+      } else {
+        console.log('No complete response to parse');
+      }
+    } catch (e) {
+      console.error('Error parsing complete response:', e);
+      console.error('Response content:', completeResponse);
+    }
 
     aiController.sendToUser(uid, "[DONE]");
     res.end();
