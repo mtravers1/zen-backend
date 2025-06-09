@@ -18,6 +18,7 @@ const makeRequest = async (req, res) => {
     addConnection(uid, res);
 
     await aiService.makeRequest(prompt, uid, profileId, messages, screen, res);
+    res.end();
   } catch (error) {
     res.write(
       `data: ${JSON.stringify({ error: "Internal server error" })}\n\n`

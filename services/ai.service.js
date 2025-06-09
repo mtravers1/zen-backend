@@ -26,13 +26,52 @@ const makeRequest = async (
     apiKey: GROQ_API_KEY,
   });
   try {
+    // Validate required parameters
+    if (!uid) throw new Error('User ID (uid) is required');
+    if (!profileId) throw new Error('Profile ID is required');
+    
     const dek = await getUserDek(uid);
     const user = await getUserInfo(uid);
+    if (!user?.email?.[0]?.email) throw new Error('User email not found');
+    
     const email = user.email[0].email;
     const profiles = await businessService.getUserProfiles(email, uid);
-    const profile = profiles.find((p) => p.id === profileId);
-    const baseScreen = screen.split("/")[0];
-    const dataScreen = screen.split("/")[1];
+    if (!profiles?.length) throw new Error('No profiles found for user');
+    
+    // Find the profile by ID
+    let profile = profiles.find(async (p) => {
+      // For personal profiles, we need to match the user's _id with the profileId
+      if (p.isPersonal) {
+        const user = await User.findOne({ authUid: uid }).lean();
+        if (!user) {
+          throw new Error('User not found');
+        }
+        return user._id.toString() === profileId;
+      }
+      // For business profiles, match the profile ID directly
+      return p.id.toString() === profileId;
+    });
+    
+    // If no profile found, try to find by user ID (for backward compatibility)
+    if (!profile) {
+      const user = await User.findOne({ authUid: uid }).lean();
+      if (user && user._id.toString() === profileId) {
+        profile = profiles.find(p => p.isPersonal);
+      }
+    }
+    
+    if (!profile) {
+      console.error('Profile not found. Available profile IDs:', profiles.map(p => ({
+        id: p.id?.toString(),
+        isPersonal: p.isPersonal,
+        name: p.name
+      })));
+      throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
+    }
+    
+    // Make profile available to all nested functions
+    const baseScreen = (screen || '').split("/")[0] || '';
+    const dataScreen = (screen || '').split("/")[1];
     const currentScreen = baseScreen.toLowerCase().trim();
     console.log("currentScreen", currentScreen);
     console.log("dataScreen", dataScreen);
@@ -796,7 +835,12 @@ Example:
         return filteredAccounts;
       },
       getAccountsByProfile: async ({ uid, filters = {} }) => {
+        // Profile is already validated in makeRequest
         const accounts = await accountsService.getAccounts(profile, uid);
+        if (!accounts) {
+          return [];
+        }
+        
         const cleaned = Object.fromEntries(
           Object.entries(accounts).map(([key, value]) => {
             if (Array.isArray(value)) {
@@ -990,11 +1034,11 @@ Example:
     let response = await groqClient.chat.completions.create({
       model: GROQ_AI_MODEL,
       messages,
-      stream: true, // streaming ahora
+      temperature: 0.0,
+      stream: true,
       tools,
     });
     console.log("AI service response received");
-    console.log("Response body:", response);
 
     let buffer = "";
     let finalMessages = [...messages];
@@ -1022,7 +1066,9 @@ Example:
             delta.content = delta.content.slice(0, -1);
           }
           if (started && !ended) {
+            // Send the chunk to the client using the controller's sendToUser
             aiController.sendToUser(uid, { text: delta.content });
+            // Also update the buffer for any tool calls
             buffer += delta.content;
           }
         }
@@ -1090,11 +1136,12 @@ Example:
         if (finishReason === "stop") break;
       }
 
-      // Si hubo tool calls, hacer otra llamada con mensajes actualizados
+      // If there were tool calls, make another call with updated messages
       if (toolCallsRemaining) {
         response = await groqClient.chat.completions.create({
           model: GROQ_AI_MODEL,
           messages: finalMessages,
+          temperature: 0.0,
           stream: true,
           tools,
           tool_choice: "auto",
@@ -1102,21 +1149,102 @@ Example:
       }
     }
 
+    // Function to validate if string is valid JSON
+    const isValidJSON = (str) => {
+      try {
+        JSON.parse(str);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+
+    // Function to get corrected JSON from LLM
+    const getCorrectedJsonResponse = async (invalidJson) => {
+      try {
+        const correctionPrompt = `The following response contains invalid JSON. Please correct any syntax errors and return ONLY the valid JSON object, with no additional text or explanation:
+
+        ${invalidJson}
+
+        Respond with ONLY the corrected JSON object.`;
+
+        const correctionResponse = await groqClient.chat.completions.create({
+          model: GROQ_AI_MODEL,
+          messages: [
+            { role: 'system', content: 'You are a JSON correction assistant. Fix any JSON syntax errors and return ONLY the valid JSON object.' },
+            { role: 'user', content: correctionPrompt }
+          ],
+          temperature: 0.0,
+          max_tokens: 2000
+        });
+
+        const correctedJson = correctionResponse.choices[0]?.message?.content?.trim();
+        if (correctedJson && isValidJSON(correctedJson)) {
+          return JSON.parse(correctedJson);
+        }
+      } catch (error) {
+        console.error('Error getting corrected JSON:', error);
+      }
+      return null;
+    };
+
     try {
-      // Only try to parse if there's content to parse
-      if (completeResponse && completeResponse.trim()) {
-        const parsedResponse = JSON.parse(completeResponse);
-        aiController.sendToUser(uid, { data: parsedResponse.data || null });
-      } else {
+      // Only process if there's content
+      if (!completeResponse || !completeResponse.trim()) {
         console.log('No complete response to parse');
+        aiController.sendToUser(uid, { data: null });
+        return;
+      }
+
+      let parsedResponse;
+      
+      // First try to parse directly
+      if (isValidJSON(completeResponse)) {
+        parsedResponse = JSON.parse(completeResponse);
+      } else {
+        console.log('Invalid JSON received, attempting to correct...');
+        // If direct parse fails, try to get a corrected version
+        parsedResponse = await getCorrectedJsonResponse(completeResponse);
+        
+        if (!parsedResponse) {
+          // If we still don't have valid JSON, try a more basic cleanup as last resort
+          try {
+            // Try to extract JSON-like content
+            const jsonMatch = completeResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch && isValidJSON(jsonMatch[0])) {
+              parsedResponse = JSON.parse(jsonMatch[0]);
+            }
+          } catch (e) {
+            console.error('Failed to extract valid JSON:', e);
+          }
+        }
+      }
+
+      // Send the response or error
+      if (parsedResponse) {
+        aiController.sendToUser(uid, { 
+          data: parsedResponse.data || parsedResponse || null,
+          wasCorrected: !isValidJSON(completeResponse) // Flag if the response was corrected
+        });
+      } else {
+        console.error('Failed to parse or correct response:', completeResponse);
+        aiController.sendToUser(uid, { 
+          error: 'Invalid response format', 
+          originalResponse: completeResponse,
+          details: 'Could not parse or correct the JSON response.'
+        });
       }
     } catch (e) {
-      console.error('Error parsing complete response:', e);
+      console.error('Error processing response:', e);
       console.error('Response content:', completeResponse);
+      aiController.sendToUser(uid, { 
+        error: 'Error processing response', 
+        details: e.message,
+        originalResponse: completeResponse 
+      });
     }
 
     aiController.sendToUser(uid, "[DONE]");
-    res.end();
 
     // return {
     //   message: prompt,
@@ -1135,7 +1263,6 @@ Example:
       error: error.message,
     };
     aiController.sendToUser(uid, resp);
-    res.end();
 
     return resp;
   }
