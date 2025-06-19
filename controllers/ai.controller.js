@@ -15,8 +15,6 @@ const makeRequest = async (req, res) => {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    addConnection(uid, res);
-
     await aiService.makeRequest(prompt, uid, profileId, messages, screen, res);
     res.end();
   } catch (error) {
