@@ -1,0 +1,18 @@
+{
+  "jest.autoEnable": true,
+  "jest.runMode": "on-demand",
+  "jest.debugCodeLens.showWhenTestStateIn": ["pass", "fail", "unknown", "skip"],
+  "jest.jestCommandLine": "npm test --",
+  "jest.nodeEnv": {
+    "NODE_OPTIONS": "--experimental-vm-modules"
+  },
+  "jest.pathToJest": "npm test --",
+  "jest.showCoverageOnLoad": true,
+  "testing.autoRun.mode": "test-only",
+  "testing.autoRun.autoInject": true,
+  "testing.autoRun.openTesting": "openOnTestStart",
+  "testing.jest.autoRun": {
+    "watch": true,
+    "onStartup": ["all-tests"]
+  }
+}
