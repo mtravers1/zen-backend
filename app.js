@@ -24,27 +24,27 @@ app.use(cookieParser());
 
 // authentication
 app.use(
-  firebaseAuth.unless({
-    path: [
-      "/api/auth/signup",
-      // "/api/auth/signin",
-      "/api/auth/check-email",
-      "/api/auth/check-email-firebase",
-      "/api/auth/recoverypassword",
-      "/api/_info/version",
-      "/api/webhook/plaid",
-      "/api/webhook/test",
-      "/api/plaid/institutions",
-      "/api/auth/sendCode",
-      "/api/auth/resetPassword",
-      "/api/plaid/accounts",
-      "/api/account/add-photo",
-      "/api/account/get-photo",
-      "/api/script/update-transactions",
-      "/api/payments/webhook/android",
-      "/api/payments/webhook/apple",
-    ],
-  })
+	firebaseAuth.unless({
+		path: [
+			"/api/auth/signup",
+			// "/api/auth/signin",
+			"/api/auth/check-email",
+			"/api/auth/check-email-firebase",
+			"/api/auth/recoverypassword",
+			"/api/_info/version",
+			"/api/webhook/plaid",
+			"/api/webhook/test",
+			"/api/plaid/institutions",
+			"/api/auth/sendCode",
+			"/api/auth/resetPassword",
+			"/api/plaid/accounts",
+			"/api/account/add-photo",
+			"/api/account/get-photo",
+			"/api/script/update-transactions",
+			"/api/payments/webhook/android",
+			"/api/payments/webhook/apple",
+		],
+	})
 );
 
 // Load routes
@@ -52,18 +52,20 @@ app.use("/api", router);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
-  next(createError(404));
+	next(createError(404));
 });
 
 // error handler
 app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get("env") === "development" ? err : {};
+  const errorResponse = {
+    message: err.message,
+  };
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render("error");
+  if (req.app.get('env') !== 'production') {
+    errorResponse.error = err;
+  }
+
+  res.status(err.status || 500).json(errorResponse);
 });
 
 export default app;
