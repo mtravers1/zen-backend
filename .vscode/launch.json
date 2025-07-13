@@ -12,10 +12,7 @@
       "runtimeExecutable": "nodemon",
       "restart": true,
       "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen",
-      "env": {
-        "NODE_ENV": "development"
-      }
+      "internalConsoleOptions": "neverOpen"
     },
     {
       "type": "node",
