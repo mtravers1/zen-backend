@@ -9,6 +9,7 @@ on:
 
 env:
   DEPLOYMENT_NAME: uat
+  BUNDLE_ID: com.zentavos.zentavosuat
   APP_PORT: 3002
 
 jobs:
@@ -67,8 +68,8 @@ jobs:
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT }}|g" .env.sample
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT }}|g" .env.sample
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env.sample
-          sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=${{ secrets.BUNDLEID_STG }}|g" .env.sample
-          sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=${{ secrets.ENVIRONMENT_STG }}|g" .env.sample
+          sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID }}|g" .env.sample
+          sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
           cd ..
