@@ -16,6 +16,7 @@ const plaidSecret = process.env.PLAID_SECRET;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
+const androidPackageName = process.env.BUNDLEID || "com.zentavos.mobile";
 
 const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
   const user = await User.findOne({
@@ -45,9 +46,8 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     secret: plaidSecret,
     client_name: "Zentavos",
     country_codes: ["US"],
-    android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+    android_package_name: isAndroid ? androidPackageName : null,
     redirect_uri: !isAndroid ? redirectUri : null,
-    //TODO: change this to fit every environment
     webhook: webhookUrl,
     language: "en",
     user: {

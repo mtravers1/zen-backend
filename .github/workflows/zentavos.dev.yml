@@ -9,6 +9,7 @@ on:
 
 env:
   DEPLOYMENT_NAME: dev
+  BUNDLE_ID: com.zentavos.zentavosdev
   APP_PORT: 3002
 
 jobs:
@@ -40,8 +41,6 @@ jobs:
       - name: Build backend
         run: npm run build
       - name: Replace environment variables
-        env:
-          GCP_BUCKET_JSON: ${{ secrets.GCP_BUCKET_KEY }}
         run: |
           cd dist
           sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
@@ -60,7 +59,6 @@ jobs:
           sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env.sample
           sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env.sample
           sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env.sample
-          sed -i -e "s|GCP_BUCKET_KEY\=.*|GCP_BUCKET_KEY\=./GCPKey.json|g" .env.sample
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT }}|g" .env.sample
           sed -i -e "s|AI_URL\=.*|AI_URL\=${{ secrets.AI_URL }}|g" .env.sample
           sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=${{ secrets.AI_MODEL }}|g" .env.sample
@@ -74,9 +72,10 @@ jobs:
           sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID }}|g" .env.sample
           sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID }}|g" .env.sample
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}|g" .env.sample
+          sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env.sample
+          sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env.sample
           sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
-          echo "$GCP_BUCKET_JSON" > GCPKey.json
           cd ..
       - name: VPN config
         env:

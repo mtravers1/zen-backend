@@ -16,7 +16,7 @@ const PRIVATE_KEY = Buffer.from(PRIVATE_KEY_BASE64, "base64").toString("utf8");
 const ISSUER_ID = process.env.ISSUER_ID;
 const KEY_ID = process.env.KEY_ID;
 const ALG = "ES256";
-const BUNLDE_ID = "com.zentavos.zentavosdev";
+const BUNLDE_ID = process.env.BUNDLEID;
 // const privateKeyPEM = fs.readFileSync(PRIVATE_KEY_PATH, "utf-8");
 const environment = Environment.SANDBOX;
 

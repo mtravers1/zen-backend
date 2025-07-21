@@ -1,10 +1,14 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
+const environment = process.env.ENVIRONMENT || "prod";
+let plaidEnv = PlaidEnvironments.production;
+if (environment === "dev") {
+  plaidEnv = PlaidEnvironments.sandbox;
+}
 const plaidConfig = new Configuration({
-  basePath: PlaidEnvironments.production,
+  basePath: plaidEnv,
   baseOptions: {
     headers: {
-      //TODO: change to production
       "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID,
       "PLAID-SECRET": process.env.PLAID_SECRET,
     },

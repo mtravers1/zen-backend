@@ -1590,9 +1590,15 @@ const getTransactionsByAccount = async (
     throw new Error("Account not found");
   }
 
+  const transactionsResponse = await Transaction.find({
+    plaidAccountId: account.plaid_account_id,
+  })
+    .sort({ transactionDate: -1 })
+    .lean();
+
   let allTransactions = [];
   const dek = await getUserDek(uid);
-  for (const transaction of account.transactions) {
+  for (const transaction of transactionsResponse) {
     const decryptedAmount = await decryptValue(transaction.amount, dek);
     const decryptedName = await decryptValue(transaction.name, dek);
     const decryptedAccountType = await decryptValue(
