@@ -14,7 +14,7 @@ module.exports = {
             log_date_format: "YYYY-MM-DD HH:mm Z",
         },
         {
-            name: "uat",
+            name: "stg",
             script: "./index.js",
             watch: true,
             node_args: "--env-file=.env",
