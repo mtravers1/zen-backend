@@ -2,20 +2,20 @@ name: zentavos-api-stg
 
 on:
   push:
-    branches: [ uat ]
+    branches: [ staging ]
   pull_request:
-    branches: [ uat ]
+    branches: [ staging ]
   workflow_dispatch:
 
 env:
-  DEPLOYMENT_NAME: uat
+  DEPLOYMENT_NAME: stg
   BUNDLE_ID: com.zentavos.zentavosuat
   APP_PORT: 3002
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/uat'
+    if: github.ref == 'refs/heads/staging'
     strategy:
       matrix:
         node-version: [20.x]
