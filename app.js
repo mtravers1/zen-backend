@@ -16,7 +16,24 @@ const app = express();
 // database initialization
 // require('./database/database');
 
-app.use(cors());
+// CORS configuration for development
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'http://10.0.2.2:3000',
+    'http://10.0.2.2:8081',
+    'http://10.0.2.2:19006',
+    'exp://localhost:19000',
+    'exp://10.0.2.2:19000',
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
 app.use(logger("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
