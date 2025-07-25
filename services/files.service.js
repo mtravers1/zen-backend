@@ -108,6 +108,44 @@ const getFiles = async (profileId, uid) => {
   }));
 };
 
+const getFilesByFolder = async (profileId, uid, folder) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) throw new Error("User not found");
+  const query = {
+    userId: user._id.toString(),
+    profileId: profileId,
+  };
+  if (folder) {
+    query["info.folder"] = folder;
+  }
+  const files = await Files.find(query);
+  return files.map((file) => ({
+    id: file._id,
+    userId: file.userId,
+    account: file.account,
+    profileId: file.profileId,
+    type: file.type,
+    info: file.info,
+    fileurl: file.fileurl,
+    updatedAt: file.updatedAt,
+  }));
+};
+
+const getFolderCounts = async (profileId, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) throw new Error("User not found");
+  const pipeline = [
+    { $match: { userId: user._id.toString(), profileId: profileId } },
+    { $group: { _id: "$info.folder", count: { $sum: 1 } } },
+  ];
+  const result = await Files.aggregate(pipeline);
+  const counts = {};
+  result.forEach((item) => {
+    counts[item._id || "General"] = item.count;
+  });
+  return counts;
+};
+
 const deleteFiles = async (data, uid) => {
   const user = await User.findOne({ authUid: uid });
   if (!user) throw new Error("User not found");
@@ -132,6 +170,8 @@ const deleteFiles = async (data, uid) => {
 const filesService = {
   addFile,
   getFiles,
+  getFilesByFolder,
+  getFolderCounts,
   deleteFiles,
   generateUploadUrl,
   generateSignedUrl,
