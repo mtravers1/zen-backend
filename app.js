@@ -16,9 +16,9 @@ const app = express();
 // database initialization
 // require('./database/database');
 
-// CORS configuration for development
+// CORS configuration
 const corsOptions = {
-  origin: [
+  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [
     'http://localhost:3000',
     'http://localhost:8081',
     'http://localhost:19006',
