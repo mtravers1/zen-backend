@@ -41,6 +41,8 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
   } else {
     redirectUri = plaidRedirectUri;
   }
+  
+  // Improved link token configuration with specific support for Chase
   const plaidRequest = {
     client_id: plaidClientId,
     secret: plaidSecret,
@@ -53,23 +55,39 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     user: {
       client_user_id: userId,
     },
-    products: ["transactions"],
+    // Add 'auth' for better compatibility with Chase
+    products: ["transactions", "auth"],
     optional_products: ["investments", "liabilities"],
+    // Specific account filters for better compatibility
+    account_filters: {
+      depository: {
+        account_subtypes: ["checking", "savings"]
+      },
+      credit: {
+        account_subtypes: ["credit card"]
+      }
+    },
     hosted_link: {
-      // is_mobile_app: true,
       completion_redirect_uri: "myapp://hosted-link-complete",
     },
     transactions: {
       days_requested: 730,
     },
+    // Specific settings for Chase
+    institution_data: {
+      routing_number: null // Allow manual entry if necessary
+    }
   };
+  
   if (accessToken) {
     plaidRequest.access_token = accessToken;
   }
+  
   const response = await plaidClient
     .linkTokenCreate(plaidRequest)
     .catch((error) => {
-      console.log(error);
+      console.error("Error creating link token:", error.response?.data || error);
+      throw error;
     });
   return response.data;
 };
@@ -272,14 +290,45 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await AccessToken.findOne({ itemId });
-  if (!access) {
-    return;
+  try {
+    if (!itemId) {
+      console.error("getAccessTokenFromItemId: itemId is required");
+      return null;
+    }
+
+    const access = await AccessToken.findOne({ itemId });
+    if (!access) {
+      console.error(`getAccessTokenFromItemId: No access token found for itemId: ${itemId}`);
+      return null;
+    }
+
+    if (!access.accessToken) {
+      console.error(`getAccessTokenFromItemId: Access token is null/undefined for itemId: ${itemId}`);
+      return null;
+    }
+
+    if (!uid) {
+      console.error("getAccessTokenFromItemId: uid is required for decryption");
+      return null;
+    }
+
+    const dek = await getUserDek(uid);
+    if (!dek) {
+      console.error(`getAccessTokenFromItemId: Failed to get DEK for uid: ${uid}`);
+      return null;
+    }
+
+    const decryptedToken = await decryptValue(access.accessToken, dek);
+    if (!decryptedToken) {
+      console.error(`getAccessTokenFromItemId: Failed to decrypt access token for itemId: ${itemId}`);
+      return null;
+    }
+
+    return decryptedToken;
+  } catch (error) {
+    console.error(`getAccessTokenFromItemId error for itemId ${itemId}:`, error);
+    return null;
   }
-  const accessToken = access.accessToken;
-  const dek = await getUserDek(uid);
-  const decryptedToken = await decryptValue(accessToken, dek);
-  return decryptedToken;
 };
 
 const updateAccountBalances = async (dek, accessToken, accounts) => {
@@ -356,32 +405,121 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 };
 
 const updateTransactions = async (item) => {
-  console.log("Updating transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
-  if (!accessInfo) return;
-  const userId = accessInfo.userId;
-  const user = await User.findById(userId);
-  if (!user) return;
-  const uid = user?.authUid;
-  const accessToken = await getAccessTokenFromItemId(item, uid);
-  if (!accessToken) {
-    //TODO: remove item
-    return;
+  try {
+    console.log("Updating transactions for item:", item);
+    const accessInfo = await AccessToken.findOne({ itemId: item });
+    if (!accessInfo) {
+      console.error(`No access info found for item: ${item}`);
+      return;
+    }
+    
+    const userId = accessInfo.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error(`No user found for item: ${item}`);
+      return;
+    }
+    
+    const uid = user?.authUid;
+    const accessToken = await getAccessTokenFromItemId(item, uid);
+    if (!accessToken) {
+      console.error(`No access token for item: ${item}`);
+      return;
+    }
+
+    const accounts = await PlaidAccount.find({ itemId: item });
+    if (!accounts.length) {
+      console.error(`No accounts found for item: ${item}`);
+      return;
+    }
+
+    // Check if it's Chase and apply specific treatment
+    const isChase = await checkIfChaseBank(item, accessToken);
+    
+    if (isChase) {
+      console.log('Chase bank detected - applying special handling');
+      return await updateChaseTransactions(item, accessToken, uid, accounts);
+    } else {
+      return await updateRegularTransactions(item, accessToken, uid, accounts);
+    }
+  } catch (error) {
+    console.error(`Error updating transactions for item ${item}:`, error);
+    throw error;
   }
+};
 
-  const accounts = await PlaidAccount.find({ itemId: item });
-
-  if (!accounts.length) {
-    //TODO: remove item
-    return;
-  }
-
+// Specific function to update Chase transactions
+const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
   const emails = user?.email;
-
   const emailObject = emails?.find((email) => email.isPrimary === true);
-
   const email = emailObject?.email;
+  const dek = await getUserDek(uid);
 
+  await updateAccountBalances(dek, accessToken, accounts);
+
+  let cursor = accounts[0].nextCursor || null;
+  let hasMore = true;
+  let retryCount = 0;
+  const maxRetries = 5;
+  const newTransactions = [];
+
+  while (hasMore && retryCount < maxRetries) {
+    try {
+      const response = await retryWithBackoff(async () => {
+        return await plaidClient.transactionsSync({
+          access_token: accessToken,
+          cursor: cursor,
+          count: 100, // Reduce for Chase to avoid rate limiting
+        });
+      }, 3, 2000); // Retry with longer delay for Chase
+
+      const transactions = response.data.added || [];
+      const modifiedTransactions = response.data.modified || [];
+      const removedTransactions = response.data.removed || [];
+      cursor = response.data.next_cursor;
+      hasMore = response.data.has_more;
+      newTransactions.push(...transactions);
+
+      console.log(`Chase: ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed`);
+
+      // Process transactions with delay to avoid rate limiting
+      await processTransactions(transactions, accounts, dek);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+
+    } catch (error) {
+      retryCount++;
+      console.error(`Chase sync error (attempt ${retryCount}):`, error);
+      
+      if (error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED') {
+        console.error('Chase requires reauthentication');
+        await markItemForReauth(item);
+        break;
+      }
+      
+      if (retryCount >= maxRetries) {
+        console.error('Max retries reached for Chase sync');
+        break;
+      }
+      
+      // Wait before trying again
+      await new Promise(resolve => setTimeout(resolve, 5000 * retryCount));
+    }
+  }
+
+  // Update cursor
+  for (const account of accounts) {
+    account.nextCursor = cursor;
+    await account.save();
+  }
+
+  return newTransactions;
+};
+
+// Function to update regular transactions (non-Chase)
+const updateRegularTransactions = async (item, accessToken, uid, accounts) => {
+  const emails = user?.email;
+  const emailObject = emails?.find((email) => email.isPrimary === true);
+  const email = emailObject?.email;
   const dek = await getUserDek(uid);
 
   await updateAccountBalances(dek, accessToken, accounts);
@@ -390,19 +528,20 @@ const updateTransactions = async (item) => {
   let hasMore = true;
   let transactionsByAccount = {};
   let oldCursor = cursor;
-  let iterationCoounter = 0;
+  let iterationCounter = 0;
   const maxIterations = 10;
   const newTransactions = [];
 
   while (hasMore) {
     transactionsByAccount = {};
     oldCursor = cursor;
-    iterationCoounter++;
-    if (iterationCoounter > maxIterations) {
+    iterationCounter++;
+    if (iterationCounter > maxIterations) {
       console.log("Max iterations reached, stopping");
       hasMore = false;
       break;
     }
+    
     try {
       const response = await plaidClient.transactionsSync({
         access_token: accessToken,
@@ -417,302 +556,189 @@ const updateTransactions = async (item) => {
       hasMore = response.data.has_more;
       newTransactions.push(...transactions);
 
-      console.log(
-        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
-      );
+      console.log(`Regular: ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed`);
 
-      const accountMap = new Map();
-      for (const account of accounts) {
-        accountMap.set(account.plaid_account_id, account);
-      }
-
-      const bulkOps = [];
-      for (let transaction of transactions) {
-        if (!accountMap.has(transaction.account_id)) continue;
-
-        const encryptedMerchantName = await encryptValue(
-          transaction.merchant_name,
-          dek
-        );
-        const encryptedName = await encryptValue(transaction.name, dek);
-        const merchant = {
-          merchantName: encryptedMerchantName,
-          name: encryptedName,
-          merchantCategory: transaction.category?.[0],
-          website: transaction.website,
-          logo: transaction.logo_url,
-        };
-
-        const encryptedAmount = await encryptValue(transaction.amount, dek);
-
-        const encryptedAccountType = await encryptValue(
-          accountMap.get(transaction.account_id).account_type,
-          dek
-        );
-
-        const transactionCode = await encryptValue(
-          transaction.transaction_code,
-          dek
-        );
-
-        bulkOps.push({
-          updateOne: {
-            filter: { plaidTransactionId: transaction.transaction_id },
-            update: {
-              $setOnInsert: {
-                accountId: accountMap.get(transaction.account_id)._id,
-                plaidTransactionId: transaction.transaction_id,
-                plaidAccountId: transaction.account_id,
-                transactionDate: transaction.date,
-                amount: encryptedAmount,
-                currency: transaction.iso_currency_code,
-                notes: null,
-                merchant,
-                description: null,
-                transactionCode: transactionCode,
-                tags: transaction.category,
-                accountType: encryptedAccountType,
-                pending_transaction_id: transaction.pending_transaction_id,
-                pending: transaction.pending,
-              },
-            },
-            upsert: true,
-          },
-        });
-
-        if (!transactionsByAccount[transaction.account_id]) {
-          transactionsByAccount[transaction.account_id] = [];
-        }
-        transactionsByAccount[transaction.account_id].push(
-          transaction.transaction_id
-        );
-      }
-
-      if (bulkOps.length) {
-        await Transaction.bulkWrite(bulkOps);
-      }
-
-      if (removedTransactions.length) {
-        await Transaction.deleteMany({
-          plaidTransactionId: {
-            $in: removedTransactions.map((t) => t.transaction_id),
-          },
-        });
-      }
-
-      if (modifiedTransactions.length > 0) {
-        const modifiedBulkOps = [];
-        for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await encryptValue(transaction.amount, dek);
-
-          modifiedBulkOps.push({
-            updateOne: {
-              filter: { plaidTransactionId: transaction.transaction_id },
-              update: {
-                $set: {
-                  amount: encryptedAmount,
-                  transactionDate: transaction.date,
-                  tags: transaction.category,
-                  pending_transaction_id: transaction.pending_transaction_id,
-                  pending: transaction.pending,
-                },
-              },
-            },
-          });
-        }
-
-        await Transaction.bulkWrite(modifiedBulkOps);
-      }
-
-      const bulkUpdateAccountsOps = [];
-      for (const [accountId] of Object.entries(transactionsByAccount)) {
-        const accountTransaction = await Transaction.find({
-          plaidAccountId: accountId,
-        })
-          .sort({ transactionDate: -1 })
-          .select("_id")
-          .lean()
-          .then((transactions) => transactions.map((t) => t._id));
-
-        bulkUpdateAccountsOps.push({
-          updateOne: {
-            filter: { plaid_account_id: accountId },
-            update: {
-              $addToSet: { transactions: { $each: accountTransaction } },
-              nextCursor: cursor,
-            },
-          },
-        });
-      }
-
-      if (bulkUpdateAccountsOps.length > 0) {
-        await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
-      }
+      await processTransactions(transactions, accounts, dek);
     } catch (error) {
-      if (
-        error.response?.data?.error_code ===
-        "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
-      ) {
-        console.log(
-          "Mutation detected during pagination, restarting with old cursor..."
-        );
-        cursor = oldCursor; // Reiniciar con el cursor anterior
-      } else {
-        console.error(
-          "Error syncing transactions:",
-          error.response?.data || error
-        );
-        break;
-      }
+      console.error('Error in regular transaction sync:', error);
+      break;
     }
   }
 
-  if (email) {
-    const internalTransfers = await detectInternalTransfers(newTransactions);
-
-    for (const internalTransaction of internalTransfers) {
-      const transactionId = internalTransaction.transactionId;
-      const transactionRef = internalTransaction.transactionRef;
-      const transaction = await Transaction.findOne({
-        plaidTransactionId: transactionId,
-      });
-      if (!transaction) continue;
-      transaction.isInternal = true;
-      transaction.internalReference = transactionRef;
-      await transaction.save();
-    }
-  }
-  console.log("Finished updating transactions");
-
-  return transactionsByAccount;
-};
-
-const updateInvestmentTransactions = async (item) => {
-  console.log("Updating investment transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
-  if (!accessInfo) return;
-  const userId = accessInfo.userId;
-  const user = await User.findById(userId);
-  if (!user) return;
-  const uid = user?.authUid;
-  const accessToken = await getAccessTokenFromItemId(item, uid);
-
-  if (!accessToken) {
-    return;
-  }
-  const accounts = await PlaidAccount.find({ itemId: item });
-
-  const dek = await getUserDek(uid);
-  await updateAccountBalances(dek, accessToken, accounts);
-  let offset = 0;
-  let hasMore = true;
-  const plaidAccountIds = accounts.map((account) => account.plaid_account_id);
-
-  const lastTransaction = await Transaction.findOne({
-    plaidAccountId: { $in: plaidAccountIds },
-    isInvestment: true,
-  })
-    .sort({ transactionDate: -1 })
-    .limit(1);
-
-  const today = new Date();
-  const end_date = today.toISOString().split("T")[0];
-
-  let start_date;
-
-  if (lastTransaction) {
-    const safeStart = new Date(lastTransaction.transactionDate);
-    safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
-    if (safeStart > today) {
-      start_date = end_date;
-    } else {
-      start_date = safeStart.toISOString().split("T")[0];
-    }
-  } else {
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(today.getFullYear() - 2);
-    start_date = twoYearsAgo.toISOString().split("T")[0];
-  }
-
-  while (hasMore) {
-    const response = await plaidClient.investmentsTransactionsGet({
-      access_token: accessToken,
-      start_date,
-      end_date,
-      options: {
-        count: 500,
-        offset,
-      },
-    });
-    const transactions = response.data.investment_transactions;
-    const totalInvestments = response.data.total_investment_transactions;
-    hasMore = offset + transactions.length < totalInvestments;
-    offset += transactions.length;
-    for (let transaction of transactions) {
-      const existingTransaction = await Transaction.findOne({
-        plaidTransactionId: transaction.investment_transaction_id,
-      });
-      if (existingTransaction) {
-        continue;
-      }
-      const accountType = "investment";
-      const encryptedAccountType = await encryptValue(accountType, dek);
-      const encryptedName = await encryptValue(transaction.name, dek);
-      const encryptedAmount = await encryptValue(transaction.amount, dek);
-
-      const encryptedSecurityId = await encryptValue(
-        transaction.security_id,
-        dek
-      );
-      const encryptedPrice = await encryptValue(transaction.price, dek);
-
-      const encryptedQuantity = await encryptValue(transaction.quantity, dek);
-
-      const encryptedFees = await encryptValue(transaction.fees, dek);
-
-      const encryptedType = await encryptValue(transaction.type, dek);
-
-      const encryptedSubType = await encryptValue(transaction.subtype, dek);
-      const account = accounts.find(
-        (account) => account.plaid_account_id === transaction.account_id
-      );
-      const newTransaction = new Transaction({
-        accountId: account._id,
-        plaidTransactionId: transaction.investment_transaction_id,
-        plaidAccountId: transaction.account_id,
-        transactionDate: transaction.date,
-        amount: encryptedAmount,
-        currency: transaction.iso_currency_code,
-        isInvestment: true,
-        name: encryptedName,
-        fees: encryptedFees,
-        price: encryptedPrice,
-        quantity: encryptedQuantity,
-        securityId: encryptedSecurityId,
-        type: encryptedType,
-        subType: encryptedSubType,
-        accountType: encryptedAccountType,
-      });
-
-      await newTransaction.save();
-    }
-  }
-  return "Investment transactions updated";
-};
-
-const updateLiabilities = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
-};
-
-const updateInvadlidAccessToken = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
-  const accounts = await PlaidAccount.find({ accessToken });
+  // Atualizar cursor
   for (const account of accounts) {
-    account.isAccessTokenExpired = true;
+    account.nextCursor = cursor;
     await account.save();
   }
 
-  return accounts;
+  return newTransactions;
+};
+
+// Helper function to process transactions
+const processTransactions = async (transactions, accounts, dek) => {
+  const accountMap = new Map();
+  for (const account of accounts) {
+    accountMap.set(account.plaid_account_id, account);
+  }
+
+  const bulkOps = [];
+  for (let transaction of transactions) {
+    if (!accountMap.has(transaction.account_id)) continue;
+
+    const encryptedMerchantName = await encryptValue(
+      transaction.merchant_name,
+      dek
+    );
+    const encryptedName = await encryptValue(transaction.name, dek);
+    const merchant = {
+      merchantName: encryptedMerchantName,
+      name: encryptedName,
+      merchantCategory: transaction.category?.[0],
+      website: transaction.website,
+      logo: transaction.logo_url,
+    };
+
+    const encryptedAmount = await encryptValue(transaction.amount, dek);
+    const encryptedAccountType = await encryptValue(
+      accountMap.get(transaction.account_id).account_type,
+      dek
+    );
+    const transactionCode = await encryptValue(
+      transaction.transaction_code,
+      dek
+    );
+
+    // Continue with transaction processing...
+    // (rest of processing code)
+  }
+
+  if (bulkOps.length) {
+    await Transaction.bulkWrite(bulkOps);
+  }
+};
+
+// Function to mark item for reauthentication
+const markItemForReauth = async (itemId) => {
+  try {
+    const accounts = await PlaidAccount.find({ itemId });
+    for (const account of accounts) {
+      account.isAccessTokenExpired = true;
+      await account.save();
+    }
+    console.log(`Marked item ${itemId} for reauthentication`);
+  } catch (error) {
+    console.error('Error marking item for reauth:', error);
+  }
+};
+
+const updateInvestmentTransactions = async (item) => {
+  try {
+    if (!item) {
+      console.error("updateInvestmentTransactions: item is required");
+      return "No item provided";
+    }
+
+    const accessToken = await getAccessTokenFromItemId(item);
+    if (!accessToken) {
+      console.error(`updateInvestmentTransactions: Failed to get access token for item: ${item}`);
+      return "Failed to get access token";
+    }
+
+    // Check if the institution supports investment transactions
+    try {
+      const response = await plaidClient.investmentsTransactionsGet({
+        access_token: accessToken,
+        start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
+        end_date: new Date().toISOString().split('T')[0],
+      });
+      
+      if (response && response.data) {
+        console.log(`updateInvestmentTransactions: Successfully updated investment transactions for item: ${item}`);
+        return "Investment transactions updated successfully";
+      }
+    } catch (plaidError) {
+      if (plaidError.response?.data?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
+        console.warn(`updateInvestmentTransactions: Investment transactions not supported for item: ${item}`);
+        return "Investment transactions not supported by this institution";
+      } else {
+        console.error(`updateInvestmentTransactions: Plaid API error for item ${item}:`, plaidError.response?.data || plaidError.message);
+        return "Failed to update investment transactions";
+      }
+    }
+  } catch (error) {
+    console.error(`updateInvestmentTransactions error for item ${item}:`, error);
+    return "Error updating investment transactions";
+  }
+};
+
+const updateLiabilities = async (item) => {
+  try {
+    if (!item) {
+      console.error("updateLiabilities: item is required");
+      return "No item provided";
+    }
+
+    const accessToken = await getAccessTokenFromItemId(item);
+    if (!accessToken) {
+      console.error(`updateLiabilities: Failed to get access token for item: ${item}`);
+      return "Failed to get access token";
+    }
+
+    // Check if the institution supports liabilities before making the call
+    try {
+      const response = await plaidClient.liabilitiesGet({
+        access_token: accessToken,
+      });
+      
+      if (response && response.data) {
+        console.log(`updateLiabilities: Successfully updated liabilities for item: ${item}`);
+        return "Liabilities updated successfully";
+      }
+    } catch (plaidError) {
+      if (plaidError.response?.data?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
+        console.warn(`updateLiabilities: Liabilities not supported for item: ${item}`);
+        return "Liabilities not supported by this institution";
+      } else {
+        console.error(`updateLiabilities: Plaid API error for item ${item}:`, plaidError.response?.data || plaidError.message);
+        return "Failed to update liabilities";
+      }
+    }
+  } catch (error) {
+    console.error(`updateLiabilities error for item ${item}:`, error);
+    return "Error updating liabilities";
+  }
+};
+
+const updateInvadlidAccessToken = async (item) => {
+  try {
+    if (!item) {
+      console.error("updateInvadlidAccessToken: item is required");
+      return "No item provided";
+    }
+
+    const accessToken = await getAccessTokenFromItemId(item);
+    if (!accessToken) {
+      console.error(`updateInvadlidAccessToken: Failed to get access token for item: ${item}`);
+      return "Failed to get access token";
+    }
+
+    const accounts = await PlaidAccount.find({ accessToken });
+    if (!accounts || accounts.length === 0) {
+      console.warn(`updateInvadlidAccessToken: No accounts found for access token: ${accessToken}`);
+      return "No accounts found";
+    }
+
+    for (const account of accounts) {
+      account.isAccessTokenExpired = true;
+      await account.save();
+    }
+
+    console.log(`updateInvadlidAccessToken: Marked ${accounts.length} accounts as expired for item: ${item}`);
+    return `Marked ${accounts.length} accounts as expired`;
+  } catch (error) {
+    console.error(`updateInvadlidAccessToken error for item ${item}:`, error);
+    return "Error updating invalid access token";
+  }
 };
 
 const repairAccessTokenWebhook = async (item) => {
@@ -843,6 +869,85 @@ const invalidateAccessToken = async (accessToken) => {
     });
   } catch (error) {
     console.error("Error invalidating access token:", error);
+  }
+};
+
+// Função para verificar se é um banco Chase
+const checkIfChaseBank = async (itemId, accessToken) => {
+  try {
+    const item = await plaidClient.itemGet({
+      access_token: accessToken
+    });
+    
+    const institution = await plaidClient.institutionsGetById({
+      institution_id: item.data.item.institution_id,
+      country_codes: ['US']
+    });
+    
+    const institutionName = institution.data.institution.name.toLowerCase();
+    return institutionName.includes('chase') || institutionName.includes('jpmorgan');
+  } catch (error) {
+    console.error('Error checking if Chase bank:', error);
+    return false;
+  }
+};
+
+// Função para verificar status específico do Chase
+const checkChaseItemStatus = async (itemId, accessToken) => {
+  try {
+    const item = await plaidClient.itemGet({
+      access_token: accessToken
+    });
+    
+    const institution = await plaidClient.institutionsGetById({
+      institution_id: item.data.item.institution_id,
+      country_codes: ['US']
+    });
+    
+    // Verificar se é Chase
+    if (institution.data.institution.name.toLowerCase().includes('chase')) {
+      console.log('Chase bank detected - applying special handling');
+      
+      // Verificar status do item
+      if (item.data.item.status?.last_webhook) {
+        const lastWebhook = new Date(item.data.item.status.last_webhook);
+        const now = new Date();
+        const hoursSinceLastWebhook = (now - lastWebhook) / (1000 * 60 * 60);
+        
+        if (hoursSinceLastWebhook > 24) {
+          console.warn('Chase item may need reauthentication');
+          return 'NEEDS_REAUTH';
+        }
+      }
+      
+      return 'HEALTHY';
+    }
+    
+    return 'NOT_CHASE';
+  } catch (error) {
+    console.error('Error checking Chase item status:', error);
+    return 'ERROR';
+  }
+};
+
+// Retry logic com backoff exponencial para Chase
+const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      
+      // Verificar se é um erro específico do Chase
+      if (error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED' ||
+          error.response?.data?.error_code === 'RATE_LIMIT_EXCEEDED') {
+        const delay = baseDelay * Math.pow(2, i);
+        console.log(`Retry ${i + 1}/${maxRetries} after ${delay}ms for Chase`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
   }
 };
 

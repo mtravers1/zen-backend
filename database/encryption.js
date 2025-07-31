@@ -139,13 +139,37 @@ async function decryptValue(cipherTextBase64, dek) {
     return cipherTextBase64;
 
   try {
+    // Validate DEK
+    if (!dek || !Buffer.isBuffer(dek) || dek.length !== 32) {
+      console.error("decryptValue: Invalid DEK provided");
+      return cipherTextBase64;
+    }
+
+    // Validate cipherTextBase64 is a string
+    if (typeof cipherTextBase64 !== 'string') {
+      console.error("decryptValue: cipherTextBase64 must be a string");
+      return cipherTextBase64;
+    }
+
     // Decode the base64-encoded ciphertext
     const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+
+    // Validate buffer length (IV + Auth Tag + minimum encrypted content)
+    if (cipherBuffer.length < 33) {
+      console.error("decryptValue: Invalid ciphertext length");
+      return cipherTextBase64;
+    }
 
     // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
     const iv = cipherBuffer.slice(0, 16);
     const tag = cipherBuffer.slice(16, 32);
     const encrypted = cipherBuffer.slice(32);
+
+    // Validate IV and tag
+    if (iv.length !== 16 || tag.length !== 16) {
+      console.error("decryptValue: Invalid IV or auth tag length");
+      return cipherTextBase64;
+    }
 
     // Create a decipher using AES-256-GCM with the same DEK and IV
     const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
@@ -162,6 +186,8 @@ async function decryptValue(cipherTextBase64, dek) {
     // Parse the decrypted JSON string and return the original value
     return JSON.parse(decrypted);
   } catch (e) {
+    console.error("decryptValue error:", e.message);
+    // Return original value instead of throwing error to prevent cascading failures
     return cipherTextBase64;
   }
 }

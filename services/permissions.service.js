@@ -14,7 +14,11 @@ const checkUserRole = async (user) => {
   return user.rolePermission;
 };
 
-// Funciones para validar permisos (TODO: llenar con validaciones)
+// Functions to validate permissions (TODO: fill with validations)
+// TODO: Check the validation of the 'create_trips_max' permission
+// TODO: Check the validation of the 'businesses_max' permission
+// TODO: Check the validation of the 'storage_max_gb' permission
+// You can keep adding more functions according to the JSON
 const validateCreateTrips = (createTripsMax) => {
   // TODO: Verificar la validación del permiso 'create_trips_max'
   return createTripsMax > 0;
