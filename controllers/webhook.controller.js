@@ -7,19 +7,59 @@ const plaidWebhook = async (req, res) => {
     const event = req.body;
     const authorization = req.headers["plaid-verification"];
 
-    webhookService.verifyPlaidToken(authorization, event);
-    webhookService.webhookHandler(event);
-    return res.status(200).send("Webhook received");
+    // Validate webhook payload
+    if (!event || !event.webhook_type) {
+      console.error("Invalid webhook payload received");
+      return res.status(400).json({ error: "Invalid webhook payload" });
+    }
+
+    // Verify Plaid webhook signature
+    try {
+      webhookService.verifyPlaidToken(authorization, event);
+    } catch (verificationError) {
+      console.error("Webhook verification failed:", verificationError.message);
+      return res.status(401).json({ error: "Webhook verification failed" });
+    }
+
+    // Process webhook asynchronously to avoid timeout
+    webhookService.webhookHandler(event).catch(error => {
+      console.error("Webhook processing error:", error);
+    });
+
+    // Return success immediately
+    return res.status(200).json({ 
+      status: "success", 
+      message: "Webhook received and processing started" 
+    });
   } catch (error) {
-    return res.status(500).send("Webhook error");
+    console.error("Webhook controller error:", error);
+    return res.status(500).json({ 
+      error: "Internal server error",
+      message: "Webhook processing failed" 
+    });
   }
 };
 
 const testWebhook = async (req, res) => {
-  // const { email } = req.user;
-  const { itemId, uid } = req.body;
-  await webhookService.testWebhook(itemId, uid);
-  return res.status(200).send("test webhook");
+  try {
+    const { itemId, uid } = req.body;
+    
+    if (!itemId || !uid) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    await webhookService.testWebhook(itemId, uid);
+    return res.status(200).json({ 
+      status: "success", 
+      message: "Test webhook executed successfully" 
+    });
+  } catch (error) {
+    console.error("Test webhook error:", error);
+    return res.status(500).json({ 
+      error: "Test webhook failed",
+      message: error.message 
+    });
+  }
 };
 
 const webhookController = {

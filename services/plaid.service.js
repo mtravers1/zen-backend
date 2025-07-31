@@ -471,7 +471,7 @@ const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
           cursor: cursor,
           count: 100, // Reduce for Chase to avoid rate limiting
         });
-      }, 3, 2000); // Retry with longer delay for Chase
+      }, 'chase'); // Use 'chase' specific config
 
       const transactions = response.data.added || [];
       const modifiedTransactions = response.data.modified || [];
@@ -930,25 +930,80 @@ const checkChaseItemStatus = async (itemId, accessToken) => {
   }
 };
 
-// Retry logic com backoff exponencial para Chase
-const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
-  for (let i = 0; i < maxRetries; i++) {
+// Global rate limiting configuration
+const RATE_LIMIT_CONFIG = {
+  default: { maxRetries: 3, baseDelay: 1000, maxDelay: 10000 },
+  chase: { maxRetries: 5, baseDelay: 2000, maxDelay: 30000 },
+  high_volume: { maxRetries: 4, baseDelay: 1500, maxDelay: 15000 }
+};
+
+// Enhanced retry logic with exponential backoff for all institutions
+const retryWithBackoff = async (fn, institutionType = 'default', customConfig = {}) => {
+  const config = { ...RATE_LIMIT_CONFIG[institutionType] || RATE_LIMIT_CONFIG.default, ...customConfig };
+  
+  for (let i = 0; i < config.maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
-      if (i === maxRetries - 1) throw error;
+      if (i === config.maxRetries - 1) throw error;
       
-      // Verificar se é um erro específico do Chase
-      if (error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED' ||
-          error.response?.data?.error_code === 'RATE_LIMIT_EXCEEDED') {
-        const delay = baseDelay * Math.pow(2, i);
-        console.log(`Retry ${i + 1}/${maxRetries} after ${delay}ms for Chase`);
+      // Check for specific error types that warrant retry
+      const shouldRetry = error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED' ||
+                         error.response?.data?.error_code === 'RATE_LIMIT_EXCEEDED' ||
+                         error.response?.data?.error_code === 'INSTITUTION_DOWN' ||
+                         error.response?.status >= 500;
+      
+      if (shouldRetry) {
+        const delay = Math.min(config.baseDelay * Math.pow(2, i), config.maxDelay);
+        console.log(`Retry ${i + 1}/${config.maxRetries} after ${delay}ms for ${institutionType}`);
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
         throw error;
       }
     }
   }
+};
+
+// Monitoring and metrics
+const plaidMetrics = {
+  requests: 0,
+  errors: 0,
+  rateLimitHits: 0,
+  institutionErrors: {},
+  responseTimes: []
+};
+
+const trackPlaidRequest = (startTime, success, errorCode = null, institution = null) => {
+  const responseTime = Date.now() - startTime;
+  plaidMetrics.requests++;
+  plaidMetrics.responseTimes.push(responseTime);
+  
+  if (!success) {
+    plaidMetrics.errors++;
+    if (errorCode === 'RATE_LIMIT_EXCEEDED') {
+      plaidMetrics.rateLimitHits++;
+    }
+    if (institution) {
+      plaidMetrics.institutionErrors[institution] = (plaidMetrics.institutionErrors[institution] || 0) + 1;
+    }
+  }
+  
+  // Keep only last 1000 response times for memory management
+  if (plaidMetrics.responseTimes.length > 1000) {
+    plaidMetrics.responseTimes = plaidMetrics.responseTimes.slice(-1000);
+  }
+};
+
+const getPlaidMetrics = () => {
+  const avgResponseTime = plaidMetrics.responseTimes.length > 0 
+    ? plaidMetrics.responseTimes.reduce((a, b) => a + b, 0) / plaidMetrics.responseTimes.length 
+    : 0;
+  
+  return {
+    ...plaidMetrics,
+    avgResponseTime: Math.round(avgResponseTime),
+    errorRate: plaidMetrics.requests > 0 ? (plaidMetrics.errors / plaidMetrics.requests * 100).toFixed(2) : 0
+  };
 };
 
 const plaidService = {
