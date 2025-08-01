@@ -1,24 +1,24 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
-const environment = process.env.ENVIRONMENT || "prod";
-let plaidEnv = PlaidEnvironments.production;
-
+const environment = process.env.ENVIRONMENT; 
+let plaidEnv;
+console.log("environment", environment);
 // Improved environment configuration
 switch (environment.toLowerCase()) {
   case "dev":
   case "development":
-    plaidEnv = PlaidEnvironments.development;
-    break;
   case "sandbox":
     plaidEnv = PlaidEnvironments.sandbox;
+    break;
+  case "staging":
+    plaidEnv = PlaidEnvironments.development;
     break;
   case "prod":
   case "production":
     plaidEnv = PlaidEnvironments.production;
     break;
   default:
-    console.warn(`Unknown environment: ${environment}, defaulting to production`);
-    plaidEnv = PlaidEnvironments.production;
+    throw Error(`Unknown environment: ${environment}`);
 }
 
 const plaidConfig = new Configuration({

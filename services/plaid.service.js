@@ -73,10 +73,10 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     transactions: {
       days_requested: 730,
     },
-    // Specific settings for Chase
-    institution_data: {
-      routing_number: null // Allow manual entry if necessary
-    }
+    // Remove institution_data if not needed for specific institution
+    // institution_data: {
+    //   routing_number: null // Allow manual entry if necessary
+    // }
   };
   
   if (accessToken) {
