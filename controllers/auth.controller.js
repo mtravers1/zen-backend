@@ -1,4 +1,5 @@
 import authService from "../services/auth.service.js";
+import permissionsService from "../services/permissions.service.js";
 import { emailValidation } from "../lib/mailer/mailer.js";
 
 const own = async (req, res) => {
@@ -12,8 +13,19 @@ const own = async (req, res) => {
 };
 
 const signUp = async (req, res) => {
-  const { data } = req.body;
+  const { data, isBusinessOwner } = req.body;
   try {
+    if (isBusinessOwner) {
+      const uid = req.user?.uid;
+      if (uid) {
+        const canCreateBusiness = await permissionsService.canPerformAction(uid, 'business_owner_signup');
+        
+        if (!canCreateBusiness.success) {
+          return res.status(403).send(canCreateBusiness);
+        }
+      }
+    }
+    
     await authService.signUp(data);
     res.status(201).send({
       email: data.email,

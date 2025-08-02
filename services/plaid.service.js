@@ -102,6 +102,13 @@ const saveAccessToken = async (
     throw new Error("User not found");
   }
   const userId = user._id.toString();
+  
+  // Check if this itemId already exists for this user
+  const existingToken = await AccessToken.findOne({ itemId, userId });
+  if (existingToken) {
+    throw new Error("This account connection already exists");
+  }
+  
   const dek = await getUserDek(uid);
 
   const encryptedToken = await encryptValue(accessToken, dek);

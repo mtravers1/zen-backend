@@ -19,6 +19,16 @@ const permissions = {
     storage_limit: 2,
     buy_more_space: true,
   },
+  Founder: {
+    create_trips_max: -1,
+    businesses_max: 1,
+    storage_max_gb: 10,
+    docs_max: 1000,
+    receipts_max: 1000,
+    accounts_max: 4,
+    storage_limit: 10,
+    buy_more_space: true,
+  },
   Entrepreneur: {
     create_trips_max: -1,
     businesses_max: 2,
