@@ -28,8 +28,8 @@ const safeDecryptValue = async (value, dek) => {
   try {
     return await decryptValue(value, dek);
   } catch (error) {
-    console.warn("Failed to decrypt value, returning original:", error.message);
-    return value;
+    console.warn("Failed to decrypt value, returning null instead of encrypted value:", error.message);
+    return null; // Return null instead of the encrypted value to avoid data corruption
   }
 };
 
@@ -794,7 +794,8 @@ const getAccounts = async (profile, uid) => {
 };
 
 const getAllUserAccounts = async (email, uid) => {
-  console.time("getAllUserAccounts");
+  const startTime = Date.now();
+  structuredLogger.logOperationStart('getAllUserAccounts', { uid });
   
   const user = await User.findOne({
     authUid: uid,
@@ -802,12 +803,18 @@ const getAllUserAccounts = async (email, uid) => {
     .populate("plaidAccounts", "-transactions")
     .exec();
   if (!user) {
-    console.timeEnd("getAllUserAccounts");
+    const duration = Date.now() - startTime;
+    structuredLogger.logErrorBlock(new Error("User not found"), {
+      operation: 'getAllUserAccounts',
+      uid,
+      duration
+    });
     throw new Error("User not found");
   }
 
   if (!user.plaidAccounts.length) {
-    console.timeEnd("getAllUserAccounts");
+    const duration = Date.now() - startTime;
+    structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, result: 'no_accounts' });
     return [];
   }
 
@@ -863,7 +870,8 @@ const getAllUserAccounts = async (email, uid) => {
     });
   }
 
-  console.timeEnd("getAllUserAccounts");
+  const duration = Date.now() - startTime;
+  structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, account_count: accounts.length });
   return accounts;
 };
 const calculateCashFlowsWeekly = async (

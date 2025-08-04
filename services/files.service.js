@@ -126,14 +126,24 @@ const getFolders = async (profileId, uid) => {
     folderCounts[folder] = (folderCounts[folder] || 0) + 1;
   });
 
-  // Convert to array format expected by mobile app
-  const folders = Object.keys(folderCounts).map((folderName) => ({
-    id: folderName,
-    name: folderName,
-    fileCount: folderCounts[folderName],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }));
+  // Convert to array format with actual timestamps
+  const folders = Object.keys(folderCounts).map((folderName) => {
+    const folderFiles = files.filter(file => (file.folder || "General") === folderName);
+    const oldestFile = folderFiles.reduce((oldest, file) => 
+      file.updatedAt < oldest.updatedAt ? file : oldest
+    );
+    const newestFile = folderFiles.reduce((newest, file) => 
+      file.updatedAt > newest.updatedAt ? file : newest
+    );
+    
+    return {
+      id: folderName,
+      name: folderName,
+      fileCount: folderCounts[folderName],
+      createdAt: oldestFile.updatedAt.toISOString(),
+      updatedAt: newestFile.updatedAt.toISOString(),
+    };
+  });
 
   return folders;
 };

@@ -22,6 +22,9 @@ const webhookHandler = async (event, signature = null, body = null) => {
 
     // Validate webhook signature if provided
     if (signature && body) {
+      if (typeof body !== 'string') {
+        throw new Error('Body must be a string when signature is provided');
+      }
       const webhookSecret = process.env.PLAID_WEBHOOK_SECRET;
       if (webhookSecret) {
         const isValid = await structuredLogger.withContext('webhookSignatureValidation', {
@@ -65,12 +68,14 @@ const webhookHandler = async (event, signature = null, body = null) => {
       }
     }
 
+    const CHASE_DELAY_MS = parseInt(process.env.CHASE_WEBHOOK_DELAY_MS || '2000', 10);
+
     if (isChase) {
       structuredLogger.logSuccess('chaseDelay', {
         item_id: event.item_id,
-        delay_ms: 2000
+        delay_ms: CHASE_DELAY_MS
       });
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, CHASE_DELAY_MS));
     }
 
     let result;
@@ -184,6 +189,10 @@ const testWebhook = async (itemId, uid) => {
 
 const testResetLogin = async (accessToken) => {
   try {
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('Valid access token is required');
+    }
+    
     structuredLogger.logOperationStart('testResetLogin', {
       note: 'Testing reset login'
     });
@@ -207,13 +216,17 @@ const testResetLogin = async (accessToken) => {
 
 const verifyPlaidToken = (token, body) => {
   try {
-    const expectedToken = sha256(process.env.PLAID_WEBHOOK_SECRET + body).toString();
-    const isValid = token === expectedToken;
-    
     structuredLogger.logOperationStart('verifyPlaidToken', {
       token_provided: !!token,
       body_provided: !!body
     });
+    
+    if (!token || !body || !process.env.PLAID_WEBHOOK_SECRET) {
+      return false;
+    }
+    
+    const expectedToken = sha256(process.env.PLAID_WEBHOOK_SECRET + body).toString();
+    const isValid = token === expectedToken;
     
     return isValid;
   } catch (error) {
@@ -235,6 +248,13 @@ const getWebhookHealth = () => {
   };
 
   if (plaidService.webhookFailureTracker) {
+    // Ensure it's a Map before iterating
+    if (!(plaidService.webhookFailureTracker instanceof Map)) {
+      structuredLogger.logErrorBlock(new Error('webhookFailureTracker is not a Map'), {
+        operation: 'getWebhookHealth'
+      });
+      return health;
+    }
     for (const [itemId, failures] of plaidService.webhookFailureTracker.entries()) {
       health.failureTracker.itemsWithFailures.push({
         itemId,

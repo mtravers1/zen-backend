@@ -79,8 +79,9 @@ const checkInstitutionProductSupport = async (institutionId, product) => {
       product,
       error: error.message
     });
-    // Default to true to avoid blocking operations
-    return true;
+    // Return null to indicate unknown support status
+    // Let the caller decide whether to proceed
+    return null;
   }
 };
 
@@ -766,9 +767,6 @@ const updateTransactions = async (item) => {
 
 // Specific function to update Chase transactions
 const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
-  const emails = user?.email;
-  const emailObject = emails?.find((email) => email.isPrimary === true);
-  const email = emailObject?.email;
   const dek = await getUserDek(uid);
 
   await updateAccountBalances(dek, accessToken, accounts);
@@ -1723,6 +1721,9 @@ const runHealthCheck = async () => {
 
     for (const item of allItems) {
       try {
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const itemId = item.itemId;
         const uid = item.userId;
 
@@ -2103,7 +2104,10 @@ const errorMonitoring = {
     const now = new Date();
     const report = {
       timestamp: now,
-      encryptionErrors: Array.from(errorMonitoring.encryptionErrors.values()),
+      encryptionErrors: Array.from(errorMonitoring.encryptionErrors.entries()).map(([key, value]) => ({
+        ...value,
+        key
+      })),
       webhookFailures: Array.from(errorMonitoring.webhookFailures.values()),
       summary: {
         totalEncryptionErrors: errorMonitoring.encryptionErrors.size,

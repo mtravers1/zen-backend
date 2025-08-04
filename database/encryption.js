@@ -317,8 +317,8 @@ async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
     throw new Error(`cipherTextBase64 must be a string for ${attemptType} attempt, got ${typeof cipherTextBase64}`);
   }
 
-  // Check if the string looks like base64
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cipherTextBase64)) {
+  // Check if the string looks like base64 (including URL-safe base64)
+  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(cipherTextBase64)) {
     throw new Error(`Invalid base64 format for ${attemptType} attempt`);
   }
 
@@ -418,8 +418,13 @@ async function rotateUserKey(uid) {
         .bucket(BUCKET_NAME)
         .file(`keys/${environmnet}/${uid}.key.previous`);
       
+      // Encrypt the current DEK with KMS before persisting
+      const [encryptResponse] = await kmsClient.encrypt({
+        name: KEY_PATH,
+        plaintext: currentDek,
+      });
       const previousKeyData = {
-        encryptedDEK: currentDek.toString('base64'),
+        encryptedDEK: encryptResponse.ciphertext.toString('base64'),
         version: currentVersion,
         rotatedAt: new Date().toISOString()
       };

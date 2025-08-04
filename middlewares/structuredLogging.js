@@ -1,5 +1,22 @@
 import structuredLogger from '../lib/structuredLogger.js';
 
+const SENSITIVE_RESPONSE_HEADERS = ['authorization', 'cookie', 'x-api-key'];
+const MAX_RESPONSE_BODY_LENGTH = 1000; // make configurable if needed
+
+function sanitizeHeaders(headers) {
+  return Object.entries(headers).reduce((out, [key, value]) => {
+    out[key] = SENSITIVE_RESPONSE_HEADERS.includes(key.toLowerCase())
+      ? '[REDACTED]'
+      : value;
+    return out;
+  }, {});
+}
+
+function truncateBody(body, maxLength) {
+  if (body.length <= maxLength) return body;
+  return body.slice(0, maxLength) + '... [truncated]';
+}
+
 /**
  * Middleware to automatically capture request context and log responses
  * Follows Cursor Rules for comprehensive request/response logging
@@ -18,8 +35,11 @@ const structuredLoggingMiddleware = (req, res, next) => {
     const durationMs = Date.now() - startTime;
     const response = {
       statusCode: res.statusCode,
-      headers: res.getHeaders(),
-      body: typeof data === 'string' ? data : JSON.stringify(data)
+      headers: sanitizeHeaders(res.getHeaders()),
+      body: truncateBody(
+        typeof data === 'string' ? data : JSON.stringify(data),
+        MAX_RESPONSE_BODY_LENGTH
+      )
     };
 
     // Log successful response
@@ -48,8 +68,8 @@ const structuredLoggingMiddleware = (req, res, next) => {
     const durationMs = Date.now() - startTime;
     const response = {
       statusCode: res.statusCode,
-      headers: res.getHeaders(),
-      body: JSON.stringify(data)
+      headers: sanitizeHeaders(res.getHeaders()),
+      body: truncateBody(JSON.stringify(data), MAX_RESPONSE_BODY_LENGTH)
     };
 
     // Log successful response
@@ -105,7 +125,17 @@ const structuredLoggingMiddleware = (req, res, next) => {
  * Error handling middleware for uncaught exceptions
  */
 const errorHandlingMiddleware = (error, req, res, next) => {
-  const requestId = structuredLogger.requestContext.get(req.id)?.requestId;
+  // Try to get existing requestId or create a new one
+  let requestId = req.requestId;
+  if (!requestId) {
+    // Search through existing contexts
+    for (const [id, context] of structuredLogger.requestContext) {
+      if (context.request === req) {
+        requestId = id;
+        break;
+      }
+    }
+  }
   
   structuredLogger.logErrorBlock(error, {
     operation: req.route?.path || req.path,
@@ -125,12 +155,14 @@ const errorHandlingMiddleware = (error, req, res, next) => {
 /**
  * Cleanup middleware to remove old request contexts
  */
+const CLEANUP_PROBABILITY = process.env.LOG_CLEANUP_PROBABILITY || 0.01;
+
 const cleanupMiddleware = (req, res, next) => {
   // Clean up old error blocks periodically
-  if (Math.random() < 0.01) { // 1% chance to run cleanup
+  if (Math.random() < CLEANUP_PROBABILITY) {
     structuredLogger.cleanupOldErrors();
   }
-  
+
   next();
 };
 

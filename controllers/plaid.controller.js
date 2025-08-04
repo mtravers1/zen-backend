@@ -122,8 +122,7 @@ const getAccounts = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(req, 'getAccounts');
   
   try {
-    // const { email } = req.user;
-    const email = "galvanerick27@gmail.com";
+    const email = req.user.email;
 
     const accounts = await structuredLogger.withContext('getAccounts', {
       email,

@@ -120,7 +120,10 @@ setup_test_env() {
     
     # Load test environment variables
     if [ -f "test.env" ]; then
-        export $(cat test.env | xargs)
+        while IFS='=' read -r key value; do
+            [[ $key =~ ^[[:space:]]*# ]] || [[ -z $key ]] && continue
+            export "$key=$value"
+        done < test.env
         print_success "Test environment variables loaded"
     else
         print_warning "test.env file not found, using default values"
@@ -155,31 +158,31 @@ run_test_type() {
     case $test_type in
         "all")
             print_status "Running all tests..."
-            npm test $jest_args
+            npm test "$jest_args"
             ;;
         "unit")
             print_status "Running unit tests..."
-            npm run test:unit $jest_args
+            npm run test:unit "$jest_args"
             ;;
         "integration")
             print_status "Running integration tests..."
-            npm run test:integration $jest_args
+            npm run test:integration "$jest_args"
             ;;
         "plaid")
             print_status "Running Plaid service tests..."
-            npm run test:plaid $jest_args
+            npm run test:plaid "$jest_args"
             ;;
         "auth")
             print_status "Running Auth service tests..."
-            node --experimental-vm-modules node_modules/.bin/jest tests/unit/auth.service.test.js $jest_args
+            node --experimental-vm-modules node_modules/.bin/jest tests/unit/auth.service.test.js "$jest_args"
             ;;
         "accounts")
             print_status "Running Accounts service tests..."
-            node --experimental-vm-modules node_modules/.bin/jest tests/unit/accounts.service.test.js $jest_args
+            node --experimental-vm-modules node_modules/.bin/jest tests/unit/accounts.service.test.js "$jest_args"
             ;;
         "ai")
             print_status "Running AI service tests..."
-            node --experimental-vm-modules node_modules/.bin/jest tests/unit/ai.service.test.js $jest_args
+            node --experimental-vm-modules node_modules/.bin/jest tests/unit/ai.service.test.js "$jest_args"
             ;;
         *)
             print_error "Unknown test type: $test_type"
