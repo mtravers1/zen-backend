@@ -49,17 +49,37 @@ const plaidWebhook = async (req, res) => {
     }
 
     // Process webhook asynchronously to avoid timeout
-    webhookService.webhookHandler(event, authorization, JSON.stringify(req.body)).catch(error => {
-      structuredLogger.logErrorBlock(error, {
-        operation: 'plaidWebhook',
-        request_id: requestId,
-        item_id: event.item_id,
-        webhook_type: event.webhook_type,
-        webhook_code: event.webhook_code,
-        request: structuredLogger.requestContext.get(requestId)?.request,
-        error_classification: 'webhook_processing_error'
+    const webhookPromise = webhookService.webhookHandler(event, authorization, JSON.stringify(req.body));
+    
+    // Track webhook processing
+    webhookPromise
+      .then(() => {
+        structuredLogger.logSuccess('plaidWebhook.async', {
+          request_id: requestId,
+          item_id: event.item_id,
+          webhook_type: event.webhook_type,
+          webhook_code: event.webhook_code
+        });
+      })
+      .catch(error => {
+        structuredLogger.logErrorBlock(error, {
+          operation: 'plaidWebhook',
+          request_id: requestId,
+          item_id: event.item_id,
+          webhook_type: event.webhook_type,
+          webhook_code: event.webhook_code,
+          request: structuredLogger.requestContext.get(requestId)?.request,
+          error_classification: 'webhook_processing_error'
+        });
+        
+        // Consider sending to a dead letter queue or retry mechanism
+        console.error('Webhook processing failed:', {
+          item_id: event.item_id,
+          webhook_type: event.webhook_type,
+          webhook_code: event.webhook_code,
+          error: error.message
+        });
       });
-    });
 
     // Return success immediately
     return res.status(200).json({ 

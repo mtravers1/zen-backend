@@ -2,10 +2,11 @@ import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
 
 const addAccount = async (req, res) => {
+  let email, uid, token;
   try {
-    const { token } = req.body;
-    const email = req.user.email;
-    const uid = req.user.uid;
+    token = req.body.token;
+    email = req.user.email;
+    uid = req.user.uid;
     const response = await accountsService.addAccount(token, email, uid);
     res.status(201).send(response);
   } catch (error) {
