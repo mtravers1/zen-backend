@@ -6,26 +6,34 @@ dotenv.config();
 
 const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
 
-mongoose.connect(mongoDB, {
-  user: process.env.MONGODB_USER,
-  pass: process.env.MONGODB_PASS,
-  dbName: process.env.MONGODB_DB,
-});
+let mongoDBConnection = null;
 
-const mongoDBConnection = mongoose.connection;
+// Only connect automatically if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  mongoose.connect(mongoDB, {
+    user: process.env.MONGODB_USER,
+    pass: process.env.MONGODB_PASS,
+    dbName: process.env.MONGODB_DB,
+  });
 
-mongoDBConnection.on(
-  "error",
-  console.error.bind(console, "MongoDB connection error:")
-);
-mongoDBConnection.once("open", async function () {
-  console.log("Connected to MongoDB!");
+  mongoDBConnection = mongoose.connection;
 
-  // await initialize();
-});
+  mongoDBConnection.on(
+    "error",
+    console.error.bind(console, "MongoDB connection error:")
+  );
+  mongoDBConnection.once("open", async function () {
+    console.log("Connected to MongoDB!");
 
-mongoDBConnection.on("disconnected", function () {
-  console.log("MongoDB disconnected!");
-});
+    // await initialize();
+  });
 
-export { mongoDBConnection };
+  mongoDBConnection.on("disconnected", function () {
+    console.log("MongoDB disconnected!");
+  });
+} else {
+  // For test environment, just set the connection
+  mongoDBConnection = mongoose;
+}
+
+export { mongoDBConnection, mongoose };

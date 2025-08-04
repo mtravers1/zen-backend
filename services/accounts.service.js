@@ -16,13 +16,11 @@ import {
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
-// Helper function to safely decrypt values that might be null, undefined, or non-string
 const safeDecryptValue = async (value, dek) => {
   if (value === null || value === undefined || value === "") {
     return value;
   }
   
-  // If the value is not a string, return it as is (it's not encrypted)
   if (typeof value !== 'string') {
     return value;
   }
@@ -356,7 +354,7 @@ const addAccount = async (accessToken, email, uid) => {
     Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
       if (Array.isArray(value)) {
         value.forEach(async (item) => {
-          //if accountid is not in savedaccounts, then skip
+
           if (
             !savedAccounts.find(
               (account) => account.plaid_account_id === item.account_id
@@ -643,9 +641,13 @@ const removeAccount = async (accountId, email) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const plaidAccounts = user.plaidAccounts;
 
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  const plaidAccounts = user.plaidAccounts || [];
   user.plaidAccounts = plaidAccounts.filter(
     (id) => id.toString() !== account._id.toString()
   );
@@ -740,16 +742,20 @@ const getAccounts = async (profile, uid) => {
 };
 
 const getAllUserAccounts = async (email, uid) => {
+  console.time("getAllUserAccounts");
+  
   const user = await User.findOne({
     authUid: uid,
   })
     .populate("plaidAccounts", "-transactions")
     .exec();
   if (!user) {
+    console.timeEnd("getAllUserAccounts");
     throw new Error("User not found");
   }
 
   if (!user.plaidAccounts.length) {
+    console.timeEnd("getAllUserAccounts");
     return [];
   }
 

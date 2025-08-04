@@ -36,70 +36,140 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
   process.env.GCP_KEY_NAME
 );
 
-// DEK cache in memory
+// DEK cache in memory with version tracking
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
+const dekVersionCache = new LimitedMap(1000); // Track key versions
+
+// Structured logging for encryption operations
+const logEncryptionOperation = (operation, success, details = {}) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    operation,
+    success,
+    ...details
+  };
+  
+  if (success) {
+    console.log(`[ENCRYPTION] ${operation}:`, logEntry);
+  } else {
+    console.error(`[ENCRYPTION] ${operation} FAILED:`, logEntry);
+  }
+};
 
 async function generateAndStoreEncryptedDEK(uid) {
-  const dek = crypto.randomBytes(32);
+  try {
+    const dek = crypto.randomBytes(32);
+    const keyVersion = Date.now(); // Use timestamp as version
 
-  const [encryptResponse] = await kmsClient.encrypt({
-    name: KEY_PATH,
-    plaintext: dek,
-  });
+    const [encryptResponse] = await kmsClient.encrypt({
+      name: KEY_PATH,
+      plaintext: dek,
+    });
 
-  const encryptedDEK = encryptResponse.ciphertext;
-  const file = storage
-    .bucket(BUCKET_NAME)
-    .file(`keys/${environmnet}/${uid}.key`);
-  await file.save(encryptedDEK);
+    const encryptedDEK = encryptResponse.ciphertext;
+    const file = storage
+      .bucket(BUCKET_NAME)
+      .file(`keys/${environmnet}/${uid}.key`);
+    
+    // Store both encrypted DEK and version
+    const keyData = {
+      encryptedDEK: encryptedDEK.toString('base64'),
+      version: keyVersion,
+      createdAt: new Date().toISOString()
+    };
+    
+    await file.save(JSON.stringify(keyData));
 
-  // Cache the DEK
-  dekCache.set(uid, dek);
+    // Cache the DEK and version
+    dekCache.set(uid, dek);
+    dekVersionCache.set(uid, keyVersion);
 
-  return dek;
+    logEncryptionOperation('generateAndStoreEncryptedDEK', true, { uid, keyVersion });
+    return { dek, version: keyVersion };
+  } catch (error) {
+    logEncryptionOperation('generateAndStoreEncryptedDEK', false, { uid, error: error.message });
+    throw error;
+  }
 }
 
 async function getDEKFromBucket(uid) {
-  const file = storage
-    .bucket(BUCKET_NAME)
-    .file(`keys/${environmnet}/${uid}.key`);
-  if (!(await file.exists())[0]) {
+  try {
+    const file = storage
+      .bucket(BUCKET_NAME)
+      .file(`keys/${environmnet}/${uid}.key`);
+    
+    if (!(await file.exists())[0]) {
+      logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found' });
+      return null;
+    }
+    
+    const [keyDataString] = await file.download();
+    const keyData = JSON.parse(keyDataString.toString());
+    
+    const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
+    const keyVersion = keyData.version;
+
+    const [decryptResponse] = await kmsClient.decrypt({
+      name: KEY_PATH,
+      ciphertext: encryptedDEK,
+    });
+
+    const dek = decryptResponse.plaintext;
+    
+    // Cache the DEK and version
+    dekCache.set(uid, dek);
+    dekVersionCache.set(uid, keyVersion);
+
+    logEncryptionOperation('getDEKFromBucket', true, { uid, keyVersion });
+    return { dek, version: keyVersion };
+  } catch (error) {
+    logEncryptionOperation('getDEKFromBucket', false, { uid, error: error.message });
     return null;
   }
-  const [encryptedDEK] = await file.download();
-
-  const [decryptResponse] = await kmsClient.decrypt({
-    name: KEY_PATH,
-    ciphertext: encryptedDEK,
-  });
-
-  return decryptResponse.plaintext;
 }
 
 async function getUserDek(uid) {
   try {
     // Check in-memory cache first
     if (dekCache.has(uid)) {
+      const version = dekVersionCache.get(uid);
+      logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version });
       return dekCache.get(uid);
     }
 
-    let dek = await getDEKFromBucket(uid);
+    let keyData = await getDEKFromBucket(uid);
 
-    if (!dek) {
-      dek = await generateAndStoreEncryptedDEK(uid);
-    } else {
-      dekCache.set(uid, dek); // Cache it once retrieved
+    if (!keyData) {
+      keyData = await generateAndStoreEncryptedDEK(uid);
     }
 
-    return dek;
+    return keyData.dek;
   } catch (e) {
+    logEncryptionOperation('getUserDek', false, { uid, error: e.message });
     console.error("Error getting DEK:", e);
     throw e;
   }
 }
 
-// Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
-async function encryptValue(value, dek) {
+// Get key version for a user
+async function getUserDekVersion(uid) {
+  try {
+    // Check cache first
+    if (dekVersionCache.has(uid)) {
+      return dekVersionCache.get(uid);
+    }
+
+    // Try to get from bucket
+    const keyData = await getDEKFromBucket(uid);
+    return keyData ? keyData.version : null;
+  } catch (error) {
+    logEncryptionOperation('getUserDekVersion', false, { uid, error: error.message });
+    return null;
+  }
+}
+
+// Encrypts a value using AES-256-GCM with version tracking
+async function encryptValue(value, dek, uid = null) {
   if (value === null || value === undefined) return value;
 
   try {
@@ -121,16 +191,33 @@ async function encryptValue(value, dek) {
     // Get the authentication tag to ensure integrity during decryption
     const tag = cipher.getAuthTag();
 
+    // Get key version for tracking
+    const keyVersion = uid ? await getUserDekVersion(uid) : null;
+
     // Combine IV + Auth Tag + Encrypted content, and return as base64 string
-    return Buffer.concat([iv, tag, encrypted]).toString("base64");
+    const result = Buffer.concat([iv, tag, encrypted]).toString("base64");
+    
+    logEncryptionOperation('encryptValue', true, { 
+      uid, 
+      keyVersion, 
+      valueType: typeof value,
+      encryptedLength: result.length 
+    });
+    
+    return result;
   } catch (e) {
+    logEncryptionOperation('encryptValue', false, { 
+      uid, 
+      error: e.message, 
+      valueType: typeof value 
+    });
     console.error("Error encrypting value:", e);
     return value;
   }
 }
 
-// Decrypts a base64-encoded ciphertext using AES-256-GCM and a provided DEK
-async function decryptValue(cipherTextBase64, dek) {
+// Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
+async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = null) {
   if (
     cipherTextBase64 === null ||
     cipherTextBase64 === undefined ||
@@ -138,26 +225,110 @@ async function decryptValue(cipherTextBase64, dek) {
   )
     return cipherTextBase64;
 
+  // Validate input type
+  if (typeof cipherTextBase64 !== 'string') {
+    logEncryptionOperation('decryptValue', false, { 
+      uid, 
+      error: 'Invalid input type - expected string',
+      inputType: typeof cipherTextBase64
+    });
+    return null;
+  }
+
+  // Try with current DEK first
   try {
-    // Validate DEK
-    if (!dek || !Buffer.isBuffer(dek) || dek.length !== 32) {
-      console.error("decryptValue: Invalid DEK provided");
-      return cipherTextBase64;
+    const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
+    if (result.success) {
+      return result.value;
     }
+  } catch (error) {
+    logEncryptionOperation('decryptValue', false, { 
+      uid, 
+      attempt: 'current', 
+      error: error.message,
+      errorCode: error.code
+    });
+  }
 
-    // Validate cipherTextBase64 is a string
-    if (typeof cipherTextBase64 !== 'string') {
-      console.error("decryptValue: cipherTextBase64 must be a string");
-      return cipherTextBase64;
+  // Try with fallback DEK if provided
+  if (fallbackDek) {
+    try {
+      const result = await attemptDecryption(cipherTextBase64, fallbackDek, uid, 'fallback');
+      if (result.success) {
+        logEncryptionOperation('decryptValue', true, { 
+          uid, 
+          attempt: 'fallback', 
+          note: 'Successfully decrypted with fallback key'
+        });
+        return result.value;
+      }
+    } catch (error) {
+      logEncryptionOperation('decryptValue', false, { 
+        uid, 
+        attempt: 'fallback', 
+        error: error.message,
+        errorCode: error.code
+      });
     }
+  }
 
+  // Try to get previous DEK and attempt decryption
+  try {
+    const previousDek = await getPreviousDek(uid);
+    if (previousDek) {
+      const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
+      if (result.success) {
+        logEncryptionOperation('decryptValue', true, { 
+          uid, 
+          attempt: 'previous', 
+          note: 'Successfully decrypted with previous key'
+        });
+        return result.value;
+      }
+    }
+  } catch (error) {
+    logEncryptionOperation('decryptValue', false, { 
+      uid, 
+      attempt: 'previous', 
+      error: error.message,
+      errorCode: error.code
+    });
+  }
+
+  // If all attempts fail, log the failure and return null
+  logEncryptionOperation('decryptValue', false, { 
+    uid, 
+    error: 'All decryption attempts failed',
+    inputLength: cipherTextBase64.length
+  });
+  
+  return null;
+}
+
+// Helper function to attempt decryption with a specific key
+async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
+  // Validate DEK
+  if (!dek || !Buffer.isBuffer(dek) || dek.length !== 32) {
+    throw new Error(`Invalid DEK provided for ${attemptType} attempt: ${dek ? `length=${dek.length}, type=${typeof dek}` : 'null/undefined'}`);
+  }
+
+  // Validate cipherTextBase64 is a string
+  if (typeof cipherTextBase64 !== 'string') {
+    throw new Error(`cipherTextBase64 must be a string for ${attemptType} attempt, got ${typeof cipherTextBase64}`);
+  }
+
+  // Check if the string looks like base64
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cipherTextBase64)) {
+    throw new Error(`Invalid base64 format for ${attemptType} attempt`);
+  }
+
+  try {
     // Decode the base64-encoded ciphertext
     const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
 
     // Validate buffer length (IV + Auth Tag + minimum encrypted content)
     if (cipherBuffer.length < 33) {
-      console.error("decryptValue: Invalid ciphertext length");
-      return cipherTextBase64;
+      throw new Error(`Invalid ciphertext length for ${attemptType} attempt: ${cipherBuffer.length} bytes (minimum 33 required)`);
     }
 
     // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
@@ -167,8 +338,7 @@ async function decryptValue(cipherTextBase64, dek) {
 
     // Validate IV and tag
     if (iv.length !== 16 || tag.length !== 16) {
-      console.error("decryptValue: Invalid IV or auth tag length");
-      return cipherTextBase64;
+      throw new Error(`Invalid IV or auth tag length for ${attemptType} attempt: IV=${iv.length}, Tag=${tag.length}`);
     }
 
     // Create a decipher using AES-256-GCM with the same DEK and IV
@@ -184,11 +354,89 @@ async function decryptValue(cipherTextBase64, dek) {
     ]).toString("utf8");
 
     // Parse the decrypted JSON string and return the original value
-    return JSON.parse(decrypted);
-  } catch (e) {
-    console.error("decryptValue error:", e.message);
-    // Return original value instead of throwing error to prevent cascading failures
-    return cipherTextBase64;
+    const parsedValue = JSON.parse(decrypted);
+    
+    return { success: true, value: parsedValue };
+  } catch (error) {
+    // Provide more specific error information
+    const errorInfo = {
+      attemptType,
+      uid,
+      cipherTextLength: cipherTextBase64.length,
+      errorCode: error.code,
+      errorMessage: error.message
+    };
+    
+    logEncryptionOperation('attemptDecryption', false, errorInfo);
+    throw error;
+  }
+}
+
+// Get previous key version for fallback (implement based on your key rotation strategy)
+async function getPreviousDek(uid) {
+  try {
+    // This is a placeholder - implement based on your key rotation strategy
+    // You might store previous keys in a separate location or use a different approach
+    const file = storage
+      .bucket(BUCKET_NAME)
+      .file(`keys/${environmnet}/${uid}.key.previous`);
+    
+    if (!(await file.exists())[0]) {
+      return null;
+    }
+    
+    const [keyDataString] = await file.download();
+    const keyData = JSON.parse(keyDataString.toString());
+    
+    const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
+
+    const [decryptResponse] = await kmsClient.decrypt({
+      name: KEY_PATH,
+      ciphertext: encryptedDEK,
+    });
+
+    return decryptResponse.plaintext;
+  } catch (error) {
+    logEncryptionOperation('getPreviousDek', false, { uid, error: error.message });
+    return null;
+  }
+}
+
+// Rotate encryption key for a user
+async function rotateUserKey(uid) {
+  try {
+    // Get current key
+    const currentDek = await getUserDek(uid);
+    const currentVersion = await getUserDekVersion(uid);
+    
+    // Generate new key
+    const newKeyData = await generateAndStoreEncryptedDEK(uid);
+    
+    // Store previous key for fallback
+    if (currentDek && currentVersion) {
+      const file = storage
+        .bucket(BUCKET_NAME)
+        .file(`keys/${environmnet}/${uid}.key.previous`);
+      
+      const previousKeyData = {
+        encryptedDEK: currentDek.toString('base64'),
+        version: currentVersion,
+        rotatedAt: new Date().toISOString()
+      };
+      
+      await file.save(JSON.stringify(previousKeyData));
+    }
+    
+    logEncryptionOperation('rotateUserKey', true, { 
+      uid, 
+      oldVersion: currentVersion, 
+      newVersion: newKeyData.version 
+    });
+    
+    return newKeyData;
+  } catch (error) {
+    logEncryptionOperation('rotateUserKey', false, { uid, error: error.message });
+    throw error;
   }
 }
 
@@ -207,4 +455,15 @@ function hashValue(value) {
     .update(value + salt)
     .digest("hex");
 }
-export { encryptValue, decryptValue, getUserDek, hashEmail, hashValue };
+
+export {
+  encryptValue,
+  decryptValue,
+  getUserDek,
+  getUserDekVersion,
+  getPreviousDek,
+  rotateUserKey,
+  hashEmail,
+  hashValue,
+  logEncryptionOperation
+};

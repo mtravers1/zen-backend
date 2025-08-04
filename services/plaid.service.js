@@ -8,15 +8,119 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
+  getPreviousDek,
+  logEncryptionOperation
 } from "../database/encryption.js";
+import crypto from 'crypto';
 
-//TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
 const plaidSecret = process.env.PLAID_SECRET;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 const androidPackageName = process.env.BUNDLEID || "com.zentavos.mobile";
+
+// Structured logging for Plaid operations
+const logPlaidOperation = (operation, success, details = {}) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    operation,
+    success,
+    ...details
+  };
+  
+  if (success) {
+    console.log(`[PLAID] ${operation}:`, logEntry);
+  } else {
+    console.error(`[PLAID] ${operation} FAILED:`, logEntry);
+  }
+};
+
+// Cache for institution product support
+const institutionProductCache = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Check if institution supports specific products
+const checkInstitutionProductSupport = async (institutionId, product) => {
+  try {
+    const cacheKey = `${institutionId}_${product}`;
+    const cached = institutionProductCache.get(cacheKey);
+    
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      return cached.supported;
+    }
+
+    const response = await plaidClient.institutionsGetById({
+      institution_id: institutionId,
+      country_codes: ["US"],
+      options: {
+        include_optional_metadata: true
+      }
+    });
+
+    const institution = response.data.institution;
+    const supported = institution.products && institution.products.includes(product);
+    
+    institutionProductCache.set(cacheKey, {
+      supported,
+      timestamp: Date.now()
+    });
+
+    logPlaidOperation('checkInstitutionProductSupport', true, {
+      institutionId,
+      product,
+      supported
+    });
+
+    return supported;
+  } catch (error) {
+    logPlaidOperation('checkInstitutionProductSupport', false, {
+      institutionId,
+      product,
+      error: error.message
+    });
+    // Default to true to avoid blocking operations
+    return true;
+  }
+};
+
+// Validate item status before making API calls
+const validateItemStatus = async (itemId, accessToken) => {
+  try {
+    const response = await plaidClient.itemGet({
+      access_token: accessToken
+    });
+
+    const item = response.data.item;
+    const status = item.status;
+
+    logPlaidOperation('validateItemStatus', true, {
+      itemId,
+      status,
+      requestId: response.data.request_id
+    });
+
+    return {
+      valid: status === 'good',
+      status,
+      requestId: response.data.request_id,
+      item
+    };
+  } catch (error) {
+    logPlaidOperation('validateItemStatus', false, {
+      itemId,
+      error: error.message,
+      errorCode: error.response?.data?.error_code
+    });
+    
+    return {
+      valid: false,
+      status: 'unknown',
+      error: error.message,
+      errorCode: error.response?.data?.error_code
+    };
+  }
+};
 
 const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
   const user = await User.findOne({
@@ -32,7 +136,7 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     if (!account) {
       throw new Error("Account not found");
     }
-    accessToken = await decryptValue(account.accessToken, dek);
+    accessToken = await decryptValue(account.accessToken, dek, uid);
   }
   const userId = user._id.toString();
   let redirectUri;
@@ -113,77 +217,114 @@ const saveAccessToken = async (
   institutionId,
   uid
 ) => {
-  const user = await User.findOne({
-    authUid: uid,
-  });
-  if (!user) {
-    throw new Error("User not found");
+  try {
+    const dek = await getUserDek(uid);
+    const encryptedAccessToken = await encryptValue(accessToken, dek, uid);
+
+    const accessTokenDoc = new AccessToken({
+      accessToken: encryptedAccessToken,
+      itemId,
+      userId: uid,
+      institutionId,
+    });
+
+    await accessTokenDoc.save();
+
+    logPlaidOperation('saveAccessToken', true, {
+      itemId,
+      institutionId,
+      uid
+    });
+
+    return accessTokenDoc;
+  } catch (error) {
+    logPlaidOperation('saveAccessToken', false, {
+      itemId,
+      institutionId,
+      uid,
+      error: error.message
+    });
+    throw error;
   }
-  const userId = user._id.toString();
-  const dek = await getUserDek(uid);
-
-  const encryptedToken = await encryptValue(accessToken, dek);
-
-  const newToken = new AccessToken({
-    userId,
-    accessToken: encryptedToken,
-    itemId,
-    institutionId,
-  });
-  await newToken.save();
-  return {
-    userId,
-    accessToken,
-    itemId,
-    institutionId,
-  };
 };
 
 const getUserAccessTokens = async (email, uid) => {
-  const user = await User.findOne({
-    authUid: uid,
-  });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  const userId = user._id.toString();
-  const tokens = await AccessToken.find({ userId });
+  try {
+    const accessTokens = await AccessToken.find({ userId: uid });
+    const dek = await getUserDek(uid);
+    const fallbackDek = await getPreviousDek(uid);
 
-  const decryptedTokens = [];
-  const dek = await getUserDek(uid);
-  for (const token of tokens) {
-    const decryptedAccessToken = await decryptValue(token.accessToken, dek);
+    const decryptedTokens = [];
+    for (const token of accessTokens) {
+      try {
+        const decryptedToken = await decryptValue(
+          token.accessToken, 
+          dek, 
+          uid, 
+          fallbackDek
+        );
+        decryptedTokens.push({
+          ...token.toObject(),
+          accessToken: decryptedToken,
+        });
+      } catch (error) {
+        logPlaidOperation('getUserAccessTokens', false, {
+          itemId: token.itemId,
+          uid,
+          error: error.message,
+          note: 'Failed to decrypt individual token'
+        });
+        // Continue with other tokens
+      }
+    }
 
-    decryptedTokens.push({
-      ...token.toObject(),
-      accessToken: decryptedAccessToken,
+    logPlaidOperation('getUserAccessTokens', true, {
+      uid,
+      tokenCount: decryptedTokens.length
     });
-  }
 
-  return decryptedTokens;
+    return decryptedTokens;
+  } catch (error) {
+    logPlaidOperation('getUserAccessTokens', false, {
+      uid,
+      error: error.message
+    });
+    throw error;
+  }
 };
 
 const getAccounts = async (email, uid) => {
   try {
-    const tokens = await getUserAccessTokens(email, uid);
-    if (!tokens.length) return [];
-    const accountsPromises = tokens.map(async (token) => {
-      const response = await plaidClient.accountsGet({
-        access_token: token.accessToken,
-      });
-      return response.data.accounts.map((account) => ({
-        ...account,
-        institutionId: token.institutionId,
-      }));
+    const accessTokens = await getUserAccessTokens(email, uid);
+    const allAccounts = [];
+
+    for (const token of accessTokens) {
+      try {
+        const accounts = await getAccountsWithAccessToken(token.accessToken);
+        allAccounts.push(...accounts);
+      } catch (error) {
+        logPlaidOperation('getAccounts', false, {
+          itemId: token.itemId,
+          uid,
+          error: error.message,
+          note: 'Failed to get accounts for individual token'
+        });
+        // Continue with other tokens
+      }
+    }
+
+    logPlaidOperation('getAccounts', true, {
+      uid,
+      accountCount: allAccounts.length
     });
 
-    const accountsArray = await Promise.all(accountsPromises);
-
-    const accounts = accountsArray.flat();
-
-    return accounts;
+    return allAccounts;
   } catch (error) {
-    return [];
+    logPlaidOperation('getAccounts', false, {
+      uid,
+      error: error.message
+    });
+    throw error;
   }
 };
 
@@ -191,30 +332,41 @@ const getAccountsWithAccessToken = async (accessToken) => {
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
-  return response.data;
+  return response.data.accounts;
 };
 
-const getBalance = async (email) => {
+const getBalance = async (email, uid) => {
   try {
-    const tokens = await getUserAccessTokens(email);
-    if (!tokens.length) return [];
+    const accessTokens = await getUserAccessTokens(email, uid);
+    const allBalances = [];
 
-    const balancePromises = tokens.map(async (token) => {
-      const response = await plaidClient.accountsGet({
-        access_token: token.accessToken,
-        // min_last_updated_datetime: new Date().toISOString(),
-      });
-      return response.data.accounts.map((account) => ({
-        ...account,
-        institutionId: token.institutionId,
-      }));
+    for (const token of accessTokens) {
+      try {
+        const accounts = await getAccountsWithAccessToken(token.accessToken);
+        allBalances.push(...accounts);
+      } catch (error) {
+        logPlaidOperation('getBalance', false, {
+          itemId: token.itemId,
+          uid,
+          error: error.message,
+          note: 'Failed to get balance for individual token'
+        });
+        // Continue with other tokens
+      }
+    }
+
+    logPlaidOperation('getBalance', true, {
+      uid,
+      balanceCount: allBalances.length
     });
-    const balancesArray = await Promise.all(balancePromises);
-    const balances = balancesArray.flat();
 
-    return balances;
+    return allBalances;
   } catch (error) {
-    return [];
+    logPlaidOperation('getBalance', false, {
+      uid,
+      error: error.message
+    });
+    throw error;
   }
 };
 
@@ -223,41 +375,52 @@ const getInstitutions = async () => {
     count: 500,
     offset: 0,
     country_codes: ["US"],
-    options: {
-      include_optional_metadata: true,
-    },
   });
-
-  const institutions = {};
-  for (const institution of response.data.institutions) {
-    institutions[institution.institution_id] = institution;
-  }
-  return institutions;
+  return response.data.institutions;
 };
 
 const getTransactions = async (email, uid) => {
-  const tokens = await getUserAccessTokens(email, uid);
-  if (!tokens.length) return [];
+  try {
+    const accessTokens = await getUserAccessTokens(email, uid);
+    const allTransactions = [];
 
-  const transactionsPromises = tokens.map(async (token) => {
-    const response = await plaidClient.transactionsSync({
-      access_token: token.accessToken,
-      count: 500,
+    for (const token of accessTokens) {
+      try {
+        const transactions = await getTransactionsWithAccessToken(token.accessToken);
+        allTransactions.push(...transactions);
+      } catch (error) {
+        logPlaidOperation('getTransactions', false, {
+          itemId: token.itemId,
+          uid,
+          error: error.message,
+          note: 'Failed to get transactions for individual token'
+        });
+        // Continue with other tokens
+      }
+    }
+
+    logPlaidOperation('getTransactions', true, {
+      uid,
+      transactionCount: allTransactions.length
     });
-    return response.data.added;
-  });
 
-  const transactionsArray = await Promise.all(transactionsPromises);
-  const transactions = transactionsArray.flat();
-
-  return transactions;
+    return allTransactions;
+  } catch (error) {
+    logPlaidOperation('getTransactions', false, {
+      uid,
+      error: error.message
+    });
+    throw error;
+  }
 };
 
 const getTransactionsWithAccessToken = async (accessToken) => {
-  const response = await plaidClient.transactionsSync({
+  const response = await plaidClient.transactionsGet({
     access_token: accessToken,
+    start_date: "2020-01-01",
+    end_date: new Date().toISOString().split("T")[0],
   });
-  return response.data;
+  return response.data.transactions;
 };
 
 const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
@@ -275,11 +438,47 @@ const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
-const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
-  const response = await plaidClient.liabilitiesGet({
-    access_token: accessToken,
-  });
-  return response.data;
+const getLoanLiabilitiesWithAccessToken = async (accessToken, institutionId = null) => {
+  try {
+    // Check if institution supports liabilities before making the call
+    if (institutionId) {
+      const supportsLiabilities = await checkInstitutionProductSupport(institutionId, 'liabilities');
+      if (!supportsLiabilities) {
+        logPlaidOperation('getLoanLiabilitiesWithAccessToken', true, {
+          institutionId,
+          note: 'Liabilities not supported by institution, skipping call'
+        });
+        return { accounts: [], liabilities: [] };
+      }
+    }
+
+    const response = await plaidClient.liabilitiesGet({
+      access_token: accessToken,
+    });
+    
+    logPlaidOperation('getLoanLiabilitiesWithAccessToken', true, {
+      institutionId,
+      requestId: response.data.request_id
+    });
+    
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
+      logPlaidOperation('getLoanLiabilitiesWithAccessToken', true, {
+        institutionId,
+        errorCode: 'PRODUCTS_NOT_SUPPORTED',
+        note: 'Liabilities not supported by institution'
+      });
+      return { accounts: [], liabilities: [] };
+    }
+    
+    logPlaidOperation('getLoanLiabilitiesWithAccessToken', false, {
+      institutionId,
+      error: error.message,
+      errorCode: error.response?.data?.error_code
+    });
+    throw error;
+  }
 };
 
 const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
@@ -289,44 +488,157 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
+// Handle corrupted access tokens by marking them for re-authentication
+const handleCorruptedAccessToken = async (itemId, uid, error) => {
+  try {
+    logPlaidOperation('handleCorruptedAccessToken', true, {
+      itemId,
+      uid,
+      error: error.message,
+      note: 'Marking item for re-authentication due to corrupted access token'
+    });
+
+    // Mark the item for re-authentication
+    await markItemForReauth(itemId);
+
+    // Update the access token document to indicate corruption
+    await AccessToken.findOneAndUpdate(
+      { itemId },
+      { 
+        $set: { 
+          status: 'corrupted',
+          lastError: error.message,
+          lastErrorAt: new Date(),
+          requiresReauth: true
+        }
+      }
+    );
+
+    // Log the corruption for monitoring
+    logPlaidOperation('handleCorruptedAccessToken', true, {
+      itemId,
+      uid,
+      note: 'Access token marked as corrupted and requiring re-authentication'
+    });
+
+    return true;
+  } catch (recoveryError) {
+    logPlaidOperation('handleCorruptedAccessToken', false, {
+      itemId,
+      uid,
+      error: recoveryError.message,
+      originalError: error.message
+    });
+    return false;
+  }
+};
+
+// Enhanced getAccessTokenFromItemId with corruption handling
 const getAccessTokenFromItemId = async (itemId, uid) => {
   try {
     if (!itemId) {
-      console.error("getAccessTokenFromItemId: itemId is required");
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        error: 'itemId is required'
+      });
       return null;
     }
 
-    const access = await AccessToken.findOne({ itemId });
-    if (!access) {
-      console.error(`getAccessTokenFromItemId: No access token found for itemId: ${itemId}`);
+    const accessTokenDoc = await AccessToken.findOne({ itemId });
+    if (!accessTokenDoc) {
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        error: 'Access token document not found'
+      });
       return null;
     }
 
-    if (!access.accessToken) {
-      console.error(`getAccessTokenFromItemId: Access token is null/undefined for itemId: ${itemId}`);
+    // Check if token is marked as corrupted
+    if (accessTokenDoc.status === 'corrupted') {
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        uid,
+        error: 'Access token is marked as corrupted',
+        lastError: accessTokenDoc.lastError,
+        lastErrorAt: accessTokenDoc.lastErrorAt
+      });
       return null;
     }
 
     if (!uid) {
-      console.error("getAccessTokenFromItemId: uid is required for decryption");
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        error: 'uid is required for decryption'
+      });
       return null;
     }
 
     const dek = await getUserDek(uid);
     if (!dek) {
-      console.error(`getAccessTokenFromItemId: Failed to get DEK for uid: ${uid}`);
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        uid,
+        error: 'Failed to get user DEK'
+      });
       return null;
     }
 
-    const decryptedToken = await decryptValue(access.accessToken, dek);
-    if (!decryptedToken) {
-      console.error(`getAccessTokenFromItemId: Failed to decrypt access token for itemId: ${itemId}`);
+    // Try to decrypt with current DEK
+    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek, uid);
+    
+    // If decryption fails, try with fallback DEK
+    if (!accessToken) {
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        uid,
+        error: 'Failed to decrypt access token with current DEK, trying fallback'
+      });
+      
+      // Get fallback DEK (previous version)
+      const fallbackDek = await getPreviousDek(uid);
+      if (fallbackDek) {
+        accessToken = await decryptValue(accessTokenDoc.accessToken, fallbackDek, uid);
+        if (accessToken) {
+          logPlaidOperation('getAccessTokenFromItemId', true, {
+            itemId,
+            uid,
+            note: 'Successfully decrypted with fallback DEK'
+          });
+        }
+      }
+    }
+
+    if (!accessToken) {
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        uid,
+        error: 'All decryption attempts failed for access token'
+      });
+      
+      // Handle corrupted access token
+      await handleCorruptedAccessToken(itemId, uid, new Error('Access token decryption failed'));
+      
       return null;
     }
 
-    return decryptedToken;
+    logPlaidOperation('getAccessTokenFromItemId', true, {
+      itemId,
+      uid
+    });
+
+    return accessToken;
   } catch (error) {
-    console.error(`getAccessTokenFromItemId error for itemId ${itemId}:`, error);
+    logPlaidOperation('getAccessTokenFromItemId', false, {
+      itemId,
+      uid,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    // Handle corrupted access token for unexpected errors
+    if (uid) {
+      await handleCorruptedAccessToken(itemId, uid, error);
+    }
+    
     return null;
   }
 };
@@ -433,15 +745,7 @@ const updateTransactions = async (item) => {
       return;
     }
 
-    // Check if it's Chase and apply specific treatment
-    const isChase = await checkIfChaseBank(item, accessToken);
-    
-    if (isChase) {
-      console.log('Chase bank detected - applying special handling');
-      return await updateChaseTransactions(item, accessToken, uid, accounts);
-    } else {
-      return await updateRegularTransactions(item, accessToken, uid, accounts);
-    }
+      return await updateUniversalTransactions(item, accessToken, uid, accounts);
   } catch (error) {
     console.error(`Error updating transactions for item ${item}:`, error);
     throw error;
@@ -516,7 +820,8 @@ const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
 };
 
 // Function to update regular transactions (non-Chase)
-const updateRegularTransactions = async (item, accessToken, uid, accounts) => {
+const updateUniversalTransactions = async (item, accessToken, uid, accounts) => {
+  const user = await User.findById(accounts[0].owner_id);
   const emails = user?.email;
   const emailObject = emails?.find((email) => email.isPrimary === true);
   const email = emailObject?.email;
@@ -526,51 +831,139 @@ const updateRegularTransactions = async (item, accessToken, uid, accounts) => {
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
-  let transactionsByAccount = {};
-  let oldCursor = cursor;
+  let newTransactions = [];
+  let retryCount = 0;
+  let mutationErrorCount = 0;
+  const maxRetries = 3;
+  const maxMutationErrors = 5;
+  const maxIterations = 15;
   let iterationCounter = 0;
-  const maxIterations = 10;
-  const newTransactions = [];
 
-  while (hasMore) {
-    transactionsByAccount = {};
-    oldCursor = cursor;
+  // Configuração específica para Capital One
+  const isCapitalOne = accounts[0]?.institution_id === 'ins_56' || 
+                      accounts[0]?.institution_id?.includes('capital_one') ||
+                      accounts[0]?.institution_id?.includes('capitalone');
+  
+  const mutationConfig = isCapitalOne ? {
+    maxMutationErrors: 10,
+    mutationDelay: 10000,
+    retryInterval: 30000
+  } : {
+    maxMutationErrors: 5,
+    mutationDelay: 5000,
+    retryInterval: 5000
+  };
+
+  while (hasMore && iterationCounter < maxIterations) {
     iterationCounter++;
-    if (iterationCounter > maxIterations) {
-      console.log("Max iterations reached, stopping");
-      hasMore = false;
-      break;
-    }
+    const currentCursor = cursor;
     
     try {
-      const response = await plaidClient.transactionsSync({
-        access_token: accessToken,
-        cursor: cursor,
-        count: 500,
-      });
+      console.log(`Transaction sync iteration ${iterationCounter}, cursor: ${currentCursor}`);
+      
+      const response = await retryWithBackoff(async () => {
+        return await plaidClient.transactionsSync({
+          access_token: accessToken,
+          cursor: currentCursor,
+          count: 100,
+        });
+      }, 'universal');
 
       const transactions = response.data.added || [];
       const modifiedTransactions = response.data.modified || [];
       const removedTransactions = response.data.removed || [];
-      cursor = response.data.next_cursor;
+      const nextCursor = response.data.next_cursor;
       hasMore = response.data.has_more;
-      newTransactions.push(...transactions);
 
-      console.log(`Regular: ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed`);
+      console.log(`Universal sync: ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed`);
 
-      await processTransactions(transactions, accounts, dek);
+      if (transactions.length > 0) {
+        await processTransactions(transactions, accounts, dek);
+        newTransactions.push(...transactions);
+      }
+
+      if (modifiedTransactions.length > 0) {
+        await handleModifiedTransactions(modifiedTransactions, accounts, dek);
+      }
+
+      if (removedTransactions.length > 0) {
+        await handleRemovedTransactions(removedTransactions);
+      }
+
+      cursor = nextCursor;
+      retryCount = 0;
+
+      if (hasMore) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
     } catch (error) {
-      console.error('Error in regular transaction sync:', error);
-      break;
+      retryCount++;
+      console.error(`Transaction sync error (attempt ${retryCount}):`, error);
+      
+      if (error.response?.data?.error_code === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION') {
+        mutationErrorCount++;
+        console.log(`Data mutation detected (attempt ${mutationErrorCount}/${mutationConfig.maxMutationErrors}), restarting pagination from current cursor`);
+        
+        // Log institution-specific information for debugging
+        try {
+          const institutionInfo = await plaidClient.institutionsGetById({
+            institution_id: accounts[0]?.institution_id,
+            country_codes: ['US']
+          });
+          console.log(`Mutation error for institution: ${institutionInfo.data.institution.name}${isCapitalOne ? ' (Capital One - using extended config)' : ''}`);
+        } catch (instError) {
+          console.log('Could not retrieve institution info for mutation error');
+        }
+        
+        if (mutationErrorCount >= mutationConfig.maxMutationErrors) {
+          console.error(`Max mutation errors reached (${mutationConfig.maxMutationErrors}), stopping sync`);
+          break;
+        }
+        
+        // Reset cursor to null to restart pagination from the beginning
+        // This follows Plaid's recommendation for this error
+        cursor = null;
+        
+        // Wait longer for data to stabilize (longer for Capital One)
+        await new Promise(resolve => setTimeout(resolve, mutationConfig.mutationDelay));
+        
+        // Don't increment retryCount for mutation errors as we're restarting pagination
+        // This gives us more attempts to handle the mutation
+        continue;
+      }
+      
+      if (error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED') {
+        console.error('Item requires reauthentication');
+        await markItemForReauth(item);
+        break;
+      }
+      
+      if (error.response?.data?.error_code === 'RATE_LIMIT_EXCEEDED') {
+        console.log('Rate limit exceeded, waiting before retry');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (retryCount >= maxRetries) {
+          console.error('Max retries reached for rate limit');
+          break;
+        }
+        continue;
+      }
+      
+      if (retryCount >= maxRetries) {
+        console.error('Max retries reached for transaction sync');
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
     }
   }
 
-  // Atualizar cursor
   for (const account of accounts) {
     account.nextCursor = cursor;
     await account.save();
   }
 
+  console.log(`Universal transaction sync completed. Processed ${newTransactions.length} new transactions`);
   return newTransactions;
 };
 
@@ -631,20 +1024,101 @@ const markItemForReauth = async (itemId) => {
   }
 };
 
+const handleModifiedTransactions = async (modifiedTransactions, accounts, dek) => {
+  try {
+    console.log(`Processing ${modifiedTransactions.length} modified transactions`);
+    
+    for (const transaction of modifiedTransactions) {
+      const existingTransaction = await Transaction.findOne({
+        plaidTransactionId: transaction.transaction_id
+      });
+      
+      if (existingTransaction) {
+        // Update the transaction with new data
+        const encryptedAmount = await encryptValue(transaction.amount, dek);
+        const encryptedName = await encryptValue(transaction.name, dek);
+        const encryptedMerchantName = await encryptValue(transaction.merchant_name, dek);
+        
+        existingTransaction.amount = encryptedAmount;
+        existingTransaction.name = encryptedName;
+        existingTransaction.merchant = {
+          ...existingTransaction.merchant,
+          name: encryptedMerchantName,
+          merchantName: encryptedMerchantName,
+        };
+        existingTransaction.category = transaction.category;
+        existingTransaction.date = transaction.date;
+        existingTransaction.pending = transaction.pending;
+        
+        await existingTransaction.save();
+      }
+    }
+  } catch (error) {
+    console.error('Error handling modified transactions:', error);
+  }
+};
+
+const handleRemovedTransactions = async (removedTransactions) => {
+  try {
+    console.log(`Processing ${removedTransactions.length} removed transactions`);
+    
+    for (const transaction of removedTransactions) {
+      await Transaction.findOneAndDelete({
+        plaidTransactionId: transaction.transaction_id
+      });
+    }
+  } catch (error) {
+    console.error('Error handling removed transactions:', error);
+  }
+};
+
 const updateInvestmentTransactions = async (item) => {
   try {
     if (!item) {
-      console.error("updateInvestmentTransactions: item is required");
+      logPlaidOperation('updateInvestmentTransactions', false, {
+        error: 'item is required'
+      });
       return "No item provided";
     }
 
+    // Get access token with proper error handling
     const accessToken = await getAccessTokenFromItemId(item);
     if (!accessToken) {
-      console.error(`updateInvestmentTransactions: Failed to get access token for item: ${item}`);
+      logPlaidOperation('updateInvestmentTransactions', false, {
+        itemId: item,
+        error: 'Failed to get access token'
+      });
       return "Failed to get access token";
     }
 
-    // Check if the institution supports investment transactions
+    // Validate item status before making API calls
+    const itemStatus = await validateItemStatus(item, accessToken);
+    if (!itemStatus.valid) {
+      logPlaidOperation('updateInvestmentTransactions', false, {
+        itemId: item,
+        status: itemStatus.status,
+        error: itemStatus.error || 'Item status invalid'
+      });
+      return `Item status invalid: ${itemStatus.status}`;
+    }
+
+    // Get institution ID for product support checking
+    const accessTokenDoc = await AccessToken.findOne({ itemId: item });
+    const institutionId = accessTokenDoc?.institutionId;
+
+    // Check if the institution supports investment transactions before making the call
+    if (institutionId) {
+      const supportsInvestments = await checkInstitutionProductSupport(institutionId, 'investments');
+      if (!supportsInvestments) {
+        logPlaidOperation('updateInvestmentTransactions', true, {
+          itemId: item,
+          institutionId,
+          note: 'Investment transactions not supported by institution, skipping call'
+        });
+        return "Investment transactions not supported by this institution";
+      }
+    }
+
     try {
       const response = await plaidClient.investmentsTransactionsGet({
         access_token: accessToken,
@@ -653,20 +1127,38 @@ const updateInvestmentTransactions = async (item) => {
       });
       
       if (response && response.data) {
-        console.log(`updateInvestmentTransactions: Successfully updated investment transactions for item: ${item}`);
+        logPlaidOperation('updateInvestmentTransactions', true, {
+          itemId: item,
+          institutionId,
+          requestId: response.data.request_id,
+          transactionCount: response.data.investment_transactions?.length || 0
+        });
         return "Investment transactions updated successfully";
       }
     } catch (plaidError) {
       if (plaidError.response?.data?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
-        console.warn(`updateInvestmentTransactions: Investment transactions not supported for item: ${item}`);
+        logPlaidOperation('updateInvestmentTransactions', true, {
+          itemId: item,
+          institutionId,
+          note: 'Investment transactions not supported by this institution'
+        });
         return "Investment transactions not supported by this institution";
       } else {
-        console.error(`updateInvestmentTransactions: Plaid API error for item ${item}:`, plaidError.response?.data || plaidError.message);
+        logPlaidOperation('updateInvestmentTransactions', false, {
+          itemId: item,
+          institutionId,
+          error: plaidError.response?.data?.error_message || plaidError.message,
+          errorCode: plaidError.response?.data?.error_code
+        });
         return "Failed to update investment transactions";
       }
     }
   } catch (error) {
-    console.error(`updateInvestmentTransactions error for item ${item}:`, error);
+    logPlaidOperation('updateInvestmentTransactions', false, {
+      itemId: item,
+      error: error.message,
+      stack: error.stack
+    });
     return "Error updating investment transactions";
   }
 };
@@ -674,37 +1166,88 @@ const updateInvestmentTransactions = async (item) => {
 const updateLiabilities = async (item) => {
   try {
     if (!item) {
-      console.error("updateLiabilities: item is required");
+      logPlaidOperation('updateLiabilities', false, {
+        error: 'item is required'
+      });
       return "No item provided";
     }
 
+    // Get access token with fallback support
     const accessToken = await getAccessTokenFromItemId(item);
     if (!accessToken) {
-      console.error(`updateLiabilities: Failed to get access token for item: ${item}`);
+      logPlaidOperation('updateLiabilities', false, {
+        itemId: item,
+        error: 'Failed to get access token'
+      });
       return "Failed to get access token";
     }
 
+    // Validate item status before making API calls
+    const itemStatus = await validateItemStatus(item, accessToken);
+    if (!itemStatus.valid) {
+      logPlaidOperation('updateLiabilities', false, {
+        itemId: item,
+        status: itemStatus.status,
+        error: itemStatus.error || 'Item status invalid'
+      });
+      return `Item status invalid: ${itemStatus.status}`;
+    }
+
+    // Get institution ID for product support checking
+    const accessTokenDoc = await AccessToken.findOne({ itemId: item });
+    const institutionId = accessTokenDoc?.institutionId;
+
     // Check if the institution supports liabilities before making the call
+    if (institutionId) {
+      const supportsLiabilities = await checkInstitutionProductSupport(institutionId, 'liabilities');
+      if (!supportsLiabilities) {
+        logPlaidOperation('updateLiabilities', true, {
+          itemId: item,
+          institutionId,
+          note: 'Liabilities not supported by institution, skipping call'
+        });
+        return "Liabilities not supported by this institution";
+      }
+    }
+
     try {
       const response = await plaidClient.liabilitiesGet({
         access_token: accessToken,
       });
       
       if (response && response.data) {
-        console.log(`updateLiabilities: Successfully updated liabilities for item: ${item}`);
+        logPlaidOperation('updateLiabilities', true, {
+          itemId: item,
+          institutionId,
+          requestId: response.data.request_id
+        });
         return "Liabilities updated successfully";
       }
     } catch (plaidError) {
       if (plaidError.response?.data?.error_code === 'PRODUCTS_NOT_SUPPORTED') {
-        console.warn(`updateLiabilities: Liabilities not supported for item: ${item}`);
+        logPlaidOperation('updateLiabilities', true, {
+          itemId: item,
+          institutionId,
+          errorCode: 'PRODUCTS_NOT_SUPPORTED',
+          requestId: plaidError.response?.data?.request_id,
+          note: 'Liabilities not supported by institution'
+        });
         return "Liabilities not supported by this institution";
       } else {
-        console.error(`updateLiabilities: Plaid API error for item ${item}:`, plaidError.response?.data || plaidError.message);
+        logPlaidOperation('updateLiabilities', false, {
+          itemId: item,
+          institutionId,
+          error: plaidError.response?.data || plaidError.message,
+          requestId: plaidError.response?.data?.request_id
+        });
         return "Failed to update liabilities";
       }
     }
   } catch (error) {
-    console.error(`updateLiabilities error for item ${item}:`, error);
+    logPlaidOperation('updateLiabilities', false, {
+      itemId: item,
+      error: error.message
+    });
     return "Error updating liabilities";
   }
 };
@@ -803,8 +1346,8 @@ const repairAccessToken = async (accountId, email) => {
   }
 };
 
-const getCurrentCashflow = async (email) => {
-  const transactionsResponse = await getTransactions(email);
+const getCurrentCashflow = async (email, uid) => {
+  const transactionsResponse = await getTransactions(email, uid);
   const transactions = transactionsResponse.added;
   return transactions;
 };
@@ -872,7 +1415,6 @@ const invalidateAccessToken = async (accessToken) => {
   }
 };
 
-// Função para verificar se é um banco Chase
 const checkIfChaseBank = async (itemId, accessToken) => {
   try {
     const item = await plaidClient.itemGet({
@@ -892,7 +1434,6 @@ const checkIfChaseBank = async (itemId, accessToken) => {
   }
 };
 
-// Função para verificar status específico do Chase
 const checkChaseItemStatus = async (itemId, accessToken) => {
   try {
     const item = await plaidClient.itemGet({
@@ -904,7 +1445,6 @@ const checkChaseItemStatus = async (itemId, accessToken) => {
       country_codes: ['US']
     });
     
-    // Verificar se é Chase
     if (institution.data.institution.name.toLowerCase().includes('chase')) {
       console.log('Chase bank detected - applying special handling');
       
@@ -930,14 +1470,13 @@ const checkChaseItemStatus = async (itemId, accessToken) => {
   }
 };
 
-// Global rate limiting configuration
 const RATE_LIMIT_CONFIG = {
   default: { maxRetries: 3, baseDelay: 1000, maxDelay: 10000 },
   chase: { maxRetries: 5, baseDelay: 2000, maxDelay: 30000 },
-  high_volume: { maxRetries: 4, baseDelay: 1500, maxDelay: 15000 }
+  high_volume: { maxRetries: 4, baseDelay: 1500, maxDelay: 15000 },
+  universal: { maxRetries: 4, baseDelay: 1500, maxDelay: 20000 }
 };
 
-// Enhanced retry logic with exponential backoff for all institutions
 const retryWithBackoff = async (fn, institutionType = 'default', customConfig = {}) => {
   const config = { ...RATE_LIMIT_CONFIG[institutionType] || RATE_LIMIT_CONFIG.default, ...customConfig };
   
@@ -947,10 +1486,10 @@ const retryWithBackoff = async (fn, institutionType = 'default', customConfig = 
     } catch (error) {
       if (i === config.maxRetries - 1) throw error;
       
-      // Check for specific error types that warrant retry
       const shouldRetry = error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED' ||
                          error.response?.data?.error_code === 'RATE_LIMIT_EXCEEDED' ||
                          error.response?.data?.error_code === 'INSTITUTION_DOWN' ||
+                         error.response?.data?.error_code === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' ||
                          error.response?.status >= 500;
       
       if (shouldRetry) {
@@ -964,13 +1503,16 @@ const retryWithBackoff = async (fn, institutionType = 'default', customConfig = 
   }
 };
 
-// Monitoring and metrics
 const plaidMetrics = {
   requests: 0,
   errors: 0,
   rateLimitHits: 0,
+  paginationErrors: 0,
+  webhookErrors: 0,
   institutionErrors: {},
-  responseTimes: []
+  responseTimes: [],
+  lastSync: {},
+  syncStatus: {}
 };
 
 const trackPlaidRequest = (startTime, success, errorCode = null, institution = null) => {
@@ -982,13 +1524,16 @@ const trackPlaidRequest = (startTime, success, errorCode = null, institution = n
     plaidMetrics.errors++;
     if (errorCode === 'RATE_LIMIT_EXCEEDED') {
       plaidMetrics.rateLimitHits++;
+    } else if (errorCode === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION') {
+      plaidMetrics.paginationErrors++;
+    } else if (errorCode === 'WEBHOOK_ERROR') {
+      plaidMetrics.webhookErrors++;
     }
     if (institution) {
       plaidMetrics.institutionErrors[institution] = (plaidMetrics.institutionErrors[institution] || 0) + 1;
     }
   }
   
-  // Keep only last 1000 response times for memory management
   if (plaidMetrics.responseTimes.length > 1000) {
     plaidMetrics.responseTimes = plaidMetrics.responseTimes.slice(-1000);
   }
@@ -1004,6 +1549,599 @@ const getPlaidMetrics = () => {
     avgResponseTime: Math.round(avgResponseTime),
     errorRate: plaidMetrics.requests > 0 ? (plaidMetrics.errors / plaidMetrics.requests * 100).toFixed(2) : 0
   };
+};
+
+// Health monitoring and recovery functions
+
+// Check if an item's last successful sync is stale
+const isItemStale = async (itemId, staleThresholdDays = 30) => {
+  try {
+    const accounts = await PlaidAccount.find({ itemId });
+    if (!accounts || accounts.length === 0) {
+      return { stale: true, reason: 'No accounts found' };
+    }
+
+    const staleThreshold = new Date();
+    staleThreshold.setDate(staleThreshold.getDate() - staleThresholdDays);
+
+    // Check if any account has recent activity
+    for (const account of accounts) {
+      if (account.updated_at && account.updated_at > staleThreshold) {
+        return { stale: false, lastUpdate: account.updated_at };
+      }
+    }
+
+    return { stale: true, reason: 'No recent updates', lastUpdate: accounts[0]?.updated_at };
+  } catch (error) {
+    logPlaidOperation('isItemStale', false, {
+      itemId,
+      error: error.message
+    });
+    return { stale: true, reason: 'Error checking staleness' };
+  }
+};
+
+// Recover stale transactions for an item
+const recoverStaleTransactions = async (itemId, uid, daysBack = 90) => {
+  try {
+    logPlaidOperation('recoverStaleTransactions', true, {
+      itemId,
+      uid,
+      daysBack,
+      note: 'Starting stale transaction recovery'
+    });
+
+    const accessToken = await getAccessTokenFromItemId(itemId, uid);
+    if (!accessToken) {
+      logPlaidOperation('recoverStaleTransactions', false, {
+        itemId,
+        uid,
+        error: 'Failed to get access token'
+      });
+      return { success: false, error: 'Failed to get access token' };
+    }
+
+    // Validate item status
+    const itemStatus = await validateItemStatus(itemId, accessToken);
+    if (!itemStatus.valid) {
+      logPlaidOperation('recoverStaleTransactions', false, {
+        itemId,
+        uid,
+        status: itemStatus.status,
+        error: 'Item status invalid'
+      });
+      return { success: false, error: `Item status invalid: ${itemStatus.status}` };
+    }
+
+    // Get accounts for this item
+    const accounts = await PlaidAccount.find({ itemId });
+    if (!accounts || accounts.length === 0) {
+      logPlaidOperation('recoverStaleTransactions', false, {
+        itemId,
+        uid,
+        error: 'No accounts found'
+      });
+      return { success: false, error: 'No accounts found' };
+    }
+
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysBack);
+
+    const dek = await getUserDek(uid);
+    let totalRecovered = 0;
+
+    // Recover transactions for each account
+    for (const account of accounts) {
+      try {
+        const response = await plaidClient.transactionsGet({
+          access_token: accessToken,
+          start_date: startDate.toISOString().split('T')[0],
+          end_date: endDate.toISOString().split('T')[0],
+          options: {
+            account_ids: [account.plaid_account_id]
+          }
+        });
+
+        const transactions = response.data.transactions;
+        if (transactions && transactions.length > 0) {
+          // Process recovered transactions
+          await processTransactions(transactions, [account], dek);
+          totalRecovered += transactions.length;
+
+          logPlaidOperation('recoverStaleTransactions', true, {
+            itemId,
+            uid,
+            accountId: account.plaid_account_id,
+            recoveredCount: transactions.length
+          });
+        }
+
+        // Update account timestamp
+        account.updated_at = new Date();
+        await account.save();
+
+      } catch (error) {
+        logPlaidOperation('recoverStaleTransactions', false, {
+          itemId,
+          uid,
+          accountId: account.plaid_account_id,
+          error: error.message
+        });
+        // Continue with other accounts
+      }
+    }
+
+    logPlaidOperation('recoverStaleTransactions', true, {
+      itemId,
+      uid,
+      totalRecovered,
+      note: 'Stale transaction recovery completed'
+    });
+
+    return { success: true, recoveredCount: totalRecovered };
+  } catch (error) {
+    logPlaidOperation('recoverStaleTransactions', false, {
+      itemId,
+      uid,
+      error: error.message
+    });
+    return { success: false, error: error.message };
+  }
+};
+
+// Background health check job
+const runHealthCheck = async () => {
+  try {
+    logPlaidOperation('runHealthCheck', true, {
+      note: 'Starting background health check'
+    });
+
+    const allItems = await AccessToken.find({});
+    const healthReport = {
+      totalItems: allItems.length,
+      healthyItems: 0,
+      staleItems: 0,
+      failedItems: 0,
+      recoveryAttempts: 0,
+      recoverySuccesses: 0,
+      details: []
+    };
+
+    for (const item of allItems) {
+      try {
+        const itemId = item.itemId;
+        const uid = item.userId;
+
+        // Check if item is stale
+        const staleness = await isItemStale(itemId);
+        
+        if (staleness.stale) {
+          healthReport.staleItems++;
+          
+          // Attempt recovery for stale items
+          healthReport.recoveryAttempts++;
+          const recovery = await recoverStaleTransactions(itemId, uid);
+          
+          if (recovery.success) {
+            healthReport.recoverySuccesses++;
+            healthReport.details.push({
+              itemId,
+              status: 'recovered',
+              recoveredCount: recovery.recoveredCount,
+              reason: staleness.reason
+            });
+          } else {
+            healthReport.failedItems++;
+            healthReport.details.push({
+              itemId,
+              status: 'failed',
+              error: recovery.error,
+              reason: staleness.reason
+            });
+          }
+        } else {
+          healthReport.healthyItems++;
+          healthReport.details.push({
+            itemId,
+            status: 'healthy',
+            lastUpdate: staleness.lastUpdate
+          });
+        }
+
+      } catch (error) {
+        healthReport.failedItems++;
+        healthReport.details.push({
+          itemId: item.itemId,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+
+    logPlaidOperation('runHealthCheck', true, {
+      report: healthReport,
+      note: 'Background health check completed'
+    });
+
+    return healthReport;
+  } catch (error) {
+    logPlaidOperation('runHealthCheck', false, {
+      error: error.message
+    });
+    throw error;
+  }
+};
+
+// Webhook validation and fallback
+const validateWebhookSignature = (body, signature, webhookSecret) => {
+  try {
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(body, 'utf8')
+      .digest('hex');
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedSignature, 'hex')
+    );
+  } catch (error) {
+    logPlaidOperation('validateWebhookSignature', false, {
+      error: error.message
+    });
+    return false;
+  }
+};
+
+// Track webhook delivery failures
+const webhookFailureTracker = new Map();
+const WEBHOOK_FAILURE_THRESHOLD = 3;
+
+const trackWebhookFailure = (itemId) => {
+  const failures = webhookFailureTracker.get(itemId) || 0;
+  webhookFailureTracker.set(itemId, failures + 1);
+  
+  logPlaidOperation('trackWebhookFailure', true, {
+    itemId,
+    failureCount: failures + 1
+  });
+  
+  return failures + 1 >= WEBHOOK_FAILURE_THRESHOLD;
+};
+
+const resetWebhookFailures = (itemId) => {
+  webhookFailureTracker.delete(itemId);
+  logPlaidOperation('resetWebhookFailures', true, {
+    itemId
+  });
+};
+
+// Fallback polling for items with missed webhooks
+const triggerFallbackPolling = async (itemId, uid) => {
+  try {
+    logPlaidOperation('triggerFallbackPolling', true, {
+      itemId,
+      uid,
+      note: 'Triggering fallback polling due to missed webhooks'
+    });
+
+    // Trigger transaction sync
+    const transactionResult = await updateTransactions(itemId);
+    
+    // Trigger liabilities update
+    const liabilitiesResult = await updateLiabilities(itemId);
+    
+    // Reset webhook failure count
+    resetWebhookFailures(itemId);
+    
+    return {
+      success: true,
+      transactions: transactionResult,
+      liabilities: liabilitiesResult
+    };
+  } catch (error) {
+    logPlaidOperation('triggerFallbackPolling', false, {
+      itemId,
+      uid,
+      error: error.message
+    });
+    return { success: false, error: error.message };
+  }
+};
+
+// Generate health report for all items
+const generateHealthReport = async () => {
+  try {
+    const allItems = await AccessToken.find({});
+    const report = {
+      timestamp: new Date().toISOString(),
+      totalItems: allItems.length,
+      summary: {
+        healthy: 0,
+        needsReauth: 0,
+        stale: 0,
+        failed: 0
+      },
+      items: []
+    };
+
+    for (const item of allItems) {
+      try {
+        const itemId = item.itemId;
+        const uid = item.userId;
+        
+        // Get access token
+        const accessToken = await getAccessTokenFromItemId(itemId, uid);
+        if (!accessToken) {
+          report.summary.failed++;
+          report.items.push({
+            itemId,
+            status: 'failed',
+            reason: 'Cannot decrypt access token'
+          });
+          continue;
+        }
+
+        // Validate item status
+        const itemStatus = await validateItemStatus(itemId, accessToken);
+        if (!itemStatus.valid) {
+          if (itemStatus.status === 'ITEM_LOGIN_REQUIRED') {
+            report.summary.needsReauth++;
+            report.items.push({
+              itemId,
+              status: 'needs_reauth',
+              reason: itemStatus.status
+            });
+          } else {
+            report.summary.failed++;
+            report.items.push({
+              itemId,
+              status: 'failed',
+              reason: itemStatus.status
+            });
+          }
+          continue;
+        }
+
+        // Check staleness
+        const staleness = await isItemStale(itemId);
+        if (staleness.stale) {
+          report.summary.stale++;
+          report.items.push({
+            itemId,
+            status: 'stale',
+            reason: staleness.reason,
+            lastUpdate: staleness.lastUpdate
+          });
+        } else {
+          report.summary.healthy++;
+          report.items.push({
+            itemId,
+            status: 'healthy',
+            lastUpdate: staleness.lastUpdate
+          });
+        }
+
+      } catch (error) {
+        report.summary.failed++;
+        report.items.push({
+          itemId: item.itemId,
+          status: 'error',
+          reason: error.message
+        });
+      }
+    }
+
+    logPlaidOperation('generateHealthReport', true, {
+      report: report.summary
+    });
+
+    return report;
+  } catch (error) {
+    logPlaidOperation('generateHealthReport', false, {
+      error: error.message
+    });
+    throw error;
+  }
+};
+
+// Safe sync/recovery for a specific item
+const safeSyncItem = async (itemId, uid) => {
+  try {
+    logPlaidOperation('safeSyncItem', true, {
+      itemId,
+      uid,
+      note: 'Starting safe sync'
+    });
+
+    // Validate item status first
+    const accessToken = await getAccessTokenFromItemId(itemId, uid);
+    if (!accessToken) {
+      return { success: false, error: 'Cannot decrypt access token' };
+    }
+
+    const itemStatus = await validateItemStatus(itemId, accessToken);
+    if (!itemStatus.valid) {
+      return { success: false, error: `Item status invalid: ${itemStatus.status}` };
+    }
+
+    // Perform safe sync operations
+    const results = {
+      transactions: null,
+      liabilities: null,
+      investments: null
+    };
+
+    try {
+      results.transactions = await updateTransactions(itemId);
+    } catch (error) {
+      logPlaidOperation('safeSyncItem', false, {
+        itemId,
+        uid,
+        operation: 'transactions',
+        error: error.message
+      });
+    }
+
+    try {
+      results.liabilities = await updateLiabilities(itemId);
+    } catch (error) {
+      logPlaidOperation('safeSyncItem', false, {
+        itemId,
+        uid,
+        operation: 'liabilities',
+        error: error.message
+      });
+    }
+
+    try {
+      results.investments = await updateInvestmentTransactions(itemId);
+    } catch (error) {
+      logPlaidOperation('safeSyncItem', false, {
+        itemId,
+        uid,
+        operation: 'investments',
+        error: error.message
+      });
+    }
+
+    logPlaidOperation('safeSyncItem', true, {
+      itemId,
+      uid,
+      results
+    });
+
+    return { success: true, results };
+  } catch (error) {
+    logPlaidOperation('safeSyncItem', false, {
+      itemId,
+      uid,
+      error: error.message
+    });
+    return { success: false, error: error.message };
+  }
+};
+
+// Error monitoring and reporting system
+const errorMonitoring = {
+  encryptionErrors: new Map(),
+  webhookFailures: new Map(),
+  lastReportTime: null,
+  
+  // Track encryption errors
+  trackEncryptionError: (itemId, uid, error, context = {}) => {
+    const key = `${itemId}-${uid}`;
+    const errorInfo = {
+      itemId,
+      uid,
+      error: error.message,
+      errorCode: error.code,
+      context,
+      timestamp: new Date(),
+      count: 1
+    };
+    
+    if (errorMonitoring.encryptionErrors.has(key)) {
+      const existing = errorMonitoring.encryptionErrors.get(key);
+      existing.count++;
+      existing.lastError = error.message;
+      existing.lastTimestamp = new Date();
+    } else {
+      errorMonitoring.encryptionErrors.set(key, errorInfo);
+    }
+    
+    // Log immediately for critical errors
+    if (error.code === 'ERR_CRYPTO_INVALID_AUTH_TAG' || 
+        error.code === 'ERR_CRYPTO_INVALID_IV' ||
+        error.message.includes('Unsupported state')) {
+      logPlaidOperation('errorMonitoring', false, {
+        type: 'critical_encryption_error',
+        itemId,
+        uid,
+        error: error.message,
+        errorCode: error.code,
+        context
+      });
+    }
+  },
+  
+  // Track webhook failures
+  trackWebhookFailure: (itemId, error, context = {}) => {
+    const failureInfo = {
+      itemId,
+      error: error?.message || 'Unknown error',
+      context,
+      timestamp: new Date(),
+      count: 1
+    };
+    
+    if (errorMonitoring.webhookFailures.has(itemId)) {
+      const existing = errorMonitoring.webhookFailures.get(itemId);
+      existing.count++;
+      existing.lastError = error?.message || 'Unknown error';
+      existing.lastTimestamp = new Date();
+    } else {
+      errorMonitoring.webhookFailures.set(itemId, failureInfo);
+    }
+  },
+  
+  // Generate error report
+  generateErrorReport: () => {
+    const now = new Date();
+    const report = {
+      timestamp: now,
+      encryptionErrors: Array.from(errorMonitoring.encryptionErrors.values()),
+      webhookFailures: Array.from(errorMonitoring.webhookFailures.values()),
+      summary: {
+        totalEncryptionErrors: errorMonitoring.encryptionErrors.size,
+        totalWebhookFailures: errorMonitoring.webhookFailures.size,
+        criticalErrors: Array.from(errorMonitoring.encryptionErrors.values())
+          .filter(e => e.errorCode === 'ERR_CRYPTO_INVALID_AUTH_TAG' || 
+                      e.errorCode === 'ERR_CRYPTO_INVALID_IV' ||
+                      e.error.includes('Unsupported state')).length
+      }
+    };
+    
+    // Log the report
+    logPlaidOperation('errorMonitoring', true, {
+      type: 'error_report',
+      report
+    });
+    
+    errorMonitoring.lastReportTime = now;
+    return report;
+  },
+  
+  // Clear old errors (older than 24 hours)
+  cleanupOldErrors: () => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    for (const [key, error] of errorMonitoring.encryptionErrors.entries()) {
+      if (error.timestamp < cutoff) {
+        errorMonitoring.encryptionErrors.delete(key);
+      }
+    }
+    
+    for (const [itemId, failure] of errorMonitoring.webhookFailures.entries()) {
+      if (failure.timestamp < cutoff) {
+        errorMonitoring.webhookFailures.delete(itemId);
+      }
+    }
+  }
+};
+
+// Enhanced decryptValue with error monitoring
+const decryptValueWithMonitoring = async (cipherTextBase64, dek, uid, context = {}) => {
+  try {
+    return await decryptValue(cipherTextBase64, dek, uid);
+  } catch (error) {
+    // Track encryption errors for monitoring
+    if (context.itemId) {
+      errorMonitoring.trackEncryptionError(context.itemId, uid, error, context);
+    }
+    throw error;
+  }
 };
 
 const plaidService = {
@@ -1032,6 +2170,25 @@ const plaidService = {
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
   invalidateAccessToken,
+  checkIfChaseBank,
+  checkChaseItemStatus,
+  retryWithBackoff,
+  trackPlaidRequest,
+  getPlaidMetrics,
+  markItemForReauth,
+  isItemStale,
+  recoverStaleTransactions,
+  runHealthCheck,
+  validateWebhookSignature,
+  trackWebhookFailure,
+  resetWebhookFailures,
+  triggerFallbackPolling,
+  generateHealthReport,
+  safeSyncItem,
+  // Error monitoring functions
+  handleCorruptedAccessToken,
+  decryptValueWithMonitoring,
+  errorMonitoring,
 };
 
 export default plaidService;
