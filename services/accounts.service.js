@@ -55,11 +55,38 @@ const addAccount = async (accessToken, email, uid) => {
   }
   const userId = user._id.toString();
   const userType = user.role;
-  const accountsResponse = await plaidService.getAccountsWithAccessToken(
-    accessToken
-  );
+  // Decrypt the access token before using it with Plaid API
+  const decryptedAccessToken = await safeDecryptValue(accessToken, dek);
+  
+  let accountsResponse;
+  try {
+    accountsResponse = await plaidService.getAccountsWithAccessToken(
+      decryptedAccessToken
+    );
+  } catch (error) {
+    // Add detailed error context
+    error.details = {
+      ...error.details,
+      plaid_operation: 'getAccountsWithAccessToken',
+      error_type: 'plaid_api_error',
+      plaid_status: error.response?.status,
+      plaid_status_text: error.response?.statusText,
+      plaid_response_data: error.response?.data
+    };
+    throw error;
+  }
 
   const accounts = accountsResponse.accounts;
+  
+  // Add defensive checks for response data
+  if (!accounts || !Array.isArray(accounts)) {
+    throw new Error('Invalid response from Plaid API: missing or invalid accounts data');
+  }
+  
+  if (!accountsResponse.item) {
+    throw new Error('Invalid response from Plaid API: missing item data');
+  }
+  
   const institutionId = accountsResponse.item.institution_id;
   const institutionName = accountsResponse.item.institution_name;
 
@@ -169,13 +196,19 @@ const addAccount = async (accessToken, email, uid) => {
   if (accountsResponse.item.products.includes("transactions")) {
     try {
       transactionsResponse = await plaidService.getTransactionsWithAccessToken(
-        accessToken
+        decryptedAccessToken
       );
     } catch (error) {
-      console.error(
-        "Error fetching transactions:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getTransactionsWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - transactions are optional
     }
   }
 
@@ -183,35 +216,54 @@ const addAccount = async (accessToken, email, uid) => {
     try {
       investmentTransactionsResponse =
         await plaidService.getInvestmentTransactionsWithAccessToken(
-          accessToken
+          decryptedAccessToken
         );
     } catch (error) {
-      console.error(
-        "Error fetching investment transactions:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getInvestmentTransactionsWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - investment transactions are optional
     }
   }
 
   if (accountsResponse.item.products.includes("liabilities")) {
     try {
       liabilitiesResponse =
-        await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+        await plaidService.getLoanLiabilitiesWithAccessToken(decryptedAccessToken);
     } catch (error) {
-      console.error(
-        "Error fetching liabilities:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getLoanLiabilitiesWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - liabilities are optional
     }
   }
 
   const nextCursor = transactionsResponse
     ? transactionsResponse.next_cursor
     : null;
-  const transactions = transactionsResponse ? transactionsResponse.added : [];
-  const investmentTransactions = investmentTransactionsResponse
-    ? investmentTransactionsResponse.investment_transactions
-    : [];
+  
+  // Add defensive checks for transactions data
+  let transactions = [];
+  if (transactionsResponse && transactionsResponse.added && Array.isArray(transactionsResponse.added)) {
+    transactions = transactionsResponse.added;
+  }
+  
+  let investmentTransactions = [];
+  if (investmentTransactionsResponse && investmentTransactionsResponse.investment_transactions && Array.isArray(investmentTransactionsResponse.investment_transactions)) {
+    investmentTransactions = investmentTransactionsResponse.investment_transactions;
+  }
 
   const transactionsByAccount = {};
 

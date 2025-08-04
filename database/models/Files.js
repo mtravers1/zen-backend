@@ -19,6 +19,10 @@ const filesSchema = new Schema({
   type: String,
   info: {},
   fileurl: String,
+  folder: {
+    type: String,
+    default: "General"
+  },
   updatedAt: Date,
 });
 

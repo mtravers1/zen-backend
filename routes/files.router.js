@@ -5,6 +5,7 @@ const router = Router();
 
 router.post("/addFile", filesController.addFile);
 router.get("/getFiles/:profileId", filesController.getFiles);
+router.get("/getFolders/:profileId", filesController.getFolders);
 router.post("/add-file", filesController.generateFileUrl);
 router.post("/get-file", filesController.getFileUrl);
 router.post("/add-image", filesController.genereteImageUrl);

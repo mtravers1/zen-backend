@@ -218,13 +218,19 @@ const saveAccessToken = async (
   uid
 ) => {
   try {
+    // Get the user from database to get the MongoDB ObjectId
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      throw new Error(`User not found for uid: ${uid}`);
+    }
+
     const dek = await getUserDek(uid);
     const encryptedAccessToken = await encryptValue(accessToken, dek, uid);
 
     const accessTokenDoc = new AccessToken({
       accessToken: encryptedAccessToken,
       itemId,
-      userId: uid,
+      userId: user._id, // Use MongoDB ObjectId instead of Firebase UID
       institutionId,
     });
 
@@ -250,7 +256,13 @@ const saveAccessToken = async (
 
 const getUserAccessTokens = async (email, uid) => {
   try {
-    const accessTokens = await AccessToken.find({ userId: uid });
+    // Get the user from database to get the MongoDB ObjectId
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      throw new Error(`User not found for uid: ${uid}`);
+    }
+    
+    const accessTokens = await AccessToken.find({ userId: user._id });
     const dek = await getUserDek(uid);
     const fallbackDek = await getPreviousDek(uid);
 
@@ -300,8 +312,8 @@ const getAccounts = async (email, uid) => {
 
     for (const token of accessTokens) {
       try {
-        const accounts = await getAccountsWithAccessToken(token.accessToken);
-        allAccounts.push(...accounts);
+        const accountsResponse = await getAccountsWithAccessToken(token.accessToken);
+        allAccounts.push(...accountsResponse.accounts);
       } catch (error) {
         logPlaidOperation('getAccounts', false, {
           itemId: token.itemId,
@@ -332,7 +344,7 @@ const getAccountsWithAccessToken = async (accessToken) => {
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
-  return response.data.accounts;
+  return response.data;
 };
 
 const getBalance = async (email, uid) => {
@@ -342,8 +354,8 @@ const getBalance = async (email, uid) => {
 
     for (const token of accessTokens) {
       try {
-        const accounts = await getAccountsWithAccessToken(token.accessToken);
-        allBalances.push(...accounts);
+        const accountsResponse = await getAccountsWithAccessToken(token.accessToken);
+        allBalances.push(...accountsResponse.accounts);
       } catch (error) {
         logPlaidOperation('getBalance', false, {
           itemId: token.itemId,
@@ -386,8 +398,8 @@ const getTransactions = async (email, uid) => {
 
     for (const token of accessTokens) {
       try {
-        const transactions = await getTransactionsWithAccessToken(token.accessToken);
-        allTransactions.push(...transactions);
+        const transactionsResponse = await getTransactionsWithAccessToken(token.accessToken);
+        allTransactions.push(...transactionsResponse.transactions);
       } catch (error) {
         logPlaidOperation('getTransactions', false, {
           itemId: token.itemId,
@@ -420,7 +432,7 @@ const getTransactionsWithAccessToken = async (accessToken) => {
     start_date: "2020-01-01",
     end_date: new Date().toISOString().split("T")[0],
   });
-  return response.data.transactions;
+  return response.data;
 };
 
 const getInvestmentTransactionsWithAccessToken = async (accessToken) => {

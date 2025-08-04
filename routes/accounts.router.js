@@ -21,5 +21,7 @@ router.get("/details/:accountId/:profileId", accountsController.getAccountDetail
 router.get("/", accountsController.getAllUserAccounts);
 router.post("/add-photo", accountsController.addAccountPhoto);
 router.post("/get-photo", accountsController.getAccountPhoto);
+router.get("/photo/:fileName", accountsController.serveAccountPhoto);
+router.delete("/:accountId", accountsController.deleteAccount);
 
 export default router;

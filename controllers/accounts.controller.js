@@ -9,7 +9,14 @@ const addAccount = async (req, res) => {
     const response = await accountsService.addAccount(token, email, uid);
     res.status(201).send(response);
   } catch (error) {
-    console.log(error);
+    // Add detailed error context to the error object
+    error.details = {
+      operation: 'addAccount',
+      user_email: email,
+      user_uid: uid,
+      has_token: !!token,
+      error_source: 'accounts_service'
+    };
     res.status(500).send({ message: error.message });
   }
 };
@@ -177,6 +184,59 @@ const getAccountPhoto = async (req, res) => {
   }
 };
 
+const serveAccountPhoto = async (req, res) => {
+  try {
+    const { fileName } = req.params;
+    console.log('Serving photo:', fileName);
+    
+    // Generate signed URL for the photo
+    const signedUrl = await accountsService.generateSignedUrl(fileName);
+    
+    if (!signedUrl) {
+      const error = new Error('Photo not found');
+      error.details = {
+        operation: 'serveAccountPhoto',
+        fileName,
+        user_email: req.user?.email,
+        user_uid: req.user?.uid,
+        error_type: 'file_not_found'
+      };
+      return res.status(404).send({ message: 'Photo not found' });
+    }
+    
+    // Redirect to the signed URL
+    res.redirect(signedUrl);
+  } catch (error) {
+    error.details = {
+      operation: 'serveAccountPhoto',
+      fileName: req.params.fileName,
+      user_email: req.user?.email,
+      user_uid: req.user?.uid,
+      error_type: 'server_error'
+    };
+    res.status(500).send({ message: error.message });
+  }
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const email = req.user.email;
+    
+    const result = await accountsService.removeAccount(accountId, email);
+    res.status(200).send({ message: 'Account deleted successfully', result });
+  } catch (error) {
+    error.details = {
+      operation: 'deleteAccount',
+      accountId: req.params.accountId,
+      user_email: req.user?.email,
+      user_uid: req.user?.uid,
+      error_type: 'delete_error'
+    };
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const accountsController = {
   addAccount,
   getAccounts,
@@ -188,6 +248,8 @@ const accountsController = {
   getAllUserAccounts,
   addAccountPhoto,
   getAccountPhoto,
+  serveAccountPhoto,
+  deleteAccount,
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
 };
