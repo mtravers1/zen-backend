@@ -16,11 +16,15 @@ const app = express();
 
 // database initialization
 // require('./database/database');
-
+const additionalOrigins = process.env.CORS_URL
+          .split(',')
+          .map(url => url.trim())
+          .filter(url => url.length > 0) || [];
 // CORS configuration for development
 const corsOptions = {
   origin: [
     'https://zentavos.com',
+    ...additionalOrigins
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
