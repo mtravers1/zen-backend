@@ -20,19 +20,7 @@ const app = express();
 // CORS configuration for development
 const corsOptions = {
   origin: [
-    'http://localhost:3000',
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'http://10.0.2.2:3000',
-    'http://10.0.2.2:8081',
-    'http://10.0.2.2:19006',
-    'http://192.168.0.108:3000',
-    'http://192.168.0.108:8081',
-    'http://192.168.0.108:19006',
-    'exp://localhost:19000',
-    'exp://10.0.2.2:19000',
-    'exp://192.168.0.108:19000',
-    'exp+zentavos://expo-development-client',
+    'https://zentavos.com',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -68,6 +56,7 @@ app.use(
 			"/api/plaid/accounts",
 			"/api/account/add-photo",
 			"/api/account/get-photo",
+			"/api/account/photo",
 			"/api/script/update-transactions",
 			"/api/payments/webhook/android",
 			"/api/payments/webhook/apple",
