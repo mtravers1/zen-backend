@@ -849,7 +849,7 @@ const updateUniversalTransactions = async (item, accessToken, uid, accounts) => 
   const maxIterations = 15;
   let iterationCounter = 0;
 
-  // Configuração específica para Capital One
+  // Specific configuration for Capital One
   const isCapitalOne = accounts[0]?.institution_id === 'ins_56' || 
                       accounts[0]?.institution_id?.includes('capital_one') ||
                       accounts[0]?.institution_id?.includes('capitalone');

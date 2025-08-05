@@ -3,13 +3,13 @@ import webhookService from '../services/webhook.service.js';
 
 const router = express.Router();
 
-// Middleware para garantir que webhooks sempre retornem 200
-// Isso evita que o Plaid retente webhooks desnecessariamente
+// Middleware to ensure webhooks always return 200
+// This prevents Plaid from unnecessarily retrying webhooks
 const webhookErrorHandler = (err, req, res, next) => {
   console.error('Webhook error:', err);
   
-  // Sempre retorna 200 para webhooks, mesmo em caso de erro
-  // O Plaid irá reenviar webhooks importantes automaticamente
+  // Always return 200 for webhooks, even in case of error
+  // Plaid will automatically resend important webhooks
   res.status(200).json({
     status: 'error',
     message: 'Webhook processed with errors',
@@ -17,7 +17,7 @@ const webhookErrorHandler = (err, req, res, next) => {
   });
 };
 
-// Health check para webhook endpoint
+// Health check for webhook endpoint
 router.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
@@ -49,7 +49,7 @@ router.post('/plaid', async (req, res, next) => {
   } catch (error) {
     console.error('Webhook processing error:', error);
     
-    // Sempre retorna 200 para evitar retries desnecessários
+    // Always return 200 to avoid unnecessary retries
     res.status(200).json({
       status: 'error',
       message: 'Webhook processed with errors',
@@ -58,7 +58,7 @@ router.post('/plaid', async (req, res, next) => {
   }
 });
 
-// Aplicar middleware de erro
+// Apply error middleware
 router.use(webhookErrorHandler);
 
 export default router;

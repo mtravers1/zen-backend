@@ -90,10 +90,10 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
 /*export const getStartOfWeek = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
-  const day = d.getUTCDay(); // Domingo=0, Lunes=1, ..., Sábado=6
-  const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1
+  const day = d.getUTCDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+  const diff = -day; // For weeks Sunday to Saturday
   d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().split("T")[0]; // solo la fecha
+  return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };*/
 
 export const getStartOfWeek = (date) => {

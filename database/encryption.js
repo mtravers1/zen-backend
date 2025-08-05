@@ -48,12 +48,15 @@ const logEncryptionOperation = (operation, success, details = {}) => {
     success,
     ...details
   };
-  
+
   if (success) {
     console.log(`[ENCRYPTION] ${operation}:`, logEntry);
   } else {
     console.error(`[ENCRYPTION] ${operation} FAILED:`, logEntry);
   }
+  
+  // TODO: Consider migrating to a proper logging library like Winston or Pino
+  // for production use to support log levels, rotation, and transport configuration
 };
 
 async function generateAndStoreEncryptedDEK(uid) {
