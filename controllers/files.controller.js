@@ -24,6 +24,18 @@ const getFiles = async (req, res) => {
   }
 };
 
+const getFolders = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { profileId } = req.params;
+    const response = await filesService.getFolders(profileId, uid);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const deleteFiles = async (req, res) => {
   try {
     const data = req.body;
@@ -69,5 +81,5 @@ const getFileUrl = async (req, res) => {
   }
 };
 
-const filesController = { addFile, getFiles, deleteFiles, generateFileUrl, getFileUrl, genereteImageUrl };
+const filesController = { addFile, getFiles, getFolders, deleteFiles, generateFileUrl, getFileUrl, genereteImageUrl };
 export default filesController;

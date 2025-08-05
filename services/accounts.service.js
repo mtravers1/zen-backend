@@ -16,6 +16,23 @@ import {
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
+const safeDecryptValue = async (value, dek) => {
+  if (value === null || value === undefined || value === "") {
+    return value;
+  }
+  
+  if (typeof value !== 'string') {
+    return value;
+  }
+  
+  try {
+    return await decryptValue(value, dek);
+  } catch (error) {
+    console.warn("Failed to decrypt value, returning null instead of encrypted value:", error.message);
+    return null; // Return null instead of the encrypted value to avoid data corruption
+  }
+};
+
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
@@ -38,11 +55,38 @@ const addAccount = async (accessToken, email, uid) => {
   }
   const userId = user._id.toString();
   const userType = user.role;
-  const accountsResponse = await plaidService.getAccountsWithAccessToken(
-    accessToken
-  );
+  // Decrypt the access token before using it with Plaid API
+  const decryptedAccessToken = await safeDecryptValue(accessToken, dek);
+  
+  let accountsResponse;
+  try {
+    accountsResponse = await plaidService.getAccountsWithAccessToken(
+      decryptedAccessToken
+    );
+  } catch (error) {
+    // Add detailed error context
+    error.details = {
+      ...error.details,
+      plaid_operation: 'getAccountsWithAccessToken',
+      error_type: 'plaid_api_error',
+      plaid_status: error.response?.status,
+      plaid_status_text: error.response?.statusText,
+      plaid_response_data: error.response?.data
+    };
+    throw error;
+  }
 
   const accounts = accountsResponse.accounts;
+  
+  // Add defensive checks for response data
+  if (!accounts || !Array.isArray(accounts)) {
+    throw new Error('Invalid response from Plaid API: missing or invalid accounts data');
+  }
+  
+  if (!accountsResponse.item) {
+    throw new Error('Invalid response from Plaid API: missing item data');
+  }
+  
   const institutionId = accountsResponse.item.institution_id;
   const institutionName = accountsResponse.item.institution_name;
 
@@ -152,13 +196,19 @@ const addAccount = async (accessToken, email, uid) => {
   if (accountsResponse.item.products.includes("transactions")) {
     try {
       transactionsResponse = await plaidService.getTransactionsWithAccessToken(
-        accessToken
+        decryptedAccessToken
       );
     } catch (error) {
-      console.error(
-        "Error fetching transactions:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getTransactionsWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - transactions are optional
     }
   }
 
@@ -166,35 +216,54 @@ const addAccount = async (accessToken, email, uid) => {
     try {
       investmentTransactionsResponse =
         await plaidService.getInvestmentTransactionsWithAccessToken(
-          accessToken
+          decryptedAccessToken
         );
     } catch (error) {
-      console.error(
-        "Error fetching investment transactions:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getInvestmentTransactionsWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - investment transactions are optional
     }
   }
 
   if (accountsResponse.item.products.includes("liabilities")) {
     try {
       liabilitiesResponse =
-        await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+        await plaidService.getLoanLiabilitiesWithAccessToken(decryptedAccessToken);
     } catch (error) {
-      console.error(
-        "Error fetching liabilities:",
-        error.response?.data || error
-      );
+      // Add detailed error context but don't throw - this is optional
+      error.details = {
+        ...error.details,
+        plaid_operation: 'getLoanLiabilitiesWithAccessToken',
+        error_type: 'plaid_api_error_optional',
+        plaid_status: error.response?.status,
+        plaid_status_text: error.response?.statusText,
+        plaid_response_data: error.response?.data
+      };
+      // Log but continue - liabilities are optional
     }
   }
 
   const nextCursor = transactionsResponse
     ? transactionsResponse.next_cursor
     : null;
-  const transactions = transactionsResponse ? transactionsResponse.added : [];
-  const investmentTransactions = investmentTransactionsResponse
-    ? investmentTransactionsResponse.investment_transactions
-    : [];
+  
+  // Add defensive checks for transactions data
+  let transactions = [];
+  if (transactionsResponse && transactionsResponse.added && Array.isArray(transactionsResponse.added)) {
+    transactions = transactionsResponse.added;
+  }
+  
+  let investmentTransactions = [];
+  if (investmentTransactionsResponse && investmentTransactionsResponse.investment_transactions && Array.isArray(investmentTransactionsResponse.investment_transactions)) {
+    investmentTransactions = investmentTransactionsResponse.investment_transactions;
+  }
 
   const transactionsByAccount = {};
 
@@ -337,7 +406,7 @@ const addAccount = async (accessToken, email, uid) => {
     Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
       if (Array.isArray(value)) {
         value.forEach(async (item) => {
-          //if accountid is not in savedaccounts, then skip
+
           if (
             !savedAccounts.find(
               (account) => account.plaid_account_id === item.account_id
@@ -624,9 +693,13 @@ const removeAccount = async (accountId, email) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const plaidAccounts = user.plaidAccounts;
 
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  const plaidAccounts = user.plaidAccounts || [];
   user.plaidAccounts = plaidAccounts.filter(
     (id) => id.toString() !== account._id.toString()
   );
@@ -651,33 +724,33 @@ const getAccounts = async (profile, uid) => {
   let plaidAccounts = [];
 
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecryptValue(
       plaidAccount.currentBalance,
       dek
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecryptValue(
       plaidAccount.availableBalance,
       dek
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecryptValue(
       plaidAccount.account_type,
       dek
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecryptValue(
       plaidAccount.account_subtype,
       dek
     );
-    const decryptedAccountName = await decryptValue(
+    const decryptedAccountName = await safeDecryptValue(
       plaidAccount.account_name,
       dek
     );
-    const decryptedAccountOfficialName = await decryptValue(
+    const decryptedAccountOfficialName = await safeDecryptValue(
       plaidAccount.account_official_name,
       dek
     );
-    const decryptedMask = await decryptValue(plaidAccount.mask, dek);
+    const decryptedMask = await safeDecryptValue(plaidAccount.mask, dek);
 
-    const decryptedInstitutionName = await decryptValue(
+    const decryptedInstitutionName = await safeDecryptValue(
       plaidAccount.institution_name,
       dek
     );
@@ -721,16 +794,27 @@ const getAccounts = async (profile, uid) => {
 };
 
 const getAllUserAccounts = async (email, uid) => {
+  const startTime = Date.now();
+  structuredLogger.logOperationStart('getAllUserAccounts', { uid });
+  
   const user = await User.findOne({
     authUid: uid,
   })
     .populate("plaidAccounts", "-transactions")
     .exec();
   if (!user) {
+    const duration = Date.now() - startTime;
+    structuredLogger.logErrorBlock(new Error("User not found"), {
+      operation: 'getAllUserAccounts',
+      uid,
+      duration
+    });
     throw new Error("User not found");
   }
 
   if (!user.plaidAccounts.length) {
+    const duration = Date.now() - startTime;
+    structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, result: 'no_accounts' });
     return [];
   }
 
@@ -741,34 +825,34 @@ const getAllUserAccounts = async (email, uid) => {
   const dek = await getUserDek(uid);
 
   for (const plaidAccount of accountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecryptValue(
       plaidAccount.currentBalance,
       dek
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecryptValue(
       plaidAccount.availableBalance,
       dek
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecryptValue(
       plaidAccount.account_type,
       dek
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecryptValue(
       plaidAccount.account_subtype,
       dek
     );
 
-    const decryptedAccountName = await decryptValue(
+    const decryptedAccountName = await safeDecryptValue(
       plaidAccount.account_name,
       dek
     );
-    const decryptedAccountOfficialName = await decryptValue(
+    const decryptedAccountOfficialName = await safeDecryptValue(
       plaidAccount.account_official_name,
       dek
     );
-    const decryptedMask = await decryptValue(plaidAccount.mask, dek);
+    const decryptedMask = await safeDecryptValue(plaidAccount.mask, dek);
 
-    const decryptedInstitutionName = await decryptValue(
+    const decryptedInstitutionName = await safeDecryptValue(
       plaidAccount.institution_name,
       dek
     );
@@ -786,7 +870,8 @@ const getAllUserAccounts = async (email, uid) => {
     });
   }
 
-  console.timeEnd("getAllUserAccounts");
+  const duration = Date.now() - startTime;
+  structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, account_count: accounts.length });
   return accounts;
 };
 const calculateCashFlowsWeekly = async (
@@ -911,19 +996,19 @@ const getCashFlowsWeekly = async (profile, uid) => {
 
   const dek = await getUserDek(uid);
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecryptValue(
       plaidAccount.currentBalance,
       dek
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecryptValue(
       plaidAccount.availableBalance,
       dek
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecryptValue(
       plaidAccount.account_type,
       dek
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecryptValue(
       plaidAccount.account_subtype,
       dek
     );
@@ -957,19 +1042,19 @@ const getCashFlows = async (profile, uid) => {
 
   let plaidAccounts = [];
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecryptValue(
       plaidAccount.currentBalance,
       dek
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecryptValue(
       plaidAccount.availableBalance,
       dek
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecryptValue(
       plaidAccount.account_type,
       dek
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecryptValue(
       plaidAccount.account_subtype,
       dek
     );
@@ -1547,19 +1632,19 @@ const getProfileTransactions = async (
   const dek = await getUserDek(uid);
 
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecryptValue(
       plaidAccount.currentBalance,
       dek
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecryptValue(
       plaidAccount.availableBalance,
       dek
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecryptValue(
       plaidAccount.account_type,
       dek
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecryptValue(
       plaidAccount.account_subtype,
       dek
     );
@@ -1818,7 +1903,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await decryptValue(
+      decryptedLiabilities[field] = await safeDecryptValue(
         liabilitiesList[field],
         dek
       );
@@ -1835,7 +1920,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
         "interestChargeAmount",
       ]) {
         if (aprItem[key]) {
-          decryptedAprItem[key] = await decryptValue(aprItem[key], dek);
+          decryptedAprItem[key] = await safeDecryptValue(aprItem[key], dek);
         }
       }
       decryptedLiabilities.aprs.push(decryptedAprItem);
@@ -1877,7 +1962,7 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await decryptValue(
+      decryptedLiabilities[field] = await safeDecryptValue(
         liabilitiesList[field],
         dek
       );
@@ -1916,7 +2001,7 @@ async function getDecryptedAccount(account, dek) {
 
   for (const field of binaryFields) {
     if (account[field]) {
-      decryptedAccount[field] = await decryptValue(account[field], dek);
+      decryptedAccount[field] = await safeDecryptValue(account[field], dek);
     }
   }
 

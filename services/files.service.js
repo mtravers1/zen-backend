@@ -25,6 +25,7 @@ const addFile = async (data, uid) => {
     type: data.type,
     info: data.info,
     fileurl: data.fileurl,
+    folder: data.folder || "General",
     updatedAt: new Date(),
   });
 
@@ -104,8 +105,47 @@ const getFiles = async (profileId, uid) => {
     type: file.type,
     info: file.info,
     fileurl: file.fileurl,
+    folder: file.folder,
     updatedAt: file.updatedAt,
   }));
+};
+
+const getFolders = async (profileId, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) throw new Error("User not found");
+
+  const files = await Files.find({
+    userId: user._id.toString(),
+    profileId: profileId,
+  });
+
+  // Get unique folders and count files in each
+  const folderCounts = {};
+  files.forEach((file) => {
+    const folder = file.folder || "General";
+    folderCounts[folder] = (folderCounts[folder] || 0) + 1;
+  });
+
+  // Convert to array format with actual timestamps
+  const folders = Object.keys(folderCounts).map((folderName) => {
+    const folderFiles = files.filter(file => (file.folder || "General") === folderName);
+    const oldestFile = folderFiles.reduce((oldest, file) => 
+      file.updatedAt < oldest.updatedAt ? file : oldest
+    );
+    const newestFile = folderFiles.reduce((newest, file) => 
+      file.updatedAt > newest.updatedAt ? file : newest
+    );
+    
+    return {
+      id: folderName,
+      name: folderName,
+      fileCount: folderCounts[folderName],
+      createdAt: oldestFile.updatedAt.toISOString(),
+      updatedAt: newestFile.updatedAt.toISOString(),
+    };
+  });
+
+  return folders;
 };
 
 const deleteFiles = async (data, uid) => {
@@ -132,6 +172,7 @@ const deleteFiles = async (data, uid) => {
 const filesService = {
   addFile,
   getFiles,
+  getFolders,
   deleteFiles,
   generateUploadUrl,
   generateSignedUrl,

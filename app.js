@@ -4,6 +4,7 @@ import logger from "morgan";
 import createError from "http-errors";
 import cors from "cors";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
+import { structuredLoggingMiddleware, errorHandlingMiddleware, cleanupMiddleware } from "./middlewares/structuredLogging.js";
 import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
@@ -25,8 +26,13 @@ const corsOptions = {
     'http://10.0.2.2:3000',
     'http://10.0.2.2:8081',
     'http://10.0.2.2:19006',
+    'http://192.168.0.108:3000',
+    'http://192.168.0.108:8081',
+    'http://192.168.0.108:19006',
     'exp://localhost:19000',
     'exp://10.0.2.2:19000',
+    'exp://192.168.0.108:19000',
+    'exp+zentavos://expo-development-client',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -35,6 +41,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(logger("dev"));
+
+// Structured logging middleware - must be early in the chain
+app.use(structuredLoggingMiddleware);
+app.use(cleanupMiddleware);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -72,7 +83,10 @@ app.use(function (req, res, next) {
 	next(createError(404));
 });
 
-// error handler
+// Structured error handling middleware
+app.use(errorHandlingMiddleware);
+
+// Legacy error handler (fallback)
 app.use(function (err, req, res, next) {
   const errorResponse = {
     message: err.message,
