@@ -266,6 +266,142 @@ const signIn = async (uid) => {
   }
 };
 
+// New method to handle sign-in with auto-creation for new users
+const signInOrCreate = async (uid, userData = null) => {
+  try {
+    structuredLogger.logOperationStart('auth_service_signin_or_create', { user_id: uid });
+    console.log("uid", uid);
+    console.log("userData", userData);
+
+    let user = await User.findOne({
+      authUid: uid,
+    }).select("-password");
+
+    console.log("User lookup result:", { found: !!user, uid });
+
+    if (!user) {
+      // User doesn't exist, create a basic user profile
+      console.log("User not found, creating new user with data:", userData);
+      
+      if (!userData) {
+        const error = new Error("User not found and no user data provided for creation");
+        structuredLogger.logErrorBlock(error, {
+          operation: 'auth_service_signin_or_create',
+          user_id: uid,
+          error_classification: 'missing_user_data'
+        });
+        throw error;
+      }
+
+      structuredLogger.logOperationStart('auth_service_create_basic_user', { user_id: uid });
+      
+      // Create a basic user with minimal data
+      const dek = await getUserDek(uid);
+      
+      const encryptedEmail = await encryptValue(
+        userData.email.trim().toLowerCase(),
+        dek
+      );
+
+      const emailSchema = {
+        email: encryptedEmail,
+        emailType: "personal",
+        isPrimary: true,
+      };
+
+      // For new users, we might only have email, so create minimal profile
+      const nameSchema = {
+        firstName: userData.firstName || "New",
+        lastName: userData.lastName || "User",
+        prefix: userData.prefix || null,
+        suffix: userData.suffix || null,
+        middleName: userData.middleName || null,
+      };
+
+      const phoneNumbersSchema = {
+        phone: userData.phone || null,
+      };
+
+      const addressSchema = {
+        street: userData.address1 || null,
+        city: userData.city || null,
+        state: userData.state || null,
+        postalCode: userData.zip || null,
+        country: userData.country || null,
+      };
+
+      user = new User({
+        email: [emailSchema],
+        phones: [phoneNumbersSchema],
+        role: "user",
+        authUid: uid,
+        profilePhotoUrl: "",
+        numAccounts: 0,
+        name: nameSchema,
+        maritalStatus: "",
+        address: [addressSchema],
+        dateOfBirth: null,
+        occupation: "",
+        annualIncome: null,
+        ssn: null,
+        emailHash: hashEmail(userData.email),
+      });
+
+      await user.save();
+      structuredLogger.logSuccess('auth_service_create_basic_user', { user_id: uid });
+    }
+
+    // Now proceed with normal sign-in flow
+    structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
+    const dek = await getUserDek(uid);
+
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedPhone = user.phones && user.phones.length > 0 
+      ? await decryptValue(user.phones[0].phone, dek)
+      : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+    }
+
+    const emails = await Promise.all(
+      user.email.map(async (email) => {
+        return {
+          email: await decryptValue(email.email, dek),
+          emailType: email.emailType,
+          isPrimary: email.isPrimary,
+        };
+      })
+    );
+
+    const retrievedUser = {
+      id: user._id,
+      email: emails,
+      phone: decryptedPhone,
+      role: user.role,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
+    structuredLogger.logSuccess('auth_service_signin_or_create', { user_id: uid });
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_signin_or_create',
+      user_id: uid,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'decryption_error'
+    });
+    console.log("error in signin_or_create", error);
+    throw new Error(error);
+  }
+};
+
 const checkEmail = async (email, method) => {
   try {
     structuredLogger.logOperationStart('auth_service_check_email', {
@@ -411,6 +547,7 @@ const deleteUser = async (uid) => {
 const authService = {
   signUp,
   signIn,
+  signInOrCreate,
   checkEmail,
   own,
   changeUserPassword,

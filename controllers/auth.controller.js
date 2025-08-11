@@ -46,7 +46,27 @@ const signIn = async (req, res) => {
   const uid = req.user.uid;
   try {
     structuredLogger.logOperationStart('auth_signin', { user_id: uid });
-    const user = await authService.signIn(uid);
+    
+    // Extract user data from request body
+    const { email, method, password } = req.body;
+    
+    // Log received data for debugging
+    console.log("Received signin request:", { email, method, hasPassword: !!password });
+    
+    // Validate required fields
+    if (!email) {
+      return res.status(400).send("Email is required");
+    }
+    
+    // Create minimal user data for new users
+    const userData = {
+      email: email,
+      method: method,
+      password: password
+    };
+    
+    // Use signInOrCreate to handle both existing and new users
+    const user = await authService.signInOrCreate(uid, userData);
     structuredLogger.logSuccess('auth_signin', { user_id: uid });
     res.status(200).send(user);
   } catch (error) {

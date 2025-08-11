@@ -99,7 +99,7 @@ async function getDEKFromBucket(uid) {
   try {
     const file = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${environmnet}/${uid}.key`);
+      .file(`keys/${environment}/${uid}.key`);
     
     if (!(await file.exists())[0]) {
       logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found' });
