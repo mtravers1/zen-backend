@@ -43,8 +43,18 @@ const signUp = async (req, res) => {
 };
 
 const signIn = async (req, res) => {
-  const uid = req.user.uid;
   try {
+    // Extract uid from Firebase token in Authorization header
+    const idToken = req.headers.authorization?.split("Bearer ")[1];
+    if (!idToken) {
+      return res.status(401).send("Authorization token required");
+    }
+
+    // Verify the token to get the uid
+    const admin = (await import("../lib/firebaseAdmin.js")).default;
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+
     structuredLogger.logOperationStart('auth_signin', { user_id: uid });
     
     // Extract user data from request body
@@ -73,7 +83,7 @@ const signIn = async (req, res) => {
     const errorClassification = error.message === "User not found" ? 'user_not_found' : 'authentication_error';
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_signin',
-      user_id: uid,
+      user_id: 'unknown',
       error_classification: errorClassification
     });
     

@@ -6,6 +6,25 @@ import crypto from "crypto";
 
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = [
+  'STORAGE_SERVICE_ACCOUNT',
+  'KMS_SERVICE_ACCOUNT', 
+  'GCP_PROJECT_ID',
+  'GCP_KEY_LOCATION',
+  'GCP_KEY_RING',
+  'GCP_KEY_NAME'
+];
+
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`[ENCRYPTION] Missing required environment variable: ${envVar}`);
+    throw new Error(`Missing required environment variable: ${envVar}`);
+  }
+}
+
+console.log(`[ENCRYPTION] Environment validation passed. Environment: ${process.env.ENVIRONMENT || 'prod'}`);
+
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const environment = process.env.ENVIRONMENT || "prod";
 const serviceAccountJsonString = Buffer.from(
@@ -21,6 +40,10 @@ const kmsServiceAccountJsonString = Buffer.from(
 ).toString("utf8");
 const kmsServiceAccount = JSON.parse(kmsServiceAccountJsonString);
 
+console.log(`[ENCRYPTION] Service accounts parsed successfully`);
+console.log(`[ENCRYPTION] Storage project: ${storageServiceAccount.project_id}`);
+console.log(`[ENCRYPTION] KMS project: ${kmsServiceAccount.project_id}`);
+
 const kmsClient = new KeyManagementServiceClient({
   credentials: kmsServiceAccount,
 });
@@ -35,6 +58,9 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
   process.env.GCP_KEY_RING,
   process.env.GCP_KEY_NAME
 );
+
+console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
+console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
 
 // DEK cache in memory with version tracking
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
@@ -61,18 +87,27 @@ const logEncryptionOperation = (operation, success, details = {}) => {
 
 async function generateAndStoreEncryptedDEK(uid) {
   try {
+    console.log(`[ENCRYPTION] Starting key generation for user: ${uid}`);
+    
     const dek = crypto.randomBytes(32);
     const keyVersion = Date.now(); // Use timestamp as version
+    
+    console.log(`[ENCRYPTION] Generated DEK, attempting to encrypt with KMS...`);
+    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
 
     const [encryptResponse] = await kmsClient.encrypt({
       name: KEY_PATH,
       plaintext: dek,
     });
 
+    console.log(`[ENCRYPTION] Successfully encrypted DEK with KMS`);
+
     const encryptedDEK = encryptResponse.ciphertext;
     const file = storage
       .bucket(BUCKET_NAME)
       .file(`keys/${environment}/${uid}.key`);
+    
+    console.log(`[ENCRYPTION] Attempting to store key in bucket: ${BUCKET_NAME}, path: keys/${environment}/${uid}.key`);
     
     // Store both encrypted DEK and version
     const keyData = {
@@ -82,6 +117,7 @@ async function generateAndStoreEncryptedDEK(uid) {
     };
     
     await file.save(JSON.stringify(keyData));
+    console.log(`[ENCRYPTION] Successfully stored key file in bucket`);
 
     // Cache the DEK and version
     dekCache.set(uid, dek);
@@ -90,6 +126,14 @@ async function generateAndStoreEncryptedDEK(uid) {
     logEncryptionOperation('generateAndStoreEncryptedDEK', true, { uid, keyVersion });
     return { dek, version: keyVersion };
   } catch (error) {
+    console.error(`[ENCRYPTION] Key generation failed for user ${uid}:`, error);
+    console.error(`[ENCRYPTION] Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      status: error.status
+    });
+    
     logEncryptionOperation('generateAndStoreEncryptedDEK', false, { uid, error: error.message });
     throw error;
   }
@@ -133,21 +177,37 @@ async function getDEKFromBucket(uid) {
 
 async function getUserDek(uid) {
   try {
+    console.log(`[ENCRYPTION] getUserDek called for user: ${uid}`);
+    
     // Check in-memory cache first
     if (dekCache.has(uid)) {
       const version = dekVersionCache.get(uid);
+      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}, version: ${version}`);
       logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version });
       return dekCache.get(uid);
     }
 
+    console.log(`[ENCRYPTION] DEK not in cache, checking bucket for user: ${uid}`);
     let keyData = await getDEKFromBucket(uid);
 
     if (!keyData) {
+      console.log(`[ENCRYPTION] No key found in bucket, generating new keys for user: ${uid}`);
       keyData = await generateAndStoreEncryptedDEK(uid);
+      console.log(`[ENCRYPTION] Successfully generated new keys for user: ${uid}`);
+    } else {
+      console.log(`[ENCRYPTION] Found existing keys in bucket for user: ${uid}`);
     }
 
     return keyData.dek;
   } catch (e) {
+    console.error(`[ENCRYPTION] getUserDek failed for user ${uid}:`, e);
+    console.error(`[ENCRYPTION] Error details:`, {
+      message: e.message,
+      stack: e.stack,
+      code: e.code,
+      status: e.status
+    });
+    
     logEncryptionOperation('getUserDek', false, { uid, error: e.message });
     console.error("Error getting DEK:", e);
     throw e;

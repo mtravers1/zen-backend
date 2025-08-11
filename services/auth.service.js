@@ -91,9 +91,12 @@ const signUp = async (data) => {
       throw new Error("User already exists");
     }
 
+    // Generate encryption keys first
+    console.log("Generating encryption keys for new user:", uid);
     const dek = await getUserDek(uid);
-    console.log("data", data);
+    console.log("Generated DEK for new user:", { uid, hasDek: !!dek });
 
+    // Now encrypt all the sensitive data
     const encryptedEmail = await encryptValue(
       data.email.trim().toLowerCase(),
       dek
@@ -103,15 +106,12 @@ const signUp = async (data) => {
 
     const emailSchema = {
       email: encryptedEmail,
-      //TODO: add email type to the schema
       emailType: "personal",
       isPrimary: true,
     };
 
     const encryptedFirstName = await encryptValue(data.firstName, dek);
-
     const encryptedLastName = await encryptValue(data.lastName, dek);
-
     const encryptedMiddleName = await encryptValue(data.middleName, dek);
 
     const nameSchema = {
@@ -137,29 +137,29 @@ const signUp = async (data) => {
     };
 
     const encryptedPhotoUrl = await encryptValue(data.profilePhotoUrl, dek);
-
     const encryptedAnnualIncome = await encryptValue(data.annualIncome, dek);
-
     const encryptedSSn = await encryptValue(data.ssn, dek);
 
+    // Create the user with encrypted data
     const user = new User({
       email: [emailSchema],
       phones: [phoneNumbersSchema],
-      role: data.role,
+      role: data.role || "individual",
       authUid: data.authUid,
       profilePhotoUrl: encryptedPhotoUrl,
-      numAccounts: data.numAccounts,
+      numAccounts: data.numAccounts || 0,
       name: nameSchema,
-      maritalStatus: data.maritalStatus,
+      maritalStatus: data.maritalStatus || "",
       address: [addressSchema],
-      dateOfBirth: data.dob ? Date.parse(data.dob) : data.dob,
-      occupation: data.occupation,
+      dateOfBirth: data.dob ? Date.parse(data.dob) : null,
+      occupation: data.occupation || "",
       annualIncome: encryptedAnnualIncome,
-      ssn: encryptedSSn,
+      encryptedSSN: encryptedSSn,
       emailHash: hashEmail(data.email),
     });
 
     await user.save();
+    console.log("Successfully created new user with encrypted data");
 
     const newUser = await User.findOne({
       authUid: data.authUid,
@@ -179,7 +179,7 @@ const signUp = async (data) => {
     const retrievedUser = {
       id: newUser._id,
       email: newUser.email,
-      phone: newUser.phone,
+      phone: decryptedPhone,
       role: newUser.role,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {

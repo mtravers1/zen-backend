@@ -51,7 +51,7 @@ app.use(
 			"/api/auth/check-email",
 			"/api/auth/check-email-firebase",
 			"/api/auth/recoverypassword",
-			"/api/_info/version",
+			"/api/auth/_info/version",
 			"/api/webhook/plaid",
 			"/api/webhook/test",
 			"/api/plaid/institutions",
