@@ -1,4 +1,9 @@
-import structuredLogger from '../lib/structuredLogger.js';
+const structuredLogger = require('../lib/structuredLogger.js');
+
+// Ensure structuredLogger is available
+if (!structuredLogger) {
+  throw new Error('structuredLogger not imported correctly');
+}
 
 const SENSITIVE_RESPONSE_HEADERS = ['authorization', 'cookie', 'x-api-key'];
 const MAX_RESPONSE_BODY_LENGTH = 1000; // make configurable if needed
@@ -94,79 +99,65 @@ const structuredLoggingMiddleware = (req, res, next) => {
     return originalJson.call(this, data);
   };
 
-  // Override status to capture status changes
   res.status = function(code) {
     res.statusCode = code;
     return originalStatus.call(this, code);
   };
 
-  // Handle uncaught errors in the middleware chain
-  const originalNext = next;
-  next = function(error) {
-    if (error) {
-      const durationMs = Date.now() - startTime;
-      
-      structuredLogger.logErrorBlock(error, {
+  // Add cleanup on request end
+  req.on('end', () => {
+    const durationMs = Date.now() - startTime;
+    if (durationMs > 5000) { // Log slow requests
+      structuredLogger.logErrorBlock(new Error('Slow request detected'), {
         operation: req.route?.path || req.path,
         request_id: requestId,
-        request: structuredLogger.requestContext.get(requestId)?.request,
         durationMs,
-        error_classification: 'middleware_error'
+        error_classification: 'performance_warning'
       });
     }
-    
-    return originalNext.call(this, error);
-  };
+  });
 
   next();
 };
 
 /**
- * Error handling middleware for uncaught exceptions
+ * Error handling middleware for structured logging
  */
 const errorHandlingMiddleware = (error, req, res, next) => {
-  // Try to get existing requestId or create a new one
-  let requestId = req.requestId;
-  if (!requestId) {
-    // Search through existing contexts
-    for (const [id, context] of structuredLogger.requestContext) {
-      if (context.request === req) {
-        requestId = id;
-        break;
-      }
-    }
-  }
+  const durationMs = Date.now() - (req.startTime || Date.now());
   
   structuredLogger.logErrorBlock(error, {
     operation: req.route?.path || req.path,
-    request_id: requestId,
-    request: structuredLogger.requestContext.get(requestId)?.request,
-    response: { statusCode: 500, body: { error: 'Internal server error' } },
-    error_classification: 'uncaught_exception'
+    request_id: req.requestId,
+    request: req,
+    response: {
+      statusCode: res.statusCode || 500,
+      headers: res.getHeaders ? res.getHeaders() : {},
+      body: error.message
+    },
+    durationMs,
+    error_classification: 'unhandled_error'
   });
 
-  // Don't expose internal errors to client
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: 'An unexpected error occurred'
+  // Send error response
+  res.status(500).json({
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
   });
 };
 
 /**
  * Cleanup middleware to remove old request contexts
  */
-const CLEANUP_PROBABILITY = process.env.LOG_CLEANUP_PROBABILITY || 0.01;
-
 const cleanupMiddleware = (req, res, next) => {
-  // Clean up old error blocks periodically
-  if (Math.random() < CLEANUP_PROBABILITY) {
+  // Clean up old request contexts periodically
+  if (Math.random() < 0.01) { // 1% chance to run cleanup
     structuredLogger.cleanupOldErrors();
   }
-
   next();
 };
 
-export {
+module.exports = {
   structuredLoggingMiddleware,
   errorHandlingMiddleware,
   cleanupMiddleware
