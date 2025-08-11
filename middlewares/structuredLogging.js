@@ -1,4 +1,4 @@
-const structuredLogger = require('../lib/structuredLogger.js');
+import structuredLogger from '../lib/structuredLogger.js';
 
 // Ensure structuredLogger is available
 if (!structuredLogger) {
@@ -26,7 +26,7 @@ function truncateBody(body, maxLength) {
  * Middleware to automatically capture request context and log responses
  * Follows Cursor Rules for comprehensive request/response logging
  */
-const structuredLoggingMiddleware = (req, res, next) => {
+export const structuredLoggingMiddleware = (req, res, next) => {
   const startTime = Date.now();
   const requestId = structuredLogger.startRequestContext(req, req.route?.path || req.path);
 
@@ -123,7 +123,7 @@ const structuredLoggingMiddleware = (req, res, next) => {
 /**
  * Error handling middleware for structured logging
  */
-const errorHandlingMiddleware = (error, req, res, next) => {
+export const errorHandlingMiddleware = (error, req, res, next) => {
   const durationMs = Date.now() - (req.startTime || Date.now());
   
   structuredLogger.logErrorBlock(error, {
@@ -149,16 +149,10 @@ const errorHandlingMiddleware = (error, req, res, next) => {
 /**
  * Cleanup middleware to remove old request contexts
  */
-const cleanupMiddleware = (req, res, next) => {
+export const cleanupMiddleware = (req, res, next) => {
   // Clean up old request contexts periodically
   if (Math.random() < 0.01) { // 1% chance to run cleanup
     structuredLogger.cleanupOldErrors();
   }
   next();
-};
-
-module.exports = {
-  structuredLoggingMiddleware,
-  errorHandlingMiddleware,
-  cleanupMiddleware
 }; 
