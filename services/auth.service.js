@@ -14,6 +14,7 @@ import Business from "../database/models/Businesses.js";
 // import Trips from "../database/models/Trips.js";
 import AccessToken from "../database/models/AccessToken.js";
 import plaidService from "./plaid.service.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const own = async (uid) => {
   const userResponse = await User.findOne({
@@ -40,7 +41,9 @@ const own = async (uid) => {
     userResponse.name.middleName,
     dek
   );
-  const decryptedPhone = await decryptValue(userResponse.phones[0].phone, dek);
+  const decryptedPhone = userResponse.phones && userResponse.phones.length > 0 
+    ? await decryptValue(userResponse.phones[0].phone, dek)
+    : null;
   let decryptedPhotoUrl;
   if (userResponse.profilePhotoUrl) {
     decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek);
@@ -168,7 +171,9 @@ const signUp = async (data) => {
       newUser.name.middleName,
       dek
     );
-    const decryptedPhone = await decryptValue(newUser.phones[0].phone, dek);
+    const decryptedPhone = newUser.phones && newUser.phones.length > 0 
+      ? await decryptValue(newUser.phones[0].phone, dek)
+      : null;
     const decryptedPhotoUrl = await decryptValue(newUser.profilePhotoUrl, dek);
 
     const retrievedUser = {
@@ -194,19 +199,32 @@ const signUp = async (data) => {
 
 const signIn = async (uid) => {
   try {
+    structuredLogger.logOperationStart('auth_service_signin', { user_id: uid });
     console.log("uid", uid);
+
     const user = await User.findOne({
       authUid: uid,
     }).select("-password");
+
     if (!user) {
-      throw new Error("User not found");
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_signin',
+        user_id: uid,
+        error_classification: 'user_not_found'
+      });
+      throw error;
     }
+
+    structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
     const dek = await getUserDek(uid);
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
     const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
-    const decryptedPhone = await decryptValue(user.phones[0].phone, dek);
+    const decryptedPhone = user.phones && user.phones.length > 0 
+      ? await decryptValue(user.phones[0].phone, dek)
+      : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
@@ -235,29 +253,69 @@ const signIn = async (uid) => {
       },
     };
 
+    structuredLogger.logSuccess('auth_service_signin', { user_id: uid });
     return retrievedUser;
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_signin',
+      user_id: uid,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'decryption_error'
+    });
     console.log("error in signin", error);
     throw new Error(error);
   }
 };
 
 const checkEmail = async (email, method) => {
-  const emailHash = hashEmail(email);
-  const user = await User.findOne({
-    emailHash,
-  });
-  if (!user) {
-    throw new Error("User not found");
+  try {
+    structuredLogger.logOperationStart('auth_service_check_email', {
+      email: email,
+      method: method
+    });
+
+    const emailHash = hashEmail(email);
+    const user = await User.findOne({
+      emailHash,
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_check_email',
+        email: email,
+        method: method,
+        error_classification: 'user_not_found'
+      });
+      throw error;
+    }
+
+    structuredLogger.logSuccess('auth_service_check_email', { email: email });
+    return user;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_check_email',
+      email: email,
+      method: method,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'database_error'
+    });
+    throw error;
   }
-  return user;
 };
 
 const checkEmailFirebase = async (email) => {
   try {
+    structuredLogger.logOperationStart('auth_service_check_email_firebase', { email: email });
+
     const user = await admin.auth().getUserByEmail(email);
+
+    structuredLogger.logSuccess('auth_service_check_email_firebase', { email: email });
     return user;
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_check_email_firebase',
+      email: email,
+      error_classification: 'firebase_error'
+    });
     throw new Error("User not found");
   }
 };

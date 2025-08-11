@@ -7,7 +7,7 @@ import crypto from "crypto";
 dotenv.config();
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const environmnet = process.env.ENVIRONMENT || "prod";
+const environment = process.env.ENVIRONMENT || "prod";
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64" 
@@ -72,7 +72,7 @@ async function generateAndStoreEncryptedDEK(uid) {
     const encryptedDEK = encryptResponse.ciphertext;
     const file = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${environmnet}/${uid}.key`);
+      .file(`keys/${environment}/${uid}.key`);
     
     // Store both encrypted DEK and version
     const keyData = {
@@ -382,7 +382,7 @@ async function getPreviousDek(uid) {
     // You might store previous keys in a separate location or use a different approach
     const file = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${environmnet}/${uid}.key.previous`);
+      .file(`keys/${environment}/${uid}.key.previous`);
     
     if (!(await file.exists())[0]) {
       return null;
@@ -419,7 +419,7 @@ async function rotateUserKey(uid) {
     if (currentDek && currentVersion) {
       const file = storage
         .bucket(BUCKET_NAME)
-        .file(`keys/${environmnet}/${uid}.key.previous`);
+        .file(`keys/${environment}/${uid}.key.previous`);
       
       // Encrypt the current DEK with KMS before persisting
       const [encryptResponse] = await kmsClient.encrypt({

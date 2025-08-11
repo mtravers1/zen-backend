@@ -273,7 +273,7 @@ const getUserProfiles = async (email, uid) => {
       formationDate: formationDate,
       taxInformation: taxInformation,
       legalBusinessName: legalName,
-      ownership: ownership.percentage,
+      ownership: ownership?.percentage || null,
       entityType: entityType,
       businessType: businessType,
       businessTaxCode: entityTaxType,
@@ -517,7 +517,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         ),
         businessOwners: formData.businessOwners,
         businessOwnersDetails: businessOwnersDetails,
-        ownership: { percentage: formData.ownership.percentage },
+        ownership: { percentage: formData.ownership?.percentage || 0 },
         //taxInformation: encryptedTaxInformation, //TODO: not implemented yet
         website: formData.website,
         businessLogo: encryptedBusinessLogo,

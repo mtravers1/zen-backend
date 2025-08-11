@@ -47,7 +47,7 @@ app.use(
 	firebaseAuth.unless({
 		path: [
 			"/api/auth/signup",
-			// "/api/auth/signin",
+			"/api/auth/signin",
 			"/api/auth/check-email",
 			"/api/auth/check-email-firebase",
 			"/api/auth/recoverypassword",
