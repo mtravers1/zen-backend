@@ -121,22 +121,19 @@ const signUp = async (data) => {
       isPrimary: true,
     };
 
-    // Email is always required
-    const emailArray = [emailSchema];
-
-    const encryptedFirstName = await encryptValue(data.firstName, dek);
-    const encryptedLastName = await encryptValue(data.lastName, dek);
-    const encryptedMiddleName = await encryptValue(data.middleName, dek);
+    const encryptedFirstName = await encryptValue(data.firstName || "", dek);
+    const encryptedLastName = await encryptValue(data.lastName || "", dek);
+    const encryptedMiddleName = await encryptValue(data.middleName || "", dek);
 
     const nameSchema = {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
-      prefix: data.prefix,
-      suffix: data.suffix,
+      prefix: data.prefix || null,
+      suffix: data.suffix || null,
       middleName: encryptedMiddleName,
     };
 
-    const encryptedPhone = await encryptValue(data.phone, dek);
+    const encryptedPhone = data.phone ? await encryptValue(data.phone, dek) : null;
 
     const phoneNumbersSchema = {
       phone: encryptedPhone,
@@ -158,25 +155,25 @@ const signUp = async (data) => {
       ? [addressSchema] 
       : [];
 
-    const encryptedPhotoUrl = await encryptValue(data.profilePhotoUrl, dek);
-    const encryptedAnnualIncome = await encryptValue(data.annualIncome, dek);
-    const encryptedSSn = await encryptValue(data.ssn, dek);
+    const encryptedPhotoUrl = data.profilePhotoUrl ? await encryptValue(data.profilePhotoUrl, dek) : null;
+    const encryptedAnnualIncome = data.annualIncome ? await encryptValue(data.annualIncome, dek) : null;
+    const encryptedSSn = data.ssn ? await encryptValue(data.ssn, dek) : null;
 
     // Create the user with encrypted data
     const user = new User({
-      email: emailArray,
+      email: [emailSchema],
       phones: phoneArray,
       role: data.role || "individual",
       authUid: data.authUid,
-      profilePhotoUrl: encryptedPhotoUrl || null,
+      profilePhotoUrl: encryptedPhotoUrl,
       numAccounts: data.numAccounts || 0,
       name: nameSchema,
       maritalStatus: data.maritalStatus || "single",
       address: addressArray,
       dateOfBirth: data.dob ? Date.parse(data.dob) : null,
       occupation: data.occupation || null,
-      annualIncome: encryptedAnnualIncome || null,
-      encryptedSSN: encryptedSSn || null,
+      annualIncome: encryptedAnnualIncome,
+      encryptedSSN: encryptedSSn,
       emailHash: hashEmail(data.email),
     });
 
@@ -187,20 +184,22 @@ const signUp = async (data) => {
       authUid: data.authUid,
     });
 
+    // Now decrypt the data for the response
     const decryptedFirstName = await decryptValue(newUser.name.firstName, dek);
     const decryptedLastName = await decryptValue(newUser.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(
-      newUser.name.middleName,
-      dek
-    );
+    const decryptedMiddleName = await decryptValue(newUser.name.middleName, dek);
     const decryptedPhone = newUser.phones && newUser.phones.length > 0 
       ? await decryptValue(newUser.phones[0].phone, dek)
       : null;
-    const decryptedPhotoUrl = await decryptValue(newUser.profilePhotoUrl, dek);
+    const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek) : null;
 
     const retrievedUser = {
       id: newUser._id,
-      email: newUser.email,
+      email: [{
+        email: data.email.trim().toLowerCase(), // Return original email for response
+        emailType: "personal",
+        isPrimary: true,
+      }],
       phone: decryptedPhone,
       role: newUser.role,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -344,15 +343,15 @@ const signInOrCreate = async (uid, userData = null) => {
 
       // For new users, we might only have email, so create minimal profile
       const nameSchema = {
-        firstName: userData.firstName || "New",
-        lastName: userData.lastName || "User",
+        firstName: userData.firstName ? await encryptValue(userData.firstName, dek) : await encryptValue("New", dek),
+        lastName: userData.lastName ? await encryptValue(userData.lastName, dek) : await encryptValue("User", dek),
         prefix: userData.prefix || null,
         suffix: userData.suffix || null,
-        middleName: userData.middleName || null,
+        middleName: userData.middleName ? await encryptValue(userData.middleName, dek) : null,
       };
 
       const phoneNumbersSchema = {
-        phone: userData.phone || null,
+        phone: userData.phone ? await encryptValue(userData.phone, dek) : null,
       };
 
       const phoneArray = userData.phone ? [phoneNumbersSchema] : [];
@@ -365,20 +364,24 @@ const signInOrCreate = async (uid, userData = null) => {
         country: userData.country || null,
       };
 
+      const addressArray = (userData.address1 || userData.city || userData.state || userData.zip || userData.country) 
+        ? [addressSchema] 
+        : [];
+
       user = new User({
         email: [emailSchema],
         phones: phoneArray,
-        role: "user",
+        role: "individual", // Use valid enum value
         authUid: uid,
         profilePhotoUrl: "",
         numAccounts: 0,
         name: nameSchema,
-        maritalStatus: "single",
-        address: [addressSchema],
+        maritalStatus: "single", // Use valid enum value
+        address: addressArray,
         dateOfBirth: null,
-        occupation: "",
+        occupation: null,
         annualIncome: null,
-        ssn: null,
+        encryptedSSN: null, // Use correct field name
         emailHash: hashEmail(userData.email),
       });
 
