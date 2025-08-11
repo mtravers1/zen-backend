@@ -69,6 +69,17 @@ const own = async (uid) => {
 
 const signUp = async (data) => {
   try {
+    // Validate required fields
+    if (!data.email || !data.firstName || !data.lastName || !data.authUid) {
+      throw new Error("Missing required fields: email, firstName, lastName, and authUid are required");
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      throw new Error("Invalid email format");
+    }
+
     let existingUser = null;
 
     try {
@@ -110,6 +121,9 @@ const signUp = async (data) => {
       isPrimary: true,
     };
 
+    // Email is always required
+    const emailArray = [emailSchema];
+
     const encryptedFirstName = await encryptValue(data.firstName, dek);
     const encryptedLastName = await encryptValue(data.lastName, dek);
     const encryptedMiddleName = await encryptValue(data.middleName, dek);
@@ -128,13 +142,21 @@ const signUp = async (data) => {
       phone: encryptedPhone,
     };
 
+    // Only include phone if provided
+    const phoneArray = data.phone ? [phoneNumbersSchema] : [];
+
     const addressSchema = {
-      street: data.address1,
-      city: data.city,
-      state: data.state,
-      postalCode: data.zip,
-      country: data.country,
+      street: data.address1 || null,
+      city: data.city || null,
+      state: data.state || null,
+      postalCode: data.zip || null,
+      country: data.country || null,
     };
+
+    // Only include address if at least one field is provided
+    const addressArray = (data.address1 || data.city || data.state || data.zip || data.country) 
+      ? [addressSchema] 
+      : [];
 
     const encryptedPhotoUrl = await encryptValue(data.profilePhotoUrl, dek);
     const encryptedAnnualIncome = await encryptValue(data.annualIncome, dek);
@@ -142,19 +164,19 @@ const signUp = async (data) => {
 
     // Create the user with encrypted data
     const user = new User({
-      email: [emailSchema],
-      phones: [phoneNumbersSchema],
+      email: emailArray,
+      phones: phoneArray,
       role: data.role || "individual",
       authUid: data.authUid,
-      profilePhotoUrl: encryptedPhotoUrl,
+      profilePhotoUrl: encryptedPhotoUrl || null,
       numAccounts: data.numAccounts || 0,
       name: nameSchema,
-      maritalStatus: data.maritalStatus || "",
-      address: [addressSchema],
+      maritalStatus: data.maritalStatus || "single",
+      address: addressArray,
       dateOfBirth: data.dob ? Date.parse(data.dob) : null,
-      occupation: data.occupation || "",
-      annualIncome: encryptedAnnualIncome,
-      encryptedSSN: encryptedSSn,
+      occupation: data.occupation || null,
+      annualIncome: encryptedAnnualIncome || null,
+      encryptedSSN: encryptedSSn || null,
       emailHash: hashEmail(data.email),
     });
 
@@ -192,8 +214,19 @@ const signUp = async (data) => {
     return retrievedUser;
   } catch (error) {
     console.log("error in signup", error);
+    
+    // Log specific error types for debugging
+    if (error.name === 'ValidationError') {
+      console.error("MongoDB Validation Error:", error.message);
+      console.error("Validation Details:", error.errors);
+    } else if (error.message.includes('ENCRYPTION')) {
+      console.error("Encryption Error:", error.message);
+    } else if (error.message.includes('User not found')) {
+      console.error("User Lookup Error:", error.message);
+    }
 
-    throw new Error(error);
+    // Re-throw the error with more context
+    throw new Error(`Signup failed: ${error.message}`);
   }
 };
 
@@ -322,6 +355,8 @@ const signInOrCreate = async (uid, userData = null) => {
         phone: userData.phone || null,
       };
 
+      const phoneArray = userData.phone ? [phoneNumbersSchema] : [];
+
       const addressSchema = {
         street: userData.address1 || null,
         city: userData.city || null,
@@ -332,13 +367,13 @@ const signInOrCreate = async (uid, userData = null) => {
 
       user = new User({
         email: [emailSchema],
-        phones: [phoneNumbersSchema],
+        phones: phoneArray,
         role: "user",
         authUid: uid,
         profilePhotoUrl: "",
         numAccounts: 0,
         name: nameSchema,
-        maritalStatus: "",
+        maritalStatus: "single",
         address: [addressSchema],
         dateOfBirth: null,
         occupation: "",
