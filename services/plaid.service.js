@@ -18,21 +18,29 @@ const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 const androidPackageName = process.env.BUNDLEID || "com.zentavos.mobile";
 
-const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
+const createLinkToken = async (email, isAndroid, accountId, uid, screen, mode, accessToken) => {
   const user = await User.findOne({
     authUid: uid,
   });
   if (!user) {
     throw new Error("User not found");
   }
-  let accessToken;
+  let plaidAccessToken;
   const dek = await getUserDek(uid);
-  if (accountId) {
+  
+  if (mode === "update") {
+    // Update Mode: usar access_token directo
+    if (!accessToken) {
+      throw new Error("access_token required for update mode");
+    }
+    plaidAccessToken = accessToken;
+  } else if (accountId) {
+    // Legacy Mode: buscar por _id y desencriptar
     const account = await PlaidAccount.findOne({ _id: accountId });
     if (!account) {
       throw new Error("Account not found");
     }
-    accessToken = await decryptValue(account.accessToken, dek);
+    plaidAccessToken = await decryptValue(account.accessToken, dek);
   }
   const userId = user._id.toString();
   let redirectUri;
@@ -63,8 +71,8 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
       days_requested: 730,
     },
   };
-  if (accessToken) {
-    plaidRequest.access_token = accessToken;
+  if (plaidAccessToken) {
+    plaidRequest.access_token = plaidAccessToken;
   }
   const response = await plaidClient
     .linkTokenCreate(plaidRequest)
@@ -102,14 +110,30 @@ const saveAccessToken = async (
     throw new Error("User not found");
   }
   const userId = user._id.toString();
+  const dek = await getUserDek(uid);
+  
+  console.log(`[PLAID] saveAccessToken - userId: ${userId}, itemId: ${itemId}, institutionId: ${institutionId}`);
   
   // Check if this itemId already exists for this user
   const existingToken = await AccessToken.findOne({ itemId, userId });
   if (existingToken) {
-    throw new Error("This account connection already exists");
+    console.log(`[PLAID] Update Mode detected - Updating existing token for itemId: ${itemId}`);
+    
+    // Update Mode: Update existing token with new access token
+    const encryptedNewToken = await encryptValue(accessToken, dek);
+    existingToken.accessToken = encryptedNewToken;
+    await existingToken.save();
+
+    console.log(`[PLAID] Update Mode completed successfully for itemId: ${itemId}`);
+    return {
+      userId,
+      accessToken,
+      itemId,
+      institutionId,
+    };
   }
   
-  const dek = await getUserDek(uid);
+  console.log(`[PLAID] Normal Mode - Creating new token for itemId: ${itemId}`);
 
   const encryptedToken = await encryptValue(accessToken, dek);
 

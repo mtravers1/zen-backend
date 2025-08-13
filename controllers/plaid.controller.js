@@ -9,13 +9,15 @@ const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { isAndroid, accountId, screen } = req.body;
+    const { isAndroid, accountId, screen, mode, access_token } = req.body;
     const linkToken = await plaidService.createLinkToken(
       email,
       isAndroid,
       accountId,
       uid,
-      screen
+      screen,
+      mode,
+      access_token
     );
     res.status(200).send({ linkToken });
   } catch (error) {
@@ -51,9 +53,12 @@ const saveAccessToken = async (req, res) => {
     const uid = req.user.uid;
     const { accessToken, itemId, institutionId } = req.body;
     
+    console.log(`[CONTROLLER] saveAccessToken request - uid: ${uid}, itemId: ${itemId}, institutionId: ${institutionId}`);
+    
     const canAddAccount = await permissionsService.canAddAccount(uid, institutionId);
     
     if (!canAddAccount.success) {
+      console.log(`[CONTROLLER] Permission denied for uid: ${uid}, institutionId: ${institutionId}`, canAddAccount);
       return res.status(403).send(canAddAccount);
     }
     
@@ -64,9 +69,11 @@ const saveAccessToken = async (req, res) => {
       institutionId,
       uid
     );
+    
+    console.log(`[CONTROLLER] saveAccessToken success - uid: ${uid}, itemId: ${itemId}`);
     res.status(200).send(token);
   } catch (error) {
-    console.log(error.message);
+    console.error(`[CONTROLLER] saveAccessToken error - uid: ${req.user?.uid}, itemId: ${req.body?.itemId}:`, error.message);
     res.status(500).send({ message: error.message });
   }
 };
@@ -185,11 +192,15 @@ const getConnectedInstitutions = async (req, res) => {
       
       const decryptedAccountName = await decryptValue(account.account_name, dek);
       const decryptedAccountType = await decryptValue(account.account_type, dek);
+      const decryptedInstitutionName = await decryptValue(account.institution_name, dek);
+      const decryptedAccessToken = await decryptValue(account.accessToken, dek);
       
       if (!institutionsMap.has(institutionId)) {
         institutionsMap.set(institutionId, {
           institution_id: institutionId,
-          institution_name: account.institution_name,
+          institution_name: decryptedInstitutionName,
+          access_token: decryptedAccessToken,
+          item_id: account.itemId,
           accounts: []
         });
       }
