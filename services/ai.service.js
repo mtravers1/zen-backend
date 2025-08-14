@@ -25,6 +25,9 @@ const makeRequest = async (
 	const groqClient = new Groq({
 		apiKey: GROQ_API_KEY,
 	});
+	console.log("AI_URL", AI_URL);
+	console.log("AI_MODEL", AI_MODEL);
+	console.log("GROQ_AI_MODEL", GROQ_AI_MODEL);
 	try {
 		// Validate required parameters
 		if (!uid) throw new Error("User ID (uid) is required");
