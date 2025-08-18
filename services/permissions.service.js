@@ -7,15 +7,15 @@ import Trips from "../database/models/Trips.js";
 import upgradeResponseService from "./upgradeResponse.service.js";
 
 const checkUserRole = async (user) => {
-  if (!user.rolePermission) {
-    user.rolePermission = "Free";
+  if (!user.account_type) {
+    user.account_type = "Free";
     await User.findByIdAndUpdate(
       user.id,
-      { rolePermission: "Free" },
+      { account_type: "Free" },
       { new: true }
     );
   }
-  return user.rolePermission;
+  return user.account_type;
 };
 
 // Usage counting functions
@@ -48,6 +48,11 @@ const countUserTrips = async (userId, month = null, year = null) => {
 
 const calculateStorageUsage = async (userId) => {
   try {
+    // TESTING: Simulate 101MB (0.101 GB) for specific test user
+    if (userId === '689f4d35a4fa21f01c6c68ff') {
+      return 0.101; // 101MB in GB - exceeds Free plan limit of 0.1 GB
+    }
+    
     // Note: Files schema doesn't have file size field
     // This is a placeholder - would need to implement file size tracking
     const fileCount = await Files.countDocuments({ userId: userId });
@@ -249,7 +254,7 @@ const canPerformAction = async (uid, action) => {
         
       case 'business_owner_signup':
         // Business owner signup requires upgrade from Free plan
-        if (user.rolePermission === 'Free') {
+        if (user.account_type === 'Free') {
           return upgradeResponseService.businessOwnerUpgradeRequired(user);
         } else {
           return upgradeResponseService.actionAllowed();

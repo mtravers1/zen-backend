@@ -38,7 +38,7 @@ const businessOwnerUpgradeRequired = (user) => {
     popup_data: {
       title: "Business Features Require Upgrade",
       message: "To add business profiles and features, you need to upgrade from Free plan",
-      current_plan: user.rolePermission || "Free",
+      current_plan: user.account_type || "Free",
       suggested_plans: ["Founder", "Entrepreneur", "Tycoon"],
       popup_type: "business_owner",
       action_blocked: "create_business_profile"
@@ -48,7 +48,7 @@ const businessOwnerUpgradeRequired = (user) => {
 
 // Upgrade Popup 2: Institution Limit Exceeded
 const institutionLimitExceeded = (user, currentUsage, planLimit) => {
-  const nextPlan = getNextPlan(user.rolePermission);
+  const nextPlan = getNextPlan(user.account_type);
   
   return {
     success: false,
@@ -60,8 +60,8 @@ const institutionLimitExceeded = (user, currentUsage, planLimit) => {
     popup_data: {
       title: "Institution Limit Reached",
       message: `You've reached your limit of ${planLimit} financial institutions`,
-      current_plan: user.rolePermission || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.rolePermission),
+      current_plan: user.account_type || "Free",
+      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       popup_type: "institution_limit",
       action_blocked: "add_institution"
     }
@@ -70,7 +70,7 @@ const institutionLimitExceeded = (user, currentUsage, planLimit) => {
 
 // Upgrade Popup 3: Storage Limit Exceeded
 const storageLimitExceeded = (user, currentUsage, planLimit) => {
-  const nextPlan = getNextPlan(user.rolePermission);
+  const nextPlan = getNextPlan(user.account_type);
   
   return {
     success: false,
@@ -82,8 +82,8 @@ const storageLimitExceeded = (user, currentUsage, planLimit) => {
     popup_data: {
       title: "Storage Limit Reached",
       message: `You've reached your storage limit of ${planLimit}GB`,
-      current_plan: user.rolePermission || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.rolePermission),
+      current_plan: user.account_type || "Free",
+      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       popup_type: "storage_limit",
       action_blocked: "upload_file"
     }
@@ -110,9 +110,31 @@ const tripLimitExceeded = (user, currentUsage, planLimit) => {
   };
 };
 
+// Upgrade Popup 5: Business Limit Exceeded
+const businessLimitExceeded = (user, currentUsage, planLimit) => {
+  const nextPlan = getNextPlan(user.account_type);
+  
+  return {
+    success: false,
+    error: "LIMIT_EXCEEDED",
+    limit_type: "businesses",
+    current_usage: currentUsage,
+    plan_limit: planLimit,
+    upgrade_required: true,
+    popup_data: {
+      title: "Business Limit Reached",
+      message: `You've reached your limit of ${planLimit} businesses`,
+      current_plan: user.account_type || "Free",
+      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
+      popup_type: "business_limit",
+      action_blocked: "create_business"
+    }
+  };
+};
+
 // Generic limit exceeded response
 const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) => {
-  const nextPlan = getNextPlan(user.rolePermission);
+  const nextPlan = getNextPlan(user.account_type);
   
   return {
     success: false,
@@ -124,8 +146,8 @@ const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) 
     popup_data: {
       title: "Upgrade Required",
       message: `You've reached your ${limitType} limit`,
-      current_plan: user.rolePermission || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.rolePermission),
+      current_plan: user.account_type || "Free",
+      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       action_blocked: actionBlocked
     }
   };
@@ -136,6 +158,15 @@ const actionAllowed = () => {
   return {
     success: true,
     upgrade_required: false
+  };
+};
+
+// Generic error response
+const genericError = (message) => {
+  return {
+    success: false,
+    error: "GENERIC_ERROR",
+    message: message
   };
 };
 
@@ -163,8 +194,10 @@ const upgradeResponseService = {
   institutionLimitExceeded,
   storageLimitExceeded,
   tripLimitExceeded,
+  businessLimitExceeded,
   limitExceeded,
   actionAllowed,
+  genericError,
   getUpgradeInfo,
   getAvailableUpgrades,
   getPlanLimits
