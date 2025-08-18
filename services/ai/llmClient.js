@@ -163,23 +163,43 @@ export async function callLLM({
   console.log("[AI][callLLM] Complete LLM response:", completeResponse);
 
   // --- POST-PROCESSING: Prevent hallucinations by validating the LLM's output against the tool result ---
+  console.log('[AI][callLLM] Response type check - starts with {:', completeResponse.trim().startsWith('{'));
+  console.log('[AI][callLLM] Response type check - ends with }:', completeResponse.trim().endsWith('}'));
+  console.log('[AI][callLLM] Response length:', completeResponse.length);
+  console.log('[AI][callLLM] Response preview:', completeResponse.substring(0, 200));
+  
   try {
-    const parsed = JSON.parse(completeResponse);
-    // Only check if we have a tool result and the LLM output is a valid object
-    if (lastToolResult && parsed && typeof parsed === 'object') {
-      // Compare the data field (shallow equality for arrays/objects)
-      const llmData = JSON.stringify(parsed.data);
-      const toolData = JSON.stringify(lastToolResult);
-      if (llmData !== toolData) {
-        console.warn('[AI][callLLM] LLM output does not match tool result. Overwriting with real data to prevent hallucination.');
+    // Only attempt to parse if the response looks like it might be JSON
+    if (completeResponse && completeResponse.trim().startsWith('{') && completeResponse.trim().endsWith('}')) {
+      const parsed = JSON.parse(completeResponse);
+      // Only check if we have a tool result and the LLM output is a valid object
+      if (lastToolResult && parsed && typeof parsed === 'object') {
+        // Compare the data field (shallow equality for arrays/objects)
+        const llmData = JSON.stringify(parsed.data);
+        const toolData = JSON.stringify(lastToolResult);
+        if (llmData !== toolData) {
+          console.warn('[AI][callLLM] LLM output does not match tool result. Overwriting with real data to prevent hallucination.');
+          return JSON.stringify({
+            text: 'Here is your real financial data based on your account records.',
+            data: lastToolResult
+          });
+        }
+      }
+    } else {
+      console.log('[AI][callLLM] Response is not JSON format, skipping hallucination check. Response:', completeResponse.substring(0, 100) + '...');
+      
+      // If we have tool results but the LLM didn't return JSON, provide a fallback response
+      if (lastToolResult) {
+        console.log('[AI][callLLM] Providing fallback response with tool results since LLM returned non-JSON');
         return JSON.stringify({
-          text: 'Here is your real financial data based on your account records.',
+          text: 'Here is your financial information based on your account records.',
           data: lastToolResult
         });
       }
     }
   } catch (e) {
     console.error('[AI][callLLM] Error in post-processing hallucination check:', e);
+    console.log('[AI][callLLM] Failed response content:', completeResponse);
   }
   // Send [DONE] only after the final answer is sent
   return completeResponse;
