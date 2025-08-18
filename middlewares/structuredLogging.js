@@ -1,4 +1,5 @@
 import structuredLogger from '../lib/structuredLogger.js';
+import { clearFailedDecryptionCache } from '../database/encryption.js';
 
 // Ensure structuredLogger is available
 if (!structuredLogger) {
@@ -118,6 +119,24 @@ export const structuredLoggingMiddleware = (req, res, next) => {
   });
 
   next();
+};
+
+// Function to clear failed decryption cache
+export const clearFailedDecryptionCacheMiddleware = (req, res, next) => {
+  try {
+    const result = clearFailedDecryptionCache();
+    res.json({
+      success: true,
+      message: 'Failed decryption cache cleared successfully',
+      ...result
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear decryption cache',
+      error: error.message
+    });
+  }
 };
 
 /**

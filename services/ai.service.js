@@ -84,6 +84,297 @@ const makeRequest = async (
 		console.log("currentScreen", currentScreen);
 		console.log("dataScreen", dataScreen);
 
+		// Get additional context based on current screen
+		let screenContext = {};
+		try {
+			switch (currentScreen) {
+				case "dashboard":
+					// Get dashboard-specific data
+					const cashFlows = await accountsService.getCashFlows(uid, profile);
+					const weeklyCashFlow = await accountsService.getCashFlowsWeekly(uid, profile.id);
+					const accounts = await accountsService.getAccountsByProfile(uid, profile.id);
+					
+					screenContext = {
+						hasCashFlowData: !!cashFlows,
+						hasWeeklyData: !!weeklyCashFlow,
+						accountCount: accounts?.length || 0,
+						accountTypes: accounts?.map(acc => acc.account_type) || [],
+						recentTransactions: await accountsService.getProfileTransactions(uid, { limit: 5 })
+					};
+					break;
+					
+				case "transactions":
+					if (dataScreen && dataScreen !== "all") {
+						// Get account-specific data
+						const account = await accountsService.getAccountById(uid, dataScreen);
+						const accountTransactions = await accountsService.getAccountTransactions(uid, dataScreen, { limit: 10 });
+						
+						screenContext = {
+							accountId: dataScreen,
+							accountName: account?.account_name || "Unknown Account",
+							accountType: account?.account_type || "Unknown",
+							institution: account?.institution_name || "Unknown",
+							currentBalance: account?.current_balance || 0,
+							availableBalance: account?.available_balance || 0,
+							recentTransactionCount: accountTransactions?.length || 0
+						};
+					} else {
+						// Get general transactions data
+						const allTransactions = await accountsService.getProfileTransactions(uid, { limit: 20 });
+						const transactionSummary = allTransactions?.reduce((acc, trans) => {
+							acc.totalCount++;
+							acc.totalAmount += Math.abs(trans.amount || 0);
+							if (trans.amount > 0) acc.incomeCount++;
+							else acc.expenseCount++;
+							return acc;
+						}, { totalCount: 0, totalAmount: 0, incomeCount: 0, expenseCount: 0 });
+						
+						screenContext = {
+							transactionCount: transactionSummary?.totalCount || 0,
+							totalAmount: transactionSummary?.totalAmount || 0,
+							incomeCount: transactionSummary?.incomeCount || 0,
+							expenseCount: transactionSummary?.expenseCount || 0
+						};
+					}
+					break;
+					
+				case "trips":
+					if (dataScreen) {
+						// Get trip-specific data
+						const trip = await tripService.getTripById(uid, dataScreen);
+						
+						screenContext = {
+							tripId: dataScreen,
+							tripDate: trip?.date || "Unknown",
+							tripMiles: trip?.miles || 0,
+							hasLocationData: !!(trip?.metadata?.placeName || trip?.metadata?.pickupAddress)
+						};
+					} else {
+						// Get general trips data
+						const trips = await tripService.getTrips(uid, { profileId: profile.id });
+						
+						screenContext = {
+							tripCount: trips?.length || 0,
+							totalMiles: trips?.reduce((sum, trip) => sum + (trip.miles || 0), 0) || 0,
+							hasTrips: trips && trips.length > 0
+						};
+					}
+					break;
+					
+				case "assets":
+					if (dataScreen) {
+						// Get asset-specific data
+						const asset = await assetsService.getAssetById(uid, dataScreen);
+						
+						screenContext = {
+							assetId: dataScreen,
+							assetName: asset?.name || "Unknown Asset",
+							assetType: asset?.type || "Unknown",
+							assetValue: asset?.value || 0
+						};
+					} else {
+						// Get general assets data
+						const assets = await assetsService.getAssets(uid);
+						
+						screenContext = {
+							assetCount: assets?.length || 0,
+							totalValue: assets?.reduce((sum, asset) => sum + (asset.value || 0), 0) || 0,
+							assetTypes: assets?.map(asset => asset.type) || [],
+							hasAssets: assets && assets.length > 0
+						};
+					}
+					break;
+					
+				default:
+					screenContext = {
+						generalContext: true,
+						availableScreens: ["dashboard", "transactions", "trips", "assets", "filecabinet"]
+					};
+			}
+		} catch (error) {
+			console.error("Error getting screen context:", error);
+			screenContext = { error: "Failed to load screen context" };
+		}
+
+		console.log("Screen context:", screenContext);
+
+		// Get profile context and available data
+		let profileContext = {};
+		try {
+			// Get profile information
+			const profileAccounts = await accountsService.getAccountsByProfile(uid, profile.id);
+			const profileTransactions = await accountsService.getProfileTransactions(uid, { limit: 10 });
+			const profileAssets = await assetsService.getAssets(uid);
+			const profileTrips = await tripService.getTrips(uid, { profileId: profile.id });
+			
+			profileContext = {
+				profileId: profile.id,
+				profileName: profile.name,
+				isPersonal: profile.isPersonal,
+				accountCount: profileAccounts?.length || 0,
+				transactionCount: profileTransactions?.length || 0,
+				assetCount: profileAssets?.length || 0,
+				tripCount: profileTrips?.length || 0,
+				hasData: {
+					accounts: profileAccounts && profileAccounts.length > 0,
+					transactions: profileTransactions && profileTransactions.length > 0,
+					assets: profileAssets && profileAssets.length > 0,
+					trips: profileTrips && profileTrips.length > 0
+				},
+				accountTypes: profileAccounts?.map(acc => acc.account_type) || [],
+				assetTypes: profileAssets?.map(asset => asset.type) || []
+			};
+		} catch (error) {
+			console.error("Error getting profile context:", error);
+			profileContext = { error: "Failed to load profile context" };
+		}
+
+		console.log("Profile context:", profileContext);
+
+		// Get current page display context (what the user is actually seeing)
+		let pageDisplayContext = {};
+		try {
+			switch (currentScreen) {
+				case "dashboard":
+					// Dashboard shows overview data
+					const dashboardData = await accountsService.getCashFlows(uid, profile);
+					pageDisplayContext = {
+						pageType: "overview",
+						displayedData: {
+							cashFlow: dashboardData ? "Available" : "Not available",
+							accounts: screenContext.accountCount > 0 ? `${screenContext.accountCount} accounts shown` : "No accounts",
+							recentActivity: screenContext.recentTransactions?.length > 0 ? `${screenContext.recentTransactions.length} recent transactions` : "No recent activity"
+						},
+						userCanSee: [
+							"Overall financial health",
+							"Account balances summary",
+							"Recent financial activity",
+							"Cash flow trends"
+						]
+					};
+					break;
+					
+				case "transactions":
+					if (dataScreen && dataScreen !== "all") {
+						// Specific account transactions view
+						pageDisplayContext = {
+							pageType: "account_detail",
+							displayedData: {
+								account: screenContext.accountName,
+								balance: `$${screenContext.currentBalance}`,
+								transactions: `${screenContext.recentTransactionCount} transactions shown`
+							},
+							userCanSee: [
+								"Account-specific transactions",
+								"Account balance and details",
+								"Transaction history for this account"
+							]
+						};
+					} else {
+						// All transactions view
+						pageDisplayContext = {
+							pageType: "transactions_list",
+							displayedData: {
+								totalTransactions: screenContext.transactionCount,
+								totalAmount: `$${screenContext.totalAmount}`,
+								incomeVsExpense: `${screenContext.incomeCount} income, ${screenContext.expenseCount} expenses`
+							},
+							userCanSee: [
+								"All profile transactions",
+								"Spending patterns",
+								"Income vs expense summary"
+							]
+						};
+					}
+					break;
+					
+				case "trips":
+					if (dataScreen) {
+						// Specific trip detail view
+						pageDisplayContext = {
+							pageType: "trip_detail",
+							displayedData: {
+								trip: `Trip ${screenContext.tripId}`,
+								date: screenContext.tripDate,
+								miles: screenContext.tripMiles
+							},
+							userCanSee: [
+								"Trip details and metadata",
+								"Location information",
+								"Vehicle association"
+							]
+						};
+					} else {
+						// All trips list view
+						pageDisplayContext = {
+							pageType: "trips_list",
+							displayedData: {
+								totalTrips: screenContext.tripCount,
+								totalMiles: screenContext.totalMiles
+							},
+							userCanSee: [
+								"All recorded trips",
+								"Mileage summaries",
+								"Travel patterns"
+							]
+						};
+					}
+					break;
+					
+				case "assets":
+					if (dataScreen) {
+						// Specific asset detail view
+						pageDisplayContext = {
+							pageType: "asset_detail",
+							displayedData: {
+								asset: screenContext.assetName,
+								type: screenContext.assetType,
+								value: `$${screenContext.assetValue}`
+							},
+							userCanSee: [
+								"Asset details and value",
+								"Asset type and metadata",
+								"Purchase information"
+							]
+						};
+					} else {
+						// All assets list view
+						pageDisplayContext = {
+							pageType: "assets_list",
+							displayedData: {
+								totalAssets: screenContext.assetCount,
+								totalValue: `$${screenContext.totalValue}`,
+								types: screenContext.assetTypes.join(', ')
+							},
+							userCanSee: [
+								"All financial assets",
+								"Asset portfolio summary",
+								"Value distribution by type"
+							]
+						};
+					}
+					break;
+					
+				default:
+					pageDisplayContext = {
+						pageType: "general",
+						displayedData: {
+							availableScreens: ["dashboard", "transactions", "trips", "assets", "filecabinet"]
+						},
+						userCanSee: [
+							"General financial information",
+							"Cross-profile data",
+							"Application-wide features"
+						]
+					};
+			}
+		} catch (error) {
+			console.error("Error getting page display context:", error);
+			pageDisplayContext = { error: "Failed to load page display context" };
+		}
+
+		console.log("Page display context:", pageDisplayContext);
+
 		//TODO: add file cabinet functions
 
 		let screenPrompt = "";
@@ -97,6 +388,13 @@ const makeRequest = async (
           - Net worth
           - A preview of recent transactions
           - Account summaries for this profile
+
+          Current dashboard context:
+          - Cash flow data available: ${screenContext.hasCashFlowData ? 'Yes' : 'No'}
+          - Weekly cash flow data available: ${screenContext.hasWeeklyData ? 'Yes' : 'No'}
+          - Number of accounts: ${screenContext.accountCount}
+          - Account types: ${screenContext.accountTypes.join(', ') || 'None'}
+          - Recent transactions: ${screenContext.recentTransactions?.length || 0} available
 
           Your responses should focus on financial insights, patterns, and high-level summaries using the available data. Help the user understand trends, balances, or how their finances are evolving over time. If the user asks for specific details, refer only to what would be shown in this general overview — not deep dives like full transaction history or specific account breakdowns unless explicitly asked.
 
@@ -116,15 +414,25 @@ const makeRequest = async (
           - Associated vehicle
           - Encrypted metadata like place name, and coordinates
 
+          Current trip context:
+          - Trip date: ${screenContext.tripDate}
+          - Trip miles: ${screenContext.tripMiles}
+          - Location data available: ${screenContext.hasLocationData ? 'Yes' : 'No'}
+
           Your responses must focus solely on the data for this trip ID. Answer questions about the trip's distance, location, purpose, or vehicle, but do not generalize or switch to other trips or financial areas unless explicitly asked.
 
-          If the user’s question is about something broader, clarify if they’d like to leave this specific trip view.
+          If the user's question is about something broader, clarify if they'd like to leave this specific trip view.
           `;
 				} else {
 					screenPrompt = `
           You are assisting a user on the general trips screen.
 
           This screen lists all the trips recorded for the current profile. Each trip includes metadata such as date, mileage, locations, addresses, and associated vehicle or profile information.
+
+          Current trips context:
+          - Total trips: ${screenContext.tripCount}
+          - Total miles: ${screenContext.totalMiles}
+          - Has trips data: ${screenContext.hasTrips ? 'Yes' : 'No'}
 
           Focus on answering questions related to this list, such as totals, summaries, trends, filtering by date or mileage, or patterns in travel behavior. Only refer to data from this overview unless the user specifically mentions a trip in detail.
 
@@ -144,6 +452,11 @@ const makeRequest = async (
           - Location or address (if applicable)
           - Any custom metadata the user may have added
 
+          Current asset context:
+          - Asset name: ${screenContext.assetName}
+          - Asset type: ${screenContext.assetType}
+          - Asset value: $${screenContext.assetValue}
+
           Focus your answers on analyzing or explaining this single asset. Do not generalize to other assets unless the user asks to compare or shift focus. Only discuss other financial topics if clearly requested.
 
           If the user's question is too broad, ask whether they want information beyond this specific asset.
@@ -153,6 +466,12 @@ const makeRequest = async (
           You are assisting a user on the general assets screen.
 
           This screen displays all financial assets associated with the current profile. These may include real estate, investments, vehicles, cash, or other asset types. Each asset includes metadata like name, type, value, and other details.
+
+          Current assets context:
+          - Total assets: ${screenContext.assetCount}
+          - Total value: $${screenContext.totalValue}
+          - Asset types: ${screenContext.assetTypes.join(', ') || 'None'}
+          - Has assets data: ${screenContext.hasAssets ? 'Yes' : 'No'}
 
           Focus your answers on summarizing, comparing, or analyzing the user's assets as a whole or by category. Only refer to the data shown on this screen. Do not infer information about a specific asset unless the user refers to it explicitly.
 
@@ -167,11 +486,17 @@ const makeRequest = async (
 
           This screen displays all financial transactions from **all accounts** associated with the current profile. It provides a global view of recent income, expenses, and transfers, helping the user monitor their financial activity.
 
+          Current transactions context:
+          - Total transactions: ${screenContext.transactionCount}
+          - Total amount: $${screenContext.totalAmount}
+          - Income transactions: ${screenContext.incomeCount}
+          - Expense transactions: ${screenContext.expenseCount}
+
           Focus your answers on summarizing spending habits, identifying trends, highlighting recent activity, or categorizing expenses and income across accounts.
 
           Avoid referencing specific accounts or transactions unless the user requests it explicitly. Do not shift focus to other financial sections unless clearly prompted.
           `;
-				} else {
+				} else if (dataScreen) {
 					screenPrompt = `
           You are assisting a user on the detailed view of a specific account's transactions.
           You have to respond with information related to the account only, unless the user explicitly asks for something else.
@@ -180,9 +505,33 @@ const makeRequest = async (
           - Account details such as name, mask, institution, and account type
           - Balances (current and available)
 
+          Current account context:
+          - Account name: ${screenContext.accountName}
+          - Account type: ${screenContext.accountType}
+          - Institution: ${screenContext.institution}
+          - Current balance: $${screenContext.currentBalance}
+          - Available balance: $${screenContext.availableBalance}
+          - Recent transactions: ${screenContext.recentTransactionCount} available
+
           Focus your responses on activity related to this account only. This may include analyzing spending patterns, listing recent transactions, or checking specific balances.
 
           Do not reference data from other accounts or financial areas unless explicitly requested by the user.
+          `;
+				} else {
+					screenPrompt = `
+          You are assisting a user on the general transactions screen.
+
+          This screen displays all financial transactions from **all accounts** associated with the current profile. It provides a global view of recent income, expenses, and transfers, helping the user monitor their financial activity.
+
+          Current transactions context:
+          - Total transactions: ${screenContext.transactionCount}
+          - Total amount: $${screenContext.totalAmount}
+          - Income transactions: ${screenContext.incomeCount}
+          - Expense transactions: ${screenContext.expenseCount}
+
+          Focus your answers on summarizing spending habits, identifying trends, highlighting recent activity, or categorizing expenses and income across accounts.
+
+          Avoid referencing specific accounts or transactions unless the user requests it explicitly. Do not shift focus to other financial sections unless clearly prompted.
           `;
 				}
 
@@ -220,6 +569,18 @@ You have access to the following tools. Use them _only_ when necessary to answer
 
   The current UID or user ID is "${uid}". This is the unique identifier for the user whose data you are accessing. You can use this UID to retrieve user-specific information.
   The current profile is "${profile}", which is the profile the user is currently using. A profile refers to a business or personal account within the Zentavos system. Each user can have multiple profiles, and each profile can have multiple bank accounts. You can look up other profiles if the user asks for them.
+
+  Current Profile Context:
+  - Profile ID: ${profileContext.profileId}
+  - Profile Name: ${profileContext.profileName}
+  - Profile Type: ${profileContext.isPersonal ? 'Personal' : 'Business'}
+  - Available Data:
+    - Accounts: ${profileContext.accountCount} (${profileContext.hasData.accounts ? 'Available' : 'None'})
+    - Transactions: ${profileContext.transactionCount} (${profileContext.hasData.transactions ? 'Available' : 'None'})
+    - Assets: ${profileContext.assetCount} (${profileContext.hasData.assets ? 'Available' : 'None'})
+    - Trips: ${profileContext.tripCount} (${profileContext.hasData.trips ? 'Available' : 'None'})
+  - Account Types: ${profileContext.accountTypes.join(', ') || 'None'}
+  - Asset Types: ${profileContext.assetTypes.join(', ') || 'None'}
 
   If you need to use the current date, use the following format: YYYY-MM-DD. Today is "${
 		new Date().toISOString().split("T")[0]
@@ -300,6 +661,25 @@ You have access to the following tools. Use them _only_ when necessary to answer
 ## Screen Context
 
 "${screenPrompt}"
+
+## Current Page Context
+
+You are currently assisting a user on the **${currentScreen}** screen${dataScreen ? ` (${dataScreen})` : ''}.
+
+**Page Type:** ${pageDisplayContext.pageType}
+**What the user can see on this page:**
+${pageDisplayContext.userCanSee?.map(item => `- ${item}`).join('\n') || 'General information'}
+
+**Data currently displayed:**
+${Object.entries(pageDisplayContext.displayedData || {}).map(([key, value]) => `- ${key}: ${value}`).join('\n') || 'No specific data'}
+
+**Available data for this profile:**
+- Accounts: ${profileContext.accountCount} (${profileContext.hasData.accounts ? 'Available' : 'None'})
+- Transactions: ${profileContext.transactionCount} (${profileContext.hasData.transactions ? 'Available' : 'None'})
+- Assets: ${profileContext.assetCount} (${profileContext.hasData.assets ? 'Available' : 'None'})
+- Trips: ${profileContext.tripCount} (${profileContext.hasData.trips ? 'Available' : 'None'})
+
+**Important:** Your responses should be contextual to what the user is currently viewing and the data available on this screen. Focus on the information that would be most relevant given their current location in the app.
 
 ## Handling Greetings or Vague Inputs
 
@@ -1091,13 +1471,14 @@ Example:
 					toolCallsRemaining = true;
 
 					for (const toolCall of delta.tool_calls) {
+						let fnName = null; // Declare fnName at the beginning of the loop
 						try {
 							if (!toolCall.function) {
 								console.error("Tool call missing function property:", toolCall);
 								continue;
 							}
 
-							const fnName = toolCall.function?.name;
+							fnName = toolCall.function?.name;
 							if (!fnName) {
 								console.error("Tool call missing function name:", toolCall);
 								continue;
@@ -1135,12 +1516,13 @@ Example:
 								content: JSON.stringify(result),
 							});
 						} catch (error) {
-							console.error(`Error executing tool ${fnName}:`, error);
+							const errorFnName = fnName || 'unknown';
+							console.error(`Error executing tool ${errorFnName}:`, error);
 							// Push an error response back to the model
 							finalMessages.push({
 								role: "tool",
 								tool_call_id: toolCall.id,
-								name: fnName,
+								name: errorFnName,
 								content: JSON.stringify({ error: error.message }),
 							});
 						}
