@@ -2,7 +2,58 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import aiService from "../services/ai/service.js";
 
 const makeRequest = async (req, res) => {
-  return aiService.makeRequest(req, res);
+  try {
+    const { uid } = req.user;
+    const { prompt, profileId, messages, screen } = req.body;
+    
+    console.log("[AI Controller] Received request:", { 
+      uid, 
+      profileId, 
+      hasPrompt: !!prompt, 
+      hasMessages: !!messages, 
+      screen,
+      body: req.body,
+      user: req.user 
+    });
+    
+    if (!uid) {
+      console.error("[AI Controller] No UID found in req.user:", req.user);
+      return res.status(401).json({ error: "User ID not found in token" });
+    }
+    
+    if (!profileId) {
+      console.error("[AI Controller] No profileId in request body:", req.body);
+      return res.status(400).json({ error: "Profile ID is required" });
+    }
+    
+    if (!prompt) {
+      console.error("[AI Controller] No prompt in request body:", req.body);
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+    
+    console.log("[AI Controller] Calling AI service with params:", {
+      prompt,
+      uid,
+      profileId,
+      messages: messages || [],
+      screen
+    });
+    
+    const result = await aiService.makeRequest(
+      prompt,
+      uid,
+      profileId,
+      messages || [],
+      screen,
+      res
+    );
+    
+    console.log("[AI Controller] AI service returned:", result);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("[AI Controller] Error:", error);
+    return res.status(500).json({ error: error.message });
+  }
 };
 
 const stream = async (req, res) => {

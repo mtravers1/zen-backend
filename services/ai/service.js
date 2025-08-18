@@ -46,116 +46,153 @@ class AIService {
     screen,
     res
   ) {
-    // Validate required parameters
-    if (!uid) throw new Error("User ID (uid) is required");
-    if (!profileId) throw new Error("Profile ID is required");
+    try {
+      // Validate required parameters
+      if (!uid) throw new Error("User ID (uid) is required");
+      if (!profileId) throw new Error("Profile ID is required");
 
-    // Retrieve user and profile context for tool calls
-    const dek = await getUserDek(uid);
-    const user = await User.findOne({ authUid: uid }).lean();
-    if (!user?.email?.[0]?.email) throw new Error("User email not found");
-    const email = user.email[0].email;
-    const profiles = await businessService.getUserProfiles(email, uid);
-    if (!profiles?.length) throw new Error("No profiles found for user");
+      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen });
 
-    // Find the correct profile by ID (handles personal and business profiles)
-    let profile = profiles.find((p) => {
-      if (p.isPersonal) {
-        return user._id.toString() === profileId;
-      }
-      return p.id.toString() === profileId;
-    });
-    // Fallback for legacy/personal profile ID
-    if (!profile) {
-      if (user && user._id.toString() === profileId) {
-        profile = profiles.find((p) => p.isPersonal);
-      }
-    }
-    if (!profile) {
-      throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
-    }
+      // Retrieve user and profile context for tool calls
+      const dek = await getUserDek(uid);
+      const user = await User.findOne({ authUid: uid }).lean();
+      if (!user?.email?.[0]?.email) throw new Error("User email not found");
+      const email = user.email[0].email;
+      const profiles = await businessService.getUserProfiles(email, uid);
+      if (!profiles?.length) throw new Error("No profiles found for user");
 
-    // Parse screen context for prompt construction
-    const baseScreen = (screen || "").split("/")[0] || "";
-    const dataScreen = (screen || "").split("/")[1];
-    const currentScreen = baseScreen.toLowerCase().trim();
+      console.log("[AI Service] Found profiles:", profiles.length);
 
-    // Build the system and screen prompts
-    const screenPrompt = buildScreenPrompt(currentScreen, dataScreen);
-    const systemPrompt = getProductionSystemPrompt();
-
-    // Construct the message array for the LLM
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: "user", content: screenPrompt },
-    ];
-
-    // Use the tool definitions for function calling
-    const tools = toolDefinitions;
-
-    // Prepare the context for tool functions (injects user/profile info)
-    const toolContext = {
-      email,
-      profile,
-      filterAccounts,
-      filterTransactions,
-    };
-    const toolsImpl = toolFunctions(toolContext);
-
-    console.log("[AI] Calling LLM with messages:", messages);
-    // Call the LLM (Groq/vLLM) with all context and tool functions
-    let completeResponse = await callLLM({
-      apiKey: this.GROQ_API_KEY,
-      model: this.GROQ_AI_MODEL,
-      messages,
-      tools,
-      toolFunctions: toolsImpl,
-      uid,
-      aiController,
-    });
-    console.log("[AI] LLM response:", completeResponse);
-
-    // Validate and correct the LLM response if needed
-    let parsedResponse;
-    if (isValidJSON(completeResponse)) {
-      parsedResponse = JSON.parse(completeResponse);
-    } else {
-      parsedResponse = await getCorrectedJsonResponse({
-        invalidJson: completeResponse,
-        groqClient: this.groqClient,
-        model: this.GROQ_AI_MODEL,
+      // Find the correct profile by ID (handles personal and business profiles)
+      let profile = profiles.find((p) => {
+        if (p.isPersonal) {
+          return user._id.toString() === profileId;
+        }
+        return p.id.toString() === profileId;
       });
-    }
+      // Fallback for legacy/personal profile ID
+      if (!profile) {
+        if (user && user._id.toString() === profileId) {
+          profile = profiles.find((p) => p.isPersonal);
+        }
+      }
+      if (!profile) {
+        throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
+      }
 
-    // Backend fallback: Only if the LLM did not call a tool or returned invalid JSON
-    // This should be rare; the LLM is expected to handle all normal cases
-    const llmDidNotCallTool = !parsedResponse || (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0);
-    if (llmDidNotCallTool) {
-      console.warn('[AI][Fallback] LLM did not call a tool or returned invalid JSON. Sending generic fallback message.');
-      const fallbackResponse = {
-        text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
-        data: {}
+      console.log("[AI Service] Using profile:", { id: profile.id, name: profile.name, isPersonal: profile.isPersonal });
+
+      // Parse screen context for prompt construction
+      const baseScreen = (screen || "").split("/")[0] || "";
+      const dataScreen = (screen || "").split("/")[1];
+      const currentScreen = baseScreen.toLowerCase().trim();
+
+      // Build the system and screen prompts
+      const screenPrompt = buildScreenPrompt(currentScreen, dataScreen);
+      const systemPrompt = getProductionSystemPrompt();
+
+      // Construct the message array for the LLM
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: "user", content: screenPrompt },
+      ];
+
+      // Use the tool definitions for function calling
+      const tools = toolDefinitions;
+
+      // Prepare the context for tool functions (injects user/profile info)
+      const toolContext = {
+        email,
+        profile,
+        filterAccounts,
+        filterTransactions,
       };
-      aiController.sendToUser(uid, fallbackResponse);
-      aiController.sendToUser(uid, "[DONE]");
-      return fallbackResponse;
-    }
+      const toolsImpl = toolFunctions(toolContext);
 
-    // Send the parsed response to the user (via SSE or other mechanism)
-    if (parsedResponse) {
-      aiController.sendToUser(uid, parsedResponse);
-    } else {
-      aiController.sendToUser(uid, {
-        error: "Invalid response format",
-        originalResponse: completeResponse,
-        details: "Could not parse or correct the JSON response.",
+      console.log("[AI] Calling LLM with messages:", messages);
+      // Call the LLM (Groq/vLLM) with all context and tool functions
+      let completeResponse = await callLLM({
+        apiKey: this.GROQ_API_KEY,
+        model: this.GROQ_AI_MODEL,
+        messages,
+        tools,
+        toolFunctions: toolsImpl,
+        uid,
+        aiController,
       });
-    }
+      console.log("[AI] LLM response:", completeResponse);
 
-    aiController.sendToUser(uid, "[DONE]");
-    console.log("[AI] Done sending response to user");
-    console.log("[AI] Parsed response:", parsedResponse);
-    return parsedResponse;
+      // Validate and correct the LLM response if needed
+      let parsedResponse;
+      if (isValidJSON(completeResponse)) {
+        parsedResponse = JSON.parse(completeResponse);
+      } else {
+        parsedResponse = await getCorrectedJsonResponse({
+          invalidJson: completeResponse,
+          groqClient: this.groqClient,
+          model: this.GROQ_AI_MODEL,
+        });
+      }
+
+      // Backend fallback: Only if the LLM did not call a tool or returned invalid JSON
+      // This should be rare; the LLM is expected to handle all normal cases
+      const llmDidNotCallTool = !parsedResponse || (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0);
+      if (llmDidNotCallTool) {
+        console.warn('[AI][Fallback] LLM did not call a tool or returned invalid JSON. Sending generic fallback message.');
+        const fallbackResponse = {
+          text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
+          data: {}
+        };
+        aiController.sendToUser(uid, fallbackResponse);
+        aiController.sendToUser(uid, "[DONE]");
+        return fallbackResponse;
+      }
+
+      // Send the parsed response to the user (via SSE or other mechanism)
+      if (parsedResponse) {
+        aiController.sendToUser(uid, parsedResponse);
+      } else {
+        aiController.sendToUser(uid, {
+          error: "Invalid response format",
+          originalResponse: completeResponse,
+          details: "Could not parse or correct the JSON response.",
+        });
+      }
+
+      aiController.sendToUser(uid, "[DONE]");
+      console.log("[AI] Done sending response to user");
+      console.log("[AI] Parsed response:", parsedResponse);
+      
+      // Ensure we always return a valid response object
+      if (!parsedResponse) {
+        parsedResponse = {
+          text: "Response processed but no data returned",
+          data: {},
+          error: false
+        };
+      }
+      
+      return parsedResponse;
+    } catch (error) {
+      console.error("[AI Service] Error in makeRequest:", error);
+      
+      // Send error to user if possible
+      if (uid && aiController) {
+        try {
+          aiController.sendToUser(uid, {
+            error: true,
+            text: `Error: ${error.message}`,
+            data: {}
+          });
+          aiController.sendToUser(uid, "[DONE]");
+        } catch (sendError) {
+          console.error("[AI Service] Failed to send error to user:", sendError);
+        }
+      }
+      
+      // Re-throw the error so the controller can handle it
+      throw error;
+    }
   }
 }
 
