@@ -142,7 +142,7 @@ const fetchFilteredTrips = async (query, uid) => {
           }
         }
 
-        // Desencriptar metadata fields
+        // Decrypt metadata fields
         const decryptedMetadata = {
           ...trip.metadata,
           placeName: trip.metadata.placeName
@@ -157,7 +157,7 @@ const fetchFilteredTrips = async (query, uid) => {
           profileData: setting,
         };
 
-        // Desencriptar coordenadas
+        // Decrypt coordinates
         const decryptedLocations = await Promise.all(
           trip.locations.map(async (loc) => ({
             latitude: loc.latitude
@@ -203,18 +203,20 @@ const getLastVehicleIdUsed = async (uid) => {
     const user = await User.findOne({ authUid: uid });
     if (!user) throw new Error("Usuario no encontrado");
 
-    // Buscar los trips más recientes del usuario con vehicle válido
+    // Find the most recent trips of the user with a valid vehicle
     const trips = await Trips.find({
       user: user._id,
       "metadata.vehicle": { $exists: true, $ne: null, $ne: "Other" },
     })
-      .sort({ "metadata.dateTime": -1 }) // orden descendente por fecha
-      .limit(1) // solo el más reciente
+      // Sort descending by date
+      .sort({ "metadata.dateTime": -1 })
+      // Only the most recent
+      .limit(1)
       .lean();
 
     const lastTrip = trips[0];
 
-    // Verificamos que tenga un vehicle válido
+    // Check that it has a valid vehicle
     if (!lastTrip || !lastTrip.metadata?.vehicle) return null;
 
     const vehicle = lastTrip.metadata.vehicle;
@@ -232,7 +234,7 @@ const updateTrip = async (tripId, updateData, uid) => {
 
   const encryptedData = { ...updateData };
 
-  // Encriptar locations si vienen
+  // Encrypt locations if provided
   if (updateData.locations) {
     encryptedData.locations = await Promise.all(
       updateData.locations.map(async (loc) => ({
@@ -242,7 +244,7 @@ const updateTrip = async (tripId, updateData, uid) => {
     );
   }
 
-  // Encriptar metadata si viene
+  // Encrypt metadata if provided
   if (updateData.metadata) {
     const encryptedMetadata = { ...updateData.metadata };
 

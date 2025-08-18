@@ -14,24 +14,28 @@ const checkUserRole = async (user) => {
   return user.rolePermission;
 };
 
-// Funciones para validar permisos (TODO: llenar con validaciones)
+// Functions to validate permissions (TODO: fill with validations)
+// TODO: Check the validation of the 'create_trips_max' permission
+// TODO: Check the validation of the 'businesses_max' permission
+// TODO: Check the validation of the 'storage_max_gb' permission
+// You can keep adding more functions according to the JSON
 const validateCreateTrips = (createTripsMax) => {
-  // TODO: Verificar la validación del permiso 'create_trips_max'
+  // TODO: Verify the validation of the 'create_trips_max' permission
   return createTripsMax > 0;
 };
 
 const validateBusinesses = async (businessesMax, userId) => {
-  // TODO: Verificar la validación del permiso 'businesses_max'
+  // TODO: Verify the validation of the 'businesses_max' permission
   const businesses = await Business.find({ userId });
   return businessesMax > businesses.length;
 };
 
 const validateStorage = (storageMaxGb) => {
-  // TODO: Verificar la validación del permiso 'storage_max_gb'
+  // TODO: Verify the validation of the 'storage_max_gb' permission
   return storageMaxGb > 0;
 };
 
-// Puedes seguir agregando más funciones según el JSON
+// You can keep adding more functions according to the JSON
 const permissionFunctions = {
   create_trips_max: validateCreateTrips,
   businesses_max: validateBusinesses,

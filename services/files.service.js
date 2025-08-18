@@ -25,6 +25,7 @@ const addFile = async (data, uid) => {
     type: data.type,
     info: data.info,
     fileurl: data.fileurl,
+    folder: data.folder || "General",
     updatedAt: new Date(),
   });
 
@@ -104,6 +105,7 @@ const getFiles = async (profileId, uid) => {
     type: file.type,
     info: file.info,
     fileurl: file.fileurl,
+    folder: file.folder,
     updatedAt: file.updatedAt,
   }));
 };

@@ -4,6 +4,7 @@ import logger from "morgan";
 import createError from "http-errors";
 import cors from "cors";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
+import { structuredLoggingMiddleware, errorHandlingMiddleware, cleanupMiddleware } from "./middlewares/structuredLogging.js";
 import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
@@ -15,18 +16,15 @@ const app = express();
 
 // database initialization
 // require('./database/database');
-
-// CORS configuration
+const additionalOrigins = process.env.CORS_URL
+          .split(',')
+          .map(url => url.trim())
+          .filter(url => url.length > 0) || [];
+// CORS configuration for development
 const corsOptions = {
-  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [
-    'http://localhost:3000',
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'http://10.0.2.2:3000',
-    'http://10.0.2.2:8081',
-    'http://10.0.2.2:19006',
-    'exp://localhost:19000',
-    'exp://10.0.2.2:19000',
+  origin: [
+    'https://zentavos.com',
+    ...additionalOrigins
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -35,6 +33,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(logger("dev"));
+
+// Structured logging middleware - must be early in the chain
+app.use(structuredLoggingMiddleware);
+app.use(cleanupMiddleware);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -44,11 +47,11 @@ app.use(
 	firebaseAuth.unless({
 		path: [
 			"/api/auth/signup",
-			// "/api/auth/signin",
+			"/api/auth/signin",
 			"/api/auth/check-email",
 			"/api/auth/check-email-firebase",
 			"/api/auth/recoverypassword",
-			"/api/_info/version",
+			"/api/auth/_info/version",
 			"/api/webhook/plaid",
 			"/api/webhook/test",
 			"/api/plaid/institutions",
@@ -57,6 +60,7 @@ app.use(
 			"/api/plaid/accounts",
 			"/api/account/add-photo",
 			"/api/account/get-photo",
+			"/api/account/photo",
 			"/api/script/update-transactions",
 			"/api/payments/webhook/android",
 			"/api/payments/webhook/apple",
@@ -72,7 +76,10 @@ app.use(function (req, res, next) {
 	next(createError(404));
 });
 
-// error handler
+// Structured error handling middleware
+app.use(errorHandlingMiddleware);
+
+// Legacy error handler (fallback)
 app.use(function (err, req, res, next) {
   const errorResponse = {
     message: err.message,
