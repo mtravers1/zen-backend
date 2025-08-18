@@ -66,24 +66,6 @@ console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
 const dekVersionCache = new LimitedMap(1000); // Track key versions
 
-// Cache for failed decryption attempts to avoid infinite loops
-const failedDecryptionCache = new LimitedMap(1000); // Cache failed attempts
-const MAX_DECRYPTION_ATTEMPTS = 3; // Maximum attempts per unique input
-
-// Clean up failed decryption cache periodically to prevent memory leaks
-setInterval(() => {
-  const cacheSize = failedDecryptionCache.size;
-  if (cacheSize > 500) { // If cache gets too large
-    failedDecryptionCache.clear();
-    console.log(`[ENCRYPTION] Cleared failed decryption cache (was ${cacheSize} entries)`);
-  }
-  
-  // Alert if there are too many failed attempts (potential attack or data corruption)
-  if (cacheSize > 100) {
-    console.warn(`[ENCRYPTION] WARNING: High number of failed decryption attempts (${cacheSize}). This may indicate data corruption or a potential attack.`);
-  }
-}, 300000); // Clean every 5 minutes
-
 // Structured logging for encryption operations
 const logEncryptionOperation = (operation, success, details = {}) => {
   const logEntry = {
@@ -316,41 +298,6 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     return null;
   }
 
-  // Additional validation for obviously invalid data
-  if (cipherTextBase64.length < 33) {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      error: 'Input too short for valid encrypted data',
-      inputLength: cipherTextBase64.length,
-      minimumRequired: 33
-    });
-    return null;
-  }
-
-  // Check if the string looks like base64 (including URL-safe base64)
-  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(cipherTextBase64)) {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      error: 'Input does not appear to be valid base64',
-      inputLength: cipherTextBase64.length
-    });
-    return null;
-  }
-
-  // Check if this input has already failed too many times
-  const cacheKey = `${uid || 'unknown'}_${cipherTextBase64.substring(0, 20)}_${cipherTextBase64.length}`;
-  const failedAttempts = failedDecryptionCache.get(cacheKey) || 0;
-  
-  if (failedAttempts >= MAX_DECRYPTION_ATTEMPTS) {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      error: 'Maximum decryption attempts exceeded for this input',
-      inputLength: cipherTextBase64.length,
-      failedAttempts
-    });
-    return null;
-  }
-
   // Try with current DEK first
   try {
     const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
@@ -411,15 +358,11 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     });
   }
 
-  // Increment failed attempts counter
-  failedDecryptionCache.set(cacheKey, failedAttempts + 1);
-
   // If all attempts fail, log the failure and return null
   logEncryptionOperation('decryptValue', false, { 
     uid, 
     error: 'All decryption attempts failed',
-    inputLength: cipherTextBase64.length,
-    failedAttempts: failedAttempts + 1
+    inputLength: cipherTextBase64.length
   });
   
   return null;
@@ -581,14 +524,6 @@ function hashValue(value) {
     .digest("hex");
 }
 
-// Function to clear failed decryption cache manually
-function clearFailedDecryptionCache() {
-  const cacheSize = failedDecryptionCache.size;
-  failedDecryptionCache.clear();
-  console.log(`[ENCRYPTION] Manually cleared failed decryption cache (was ${cacheSize} entries)`);
-  return { cleared: true, previousSize: cacheSize };
-}
-
 export {
   encryptValue,
   decryptValue,
@@ -598,6 +533,5 @@ export {
   rotateUserKey,
   hashEmail,
   hashValue,
-  logEncryptionOperation,
-  clearFailedDecryptionCache
+  logEncryptionOperation
 };
