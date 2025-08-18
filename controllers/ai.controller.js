@@ -1,28 +1,8 @@
 import { LimitedMap } from "../lib/limitedMap.js";
-import aiService from "../services/ai.service.js";
+import aiService from "../services/ai/service.js";
 
 const makeRequest = async (req, res) => {
-  try {
-    const body = req.body;
-    console.log("Request body received:", body);
-    const { prompt, profileId, messages, screen } = body;
-    const { uid } = req.user;
-    if (!prompt || !profileId || !messages || !screen) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    await aiService.makeRequest(prompt, uid, profileId, messages, screen, res);
-    res.end();
-  } catch (error) {
-    res.write(
-      `data: ${JSON.stringify({ error: "Internal server error" })}\n\n`
-    );
-    res.end();
-  }
+  return aiService.makeRequest(req, res);
 };
 
 const stream = async (req, res) => {

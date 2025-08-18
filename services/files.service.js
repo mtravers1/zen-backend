@@ -110,42 +110,42 @@ const getFiles = async (profileId, uid) => {
   }));
 };
 
-const getFolders = async (profileId, uid) => {
+const getFilesByFolder = async (profileId, uid, folder) => {
   const user = await User.findOne({ authUid: uid });
   if (!user) throw new Error("User not found");
-
-  const files = await Files.find({
+  const query = {
     userId: user._id.toString(),
     profileId: profileId,
-  });
+  };
+  if (folder) {
+    query["info.folder"] = folder;
+  }
+  const files = await Files.find(query);
+  return files.map((file) => ({
+    id: file._id,
+    userId: file.userId,
+    account: file.account,
+    profileId: file.profileId,
+    type: file.type,
+    info: file.info,
+    fileurl: file.fileurl,
+    updatedAt: file.updatedAt,
+  }));
+};
 
-  // Get unique folders and count files in each
-  const folderCounts = {};
-  files.forEach((file) => {
-    const folder = file.folder || "General";
-    folderCounts[folder] = (folderCounts[folder] || 0) + 1;
+const getFolderCounts = async (profileId, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) throw new Error("User not found");
+  const pipeline = [
+    { $match: { userId: user._id.toString(), profileId: profileId } },
+    { $group: { _id: "$info.folder", count: { $sum: 1 } } },
+  ];
+  const result = await Files.aggregate(pipeline);
+  const counts = {};
+  result.forEach((item) => {
+    counts[item._id || "General"] = item.count;
   });
-
-  // Convert to array format with actual timestamps
-  const folders = Object.keys(folderCounts).map((folderName) => {
-    const folderFiles = files.filter(file => (file.folder || "General") === folderName);
-    const oldestFile = folderFiles.reduce((oldest, file) => 
-      file.updatedAt < oldest.updatedAt ? file : oldest
-    );
-    const newestFile = folderFiles.reduce((newest, file) => 
-      file.updatedAt > newest.updatedAt ? file : newest
-    );
-    
-    return {
-      id: folderName,
-      name: folderName,
-      fileCount: folderCounts[folderName],
-      createdAt: oldestFile.updatedAt.toISOString(),
-      updatedAt: newestFile.updatedAt.toISOString(),
-    };
-  });
-
-  return folders;
+  return counts;
 };
 
 const deleteFiles = async (data, uid) => {
@@ -172,7 +172,8 @@ const deleteFiles = async (data, uid) => {
 const filesService = {
   addFile,
   getFiles,
-  getFolders,
+  getFilesByFolder,
+  getFolderCounts,
   deleteFiles,
   generateUploadUrl,
   generateSignedUrl,
