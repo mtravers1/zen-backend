@@ -4,7 +4,7 @@ import aiService from "../services/ai/service.js";
 const makeRequest = async (req, res) => {
   try {
     const { uid } = req.user;
-    const { prompt, profileId, messages, screen } = req.body;
+    const { prompt, profileId, messages, screen, dataScreen } = req.body;
     
     console.log("[AI Controller] Received request:", { 
       uid, 
@@ -36,7 +36,8 @@ const makeRequest = async (req, res) => {
       uid,
       profileId,
       messages: messages || [],
-      screen
+      screen,
+      dataScreen
     });
     
     const result = await aiService.makeRequest(
@@ -45,7 +46,8 @@ const makeRequest = async (req, res) => {
       profileId,
       messages || [],
       screen,
-      res
+      res,
+      dataScreen
     );
     
     console.log("[AI Controller] AI service returned:", result);

@@ -44,7 +44,8 @@ class AIService {
     profileId,
     incomingMessages,
     screen,
-    res
+    res,
+    dataScreen
   ) {
     try {
       // Validate required parameters
@@ -84,11 +85,11 @@ class AIService {
 
       // Parse screen context for prompt construction
       const baseScreen = (screen || "").split("/")[0] || "";
-      const dataScreen = (screen || "").split("/")[1];
+      const currentDataScreen = dataScreen || (screen || "").split("/")[1];
       const currentScreen = baseScreen.toLowerCase().trim();
 
       // Build the system and screen prompts
-      const screenPrompt = buildScreenPrompt(currentScreen, dataScreen);
+      const screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen);
       const systemPrompt = getProductionSystemPrompt();
 
       // Construct the message array for the LLM
