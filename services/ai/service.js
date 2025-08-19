@@ -258,16 +258,15 @@ class AIService {
     } catch (error) {
       console.error("[AI Service] Error in makeRequest:", error);
       
+      // Create user-friendly error message
+      const userFriendlyError = this.createUserFriendlyError(error, { uid, screen, dataScreen });
+      
       // Send error to user if possible
       if (uid && res) {
         try {
           const { default: aiController } = await import("../../controllers/ai.controller.js");
           if (aiController) {
-            aiController.sendToUser(uid, {
-              error: true,
-              text: `Error: ${error.message}`,
-              data: {}
-            });
+            aiController.sendToUser(uid, userFriendlyError);
             aiController.sendToUser(uid, "[DONE]");
           }
         } catch (sendError) {
@@ -278,9 +277,40 @@ class AIService {
         console.error("[AI Service] Error in non-streaming request:", error.message);
       }
       
-      // Re-throw the error so the controller can handle it
-      throw error;
+      // Return the user-friendly error instead of throwing
+      return userFriendlyError;
     }
+  }
+
+  // Helper method to create user-friendly error messages
+  createUserFriendlyError(error, context = {}) {
+    let errorMessage = "I encountered an issue while processing your request.";
+    
+    if (error.message) {
+      if (error.message.includes('timeout')) {
+        errorMessage = "The request took too long to process. Please try again with a simpler question.";
+      } else if (error.message.includes('network') || error.message.includes('connection')) {
+        errorMessage = "I'm having trouble connecting to your financial data. Please check your internet connection and try again.";
+      } else if (error.message.includes('authentication') || error.message.includes('unauthorized')) {
+        errorMessage = "I need to verify your identity to access your financial information. Please log in again.";
+      } else if (error.message.includes('permission') || error.message.includes('access')) {
+        errorMessage = "I don't have permission to access that information. Please check your account settings.";
+      } else if (error.message.includes('not found') || error.message.includes('404')) {
+        errorMessage = "The information you requested wasn't found. Please check if the account or data exists.";
+      } else if (error.message.includes('validation') || error.message.includes('invalid')) {
+        errorMessage = "There was an issue with the request format. Please try rephrasing your question.";
+      } else {
+        // For other errors, provide a generic but helpful message
+        errorMessage = "I'm experiencing technical difficulties. Please try again in a moment or contact support if the problem persists.";
+      }
+    }
+
+    return {
+      error: true,
+      text: errorMessage,
+      data: {},
+      errorMessage: error.message || "Unknown error occurred"
+    };
   }
 }
 

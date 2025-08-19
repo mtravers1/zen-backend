@@ -33,8 +33,8 @@ export const toolFunctions = (context) => ({
    * @param {object} args - { uid, filters, intent }
    */
   getAllUserAccounts: async ({ uid, filters = {}, intent = null }) => {
-    const { email } = context;
-    const accounts = await accountsService.getAllUserAccounts(email, uid);
+    const { profile } = context;
+    const accounts = await accountsService.getAllUserAccounts(profile, uid);
     if (!accounts) {
       return intent === 'balance' ? [{ name: "Checking", balance: 0 }] : [];
     }
@@ -154,8 +154,8 @@ export const toolFunctions = (context) => ({
    * Retrieves all transactions for the current profile, filtered if filters are provided.
    */
   getProfileTransactions: async ({ uid, filters = {} }) => {
-    const { email, profile } = context;
-    const transactions = await accountsService.getProfileTransactions(email, profile.id, uid);
+    const { profile } = context;
+    const transactions = await accountsService.getProfileTransactions(profile.email, profile.id, uid);
     if (!transactions) {
       return "No transaction information available";
     }
@@ -168,8 +168,8 @@ export const toolFunctions = (context) => ({
    * Retrieves all transactions for the user, filtered if filters are provided.
    */
   getAllTransactions: async ({ uid, filters = {} }) => {
-    const { email } = context;
-    const transactions = await accountsService.getUserTransactions(email, uid);
+    const { profile } = context;
+    const transactions = await accountsService.getUserTransactions(profile.email, uid);
     if (!transactions) {
       return "No transaction information available";
     }
@@ -195,8 +195,8 @@ export const toolFunctions = (context) => ({
    * Retrieves all user profiles.
    */
   getProfiles: async ({ uid }) => {
-    const { email } = context;
-    const profiles = await businessService.getUserProfiles(email, uid);
+    const { profile } = context;
+    const profiles = await businessService.getUserProfiles(profile.email, uid);
     if (!profiles) {
       return "No profiles available";
     }
