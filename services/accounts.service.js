@@ -7,6 +7,7 @@ import { Storage } from "@google-cloud/storage";
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
 import assetsService from "./assets.service.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 import {
   decryptValue,

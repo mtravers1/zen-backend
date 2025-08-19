@@ -285,29 +285,51 @@ class AIService {
   // Helper method to create user-friendly error messages
   createUserFriendlyError(error, context = {}) {
     let errorMessage = "I encountered an issue while processing your request.";
+    let suggestion = "";
     
     if (error.message) {
       if (error.message.includes('timeout')) {
-        errorMessage = "The request took too long to process. Please try again with a simpler question.";
+        errorMessage = "The request took too long to process.";
+        suggestion = "Please try again with a simpler question or wait a moment.";
       } else if (error.message.includes('network') || error.message.includes('connection')) {
-        errorMessage = "I'm having trouble connecting to your financial data. Please check your internet connection and try again.";
+        errorMessage = "I'm having trouble connecting to your financial data.";
+        suggestion = "Please check your internet connection and try again.";
       } else if (error.message.includes('authentication') || error.message.includes('unauthorized')) {
-        errorMessage = "I need to verify your identity to access your financial information. Please log in again.";
+        errorMessage = "I need to verify your identity to access your financial information.";
+        suggestion = "Please log in again or refresh your session.";
       } else if (error.message.includes('permission') || error.message.includes('access')) {
-        errorMessage = "I don't have permission to access that information. Please check your account settings.";
+        errorMessage = "I don't have permission to access that information.";
+        suggestion = "Please check your account settings or contact support.";
       } else if (error.message.includes('not found') || error.message.includes('404')) {
-        errorMessage = "The information you requested wasn't found. Please check if the account or data exists.";
+        errorMessage = "The information you requested wasn't found.";
+        suggestion = "Please check if the account or data exists, or try a different question.";
       } else if (error.message.includes('validation') || error.message.includes('invalid')) {
-        errorMessage = "There was an issue with the request format. Please try rephrasing your question.";
+        errorMessage = "There was an issue with the request format.";
+        suggestion = "Please try rephrasing your question or be more specific.";
+      } else if (error.message.includes('structuredLogger is not defined')) {
+        errorMessage = "There's a technical issue with the logging system.";
+        suggestion = "This is a backend issue that will be fixed shortly. Please try again in a few minutes.";
+      } else if (error.message.includes('tool call') || error.message.includes('function')) {
+        errorMessage = "I'm having trouble accessing the specific financial data you requested.";
+        suggestion = "Please try asking about different information or rephrase your question.";
+      } else if (error.message.includes('database') || error.message.includes('db')) {
+        errorMessage = "I'm experiencing database connection issues.";
+        suggestion = "Please try again in a moment or contact support if the problem persists.";
+      } else if (error.message.includes('encryption') || error.message.includes('decrypt')) {
+        errorMessage = "I'm having trouble securely accessing your encrypted data.";
+        suggestion = "Please try again or contact support if the issue continues.";
       } else {
         // For other errors, provide a generic but helpful message
-        errorMessage = "I'm experiencing technical difficulties. Please try again in a moment or contact support if the problem persists.";
+        errorMessage = "I'm experiencing technical difficulties.";
+        suggestion = "Please try again in a moment or contact support if the problem persists.";
       }
     }
 
+    const fullMessage = suggestion ? `${errorMessage} ${suggestion}` : errorMessage;
+
     return {
       error: true,
-      text: errorMessage,
+      text: fullMessage,
       data: {},
       errorMessage: error.message || "Unknown error occurred"
     };
