@@ -13,22 +13,24 @@ const makeRequest = async (req, res) => {
       hasMessages: !!messages, 
       screen,
       dataScreen,
-      body: req.body,
-      user: req.user 
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      bodySize: req.body ? JSON.stringify(req.body).length : 0,
+      userKeys: req.user ? Object.keys(req.user) : [],
+      hasUser: !!req.user
     });
     
     if (!uid) {
-      console.error("[AI Controller] No UID found in req.user:", req.user);
+      console.error("[AI Controller] No UID found in req.user. User keys:", req.user ? Object.keys(req.user) : 'no user object');
       return res.status(401).json({ error: "User ID not found in token" });
     }
     
     if (!profileId) {
-      console.error("[AI Controller] No profileId in request body:", req.body);
+      console.error("[AI Controller] No profileId in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
       return res.status(400).json({ error: "Profile ID is required" });
     }
     
     if (!prompt) {
-      console.error("[AI Controller] No prompt in request body:", req.body);
+      console.error("[AI Controller] No prompt in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
       return res.status(400).json({ error: "Prompt is required" });
     }
     
@@ -47,7 +49,7 @@ const makeRequest = async (req, res) => {
       profileId,
       messages || [],
       screen,
-      res,
+      null, // Don't pass res object to avoid circular references
       dataScreen
     );
     

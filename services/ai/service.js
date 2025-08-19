@@ -44,7 +44,7 @@ class AIService {
     profileId,
     incomingMessages,
     screen,
-    res,
+    res = null,
     dataScreen
   ) {
     try {
@@ -157,24 +157,41 @@ class AIService {
           text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
           data: {}
         };
-        aiController.sendToUser(uid, fallbackResponse);
-        aiController.sendToUser(uid, "[DONE]");
+        
+        // Only use aiController if we have a response object for streaming
+        if (res && aiController) {
+          aiController.sendToUser(uid, fallbackResponse);
+          aiController.sendToUser(uid, "[DONE]");
+        }
+        
         return fallbackResponse;
       }
 
       // Send the parsed response to the user (via SSE or other mechanism)
-      if (parsedResponse) {
+      if (parsedResponse && res && aiController) {
         aiController.sendToUser(uid, parsedResponse);
+      } else if (parsedResponse && !res) {
+        // For non-streaming requests, just log the response
+        console.log("[AI] Non-streaming response:", parsedResponse);
       } else {
-        aiController.sendToUser(uid, {
+        const errorResponse = {
           error: "Invalid response format",
           originalResponse: completeResponse,
           details: "Could not parse or correct the JSON response.",
-        });
+        };
+        
+        if (res && aiController) {
+          aiController.sendToUser(uid, errorResponse);
+        }
+        console.error("[AI] Error response:", errorResponse);
       }
 
-      aiController.sendToUser(uid, "[DONE]");
-      console.log("[AI] Done sending response to user");
+      // Only send [DONE] if we have streaming
+      if (res && aiController) {
+        aiController.sendToUser(uid, "[DONE]");
+      }
+      
+      console.log("[AI] Done processing response");
       console.log("[AI] Parsed response:", parsedResponse);
       
       // Ensure we always return a valid response object
@@ -191,7 +208,7 @@ class AIService {
       console.error("[AI Service] Error in makeRequest:", error);
       
       // Send error to user if possible
-      if (uid && aiController) {
+      if (uid && aiController && res) {
         try {
           aiController.sendToUser(uid, {
             error: true,
@@ -202,6 +219,9 @@ class AIService {
         } catch (sendError) {
           console.error("[AI Service] Failed to send error to user:", sendError);
         }
+      } else if (uid && !res) {
+        // For non-streaming requests, just log the error
+        console.error("[AI Service] Error in non-streaming request:", error.message);
       }
       
       // Re-throw the error so the controller can handle it
