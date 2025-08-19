@@ -109,7 +109,7 @@ class AIService {
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: "user", content: screenPrompt },
+        { role: "user", content: `${screenPrompt}\n\nUser question: ${prompt}` },
       ];
 
       // Use the tool definitions for function calling
