@@ -222,6 +222,37 @@ const getConnectedInstitutions = async (req, res) => {
   }
 };
 
+const resumeInstitution = async (req, res) => {
+  try {
+    const { institutionId, isAndroid } = req.body;
+    const uid = req.user.uid;
+    
+    console.log(`[CONTROLLER] resumeInstitution request - uid: ${uid}, institutionId: ${institutionId}, isAndroid: ${isAndroid}`);
+    
+    if (!institutionId) {
+      return res.status(400).send({ error: "institutionId is required" });
+    }
+    
+    // Reutilizar función existente con nuevo parámetro institutionId
+    const linkToken = await plaidService.createLinkToken(
+      null,                    // email (not needed for resume)
+      isAndroid,               // isAndroid  
+      null,                    // accountId
+      uid,                     // uid
+      "add-account",           // screen
+      null,                    // mode
+      null,                    // accessToken
+      institutionId            // 🔑 institutionId para pre-selección
+    );
+    
+    console.log(`[CONTROLLER] resumeInstitution success - uid: ${uid}, institutionId: ${institutionId}`);
+    res.status(200).json({ linkToken });
+  } catch (error) {
+    console.error(`[CONTROLLER] resumeInstitution error - uid: ${req.user?.uid}, institutionId: ${req.body?.institutionId}:`, error.message);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const plaidController = {
   createLinkToken,
   getPublicToken,
@@ -235,6 +266,7 @@ const plaidController = {
   repairAccessToken,
   checkInstitutionLimit,
   getConnectedInstitutions,
+  resumeInstitution,
 };
 
 export default plaidController;

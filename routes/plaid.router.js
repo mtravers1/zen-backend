@@ -12,6 +12,7 @@ router.get("/accounts", plaidController.getAccounts);
 router.post("/save-token", platformDetection, plaidController.saveAccessToken);
 router.post("/check-institution-limit", plaidController.checkInstitutionLimit);
 router.get("/institutions-connected", plaidController.getConnectedInstitutions);
+router.post("/resume-institution", plaidController.resumeInstitution);
 router.post("/balance", plaidController.getBalance);
 router.get("/institutions", plaidController.getInstitutions);
 router.get("/transactions", plaidController.getTransactions);

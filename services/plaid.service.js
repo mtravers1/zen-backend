@@ -18,7 +18,7 @@ const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 const androidPackageName = process.env.BUNDLEID || "com.zentavos.mobile";
 
-const createLinkToken = async (email, isAndroid, accountId, uid, screen, mode, accessToken) => {
+const createLinkToken = async (email, isAndroid, accountId, uid, screen, mode, accessToken, institutionId) => {
   const user = await User.findOne({
     authUid: uid,
   });
@@ -70,6 +70,11 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen, mode, a
     transactions: {
       days_requested: 730,
     },
+    // 🔑 NUEVO: Resume mode con institución pre-seleccionada
+    ...(institutionId && {
+      institution_id: institutionId,
+      skip_institution_selection: true
+    }),
   };
   if (plaidAccessToken) {
     plaidRequest.access_token = plaidAccessToken;
