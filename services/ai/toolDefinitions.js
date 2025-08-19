@@ -34,6 +34,20 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "getNetWorth",
+      description: "Calculate and return the current net worth for the user. Net worth = Total Assets - Total Liabilities. This includes cash balances, investments, assets, credit card balances, and loans.",
+      parameters: {
+        type: "object",
+        properties: {
+          uid: { type: "string", description: "User ID" },
+        },
+        required: ["uid"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "getProfiles",
       description: "Get all profiles for a user.",
       parameters: {

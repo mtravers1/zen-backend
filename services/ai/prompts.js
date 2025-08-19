@@ -23,15 +23,17 @@ export function buildScreenPrompt(currentScreen, dataScreen) {
         use the available tools to access their data and provide comprehensive answers. 
         You are not limited to just the dashboard context - you can help with all aspects of their financial information.
         
+        CRITICAL: For questions about net worth, account balances, transactions, or any financial data, you MUST call the appropriate tool function first. NEVER invent or guess financial values. Always use real data from the tools.
+        
         SUGGESTED QUESTIONS THE USER CAN ASK:
-        - "What's my current net worth?"
-        - "How much money do I have in my accounts?"
-        - "What are my recent transactions?"
-        - "How is my cash flow looking?"
-        - "What investments do I have?"
-        - "Can you help me with financial planning?"
-        - "What are my spending patterns?"
-        - "How can I save more money?"
+        - "What's my current net worth?" → Use getNetWorth tool
+        - "How much money do I have in my accounts?" → Use getAccountsByProfile tool
+        - "What are my recent transactions?" → Use getProfileTransactions tool
+        - "How is my cash flow looking?" → Use getCashFlows tool
+        - "What investments do I have?" → Use getAssets tool
+        - "Can you help me with financial planning?" → Use multiple tools to gather data
+        - "What are my spending patterns?" → Use getCashFlows and getProfileTransactions tools
+        - "How can I save more money?" → Use tools to analyze current financial situation
         
         If the user asks a generic question like "Test" or "Hello", greet them warmly and suggest some of these financial topics they can explore.
       `;
@@ -136,6 +138,13 @@ RULES:
 - Do NOT output anything before or after the JSON. No Markdown, no commentary, no extra text.
 - If you do not know the answer, or the question is not about financial data, respond with: { "text": "I'm here to help with your financial information. Let me know what you'd like to explore.", "data": {} }
 
+CRITICAL ANTI-HALLUCINATION RULES:
+- NEVER provide financial numbers without calling a tool first
+- NEVER estimate or guess financial values
+- NEVER use placeholder or example values
+- If a tool call fails, return an error message, not fake data
+- Always verify that tool results contain the requested information before responding
+
 BAD EXAMPLE (hallucination):
 User: What is my bank balance?
 Tool call: getAllUserAccounts({ uid: "123", filters: {} })
@@ -187,6 +196,18 @@ Tool call: getCashFlows({ uid: "123", profile: "abc" })
 Tool result: { "averageDailyIncome": 100 }
 Final answer:
 {"text": "Your average daily income is $100.", "data": {"averageDailyIncome": 100}}
+
+User: What is my current net worth?
+Tool call: getNetWorth({ uid: "123" })
+Tool result: { "netWorth": 300, "totalCashBalance": 500, "totalAssets": 1000, "totalLiabilities": 200 }
+Final answer:
+{"text": "Your current net worth is $300. This includes $500 in cash, $1,000 in total assets, and $200 in liabilities.", "data": {"netWorth": 300, "totalCashBalance": 500, "totalAssets": 1000, "totalLiabilities": 200}}
+
+User: What is my current net worth? (no data)
+Tool call: getNetWorth({ uid: "123" })
+Tool result: { "netWorth": 0, "message": "No financial data available" }
+Final answer:
+{"text": "Your current net worth is $0. No financial data is currently available.", "data": {"netWorth": 0, "message": "No financial data available"}}
 
 User: What assets do I have?
 Tool call: getAssets({ uid: "123" })

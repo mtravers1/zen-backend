@@ -110,17 +110,46 @@ export const toolFunctions = (context) => ({
    */
   getCashFlowsWeekly: async ({ uid }) => {
     const { profile } = context;
-    const cashFlows = await accountsService.getCashFlowsWeekly(profile, uid);
-    if (!cashFlows) {
-      return "No cash flow information available";
+    const cashFlowsWeekly = await accountsService.getCashFlowsWeekly(profile, uid);
+    if (!cashFlowsWeekly) {
+      return "No weekly cash flow information available";
     }
-    for (const week of cashFlows.weeklyCashFlow) {
-      delete week.testing;
-      delete week.depository;
-      delete week.credit;
-    }
-    return cashFlows.weeklyCashFlow;
+    return cashFlowsWeekly;
   },
+
+  /**
+   * Calculates and returns the current net worth for the user.
+   * Net worth = Total Assets - Total Liabilities
+   * Assets include: cash balances, investments, and other assets
+   * Liabilities include: credit card balances and loans
+   */
+  getNetWorth: async ({ uid }) => {
+    const { profile } = context;
+    
+    try {
+      // Get cash flows which includes net worth calculation
+      const cashFlows = await accountsService.getCashFlows(profile, uid);
+      if (!cashFlows) {
+        return { netWorth: 0, message: "No financial data available" };
+      }
+      
+      return {
+        netWorth: cashFlows.netWorth || 0,
+        totalCashBalance: cashFlows.totalCashBalance || 0,
+        totalAssets: cashFlows.totalAssets || 0,
+        totalLiabilities: cashFlows.totalLiabilities || 0,
+        message: "Net worth calculated from current financial data"
+      };
+    } catch (error) {
+      console.error("[AI][getNetWorth] Error calculating net worth:", error);
+      return { 
+        netWorth: 0, 
+        message: "Error calculating net worth",
+        error: error.message 
+      };
+    }
+  },
+
   /**
    * Retrieves all transactions for the current profile, filtered if filters are provided.
    */
