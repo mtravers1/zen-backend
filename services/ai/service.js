@@ -154,21 +154,43 @@ class AIService {
       const llmDidNotCallTool = !parsedResponse || (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0);
       if (llmDidNotCallTool) {
         console.warn('[AI][Fallback] LLM did not call a tool or returned invalid JSON. Sending generic fallback message.');
-        const fallbackResponse = {
-          text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
-          data: {}
-        };
         
-        // Only use aiController if we have a response object for streaming
-        if (res) {
-          const { default: aiController } = await import("../../controllers/ai.controller.js");
-          if (aiController) {
-            aiController.sendToUser(uid, fallbackResponse);
-            aiController.sendToUser(uid, "[DONE]");
+        // Check if we have any content from the LLM
+        if (completeResponse && completeResponse.trim()) {
+          // Try to extract meaningful content from the LLM response
+          const fallbackResponse = {
+            text: completeResponse.trim() || 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
+            data: {}
+          };
+          
+          // Only use aiController if we have a response object for streaming
+          if (res) {
+            const { default: aiController } = await import("../../controllers/ai.controller.js");
+            if (aiController) {
+              aiController.sendToUser(uid, fallbackResponse);
+              aiController.sendToUser(uid, "[DONE]");
+            }
           }
+          
+          return fallbackResponse;
+        } else {
+          // No content at all from LLM
+          const fallbackResponse = {
+            text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
+            data: {}
+          };
+          
+          // Only use aiController if we have a response object for streaming
+          if (res) {
+            const { default: aiController } = await import("../../controllers/ai.controller.js");
+            if (aiController) {
+              aiController.sendToUser(uid, fallbackResponse);
+              aiController.sendToUser(uid, "[DONE]");
+            }
+          }
+          
+          return fallbackResponse;
         }
-        
-        return fallbackResponse;
       }
 
       // Send the parsed response to the user (via SSE or other mechanism)
@@ -210,7 +232,27 @@ class AIService {
         };
       }
       
-      return parsedResponse;
+      // Ensure the response has the required structure
+      if (!parsedResponse.text && !parsedResponse.response) {
+        if (parsedResponse.error) {
+          parsedResponse.text = parsedResponse.errorMessage || "An error occurred while processing your request";
+        } else if (parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
+          parsedResponse.text = "Here is your requested information";
+        } else {
+          parsedResponse.text = "I've processed your request but couldn't provide a specific response";
+        }
+      }
+      
+      // Normalize the response structure
+      const normalizedResponse = {
+        text: parsedResponse.text || parsedResponse.response || "No response received",
+        data: parsedResponse.data || {},
+        error: parsedResponse.error || false,
+        errorMessage: parsedResponse.errorMessage || undefined
+      };
+      
+      console.log("[AI Service] Final normalized response:", normalizedResponse);
+      return normalizedResponse;
     } catch (error) {
       console.error("[AI Service] Error in makeRequest:", error);
       

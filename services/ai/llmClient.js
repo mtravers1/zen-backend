@@ -154,6 +154,13 @@ export async function callLLM({
   // After all tool calls and LLM response is complete
   if (!receivedContent) {
     console.warn("[AI][callLLM] No chunk with delta.content received after tool calls. The LLM may not be responding correctly. Consider reinforcing in the prompt: 'The final answer MUST be sent in the content field, in strict JSON.'");
+    
+    // If we have a complete response but no content was flagged, still return it
+    if (completeResponse && completeResponse.trim()) {
+      console.log("[AI][callLLM] Returning complete response despite no content flag:", completeResponse.substring(0, 200));
+      return completeResponse;
+    }
+    
     // Fallback: return a clear error to the frontend
     return JSON.stringify({ error: "LLM did not return a valid response in content field after tool calls.", details: "No delta.content received. Check model and prompt." });
   }

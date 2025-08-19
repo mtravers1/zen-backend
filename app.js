@@ -64,6 +64,7 @@ app.use(
 			"/api/script/update-transactions",
 			"/api/payments/webhook/android",
 			"/api/payments/webhook/apple",
+			"/api/ai/ping",
 		],
 	})
 );

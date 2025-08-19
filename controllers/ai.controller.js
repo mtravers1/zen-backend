@@ -47,7 +47,7 @@ const makeRequest = async (req, res) => {
     }
     
     if (!prompt) {
-      console.error("[AI Controller] No prompt in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
+      console.error("[AI Controller] No prompt in request body");
       return res.status(400).json({ 
         text: "Please provide a question or request for the AI to process.",
         data: null,
