@@ -21,17 +21,32 @@ const makeRequest = async (req, res) => {
     
     if (!uid) {
       console.error("[AI Controller] No UID found in req.user. User keys:", req.user ? Object.keys(req.user) : 'no user object');
-      return res.status(401).json({ error: "User ID not found in token" });
+      return res.status(401).json({ 
+        text: "Authentication error. Please sign in again.",
+        data: null,
+        error: true,
+        errorMessage: "User ID not found in token"
+      });
     }
     
     if (!profileId) {
       console.error("[AI Controller] No profileId in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
-      return res.status(400).json({ error: "Profile ID is required" });
+      return res.status(400).json({ 
+        text: "Profile ID is required to process your request.",
+        data: null,
+        error: true,
+        errorMessage: "Profile ID is required"
+      });
     }
     
     if (!prompt) {
       console.error("[AI Controller] No prompt in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
-      return res.status(400).json({ error: "Prompt is required" });
+      return res.status(400).json({ 
+        text: "Please provide a question or request for the AI to process.",
+        data: null,
+        error: true,
+        errorMessage: "Prompt is required"
+      });
     }
     
     console.log("[AI Controller] Calling AI service with params:", {
@@ -86,9 +101,9 @@ const makeRequest = async (req, res) => {
   } catch (error) {
     console.error("[AI Controller] Error:", error);
     
-    // Return a proper error response
+    // Return a proper error response with clear message
     const errorResponse = {
-      text: "Sorry, there was an error processing your request",
+      text: "Sorry, there was an error processing your request. Please try again or contact support if the problem persists.",
       data: null,
       error: true,
       errorMessage: error.message || "Unknown error occurred",
