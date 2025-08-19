@@ -101,10 +101,14 @@ export async function callLLM({
             }
             // Run the tool function with a timeout to prevent hanging
             let result;
+            const toolStartTime = Date.now();
             try {
-              result = await runToolWithTimeout(fn, args, 15000); // 15s timeout
+              result = await runToolWithTimeout(fn, args, 30000); // 30s timeout (increased from 15s)
+              const toolDuration = Date.now() - toolStartTime;
+              console.log(`[AI][callLLM] Tool function ${fnName} completed in ${toolDuration}ms`);
             } catch (timeoutErr) {
-              console.warn(`[AI][callLLM] Tool call for ${fnName} timed out.`);
+              const toolDuration = Date.now() - toolStartTime;
+              console.warn(`[AI][callLLM] Tool call for ${fnName} timed out after ${toolDuration}ms`);
               if (aiController && uid) {
                 aiController.sendToUser(uid, { text: `Sorry, the request for ${fnName} took too long and was cancelled. Please try again.`, data: {}, error: true });
               }

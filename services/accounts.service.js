@@ -819,61 +819,67 @@ const getAllUserAccounts = async (email, uid) => {
   }
 
   const accountsResponse = user.plaidAccounts;
-
-  let accounts = [];
-
   const dek = await getUserDek(uid);
 
-  for (const plaidAccount of accountsResponse) {
-    const decryptedCurrentBalance = await safeDecryptValue(
-      plaidAccount.currentBalance,
-      dek
-    );
-    const decryptedAvailableBalance = await safeDecryptValue(
-      plaidAccount.availableBalance,
-      dek
-    );
-    const decryptedAccountType = await safeDecryptValue(
-      plaidAccount.account_type,
-      dek
-    );
-    const decryptedAccountSubtype = await safeDecryptValue(
-      plaidAccount.account_subtype,
-      dek
-    );
+  // Process all accounts in parallel for better performance
+  const accounts = await Promise.all(
+    accountsResponse.map(async (plaidAccount) => {
+      try {
+        // Decrypt all values in parallel
+        const [
+          decryptedCurrentBalance,
+          decryptedAvailableBalance,
+          decryptedAccountType,
+          decryptedAccountSubtype,
+          decryptedAccountName,
+          decryptedAccountOfficialName,
+          decryptedMask,
+          decryptedInstitutionName
+        ] = await Promise.all([
+          safeDecryptValue(plaidAccount.currentBalance, dek),
+          safeDecryptValue(plaidAccount.availableBalance, dek),
+          safeDecryptValue(plaidAccount.account_type, dek),
+          safeDecryptValue(plaidAccount.account_subtype, dek),
+          safeDecryptValue(plaidAccount.account_name, dek),
+          safeDecryptValue(plaidAccount.account_official_name, dek),
+          safeDecryptValue(plaidAccount.mask, dek),
+          safeDecryptValue(plaidAccount.institution_name, dek)
+        ]);
 
-    const decryptedAccountName = await safeDecryptValue(
-      plaidAccount.account_name,
-      dek
-    );
-    const decryptedAccountOfficialName = await safeDecryptValue(
-      plaidAccount.account_official_name,
-      dek
-    );
-    const decryptedMask = await safeDecryptValue(plaidAccount.mask, dek);
-
-    const decryptedInstitutionName = await safeDecryptValue(
-      plaidAccount.institution_name,
-      dek
-    );
-
-    accounts.push({
-      ...plaidAccount._doc,
-      currentBalance: decryptedCurrentBalance,
-      availableBalance: decryptedAvailableBalance,
-      account_type: decryptedAccountType,
-      account_subtype: decryptedAccountSubtype,
-      account_name: decryptedAccountName,
-      account_official_name: decryptedAccountOfficialName,
-      mask: decryptedMask,
-      institution_name: decryptedInstitutionName,
-    });
-  }
+        return {
+          ...plaidAccount._doc,
+          currentBalance: decryptedCurrentBalance,
+          availableBalance: decryptedAvailableBalance,
+          account_type: decryptedAccountType,
+          account_subtype: decryptedAccountSubtype,
+          account_name: decryptedAccountName,
+          account_official_name: decryptedAccountOfficialName,
+          mask: decryptedMask,
+          institution_name: decryptedInstitutionName,
+        };
+      } catch (error) {
+        console.error(`[getAllUserAccounts] Error decrypting account ${plaidAccount._id}:`, error);
+        // Return account with default values if decryption fails
+        return {
+          ...plaidAccount._doc,
+          currentBalance: 0,
+          availableBalance: 0,
+          account_type: "unknown",
+          account_subtype: "unknown",
+          account_name: "Unknown Account",
+          account_official_name: "Unknown Account",
+          mask: "****",
+          institution_name: "Unknown Institution",
+        };
+      }
+    })
+  );
 
   const duration = Date.now() - startTime;
   structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, account_count: accounts.length });
   return accounts;
 };
+
 const calculateCashFlowsWeekly = async (
   depositoryTransactions,
   creditTransactions,

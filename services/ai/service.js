@@ -174,10 +174,12 @@ class AIService {
           
           return fallbackResponse;
         } else {
-          // No content at all from LLM
+          // No content at all from LLM - provide helpful guidance
           const fallbackResponse = {
-            text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
-            data: {}
+            text: 'I\'m having trouble accessing your financial data right now. This could be due to:\n\n• High server load\n• Database connection issues\n• Encryption/decryption delays\n\nPlease try again in a few moments, or ask a simpler question like "Hello" to test the connection.',
+            data: {},
+            error: true,
+            errorMessage: "Tool execution failed or timed out"
           };
           
           // Only use aiController if we have a response object for streaming
