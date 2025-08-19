@@ -124,6 +124,14 @@ class AIService {
       const toolsImpl = toolFunctions(toolContext);
 
       console.log("[AI] Calling LLM with messages:", messages);
+      console.log("[AI] Tools configuration:", {
+        hasTools: !!tools,
+        toolsCount: tools ? tools.length : 0,
+        toolNames: tools ? tools.map(t => t.function?.name).filter(Boolean) : [],
+        hasToolFunctions: !!toolsImpl,
+        toolFunctionNames: toolsImpl ? Object.keys(toolsImpl) : []
+      });
+      
       // Call the LLM (Groq/vLLM) with all context and tool functions
       let completeResponse = await callLLM({
         apiKey: this.GROQ_API_KEY,
@@ -134,25 +142,58 @@ class AIService {
         uid,
         aiController,
       });
-      console.log("[AI] LLM response:", completeResponse);
+      console.log("[AI] LLM response received:", {
+        hasResponse: !!completeResponse,
+        responseLength: completeResponse ? completeResponse.length : 0,
+        responsePreview: completeResponse ? completeResponse.substring(0, 200) + '...' : 'NO_RESPONSE'
+      });
 
       // Validate and correct the LLM response if needed
       let parsedResponse;
       if (isValidJSON(completeResponse)) {
+        console.log("[AI] Response is valid JSON, parsing...");
         parsedResponse = JSON.parse(completeResponse);
+        console.log("[AI] Parsed response:", {
+          hasText: !!parsedResponse.text,
+          hasData: !!parsedResponse.data,
+          hasError: !!parsedResponse.error,
+          dataKeys: parsedResponse.data ? Object.keys(parsedResponse.data) : []
+        });
       } else {
+        console.log("[AI] Response is not valid JSON, attempting correction...");
         parsedResponse = await getCorrectedJsonResponse({
           invalidJson: completeResponse,
           groqClient: this.groqClient,
           model: this.GROQ_AI_MODEL,
+        });
+        console.log("[AI] Corrected response:", {
+          hasText: !!parsedResponse.text,
+          hasData: !!parsedResponse.data,
+          hasError: !!parsedResponse.error
         });
       }
 
       // Backend fallback: Only if the LLM did not call a tool or returned invalid JSON
       // This should be rare; the LLM is expected to handle all normal cases
       const llmDidNotCallTool = !parsedResponse || (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0);
+      
+      console.log("[AI] Fallback condition check:", {
+        hasParsedResponse: !!parsedResponse,
+        parsedResponseType: typeof parsedResponse,
+        hasData: parsedResponse ? !!parsedResponse.data : false,
+        dataKeys: parsedResponse && parsedResponse.data ? Object.keys(parsedResponse.data) : [],
+        dataKeysLength: parsedResponse && parsedResponse.data ? Object.keys(parsedResponse.data).length : 0,
+        llmDidNotCallTool
+      });
+      
       if (llmDidNotCallTool) {
         console.warn('[AI][Fallback] LLM did not call a tool or returned invalid JSON. Sending generic fallback message.');
+        console.warn('[AI][Fallback] Fallback reason:', {
+          noParsedResponse: !parsedResponse,
+          emptyData: parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0,
+          parsedResponseKeys: parsedResponse ? Object.keys(parsedResponse) : []
+        });
+        
         const fallbackResponse = {
           text: 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
           data: {}
@@ -196,12 +237,23 @@ class AIService {
       
       // Ensure we always return a valid response object
       if (!parsedResponse) {
+        console.warn("[AI] No parsed response, creating fallback response object");
         parsedResponse = {
           text: "Response processed but no data returned",
           data: {},
           error: false
         };
       }
+      
+      console.log("[AI] Final response object being returned:", {
+        hasText: !!parsedResponse.text,
+        textValue: parsedResponse.text || 'NO_TEXT',
+        hasData: !!parsedResponse.data,
+        dataKeys: parsedResponse.data ? Object.keys(parsedResponse.data) : [],
+        hasError: !!parsedResponse.error,
+        responseType: typeof parsedResponse,
+        responseKeys: Object.keys(parsedResponse)
+      });
       
       return parsedResponse;
     } catch (error) {

@@ -53,7 +53,18 @@ const makeRequest = async (req, res) => {
       dataScreen
     );
     
-    console.log("[AI Controller] AI service returned:", result);
+    console.log("[AI Controller] AI service returned:", {
+      resultType: typeof result,
+      resultKeys: result ? Object.keys(result) : [],
+      hasText: result ? !!result.text : false,
+      textValue: result ? result.text || 'NO_TEXT' : 'NO_RESULT',
+      hasResponse: result ? !!result.response : false,
+      responseValue: result ? result.response || 'NO_RESPONSE' : 'NO_RESULT',
+      hasData: result ? !!result.data : false,
+      dataKeys: result && result.data ? Object.keys(result.data) : [],
+      hasError: result ? !!result.error : false,
+      errorMessage: result ? result.errorMessage || 'NO_ERROR' : 'NO_RESULT'
+    });
     
     // Ensure we return a proper response structure
     const response = {
@@ -63,7 +74,14 @@ const makeRequest = async (req, res) => {
       errorMessage: result.errorMessage || undefined,
     };
     
-    console.log("[AI Controller] Sending response to client:", response);
+    console.log("[AI Controller] Final response being sent to client:", {
+      text: response.text,
+      hasData: !!response.data,
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      error: response.error,
+      errorMessage: response.errorMessage
+    });
+    
     return res.status(200).json(response);
   } catch (error) {
     console.error("[AI Controller] Error:", error);
@@ -128,6 +146,34 @@ const test = async (req, res) => {
     // Check environment variables
     const hasGroqKey = !!process.env.GROQ_API_KEY;
     const hasGroqModel = !!process.env.GROQ_AI_MODEL;
+    const groqKeyLength = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.length : 0;
+    const groqModel = process.env.GROQ_AI_MODEL || "NOT_SET";
+    
+    // Test AI service initialization
+    let aiServiceStatus = "Not tested";
+    let promptTestStatus = "Not tested";
+    try {
+      const aiService = (await import("../services/ai/service.js")).default;
+      aiServiceStatus = "Service loaded successfully";
+      
+      // Test prompt building
+      try {
+        const { buildScreenPrompt, getProductionSystemPrompt } = await import("../services/ai/prompts.js");
+        const systemPrompt = getProductionSystemPrompt();
+        const screenPrompt = buildScreenPrompt("dashboard", "overview");
+        
+        promptTestStatus = {
+          hasSystemPrompt: !!systemPrompt,
+          systemPromptLength: systemPrompt ? systemPrompt.length : 0,
+          hasScreenPrompt: !!screenPrompt,
+          screenPromptLength: screenPrompt ? screenPrompt.length : 0
+        };
+      } catch (promptError) {
+        promptTestStatus = `Prompt test failed: ${promptError.message}`;
+      }
+    } catch (error) {
+      aiServiceStatus = `Service load failed: ${error.message}`;
+    }
     
     const testResponse = {
       status: "AI Service Test",
@@ -135,9 +181,13 @@ const test = async (req, res) => {
       environment: {
         hasGroqKey,
         hasGroqModel,
-        groqModel: process.env.GROQ_AI_MODEL || "NOT_SET"
+        groqKeyLength,
+        groqModel,
+        nodeEnv: process.env.NODE_ENV || "NOT_SET"
       },
-      message: "AI service is running and accessible"
+      aiServiceStatus,
+      promptTestStatus,
+      message: "AI service test completed"
     };
     
     console.log("[AI Controller] Test response:", testResponse);
@@ -146,7 +196,8 @@ const test = async (req, res) => {
     console.error("[AI Controller] Test error:", error);
     return res.status(500).json({ 
       error: "Test failed", 
-      message: error.message 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
