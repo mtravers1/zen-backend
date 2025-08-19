@@ -13,7 +13,8 @@ import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
-import aiController from "../../controllers/ai.controller.js";
+// Circular import prevention - import aiController only when needed
+// import aiController from "../../controllers/ai.controller.js";
 import { getUserDek } from "../../database/encryption.js";
 import User from "../../database/models/User.js";
 import dotenv from "dotenv";
@@ -132,7 +133,7 @@ class AIService {
         tools,
         toolFunctions: toolsImpl,
         uid,
-        aiController,
+        aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
       });
       console.log("[AI] LLM response:", completeResponse);
 
@@ -159,17 +160,24 @@ class AIService {
         };
         
         // Only use aiController if we have a response object for streaming
-        if (res && aiController) {
-          aiController.sendToUser(uid, fallbackResponse);
-          aiController.sendToUser(uid, "[DONE]");
+        if (res) {
+          const { default: aiController } = await import("../../controllers/ai.controller.js");
+          if (aiController) {
+            aiController.sendToUser(uid, fallbackResponse);
+            aiController.sendToUser(uid, "[DONE]");
+          }
         }
         
         return fallbackResponse;
       }
 
       // Send the parsed response to the user (via SSE or other mechanism)
-      if (parsedResponse && res && aiController) {
-        aiController.sendToUser(uid, parsedResponse);
+      if (parsedResponse && res) {
+        const { default: aiController } = await import("../../controllers/ai.controller.js");
+        if (aiController) {
+          aiController.sendToUser(uid, parsedResponse);
+          aiController.sendToUser(uid, "[DONE]");
+        }
       } else if (parsedResponse && !res) {
         // For non-streaming requests, just log the response
         console.log("[AI] Non-streaming response:", parsedResponse);
@@ -180,15 +188,14 @@ class AIService {
           details: "Could not parse or correct the JSON response.",
         };
         
-        if (res && aiController) {
-          aiController.sendToUser(uid, errorResponse);
+        if (res) {
+          const { default: aiController } = await import("../../controllers/ai.controller.js");
+          if (aiController) {
+            aiController.sendToUser(uid, errorResponse);
+            aiController.sendToUser(uid, "[DONE]");
+          }
         }
         console.error("[AI] Error response:", errorResponse);
-      }
-
-      // Only send [DONE] if we have streaming
-      if (res && aiController) {
-        aiController.sendToUser(uid, "[DONE]");
       }
       
       console.log("[AI] Done processing response");
@@ -208,14 +215,17 @@ class AIService {
       console.error("[AI Service] Error in makeRequest:", error);
       
       // Send error to user if possible
-      if (uid && aiController && res) {
+      if (uid && res) {
         try {
-          aiController.sendToUser(uid, {
-            error: true,
-            text: `Error: ${error.message}`,
-            data: {}
-          });
-          aiController.sendToUser(uid, "[DONE]");
+          const { default: aiController } = await import("../../controllers/ai.controller.js");
+          if (aiController) {
+            aiController.sendToUser(uid, {
+              error: true,
+              text: `Error: ${error.message}`,
+              data: {}
+            });
+            aiController.sendToUser(uid, "[DONE]");
+          }
         } catch (sendError) {
           console.error("[AI Service] Failed to send error to user:", sendError);
         }

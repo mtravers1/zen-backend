@@ -2,9 +2,15 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import aiService from "../services/ai/service.js";
 
 const makeRequest = async (req, res) => {
+  console.log("[AI Controller] 🚀 ENDPOINT HIT - makeRequest called");
+  console.log("[AI Controller] Request method:", req.method);
+  console.log("[AI Controller] Request URL:", req.url);
+  console.log("[AI Controller] Request path:", req.path);
+  console.log("[AI Controller] Headers:", Object.keys(req.headers));
+  
   try {
-    const { uid } = req.user;
-    const { prompt, profileId, messages, screen, dataScreen } = req.body;
+    const { uid } = req.user || {};
+    const { prompt, profileId, messages, screen, dataScreen } = req.body || {};
     
     console.log("[AI Controller] Received request:", { 
       uid, 
@@ -16,7 +22,8 @@ const makeRequest = async (req, res) => {
       bodyKeys: req.body ? Object.keys(req.body) : [],
       bodySize: req.body ? JSON.stringify(req.body).length : 0,
       userKeys: req.user ? Object.keys(req.user) : [],
-      hasUser: !!req.user
+      hasUser: !!req.user,
+      timestamp: new Date().toISOString()
     });
     
     if (!uid) {
