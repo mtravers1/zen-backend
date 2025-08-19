@@ -12,6 +12,7 @@ const makeRequest = async (req, res) => {
       hasPrompt: !!prompt, 
       hasMessages: !!messages, 
       screen,
+      dataScreen,
       body: req.body,
       user: req.user 
     });
@@ -51,10 +52,30 @@ const makeRequest = async (req, res) => {
     );
     
     console.log("[AI Controller] AI service returned:", result);
-    return res.status(200).json(result);
+    
+    // Ensure we return a proper response structure
+    const response = {
+      text: result.text || result.response || "No response received",
+      data: result.data || null,
+      error: result.error || false,
+      errorMessage: result.errorMessage || undefined,
+    };
+    
+    console.log("[AI Controller] Sending response to client:", response);
+    return res.status(200).json(response);
   } catch (error) {
     console.error("[AI Controller] Error:", error);
-    return res.status(500).json({ error: error.message });
+    
+    // Return a proper error response
+    const errorResponse = {
+      text: "Sorry, there was an error processing your request",
+      data: null,
+      error: true,
+      errorMessage: error.message || "Unknown error occurred",
+    };
+    
+    console.log("[AI Controller] Sending error response to client:", errorResponse);
+    return res.status(500).json(errorResponse);
   }
 };
 
@@ -98,10 +119,41 @@ function sendToUser(uid, data) {
   }
 }
 
+const test = async (req, res) => {
+  try {
+    console.log("[AI Controller] Test endpoint called");
+    
+    // Check environment variables
+    const hasGroqKey = !!process.env.GROQ_API_KEY;
+    const hasGroqModel = !!process.env.GROQ_AI_MODEL;
+    
+    const testResponse = {
+      status: "AI Service Test",
+      timestamp: new Date().toISOString(),
+      environment: {
+        hasGroqKey,
+        hasGroqModel,
+        groqModel: process.env.GROQ_AI_MODEL || "NOT_SET"
+      },
+      message: "AI service is running and accessible"
+    };
+    
+    console.log("[AI Controller] Test response:", testResponse);
+    return res.status(200).json(testResponse);
+  } catch (error) {
+    console.error("[AI Controller] Test error:", error);
+    return res.status(500).json({ 
+      error: "Test failed", 
+      message: error.message 
+    });
+  }
+};
+
 const aiController = {
   makeRequest,
   stream,
   sendToUser,
+  test,
 };
 
 export default aiController;

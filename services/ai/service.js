@@ -52,7 +52,20 @@ class AIService {
       if (!uid) throw new Error("User ID (uid) is required");
       if (!profileId) throw new Error("Profile ID is required");
 
-      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen });
+      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen, dataScreen });
+
+      // Check if environment variables are set
+      if (!this.GROQ_API_KEY) {
+        console.error("[AI Service] GROQ_API_KEY not set in environment variables");
+        throw new Error("AI service not properly configured - missing API key");
+      }
+      
+      if (!this.GROQ_AI_MODEL) {
+        console.error("[AI Service] GROQ_AI_MODEL not set in environment variables");
+        throw new Error("AI service not properly configured - missing model configuration");
+      }
+
+      console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
       const dek = await getUserDek(uid);
