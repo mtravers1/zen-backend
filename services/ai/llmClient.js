@@ -103,14 +103,32 @@ export async function callLLM({
             let result;
             const toolStartTime = Date.now();
             try {
+              console.log(`[AI][callLLM] Starting tool function ${fnName} at ${new Date().toISOString()}`);
               result = await runToolWithTimeout(fn, args, 30000); // 30s timeout (increased from 15s)
               const toolDuration = Date.now() - toolStartTime;
               console.log(`[AI][callLLM] Tool function ${fnName} completed in ${toolDuration}ms`);
             } catch (timeoutErr) {
               const toolDuration = Date.now() - toolStartTime;
-              console.warn(`[AI][callLLM] Tool call for ${fnName} timed out after ${toolDuration}ms`);
+              console.error(`[AI][callLLM] Tool call for ${fnName} failed after ${toolDuration}ms:`, timeoutErr);
+              
+              // Log detailed error information
+              if (timeoutErr.message.includes('timeout')) {
+                console.warn(`[AI][callLLM] Tool call for ${fnName} timed out after ${toolDuration}ms`);
+              } else {
+                console.error(`[AI][callLLM] Tool call for ${fnName} failed with error:`, {
+                  error: timeoutErr.message,
+                  stack: timeoutErr.stack,
+                  name: timeoutErr.name,
+                  duration: toolDuration
+                });
+              }
+              
               if (aiController && uid) {
-                aiController.sendToUser(uid, { text: `Sorry, the request for ${fnName} took too long and was cancelled. Please try again.`, data: {}, error: true });
+                aiController.sendToUser(uid, { 
+                  text: `Sorry, the request for ${fnName} failed: ${timeoutErr.message}. Please try again.`, 
+                  data: {}, 
+                  error: true 
+                });
               }
               continue;
             }

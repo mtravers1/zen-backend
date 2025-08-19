@@ -140,21 +140,31 @@ async function generateAndStoreEncryptedDEK(uid) {
 }
 
 async function getDEKFromBucket(uid) {
+  const startTime = Date.now();
   try {
+    console.log(`[ENCRYPTION] getDEKFromBucket starting for user: ${uid} at ${new Date().toISOString()}`);
+    
     const file = storage
       .bucket(BUCKET_NAME)
       .file(`keys/${environment}/${uid}.key`);
     
+    console.log(`[ENCRYPTION] Checking if key file exists: keys/${environment}/${uid}.key`);
+    
     if (!(await file.exists())[0]) {
-      logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found' });
+      const duration = Date.now() - startTime;
+      console.log(`[ENCRYPTION] Key file not found for user: ${uid} after ${duration}ms`);
+      logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found', duration });
       return null;
     }
     
+    console.log(`[ENCRYPTION] Key file found, downloading for user: ${uid}`);
     const [keyDataString] = await file.download();
     const keyData = JSON.parse(keyDataString.toString());
+    console.log(`[ENCRYPTION] Key data downloaded and parsed for user: ${uid}`);
     
     const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
     const keyVersion = keyData.version;
+    console.log(`[ENCRYPTION] Calling KMS decrypt for user: ${uid}, version: ${keyVersion}`);
 
     const [decryptResponse] = await kmsClient.decrypt({
       name: KEY_PATH,
@@ -162,28 +172,44 @@ async function getDEKFromBucket(uid) {
     });
 
     const dek = decryptResponse.plaintext;
+    console.log(`[ENCRYPTION] KMS decrypt successful for user: ${uid}`);
     
     // Cache the DEK and version
     dekCache.set(uid, dek);
     dekVersionCache.set(uid, keyVersion);
+    console.log(`[ENCRYPTION] DEK cached for user: ${uid}`);
 
-    logEncryptionOperation('getDEKFromBucket', true, { uid, keyVersion });
+    const duration = Date.now() - startTime;
+    console.log(`[ENCRYPTION] getDEKFromBucket completed successfully for user: ${uid} in ${duration}ms`);
+    logEncryptionOperation('getDEKFromBucket', true, { uid, keyVersion, duration });
     return { dek, version: keyVersion };
   } catch (error) {
-    logEncryptionOperation('getDEKFromBucket', false, { uid, error: error.message });
+    const duration = Date.now() - startTime;
+    console.error(`[ENCRYPTION] getDEKFromBucket failed for user ${uid} after ${duration}ms:`, error);
+    console.error(`[ENCRYPTION] Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      status: error.status,
+      duration
+    });
+    
+    logEncryptionOperation('getDEKFromBucket', false, { uid, error: error.message, duration });
     return null;
   }
 }
 
 async function getUserDek(uid) {
+  const startTime = Date.now();
   try {
-    console.log(`[ENCRYPTION] getUserDek called for user: ${uid}`);
+    console.log(`[ENCRYPTION] getUserDek called for user: ${uid} at ${new Date().toISOString()}`);
     
     // Check in-memory cache first
     if (dekCache.has(uid)) {
       const version = dekVersionCache.get(uid);
-      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}, version: ${version}`);
-      logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version });
+      const duration = Date.now() - startTime;
+      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}, version: ${version}, duration: ${duration}ms`);
+      logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version, duration });
       return dekCache.get(uid);
     }
 
@@ -198,18 +224,23 @@ async function getUserDek(uid) {
       console.log(`[ENCRYPTION] Found existing keys in bucket for user: ${uid}`);
     }
 
+    const duration = Date.now() - startTime;
+    console.log(`[ENCRYPTION] getUserDek completed successfully for user: ${uid} in ${duration}ms`);
+    logEncryptionOperation('getUserDek', true, { uid, source: 'bucket', version: keyData.version, duration });
+    
     return keyData.dek;
   } catch (e) {
-    console.error(`[ENCRYPTION] getUserDek failed for user ${uid}:`, e);
+    const duration = Date.now() - startTime;
+    console.error(`[ENCRYPTION] getUserDek failed for user ${uid} after ${duration}ms:`, e);
     console.error(`[ENCRYPTION] Error details:`, {
       message: e.message,
       stack: e.stack,
       code: e.code,
-      status: e.status
+      status: e.status,
+      duration
     });
     
-    logEncryptionOperation('getUserDek', false, { uid, error: e.message });
-    console.error("Error getting DEK:", e);
+    logEncryptionOperation('getUserDek', false, { uid, error: e.message, duration });
     throw e;
   }
 }

@@ -797,87 +797,124 @@ const getAllUserAccounts = async (email, uid) => {
   const startTime = Date.now();
   structuredLogger.logOperationStart('getAllUserAccounts', { uid });
   
-  const user = await User.findOne({
-    authUid: uid,
-  })
-    .populate("plaidAccounts", "-transactions")
-    .exec();
-  if (!user) {
+  try {
+    console.log(`[getAllUserAccounts] Starting for user ${uid} at ${new Date().toISOString()}`);
+    
+    const user = await User.findOne({
+      authUid: uid,
+    })
+      .populate("plaidAccounts", "-transactions")
+      .exec();
+      
+    if (!user) {
+      const duration = Date.now() - startTime;
+      console.error(`[getAllUserAccounts] User not found for uid: ${uid}`);
+      structuredLogger.logErrorBlock(new Error("User not found"), {
+        operation: 'getAllUserAccounts',
+        uid,
+        duration
+      });
+      throw new Error("User not found");
+    }
+
+    console.log(`[getAllUserAccounts] Found user, plaidAccounts count: ${user.plaidAccounts?.length || 0}`);
+
+    if (!user.plaidAccounts || user.plaidAccounts.length === 0) {
+      const duration = Date.now() - startTime;
+      console.log(`[getAllUserAccounts] No plaid accounts found for user ${uid}`);
+      structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, result: 'no_accounts' });
+      return [];
+    }
+
+    const accountsResponse = user.plaidAccounts;
+    console.log(`[getAllUserAccounts] Getting DEK for user ${uid}`);
+    
+    const dek = await getUserDek(uid);
+    console.log(`[getAllUserAccounts] DEK retrieved successfully for user ${uid}`);
+
+    // Process all accounts in parallel for better performance
+    console.log(`[getAllUserAccounts] Processing ${accountsResponse.length} accounts in parallel`);
+    const accounts = await Promise.all(
+      accountsResponse.map(async (plaidAccount, index) => {
+        try {
+          console.log(`[getAllUserAccounts] Processing account ${index + 1}/${accountsResponse.length}: ${plaidAccount._id}`);
+          
+          // Decrypt all values in parallel
+          const [
+            decryptedCurrentBalance,
+            decryptedAvailableBalance,
+            decryptedAccountType,
+            decryptedAccountSubtype,
+            decryptedAccountName,
+            decryptedAccountOfficialName,
+            decryptedMask,
+            decryptedInstitutionName
+          ] = await Promise.all([
+            safeDecryptValue(plaidAccount.currentBalance, dek),
+            safeDecryptValue(plaidAccount.availableBalance, dek),
+            safeDecryptValue(plaidAccount.account_type, dek),
+            safeDecryptValue(plaidAccount.account_subtype, dek),
+            safeDecryptValue(plaidAccount.account_name, dek),
+            safeDecryptValue(plaidAccount.account_official_name, dek),
+            safeDecryptValue(plaidAccount.mask, dek),
+            safeDecryptValue(plaidAccount.institution_name, dek)
+          ]);
+
+          console.log(`[getAllUserAccounts] Account ${index + 1} decrypted successfully`);
+          
+          return {
+            ...plaidAccount._doc,
+            currentBalance: decryptedCurrentBalance,
+            availableBalance: decryptedAvailableBalance,
+            account_type: decryptedAccountType,
+            account_subtype: decryptedAccountSubtype,
+            account_name: decryptedAccountName,
+            account_official_name: decryptedAccountOfficialName,
+            mask: decryptedMask,
+            institution_name: decryptedInstitutionName,
+          };
+        } catch (error) {
+          console.error(`[getAllUserAccounts] Error decrypting account ${plaidAccount._id}:`, error);
+          // Return account with default values if decryption fails
+          return {
+            ...plaidAccount._doc,
+            currentBalance: 0,
+            availableBalance: 0,
+            account_type: "unknown",
+            account_subtype: "unknown",
+            account_name: "Unknown Account",
+            account_official_name: "Unknown Account",
+            mask: "****",
+            institution_name: "Unknown Institution",
+          };
+        }
+      })
+    );
+
     const duration = Date.now() - startTime;
-    structuredLogger.logErrorBlock(new Error("User not found"), {
+    console.log(`[getAllUserAccounts] Completed successfully in ${duration}ms, returning ${accounts.length} accounts`);
+    structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, account_count: accounts.length });
+    return accounts;
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[getAllUserAccounts] Failed after ${duration}ms:`, error);
+    console.error(`[getAllUserAccounts] Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      uid,
+      duration
+    });
+    
+    structuredLogger.logErrorBlock(error, {
       operation: 'getAllUserAccounts',
       uid,
       duration
     });
-    throw new Error("User not found");
+    
+    throw error;
   }
-
-  if (!user.plaidAccounts.length) {
-    const duration = Date.now() - startTime;
-    structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, result: 'no_accounts' });
-    return [];
-  }
-
-  const accountsResponse = user.plaidAccounts;
-  const dek = await getUserDek(uid);
-
-  // Process all accounts in parallel for better performance
-  const accounts = await Promise.all(
-    accountsResponse.map(async (plaidAccount) => {
-      try {
-        // Decrypt all values in parallel
-        const [
-          decryptedCurrentBalance,
-          decryptedAvailableBalance,
-          decryptedAccountType,
-          decryptedAccountSubtype,
-          decryptedAccountName,
-          decryptedAccountOfficialName,
-          decryptedMask,
-          decryptedInstitutionName
-        ] = await Promise.all([
-          safeDecryptValue(plaidAccount.currentBalance, dek),
-          safeDecryptValue(plaidAccount.availableBalance, dek),
-          safeDecryptValue(plaidAccount.account_type, dek),
-          safeDecryptValue(plaidAccount.account_subtype, dek),
-          safeDecryptValue(plaidAccount.account_name, dek),
-          safeDecryptValue(plaidAccount.account_official_name, dek),
-          safeDecryptValue(plaidAccount.mask, dek),
-          safeDecryptValue(plaidAccount.institution_name, dek)
-        ]);
-
-        return {
-          ...plaidAccount._doc,
-          currentBalance: decryptedCurrentBalance,
-          availableBalance: decryptedAvailableBalance,
-          account_type: decryptedAccountType,
-          account_subtype: decryptedAccountSubtype,
-          account_name: decryptedAccountName,
-          account_official_name: decryptedAccountOfficialName,
-          mask: decryptedMask,
-          institution_name: decryptedInstitutionName,
-        };
-      } catch (error) {
-        console.error(`[getAllUserAccounts] Error decrypting account ${plaidAccount._id}:`, error);
-        // Return account with default values if decryption fails
-        return {
-          ...plaidAccount._doc,
-          currentBalance: 0,
-          availableBalance: 0,
-          account_type: "unknown",
-          account_subtype: "unknown",
-          account_name: "Unknown Account",
-          account_official_name: "Unknown Account",
-          mask: "****",
-          institution_name: "Unknown Institution",
-        };
-      }
-    })
-  );
-
-  const duration = Date.now() - startTime;
-  structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, account_count: accounts.length });
-  return accounts;
 };
 
 const calculateCashFlowsWeekly = async (
