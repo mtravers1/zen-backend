@@ -375,6 +375,12 @@ export async function callLLM({
     if (completeResponse && completeResponse.trim().startsWith('{') && completeResponse.trim().endsWith('}')) {
       const parsed = JSON.parse(completeResponse);
       
+      // Check if this is a general knowledge response (no tool result validation needed)
+      if (parsed.data && parsed.data.type === 'general_knowledge') {
+        console.log('[AI][callLLM] General knowledge response detected - skipping tool result validation');
+        return completeResponse;
+      }
+      
       // Only check if we have a tool result and the LLM output is a valid object
       if (lastToolResult && parsed && typeof parsed === 'object') {
         

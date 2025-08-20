@@ -257,4 +257,46 @@ export const toolDefinitions = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "getUSFormsHelp",
+      description: "Get comprehensive help and information about US tax forms (W-2, 1099), banking forms, and mortgage applications. This tool provides detailed explanations, required fields, and tips for filling out common US financial forms.",
+      parameters: {
+        type: "object",
+        properties: {
+          formType: { 
+            type: "string", 
+            description: "Type of form to get help with (e.g., 'W-2', '1099', 'bank', 'mortgage', or leave empty for general help)" 
+          },
+          question: { 
+            type: "string", 
+            description: "Specific question about the form (e.g., 'How do I fill out a 1099 form for freelance income?')" 
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getFinancialKnowledge",
+      description: "Get general financial education and tax guidance on topics like tax deadlines, deductions, investments, credit management, and retirement planning. This tool provides educational content without requiring personal financial data.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: { 
+            type: "string", 
+            description: "Financial topic area (e.g., 'tax_deadlines', 'deductions', 'investments', 'credit', 'retirement', or leave empty for general help)" 
+          },
+          question: { 
+            type: "string", 
+            description: "Specific question about the financial topic (e.g., 'What are the tax filing deadlines for 2024?')" 
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ]; 
