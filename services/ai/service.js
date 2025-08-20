@@ -149,112 +149,21 @@ class AIService {
         });
       }
 
-      // Backend fallback: Only if the LLM did not call a tool or returned invalid JSON
-      // This should be rare; the LLM is expected to handle all normal cases
-      const llmDidNotCallTool = !parsedResponse || (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length === 0);
-      if (llmDidNotCallTool) {
-        console.warn('[AI][Fallback] LLM did not call a tool or returned invalid JSON. Sending generic fallback message.');
-        
-        // Check if we have any content from the LLM
-        if (completeResponse && completeResponse.trim()) {
-          // Try to extract meaningful content from the LLM response
-          const fallbackResponse = {
-            text: completeResponse.trim() || 'Sorry, I was unable to retrieve your financial information. Please try rephrasing your question or ask about something else.',
-            data: {}
-          };
-          
-          // Only use aiController if we have a response object for streaming
-          if (res) {
-            const { default: aiController } = await import("../../controllers/ai.controller.js");
-            if (aiController) {
-              aiController.sendToUser(uid, fallbackResponse);
-              aiController.sendToUser(uid, "[DONE]");
-            }
-          }
-          
-          return fallbackResponse;
-        } else {
-          // No content at all from LLM - provide helpful guidance
-          const fallbackResponse = {
-            text: 'I\'m having trouble accessing your financial data right now. This could be due to:\n\n• High server load\n• Database connection issues\n• Encryption/decryption delays\n\nPlease try again in a few moments, or ask a simpler question like "Hello" to test the connection.',
-            data: {},
-            error: true,
-            errorMessage: "Tool execution failed or timed out"
-          };
-          
-          // Only use aiController if we have a response object for streaming
-          if (res) {
-            const { default: aiController } = await import("../../controllers/ai.controller.js");
-            if (aiController) {
-              aiController.sendToUser(uid, fallbackResponse);
-              aiController.sendToUser(uid, "[DONE]");
-            }
-          }
-          
-          return fallbackResponse;
-        }
-      }
-
-      // Send the parsed response to the user (via SSE or other mechanism)
-      if (parsedResponse && res) {
+      // Handle streaming responses if res is provided
+      if (res && parsedResponse) {
         const { default: aiController } = await import("../../controllers/ai.controller.js");
         if (aiController) {
           aiController.sendToUser(uid, parsedResponse);
           aiController.sendToUser(uid, "[DONE]");
         }
-      } else if (parsedResponse && !res) {
-        // For non-streaming requests, just log the response
-        console.log("[AI] Non-streaming response:", parsedResponse);
-      } else {
-        const errorResponse = {
-          error: "Invalid response format",
-          originalResponse: completeResponse,
-          details: "Could not parse or correct the JSON response.",
-        };
-        
-        if (res) {
-          const { default: aiController } = await import("../../controllers/ai.controller.js");
-          if (aiController) {
-            aiController.sendToUser(uid, errorResponse);
-            aiController.sendToUser(uid, "[DONE]");
-          }
-        }
-        console.error("[AI] Error response:", errorResponse);
       }
-      
-      console.log("[AI] Done processing response");
-      console.log("[AI] Parsed response:", parsedResponse);
-      
-      // Ensure we always return a valid response object
-      if (!parsedResponse) {
-        parsedResponse = {
-          text: "Response processed but no data returned",
-          data: {},
-          error: false
-        };
-      }
-      
-      // Ensure the response has the required structure
-      if (!parsedResponse.text && !parsedResponse.response) {
-        if (parsedResponse.error) {
-          parsedResponse.text = parsedResponse.errorMessage || "An error occurred while processing your request";
-        } else if (parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
-          parsedResponse.text = "Here is your requested information";
-        } else {
-          parsedResponse.text = "I've processed your request but couldn't provide a specific response";
-        }
-      }
-      
-      // Normalize the response structure
-      const normalizedResponse = {
-        text: parsedResponse.text || parsedResponse.response || "No response received",
-        data: parsedResponse.data || {},
-        error: parsedResponse.error || false,
-        errorMessage: parsedResponse.errorMessage || undefined
-      };
+
+      // Normalize the response structure for mobile compatibility
+      const normalizedResponse = this.normalizeResponse(parsedResponse, completeResponse);
       
       console.log("[AI Service] Final normalized response:", normalizedResponse);
       return normalizedResponse;
+      
     } catch (error) {
       console.error("[AI Service] Error in makeRequest:", error);
       
@@ -272,14 +181,61 @@ class AIService {
         } catch (sendError) {
           console.error("[AI Service] Failed to send error to user:", sendError);
         }
-      } else if (uid && !res) {
-        // For non-streaming requests, just log the error
-        console.error("[AI Service] Error in non-streaming request:", error.message);
       }
       
       // Return the user-friendly error instead of throwing
       return userFriendlyError;
     }
+  }
+
+  /**
+   * Normalizes the response structure to ensure mobile compatibility
+   * @param {object} parsedResponse - The parsed LLM response
+   * @param {string} completeResponse - The complete raw response
+   * @returns {object} Normalized response object
+   */
+  normalizeResponse(parsedResponse, completeResponse) {
+    // If no parsed response, create a fallback
+    if (!parsedResponse) {
+      return {
+        text: "I'm having trouble processing your request. Please try again.",
+        data: {},
+        error: true,
+        errorMessage: "Failed to parse AI response"
+      };
+    }
+
+    // Ensure we have the required fields for mobile
+    let text = parsedResponse.text || parsedResponse.response || "";
+    let data = parsedResponse.data || {};
+    let error = parsedResponse.error || false;
+    let errorMessage = parsedResponse.errorMessage || undefined;
+
+    // If we have no text but have data, create a default text
+    if (!text && data && Object.keys(data).length > 0) {
+      text = "Here is your requested information.";
+    }
+
+    // If we still have no text, provide a fallback
+    if (!text) {
+      if (error) {
+        text = errorMessage || "An error occurred while processing your request.";
+      } else {
+        text = "I've processed your request but couldn't provide a specific response.";
+      }
+    }
+
+    // Ensure data is always an object or array
+    if (data === null || data === undefined) {
+      data = {};
+    }
+
+    return {
+      text,
+      data,
+      error,
+      errorMessage
+    };
   }
 
   // Helper method to create user-friendly error messages

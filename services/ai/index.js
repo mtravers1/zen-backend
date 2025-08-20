@@ -1,26 +1,27 @@
 // Zentavos AI Service - Main Entry Point
-// This file serves as the main entry point for the AI service, exporting all necessary modules.
+// Centralizes all AI-related exports for easy importing
 
-import aiService from "./service.js";
-import { buildScreenPrompt, getProductionSystemPrompt } from "./prompts.js";
-import { toolFunctions } from "./toolFunctions.js";
-import { callLLM } from "./llmClient.js";
-import { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
-import { filterTransactions, filterAccounts } from "./filters.js";
-import { toolDefinitions } from "./toolDefinitions.js";
+// Core AI service
+export { default as aiService } from "./service.js";
 
-// Main service export
-export default aiService;
+// Prompt management
+export { buildScreenPrompt, getProductionSystemPrompt } from "./prompts.js";
 
-// Individual module exports for advanced use/testing
-export {
-  buildScreenPrompt,
-  getProductionSystemPrompt,
-  toolFunctions,
-  callLLM,
-  isValidJSON,
-  getCorrectedJsonResponse,
-  filterTransactions,
-  filterAccounts,
-  toolDefinitions,
-}; 
+// Tool system
+export { toolFunctions } from "./toolFunctions.js";
+export { toolDefinitions } from "./toolDefinitions.js";
+
+// LLM client
+export { callLLM } from "./llmClient.js";
+
+// Response utilities
+export { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
+
+// Filtering utilities
+export { filterTransactions, filterAccounts } from "./filters.js";
+
+// Testing utilities
+export { testAIIntegration, testPrompts, testToolDefinitions } from "./test-integration.js";
+
+// Service class for advanced usage
+export { AIService } from "./service.js"; 

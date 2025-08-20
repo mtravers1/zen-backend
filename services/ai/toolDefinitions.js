@@ -6,7 +6,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getUserInfo",
-      description: "Get user information",
+      description: "Get user profile information and settings",
       parameters: {
         type: "object",
         properties: {
@@ -20,14 +20,13 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getCashFlows",
-      description: "Get cash flows for a user. This includes: - Cash flow: The amount of money that comes or goes out of a profile. - Average daily income: The average amount of money that comes into a profile daily. - Average daily spending: The average amount of money that goes out of a profile daily.",
+      description: "Get cash flow summary including income, expenses, and net worth for the current profile",
       parameters: {
         type: "object",
         properties: {
-          profile: { type: "string", description: "Profile ID" },
           uid: { type: "string", description: "User ID" },
         },
-        required: ["profile", "uid"],
+        required: ["uid"],
       },
     },
   },
@@ -35,7 +34,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getNetWorth",
-      description: "Calculate and return the current net worth for the user. Net worth = Total Assets - Total Liabilities. This includes cash balances, investments, assets, credit card balances, and loans.",
+      description: "Calculate and return the current net worth (assets - liabilities) including cash balances, investments, and debts",
       parameters: {
         type: "object",
         properties: {
@@ -49,7 +48,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getProfiles",
-      description: "Get all profiles for a user.",
+      description: "Get all user profiles (personal and business) with basic information",
       parameters: {
         type: "object",
         properties: {
@@ -63,22 +62,22 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getProfileTransactions",
-      description: "Get all transactions for a profile, optionally filtered by date, amount, merchant name, or account.",
+      description: "Get transactions for the current profile, optionally filtered by date, amount, merchant, or account",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
-            description: "Optional filters to refine the results",
+            description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Filter transactions from this date (inclusive). Format: YYYY-MM-DD" },
-              endDate: { type: "string", format: "date", description: "Filter transactions up to this date (inclusive). Format: YYYY-MM-DD" },
+              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
+              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
               minAmount: { type: "number", description: "Minimum transaction amount" },
               maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Partial or full merchant name to match" },
-              accountId: { type: "string", description: "Filter by specific Plaid account ID" },
-              isInvestment: { type: "boolean", description: "Filter by investment transactions (true/false)" },
+              merchantIncludes: { type: "string", description: "Merchant name to search for" },
+              accountId: { type: "string", description: "Specific account ID to filter by" },
+              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
             },
           },
         },
@@ -90,22 +89,22 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAllTransactions",
-      description: "Get all transactions for a user across all profiles. Optionally filtered by date, amount, merchant name, or account.",
+      description: "Get all transactions across all profiles, optionally filtered by date, amount, merchant, or account",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
-            description: "Optional filters to refine the results",
+            description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Filter transactions from this date (inclusive). Format: YYYY-MM-DD" },
-              endDate: { type: "string", format: "date", description: "Filter transactions up to this date (inclusive). Format: YYYY-MM-DD" },
+              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
+              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
               minAmount: { type: "number", description: "Minimum transaction amount" },
               maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Partial or full merchant name to match" },
-              accountId: { type: "string", description: "Filter by specific Plaid account ID" },
-              isInvestment: { type: "boolean", description: "Filter by investment transactions (true/false)" },
+              merchantIncludes: { type: "string", description: "Merchant name to search for" },
+              accountId: { type: "string", description: "Specific account ID to filter by" },
+              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
             },
           },
         },
@@ -117,19 +116,19 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountsByProfile",
-      description: "Get all accounts for a profile.",
+      description: "Get all accounts for the current profile with balances and account details",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
-            description: "Optional filters to refine the results",
+            description: "Optional filters to refine account results",
             properties: {
-              institutionName: { type: "string", description: "Institution name to filter accounts" },
-              accountType: { type: "string", description: "Account type to filter accounts (e.g., checking, savings)" },
-              accountSubtype: { type: "string", description: "Account subtype to filter accounts (e.g., investment, loan)" },
-              nameIncludes: { type: "string", description: "Partial or full account name to match (e.g., 'Chase')" },
+              institutionName: { type: "string", description: "Bank or institution name" },
+              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
+              accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
+              nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
           },
         },
@@ -141,19 +140,19 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAllUserAccounts",
-      description: "Get all accounts for a user.",
+      description: "Get all accounts across all profiles with balances and account details",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
-            description: "Optional filters to refine the results",
+            description: "Optional filters to refine account results",
             properties: {
-              institutionName: { type: "string", description: "Institution name to filter accounts" },
-              accountType: { type: "string", description: "Account type to filter accounts (e.g., checking, savings)" },
-              accountSubtype: { type: "string", description: "Account subtype to filter accounts (e.g., investment, loan)" },
-              nameIncludes: { type: "string", description: "Partial or full account name to match (e.g., 'Chase')" },
+              institutionName: { type: "string", description: "Bank or institution name" },
+              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
+              accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
+              nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
           },
         },
@@ -165,14 +164,13 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getCashFlowsWeekly",
-      description: "Get weekly cash flows for a user. This includes: - Cash flow: The amount of money that comes or goes out of a profile. - Average daily income: The average amount of money that comes into a profile daily. - Average daily spending: The average amount of money that goes out of a profile daily.",
+      description: "Get weekly cash flow data including income, expenses, and trends",
       parameters: {
         type: "object",
         properties: {
-          profile: { type: "string", description: "Profile ID" },
           uid: { type: "string", description: "User ID" },
         },
-        required: ["profile", "uid"],
+        required: ["uid"],
       },
     },
   },
@@ -180,7 +178,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountTransactions",
-      description: "Get all transactions for a specific account.",
+      description: "Get transactions for a specific account, optionally filtered by date, amount, or merchant",
       parameters: {
         type: "object",
         properties: {
@@ -188,15 +186,15 @@ export const toolDefinitions = [
           uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
-            description: "Optional filters to refine the results",
+            description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Filter transactions from this date (inclusive). Format: YYYY-MM-DD" },
-              endDate: { type: "string", format: "date", description: "Filter transactions up to this date (inclusive). Format: YYYY-MM-DD" },
+              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
+              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
               minAmount: { type: "number", description: "Minimum transaction amount" },
               maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Partial or full merchant name to match" },
-              accountId: { type: "string", description: "Filter by specific Plaid account ID" },
-              isInvestment: { type: "boolean", description: "Filter by investment transactions (true/false)" },
+              merchantIncludes: { type: "string", description: "Merchant name to search for" },
+              accountId: { type: "string", description: "Specific account ID to filter by" },
+              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
             },
           },
         },
@@ -208,7 +206,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAssets",
-      description: "Get all assets for a user.",
+      description: "Get all financial assets including real estate, investments, vehicles, and other valuable items",
       parameters: {
         type: "object",
         properties: {
@@ -222,21 +220,22 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getTrips",
-      description: "Get all trips for a user.",
+      description: "Get all business and personal trips with details like date, distance, purpose, and expenses",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
           query: {
             type: "object",
+            description: "Optional query filters for trips",
             properties: {
-              profileId: { type: "string" },
-              userId: { type: "string" },
-              vehicleId: { type: "string" },
-              minMiles: { type: "number" },
-              maxMiles: { type: "number" },
-              dateRange: { type: "string", description: "Format: YYYY-MM-DD < YYYY-MM-DD" },
-              search: { type: "string" },
+              profileId: { type: "string", description: "Filter by specific profile" },
+              userId: { type: "string", description: "Filter by specific user" },
+              vehicleId: { type: "string", description: "Filter by specific vehicle" },
+              minMiles: { type: "number", description: "Minimum trip distance in miles" },
+              maxMiles: { type: "number", description: "Maximum trip distance in miles" },
+              dateRange: { type: "string", description: "Date range filter (YYYY-MM-DD < YYYY-MM-DD)" },
+              search: { type: "string", description: "Search term for trip purpose or notes" },
             },
           },
         },
