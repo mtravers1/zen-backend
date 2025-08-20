@@ -243,4 +243,18 @@ export const toolDefinitions = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "getAccountsBreakdown",
+      description: "Get detailed breakdown of accounts by type (checking, savings, credit, etc.) with descriptions and balances",
+      parameters: {
+        type: "object",
+        properties: {
+          uid: { type: "string", description: "User ID" },
+        },
+        required: ["uid"],
+      },
+    },
+  },
 ]; 

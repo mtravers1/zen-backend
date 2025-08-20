@@ -22,6 +22,11 @@ export { filterTransactions, filterAccounts } from "./filters.js";
 
 // Testing utilities
 export { testAIIntegration, testPrompts, testToolDefinitions } from "./test-integration.js";
+export { testHallucinationProtection, testValidationFunction } from "./test-hallucination-protection.js";
 
-// Service class for advanced usage
-export { AIService } from "./service.js"; 
+// Serviços específicos
+export { default as accountsService } from "../accounts.service.js";
+export { default as businessService } from "../businesses.service.js";
+export { default as authService } from "../auth.service.js";
+export { default as assetsService } from "../assets.service.js";
+export { default as tripService } from "../trips.service.js"; 

@@ -200,11 +200,22 @@ export const toolFunctions = (context) => ({
   getProfileTransactions: async ({ uid, filters = {} }) => {
     try {
       const { profile } = context;
+      
+      if (!profile || !profile.id) {
+        console.error("[AI][getProfileTransactions] No profile or profile ID in context");
+        return { message: "Profile context not available", error: "Profile not found in context" };
+      }
+      
+      console.log(`[AI][getProfileTransactions] Attempting to get transactions for profile: ${profile.id}, email: ${profile.email}`);
+      
       const transactions = await accountsService.getProfileTransactions(profile.email, profile.id, uid);
       
       if (!transactions || transactions.length === 0) {
+        console.log(`[AI][getProfileTransactions] No transactions found for profile ${profile.id}`);
         return [];
       }
+      
+      console.log(`[AI][getProfileTransactions] Found ${transactions.length} transactions for profile ${profile.id}`);
       
       const filteredTransactions = filterTransactions(transactions, filters);
       const fixedTransactions = accountsService.formatTransactionsWithSigns(filteredTransactions);
@@ -213,7 +224,15 @@ export const toolFunctions = (context) => ({
       return cleanedData;
     } catch (error) {
       console.error("[AI][getProfileTransactions] Error:", error);
-      return { message: "Failed to retrieve profile transactions", error: error.message };
+      
+      // Provide more specific error messages
+      if (error.message.includes("Profile not found")) {
+        return { message: "Profile not found in database", error: "Profile ID not found in user profiles" };
+      } else if (error.message.includes("User not found")) {
+        return { message: "User not found", error: "User authentication failed" };
+      } else {
+        return { message: "Failed to retrieve profile transactions", error: error.message };
+      }
     }
   },
 
@@ -316,6 +335,60 @@ export const toolFunctions = (context) => ({
     } catch (error) {
       console.error("[AI][getTrips] Error:", error);
       return { message: "Failed to retrieve trips", error: error.message };
+    }
+  },
+
+  /**
+   * Gets a detailed breakdown of accounts by type with descriptions
+   */
+  getAccountsBreakdown: async ({ uid }) => {
+    try {
+      const { profile } = context;
+      
+      if (!profile || !profile.id) {
+        return { message: "Profile context not available", error: "Profile not found in context" };
+      }
+      
+      const accounts = await accountsService.getAccounts(profile, uid);
+      
+      if (!accounts) {
+        return { message: "No accounts found", data: null };
+      }
+      
+      // Extract account information by type
+      const accountBreakdown = {};
+      let totalBalance = 0;
+      
+      for (const [accountType, accountList] of Object.entries(accounts)) {
+        if (Array.isArray(accountList) && accountList.length > 0) {
+          accountBreakdown[accountType] = {
+            count: accountList.length,
+            totalBalance: accountList.reduce((sum, acc) => sum + (parseFloat(acc.currentBalance) || 0), 0),
+            accounts: accountList.map(acc => ({
+              name: acc.account_name || acc.account_official_name || "Unnamed Account",
+              balance: parseFloat(acc.currentBalance) || 0,
+              mask: acc.mask || "****",
+              institution: acc.institution_name || "Unknown Bank"
+            }))
+          };
+          
+          totalBalance += accountBreakdown[accountType].totalBalance;
+        }
+      }
+      
+      return {
+        totalBalance,
+        breakdown: accountBreakdown,
+        summary: Object.entries(accountBreakdown).map(([type, data]) => ({
+          type: type === "depository" ? "Banking" : type === "credit" ? "Credit Card" : type === "investment" ? "Investment" : type === "loan" ? "Loan" : type,
+          count: data.count,
+          totalBalance: data.totalBalance,
+          description: `${data.count} ${data.count === 1 ? 'account' : 'accounts'} with total balance of $${data.totalBalance.toFixed(2)}`
+        }))
+      };
+    } catch (error) {
+      console.error("[AI][getAccountsBreakdown] Error:", error);
+      return { message: "Failed to retrieve account breakdown", error: error.message };
     }
   },
 }); 
