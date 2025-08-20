@@ -5,6 +5,7 @@ import { buildScreenPrompt, getProductionSystemPrompt } from "./prompts.js";
 import { toolFunctions } from "./toolFunctions.js";
 import { callLLM } from "./llmClient.js";
 import { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
+import { formatFinancialResponse } from "./responseFormatter.js";
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
@@ -304,5 +305,6 @@ export {
   getCorrectedJsonResponse,
   filterTransactions,
   filterAccounts,
+  formatFinancialResponse,
   AIService,
 }; 

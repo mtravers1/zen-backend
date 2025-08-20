@@ -2,6 +2,7 @@
 // Handles integration with the LLM provider (Groq/vLLM), including streaming, tool calls, and response assembly.
 
 import Groq from "groq-sdk";
+import { formatFinancialResponse } from "./responseFormatter.js";
 
 /**
  * Validates if LLM response matches tool results to prevent hallucinations
@@ -409,12 +410,15 @@ export async function callLLM({
         }
         
         if (!isValidResponse) {
-          console.warn('[AI][callLLM] LLM output does not contain tool result data. Overwriting with real data to prevent hallucination.');
+          console.warn('[AI][callLLM] LLM output does not contain tool result data. Creating proper response with real data to prevent hallucination.');
           console.warn('[AI][callLLM] Tool result:', lastToolResult);
           console.warn('[AI][callLLM] LLM response data:', parsed.data);
           
+          // Create a proper, user-friendly response using the actual financial data
+          const responseText = formatFinancialResponse(lastToolResult);
+          
           return JSON.stringify({
-            text: 'Here is your real financial data based on your account records.',
+            text: responseText,
             data: lastToolResult
           });
         } else {
@@ -431,8 +435,12 @@ export async function callLLM({
       // If we have tool results but the LLM didn't return JSON, provide a fallback response
       if (lastToolResult) {
         console.log('[AI][callLLM] Providing fallback response with tool results since LLM returned non-JSON');
+        
+        // Create a proper, user-friendly response using the actual financial data
+        const responseText = formatFinancialResponse(lastToolResult);
+        
         return JSON.stringify({
-          text: 'Here is your financial information based on your account records.',
+          text: responseText,
           data: lastToolResult
         });
       }
@@ -451,8 +459,11 @@ export async function callLLM({
     
     // Last resort fallback
     if (lastToolResult) {
+      // Create a proper, user-friendly response using the actual financial data
+      const responseText = formatFinancialResponse(lastToolResult);
+      
       return JSON.stringify({
-        text: 'Here is your financial information based on your account records.',
+        text: responseText,
         data: lastToolResult
       });
     }
