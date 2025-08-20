@@ -208,7 +208,6 @@ export async function callLLM({
     tools,
   });
 
-  let buffer = "";
   let finalMessages = [...messages];
   let toolCallsRemaining = true;
   let completeResponse = "";
@@ -227,41 +226,40 @@ export async function callLLM({
 
   while (toolCallsRemaining && iteration < MAX_ITER) {
     toolCallsRemaining = false;
-    let started = false;
-    let ended = false;
     iteration++;
+    
+    console.log(`[AI][callLLM] Starting iteration ${iteration}`);
 
     for await (const chunk of response) {
       const delta = chunk.choices?.[0]?.delta;
       const finishReason = chunk.choices?.[0]?.finish_reason;
 
+      // Handle content chunks - accumulate the complete response
       if (delta?.content) {
         completeResponse += delta.content;
         receivedContent = true;
-        if (!started && delta.content.startsWith("¡")) {
-          started = true;
-          delta.content = delta.content.slice(1);
-        }
-        if (!ended && delta.content.endsWith("¡")) {
-          ended = true;
-          delta.content = delta.content.slice(0, -1);
-        }
-        // Não envie texto parcial para o frontend aqui!
-        buffer += delta.content;
+        console.log(`[AI][callLLM] Received content chunk:`, delta.content.substring(0, 100) + '...');
       }
 
+      // Handle tool calls
       if (delta?.tool_calls) {
         toolCallsRemaining = true;
-        console.log(`[AI][callLLM] Tool call(s) detected in LLM output:`, delta.tool_calls.map(tc => tc.function?.name));
+        console.log(`[AI][callLLM] Tool call(s) detected:`, delta.tool_calls.map(tc => tc.function?.name));
+        
+        // Send progress message to user
         if (aiController && uid) {
-          // Send a progress message to the user (marked as progress)
-          aiController.sendToUser(uid, { text: 'Processing your request... (executing tool call)', progress: true });
+          aiController.sendToUser(uid, { 
+            text: 'Processing your request...', 
+            progress: true 
+          });
         }
+        
         for (const toolCall of delta.tool_calls) {
           try {
             if (!toolCall.function) continue;
             const fnName = toolCall.function?.name;
             if (!fnName) continue;
+            
             let args = {};
             try {
               args = toolCall.function.arguments
@@ -271,78 +269,72 @@ export async function callLLM({
               console.error(`[AI][callLLM] Error parsing tool arguments for ${fnName}:`, e);
               continue;
             }
-            // Always use the backend-authenticated UID, never trust the UID from the LLM/tool call args
+            
+            // Always use the backend-authenticated UID
             args.uid = uid;
-            console.log(`[AI][callLLM] Calling tool function: ${fnName} with args (forced UID):`, args);
+            console.log(`[AI][callLLM] Executing tool: ${fnName} with args:`, args);
+            
             const fn = toolFunctions[fnName];
             if (!fn) {
               console.error(`[AI][callLLM] Tool function not found: ${fnName}`);
               continue;
             }
-            // Run the tool function with a timeout to prevent hanging
+            
+            // Execute tool with timeout
             let result;
             const toolStartTime = Date.now();
             try {
-              console.log(`[AI][callLLM] Starting tool function ${fnName} at ${new Date().toISOString()}`);
-              result = await runToolWithTimeout(fn, args, 30000); // 30s timeout (increased from 15s)
+              result = await runToolWithTimeout(fn, args, 30000);
               const toolDuration = Date.now() - toolStartTime;
-              console.log(`[AI][callLLM] Tool function ${fnName} completed in ${toolDuration}ms`);
+              console.log(`[AI][callLLM] Tool ${fnName} completed in ${toolDuration}ms`);
             } catch (timeoutErr) {
               const toolDuration = Date.now() - toolStartTime;
-              console.error(`[AI][callLLM] Tool call for ${fnName} failed after ${toolDuration}ms:`, timeoutErr);
-              
-              // Log detailed error information
-              if (timeoutErr.message.includes('timeout')) {
-                console.warn(`[AI][callLLM] Tool call for ${fnName} timed out after ${toolDuration}ms`);
-              } else {
-                console.error(`[AI][callLLM] Tool call for ${fnName} failed with error:`, {
-                  error: timeoutErr.message,
-                  stack: timeoutErr.stack,
-                  name: timeoutErr.name,
-                  duration: toolDuration
-                });
-              }
+              console.error(`[AI][callLLM] Tool ${fnName} failed after ${toolDuration}ms:`, timeoutErr);
               
               if (aiController && uid) {
                 aiController.sendToUser(uid, { 
-                  text: `Sorry, the request for ${fnName} failed: ${timeoutErr.message}. Please try again.`, 
+                  text: `Sorry, there was an error retrieving your data. Please try again.`, 
                   data: {}, 
                   error: true 
                 });
               }
               continue;
             }
-            lastToolResult = result; // Save the last tool result for post-processing
-            console.log(`[AI][callLLM] Tool function ${fnName} returned:`, result);
+            
+            lastToolResult = result;
+            console.log(`[AI][callLLM] Tool ${fnName} result:`, result);
+            
+            // Add tool result to messages
             finalMessages.push({
               role: "tool",
               tool_call_id: toolCall.id,
               name: fnName,
               content: JSON.stringify(result),
             });
-            console.log(`[AI][callLLM] Tool call executed: ${fnName} with args`, args);
+            
           } catch (error) {
+            console.error(`[AI][callLLM] Tool call error for ${fnName}:`, error);
             finalMessages.push({
               role: "tool",
               tool_call_id: toolCall.id,
               name: fnName,
               content: JSON.stringify({ error: error.message }),
             });
-            console.error(`[AI][callLLM] Tool call error for ${fnName}:`, error);
           }
         }
       }
-      if (delta?.content) {
-        console.log(`[AI][callLLM] Received content chunk:`, delta.content);
-      }
+      
       if (finishReason === "stop") {
         console.log("[AI][callLLM] Finish reason: stop");
         break;
       }
     }
-    console.log(`[AI][callLLM] End of LLM response iteration ${iteration}. toolCallsRemaining:`, toolCallsRemaining);
+    
+    console.log(`[AI][callLLM] End of iteration ${iteration}. toolCallsRemaining:`, toolCallsRemaining);
+    
+    // If we have tool calls, continue with updated messages
     if (toolCallsRemaining) {
-      console.log("[AI][callLLM] Tool calls remaining, re-calling LLM with updated messages...");
+      console.log("[AI][callLLM] Continuing with tool results...");
       response = await groqClient.chat.completions.create({
         model,
         messages: finalMessages,
@@ -381,19 +373,58 @@ export async function callLLM({
     // Only attempt to parse if the response looks like it might be JSON
     if (completeResponse && completeResponse.trim().startsWith('{') && completeResponse.trim().endsWith('}')) {
       const parsed = JSON.parse(completeResponse);
+      
       // Only check if we have a tool result and the LLM output is a valid object
       if (lastToolResult && parsed && typeof parsed === 'object') {
-        // Compare the data field (shallow equality for arrays/objects)
-        const llmData = JSON.stringify(parsed.data);
-        const toolData = JSON.stringify(lastToolResult);
-        if (llmData !== toolData) {
-          console.warn('[AI][callLLM] LLM output does not match tool result. Overwriting with real data to prevent hallucination.');
+        
+        // IMPROVED VALIDATION: Check if LLM response contains the tool result data
+        // instead of strict equality comparison
+        const toolDataStr = JSON.stringify(lastToolResult);
+        const llmDataStr = JSON.stringify(parsed.data);
+        
+        // Check if tool result is contained in LLM response (more flexible validation)
+        let isValidResponse = false;
+        
+        if (Array.isArray(lastToolResult) && Array.isArray(parsed.data)) {
+          // For arrays, check if all tool result items are present in LLM response
+          isValidResponse = lastToolResult.every(toolItem => {
+            if (!toolItem || typeof toolItem !== 'object') return true;
+            return parsed.data.some(llmItem => {
+              if (!llmItem || typeof llmItem !== 'object') return false;
+              // Check if key values match (allowing for different formatting)
+              for (const [key, value] of Object.entries(toolItem)) {
+                if (llmItem[key] !== value) return false;
+              }
+              return true;
+            });
+          });
+        } else if (typeof lastToolResult === 'object' && typeof parsed.data === 'object') {
+          // For objects, check if tool result values are present in LLM response
+          isValidResponse = Object.entries(lastToolResult).every(([key, value]) => {
+            return parsed.data[key] === value;
+          });
+        } else {
+          // For other types, use simple containment check
+          isValidResponse = llmDataStr.includes(toolDataStr.substring(1, toolDataStr.length - 1));
+        }
+        
+        if (!isValidResponse) {
+          console.warn('[AI][callLLM] LLM output does not contain tool result data. Overwriting with real data to prevent hallucination.');
+          console.warn('[AI][callLLM] Tool result:', lastToolResult);
+          console.warn('[AI][callLLM] LLM response data:', parsed.data);
+          
           return JSON.stringify({
             text: 'Here is your real financial data based on your account records.',
             data: lastToolResult
           });
+        } else {
+          console.log('[AI][callLLM] LLM response validated successfully against tool result');
         }
       }
+      
+      // If validation passed or no tool result, return the LLM response
+      return completeResponse;
+      
     } else {
       console.log('[AI][callLLM] Response is not JSON format, skipping hallucination check. Response:', completeResponse.substring(0, 100) + '...');
       
@@ -405,10 +436,32 @@ export async function callLLM({
           data: lastToolResult
         });
       }
+      
+      // If no tool results and no valid JSON, return the raw response
+      return completeResponse;
     }
   } catch (e) {
     console.error('[AI][callLLM] Error in post-processing hallucination check:', e);
     console.log('[AI][callLLM] Failed response content:', completeResponse);
+    
+    // On error, return the original response if possible
+    if (completeResponse && completeResponse.trim()) {
+      return completeResponse;
+    }
+    
+    // Last resort fallback
+    if (lastToolResult) {
+      return JSON.stringify({
+        text: 'Here is your financial information based on your account records.',
+        data: lastToolResult
+      });
+    }
+    
+    return JSON.stringify({
+      text: 'I encountered an issue processing your request. Please try again.',
+      data: {},
+      error: true
+    });
   }
   // Send [DONE] only after the final answer is sent
   return completeResponse;
