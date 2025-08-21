@@ -803,37 +803,39 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
       };
       
       // Check if response contains unnecessary apologies or cut-off mentions
+      // Only flag if the response is actually incomplete or just an apology
       const hasUnnecessaryApologies = (
-        normalizedResponse.response.includes('I apologize') ||
-        normalizedResponse.response.includes('I\'m sorry') ||
+        // Check for cut-off indicators
         normalizedResponse.response.includes('my response was cut off') ||
-        normalizedResponse.response.includes('Please try asking your question again') ||
         normalizedResponse.response.includes('response was cut') ||
         normalizedResponse.response.includes('cut off') ||
-        normalizedResponse.response.includes('apologize') ||
-        normalizedResponse.response.includes('sorry')
+        normalizedResponse.response.includes('Please try asking your question again') ||
+        // Check for apologies ONLY if they're the main content
+        (normalizedResponse.response.includes('I apologize') && normalizedResponse.response.length < 100) ||
+        (normalizedResponse.response.includes('I\'m sorry') && normalizedResponse.response.length < 100) ||
+        (normalizedResponse.response.includes('apologize') && normalizedResponse.response.length < 100) ||
+        (normalizedResponse.response.includes('sorry') && normalizedResponse.response.length < 100)
       );
       
       // Check if response actually has useful content
       const hasUsefulContent = (
-        // Financial data indicators
+        // Financial data indicators (high priority)
         normalizedResponse.response.includes('$') ||
+        /\d+/.test(normalizedResponse.response) ||
         normalizedResponse.response.includes('net worth') ||
         normalizedResponse.response.includes('balance') ||
         normalizedResponse.response.includes('transactions') ||
-        normalizedResponse.response.includes('accounts') ||
-        normalizedResponse.response.includes('assets') ||
-        normalizedResponse.response.includes('liabilities') ||
-        normalizedResponse.response.includes('income') ||
-        normalizedResponse.response.includes('expenses') ||
-        normalizedResponse.response.includes('savings') ||
-        normalizedResponse.response.includes('investments') ||
-        normalizedResponse.response.includes('debt') ||
-        normalizedResponse.response.includes('credit') ||
-        normalizedResponse.response.includes('cash') ||
-        normalizedResponse.response.includes('bank') ||
-        // Numeric data
-        /\d+/.test(normalizedResponse.response) ||
+        normalizedResponse.includes('accounts') ||
+        normalizedResponse.includes('assets') ||
+        normalizedResponse.includes('liabilities') ||
+        normalizedResponse.includes('income') ||
+        normalizedResponse.includes('expenses') ||
+        normalizedResponse.includes('savings') ||
+        normalizedResponse.includes('investments') ||
+        normalizedResponse.includes('debt') ||
+        normalizedResponse.includes('credit') ||
+        normalizedResponse.includes('cash') ||
+        normalizedResponse.includes('bank') ||
         // Data arrays
         (normalizedResponse.data && Array.isArray(normalizedResponse.data) && normalizedResponse.data.length > 0) ||
         // Specific financial terms
@@ -850,10 +852,10 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('tab') ||
         normalizedResponse.response.includes('time') ||
         normalizedResponse.response.includes('day') ||
-        normalizedResponse.response.includes('device') ||
-        normalizedResponse.response.includes('platform') ||
-        normalizedResponse.response.includes('app') ||
-        normalizedResponse.response.includes('version') ||
+        normalizedResponse.includes('device') ||
+        normalizedResponse.includes('platform') ||
+        normalizedResponse.includes('app') ||
+        normalizedResponse.includes('version') ||
         // General helpful content
         normalizedResponse.response.includes('You are currently') ||
         normalizedResponse.response.includes('You\'re currently') ||
@@ -884,7 +886,31 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('Your debt') ||
         normalizedResponse.response.includes('Your credit') ||
         normalizedResponse.response.includes('Your cash') ||
-        normalizedResponse.response.includes('Your bank')
+        normalizedResponse.includes('Your bank') ||
+        // Business and investment guidance
+        normalizedResponse.response.includes('LLC') ||
+        normalizedResponse.response.includes('business') ||
+        normalizedResponse.response.includes('company') ||
+        normalizedResponse.response.includes('investment') ||
+        normalizedResponse.response.includes('strategy') ||
+        normalizedResponse.response.includes('growth') ||
+        normalizedResponse.response.includes('cash flow') ||
+        normalizedResponse.response.includes('expenses') ||
+        normalizedResponse.response.includes('revenue') ||
+        normalizedResponse.includes('profit') ||
+        normalizedResponse.includes('tax') ||
+        normalizedResponse.response.includes('IRS') ||
+        normalizedResponse.response.includes('professional') ||
+        // Form and procedure guidance
+        normalizedResponse.response.includes('form') ||
+        normalizedResponse.response.includes('fill out') ||
+        normalizedResponse.response.includes('required') ||
+        normalizedResponse.response.includes('information') ||
+        normalizedResponse.response.includes('address') ||
+        normalizedResponse.response.includes('management') ||
+        normalizedResponse.response.includes('structure') ||
+        normalizedResponse.response.includes('consult') ||
+        normalizedResponse.response.includes('website')
       );
       
       // If response has useful content but contains unnecessary apologies, clean it up
@@ -893,47 +919,31 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         
         let cleanedResponse = normalizedResponse.response;
         
-        // Remove common apology patterns - more aggressive cleaning
+        // Remove common apology patterns - more intelligent cleaning
         const apologyPatterns = [
+          // Cut-off patterns (always remove)
           /I apologize,? but my response was cut off\.? Please try asking your question again\.?/gi,
           /I'm sorry,? but my response was cut off\.? Please try asking your question again\.?/gi,
           /my response was cut off\.? Please try asking your question again\.?/gi,
           /response was cut off\.? Please try asking your question again\.?/gi,
           /cut off\.? Please try asking your question again\.?/gi,
           /Please try asking your question again\.?/gi,
+          /try asking your question again\.?/gi,
+          /asking your question again\.?/gi,
+          /your question again\.?/gi,
+          /question again\.?/gi,
+          // Cut-off indicators (always remove)
           /I apologize,? but my response was cut off\.?/gi,
           /I'm sorry,? but my response was cut off\.?/gi,
           /my response was cut off\.?/gi,
           /response was cut off\.?/gi,
-          /I apologize,? but/gi,
-          /I'm sorry,? but/gi,
-          /I apologize\.?/gi,
-          /I'm sorry\.?/gi,
-          /but my response was cut off/gi,
-          /my response was cut off/gi,
-          /response was cut off/gi,
-          /was cut off/gi,
-          /cut off/gi,
-          // Additional patterns for complete cleanup
-          /I apologize,? but/gi,
-          /I'm sorry,? but/gi,
-          /I apologize\.?/gi,
-          /I'm sorry\.?/gi,
-          /apologize,? but/gi,
-          /sorry,? but/gi,
-          /apologize\.?/gi,
-          /sorry\.?/gi,
-          /but my response was cut off/gi,
-          /my response was cut off/gi,
-          /response was cut off/gi,
-          /was cut off/gi,
-          /cut off/gi,
-          /Please try asking your question again/gi,
-          /try asking your question again/gi,
-          /asking your question again/gi,
-          /your question again/gi,
-          /question again/gi,
-          /again/gi
+          /was cut off\.?/gi,
+          /cut off\.?/gi,
+          // Apologies only if they're standalone (not part of useful content)
+          /^I apologize,?\s*$/gi,
+          /^I'm sorry,?\s*$/gi,
+          /^sorry,?\s*$/gi,
+          /^apologize,?\s*$/gi
         ];
         
         // Apply each pattern to clean the response
@@ -954,22 +964,12 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         // Remove trailing commas or periods
         cleanedResponse = cleanedResponse.replace(/[,.]$/, '');
         
-        // Final cleanup - remove any remaining apology-like phrases
+        // Final cleanup - remove any remaining standalone apologies
         cleanedResponse = cleanedResponse
-          .replace(/I apologize,?/gi, '')
-          .replace(/I'm sorry,?/gi, '')
-          .replace(/apologize,?/gi, '')
-          .replace(/sorry,?/gi, '')
-          .replace(/my response was cut off/gi, '')
-          .replace(/response was cut off/gi, '')
-          .replace(/was cut off/gi, '')
-          .replace(/cut off/gi, '')
-          .replace(/Please try asking your question again/gi, '')
-          .replace(/try asking your question again/gi, '')
-          .replace(/asking your question again/gi, '')
-          .replace(/your question again/gi, '')
-          .replace(/question again/gi, '')
-          .replace(/again/gi, '')
+          .replace(/^I apologize,?\s*$/gi, '')
+          .replace(/^I'm sorry,?\s*$/gi, '')
+          .replace(/^sorry,?\s*$/gi, '')
+          .replace(/^apologize,?\s*$/gi, '')
           .replace(/\s{2,}/g, ' ')
           .trim();
         
