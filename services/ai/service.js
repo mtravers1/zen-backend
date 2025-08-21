@@ -129,7 +129,7 @@ class AIService {
         throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
       }
 
-      console.log("[AI Service] ✅ Profile found successfully:", { 
+      console.log("[AI Service]  Profile found successfully:", { 
         id: profile.id, 
         name: profile.name, 
         isPersonal: profile.isPersonal,
@@ -175,7 +175,7 @@ class AIService {
       console.log('[AI Service] Total prompt length:', totalPromptLength, 'characters');
       
       if (totalPromptLength > 25000) {
-        console.warn('[AI Service] ⚠️ Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
+        console.warn('[AI Service]  Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
         
         // Use simplified prompt for very long requests
         const simplifiedSystemPrompt = getSimplifiedSystemPrompt(currentScreen);
@@ -301,41 +301,119 @@ class AIService {
         const fixedText = parsedResponse.text.split(/cut off|response was cut|my response was cut|I apologize, but my response was cut off/i)[0].trim();
         
         if (fixedText && fixedText.length > 10) {
-          console.log('[AI Service] ✅ Fixed cut-off response:', fixedText.substring(0, 100) + '...');
+          console.log('[AI Service]  Fixed cut-off response:', fixedText.substring(0, 100) + '...');
           parsedResponse.text = fixedText;
         } else {
-          console.warn('[AI Service] ⚠️ Could not fix cut-off response, using fallback');
+          console.warn('[AI Service]  Could not fix cut-off response, using fallback');
           parsedResponse.text = "I'm sorry, I encountered an issue with my response. Please try asking your question again.";
           parsedResponse.error = true;
         }
       }
       
-      // CRITICAL: Validate that we're returning real data, not hallucinations
-      if (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
-        console.log("[AI Service] Response has data with keys:", Object.keys(parsedResponse.data));
-        console.log("[AI Service] Response source:", parsedResponse.source);
-        
-        // Check if this is marked as real tool data
-        if (parsedResponse.source === 'tool_result' || 
-            parsedResponse.source === 'tool_result_fallback' || 
-            parsedResponse.source === 'tool_result_error_fallback') {
-          console.log("[AI Service] ✅ Response contains real tool data - safe to return");
-        } else if (parsedResponse.source === 'llm_general_knowledge') {
-          console.log("[AI Service] ⚠️ Response is general knowledge - no financial data");
-        } else {
-          console.warn("[AI Service] ⚠️ Response source unclear - may contain hallucinations");
-          // If we can't verify the source, be conservative and mark as potentially unreliable
-          parsedResponse.warning = "This response may contain AI-generated content and should be verified";
+      // CRITICAL: Validate response structure and data
+      console.log('\n🔍 [AI Service] ====== VALIDATING RESPONSE ======');
+      
+      // Step 1: Validate basic structure
+      const structureValidation = {
+        hasResponse: !!parsedResponse?.response,
+        hasData: !!parsedResponse?.data,
+        hasSource: !!parsedResponse?.source,
+        dataType: typeof parsedResponse?.data,
+        sourceType: typeof parsedResponse?.source,
+        isDataArray: Array.isArray(parsedResponse?.data)
+      };
+      console.log("[AI Service] Structure validation:", structureValidation);
+
+      // Step 2: Validate data content
+      if (parsedResponse?.data) {
+        const dataValidation = {
+          isEmpty: Array.isArray(parsedResponse.data) ? parsedResponse.data.length === 0 : Object.keys(parsedResponse.data).length === 0,
+          isValidJSON: true,
+          hasExpectedFields: false,
+          dataType: typeof parsedResponse.data
+        };
+
+        // Validate data is proper JSON
+        try {
+          if (typeof parsedResponse.data === 'string') {
+            parsedResponse.data = JSON.parse(parsedResponse.data);
+          }
+          
+          // Check for expected fields based on tool type
+          if (parsedResponse.source === 'tool_result') {
+            // Check for common financial data fields
+            const expectedFields = ['netWorth', 'balance', 'amount', 'transactions', 'accounts'];
+            dataValidation.hasExpectedFields = expectedFields.some(field => 
+              parsedResponse.data[field] !== undefined || 
+              (Array.isArray(parsedResponse.data) && parsedResponse.data[0]?.[field] !== undefined)
+            );
+          }
+        } catch (error) {
+          dataValidation.isValidJSON = false;
+          console.error("[AI Service] Data validation error:", error);
         }
-      } else {
-        console.warn("[AI Service] ⚠️ Response has no data or empty data");
-        if (parsedResponse) {
-          console.log("[AI Service] Response structure:", {
-            hasText: !!parsedResponse.text,
-            hasData: !!parsedResponse.data,
-            dataType: typeof parsedResponse.data,
-            source: parsedResponse.source
-          });
+
+        console.log("[AI Service] Data validation:", dataValidation);
+
+        // Check if data matches expected format
+        if (!dataValidation.isEmpty && dataValidation.isValidJSON) {
+          if (parsedResponse.source === 'tool_result') {
+            // Verify tool data integrity
+            const hasValidData = typeof parsedResponse.data === 'object' && 
+                               (Object.keys(parsedResponse.data).length > 0 || 
+                               (Array.isArray(parsedResponse.data) && parsedResponse.data.length > 0));
+            
+            if (hasValidData) {
+              console.log("[AI Service]  Response contains verified tool data");
+              
+              // Ensure data is properly structured
+              if (Array.isArray(parsedResponse.data)) {
+                // If array, each item should be an object
+                parsedResponse.data = parsedResponse.data.map(item => 
+                  typeof item === 'object' ? item : { value: item }
+                );
+              } else if (typeof parsedResponse.data !== 'object') {
+                // If not object, wrap in object
+                parsedResponse.data = { value: parsedResponse.data };
+              }
+            } else {
+              console.warn("[AI Service]  Tool data invalid or empty");
+              parsedResponse.warning = "Tool data validation failed";
+              parsedResponse.source = 'tool_result_error';
+            }
+          }
+        } else {
+          console.warn("[AI Service]  Data field is empty or invalid");
+          parsedResponse.warning = dataValidation.isValidJSON ? 
+            "Response data is empty" : 
+            "Response data is not valid JSON";
+          parsedResponse.source = 'tool_result_error';
+        }
+      } else if (parsedResponse) {
+        // No data field but response exists
+        if (!parsedResponse.source) {
+          // Determine appropriate source based on content
+          parsedResponse.source = this.determineResponseSource(parsedResponse.response);
+          console.log("[AI Service] Determined source:", parsedResponse.source);
+        }
+      }
+
+      // Step 3: Final validation
+      if (parsedResponse) {
+        const finalValidation = {
+          isValid: !!parsedResponse.response && (
+            !parsedResponse.data || 
+            (parsedResponse.data && parsedResponse.source === 'tool_result')
+          ),
+          source: parsedResponse.source,
+          hasWarning: !!parsedResponse.warning,
+          responseLength: parsedResponse.response?.length
+        };
+        console.log("[AI Service] Final validation:", finalValidation);
+
+        if (!finalValidation.isValid) {
+          console.warn("[AI Service]  Response validation failed");
+          parsedResponse.warning = "Response validation failed - data may be unreliable";
         }
       }
 
@@ -397,6 +475,54 @@ class AIService {
       // Return the user-friendly error instead of throwing
       return userFriendlyError;
     }
+  }
+
+  // Determine response source based on content analysis
+  determineResponseSource(response) {
+    if (!response) return 'unknown';
+    
+    // Financial data patterns
+    const financialPatterns = [
+      /\$\d+/,                    // Dollar amounts
+      /net worth/i,               // Net worth mentions
+      /balance/i,                 // Balance mentions
+      /transaction/i,             // Transaction mentions
+      /account/i                  // Account mentions
+    ];
+    
+    // Navigation/UI patterns
+    const uiPatterns = [
+      /screen/i,                  // Screen mentions
+      /click/i,                   // UI interactions
+      /button/i,                  // UI elements
+      /menu/i,                    // Navigation elements
+      /section/i                  // UI sections
+    ];
+    
+    // Form/feature patterns
+    const featurePatterns = [
+      /form/i,                    // Form mentions
+      /fill out/i,                // Form interactions
+      /enter/i,                   // Data entry
+      /upload/i,                  // File operations
+      /settings/i                 // Settings mentions
+    ];
+    
+    // Check patterns
+    const hasFinancialData = financialPatterns.some(pattern => pattern.test(response));
+    const hasUIElements = uiPatterns.some(pattern => pattern.test(response));
+    const hasFeatures = featurePatterns.some(pattern => pattern.test(response));
+    
+    // Determine source
+    if (hasFinancialData && !hasUIElements) {
+      return 'financial_advice';  // General financial advice
+    } else if (hasUIElements) {
+      return 'app_guidance';      // UI/navigation help
+    } else if (hasFeatures) {
+      return 'feature_help';      // Feature/form help
+    }
+    
+    return 'general_response';    // Default source
   }
 
   // Enhanced response processing with LLM self-evaluation
@@ -528,7 +654,7 @@ class AIService {
       
       // If response has useful content but contains unnecessary apologies, clean it up
       if (hasUsefulContent && hasUnnecessaryApologies) {
-        console.log("⚠️ [AI Service] Response has useful content but unnecessary apologies - cleaning up");
+        console.log(" [AI Service] Response has useful content but unnecessary apologies - cleaning up");
         
         let cleanedResponse = normalizedResponse.response;
         
@@ -612,7 +738,7 @@ class AIService {
           .replace(/\s{2,}/g, ' ')
           .trim();
         
-        console.log("✅ [AI Service] Cleaned response:", {
+        console.log(" [AI Service] Cleaned response:", {
           original: normalizedResponse.response.substring(0, 100) + '...',
           cleaned: cleanedResponse.substring(0, 100) + '...'
         });
@@ -645,7 +771,7 @@ class AIService {
       
       // If response is just an apology with no useful content, provide a helpful fallback
       if (isJustApology) {
-        console.log("⚠️ [AI Service] Response is just an apology with no useful content - providing fallback");
+        console.log(" [AI Service] Response is just an apology with no useful content - providing fallback");
         
         // Try to provide context-based help
         if (context && context.screen) {
@@ -756,7 +882,7 @@ class AIService {
 
     // If we have real tool data, ensure it's the primary data
     if (source.includes('tool_result') && data && Object.keys(data).length > 0) {
-      console.log("[AI Service] ✅ Using real tool data as primary data source");
+      console.log("[AI Service]  Using real tool data as primary data source");
       
       // Ensure text is appropriate for the real data
       if (!text || text.trim() === '') {
@@ -767,10 +893,10 @@ class AIService {
       source = "verified_tool_result";
       warning = undefined; // Clear any warnings since we have real data
     } else if (source === 'llm_general_knowledge') {
-      console.log("[AI Service] ⚠️ Response is general knowledge - no financial data");
+      console.log("[AI Service]  Response is general knowledge - no financial data");
       warning = "This response is based on general knowledge and may not be specific to your financial data";
     } else if (!source.includes('tool_result')) {
-      console.warn("[AI Service] ⚠️ Response source unclear - may contain hallucinations");
+      console.warn("[AI Service]  Response source unclear - may contain hallucinations");
       warning = "This response may contain AI-generated content and should be verified";
     }
 
