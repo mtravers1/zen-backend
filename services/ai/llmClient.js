@@ -465,20 +465,18 @@ export async function callLLM({
     }
   });
 
-  // Log validation warnings
-  if (totalLength > 32000) {
+  // Log validation warnings for message length
+  if (messageStats.totalLength > 32000) {
     logWithContext('warn', 'validation', 'VALIDATION WARNING', {
       warning: 'Total message length exceeds recommended limit',
       details: {
-        currentLength: totalLength,
+        currentLength: messageStats.totalLength,
         recommendedMax: 32000,
-        overagePercent: Math.round((totalLength / 32000 - 1) * 100)
+        overagePercent: Math.round((messageStats.totalLength / 32000 - 1) * 100),
+        messageCount: messageStats.total,
+        averageLength: messageStats.averageLength
       }
     });
-  }
-  
-  if (totalMessageLength > 32000) {
-    console.warn('[LLM Process] ⚠️ Total message length is very long, this might cause issues with some models');
   }
   
   let response;
