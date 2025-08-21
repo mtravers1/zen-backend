@@ -422,7 +422,8 @@ export async function callLLM({
     
     console.log(`[AI][callLLM] Starting iteration ${iteration}`);
 
-    for await (const chunk of response) {
+    try {
+      for await (const chunk of response) {
       const delta = chunk.choices?.[0]?.delta;
       const finishReason = chunk.choices?.[0]?.finish_reason;
       
@@ -656,6 +657,31 @@ export async function callLLM({
         console.log("[AI][callLLM] Finish reason: stop");
         break;
       }
+    }
+    } catch (streamError) {
+      console.error('\n❌ [LLM Client] ====== STREAMING ERROR ======');
+      console.error('[LLM Client] Stream error details:', {
+        message: streamError.message,
+        code: streamError.code,
+        type: streamError.type,
+        stack: streamError.stack,
+        fullError: streamError
+      });
+      
+      // Check if this is a function call error and rethrow to be caught by service.js
+      if (streamError.message?.includes('Failed to call a function') || streamError.message?.includes('tool_use_failed')) {
+        console.error('[LLM Client] Function call error detected in streaming, rethrowing...');
+        throw streamError; // Rethrow to be caught by the service layer
+      }
+      
+      // For other streaming errors, return a basic error response
+      return JSON.stringify({
+        text: "I encountered a streaming error while processing your request. Please try again.",
+        data: {},
+        error: true,
+        errorDetails: streamError.message,
+        source: 'streaming_error'
+      });
     }
     
     console.log(`[AI][callLLM] End of iteration ${iteration}. toolCallsRemaining:`, toolCallsRemaining);

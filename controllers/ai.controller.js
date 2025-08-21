@@ -14,6 +14,20 @@ const makeRequest = async (req, res) => {
     const { uid } = req.user || {};
     const { prompt, profileId, messages, screen, dataScreen, context } = req.body || {};
     
+    console.log('\n🔍 [AI Controller] ====== DETAILED INPUT ANALYSIS ======');
+    console.log("[AI Controller] RAW REQUEST BODY:", JSON.stringify(req.body, null, 2));
+    console.log("[AI Controller] RAW USER OBJECT:", JSON.stringify(req.user, null, 2));
+    console.log("[AI Controller] EXTRACTED VALUES:");
+    console.log("  - prompt:", `"${prompt}"`);
+    console.log("  - prompt type:", typeof prompt);
+    console.log("  - prompt length:", prompt ? prompt.length : 0);
+    console.log("  - uid:", `"${uid}"`);
+    console.log("  - profileId:", `"${profileId}"`);
+    console.log("  - messages:", messages);
+    console.log("  - screen:", `"${screen}"`);
+    console.log("  - dataScreen:", `"${dataScreen}"`);
+    console.log("  - context:", JSON.stringify(context, null, 2));
+    
     console.log('\n📋 [AI Controller] ====== REQUEST VALIDATION ======');
     console.log("[AI Controller] Received request:", { 
       uid, 

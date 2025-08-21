@@ -137,7 +137,19 @@ class AIService {
       if (!uid) throw new Error("User ID (uid) is required");
       if (!profileId) throw new Error("Profile ID is required");
 
-      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen, dataScreen, hasContext: !!context, contextKeys: context ? Object.keys(context) : [] });
+      console.log('\n🎯 [AI Service] ====== DETAILED REQUEST LOGGING ======');
+      console.log("[AI Service] Starting request with:", { 
+        uid, 
+        profileId, 
+        hasPrompt: !!prompt, 
+        prompt: prompt, // Log the actual prompt
+        promptLength: prompt ? prompt.length : 0,
+        screen, 
+        dataScreen, 
+        hasContext: !!context, 
+        contextKeys: context ? Object.keys(context) : [],
+        fullContext: context // Log the complete context
+      });
 
       // Log context details if available
       if (context) {
@@ -316,9 +328,17 @@ class AIService {
       const toolsImpl = toolFunctions(toolContext);
 
       console.log('\n🚀 [AI Service] ====== CALLING LLM ======');
-      console.log("[AI] Calling LLM with messages:", messages);
       console.log("[AI Service] User question:", prompt);
       console.log("[AI Service] Screen context:", screen, dataScreen);
+      console.log("[AI Service] Messages being sent to LLM:");
+      messages.forEach((msg, index) => {
+        console.log(`  [${index}] Role: ${msg.role}`);
+        console.log(`  [${index}] Content length: ${msg.content ? msg.content.length : 0}`);
+        console.log(`  [${index}] Content preview: ${msg.content ? msg.content.substring(0, 200) + '...' : 'No content'}`);
+        if (msg.content && msg.content.length < 500) {
+          console.log(`  [${index}] Full content: ${msg.content}`);
+        }
+      });
       
       // Log message details for debugging
       console.log('[AI Service] Message details:', {
@@ -411,8 +431,17 @@ class AIService {
         });
         
         // Check if this is a function call error and try fallback without tools
+        console.log('\n🔍 [AI Service] ====== ERROR ANALYSIS ======');
+        console.log('[AI Service] Error message:', error.message);
+        console.log('[AI Service] Error stack:', error.stack);
+        console.log('[AI Service] Full error object:', JSON.stringify(error, null, 2));
+        console.log('[AI Service] Checking for function call error...');
+        console.log('[AI Service] Contains "Failed to call a function":', error.message?.includes('Failed to call a function'));
+        console.log('[AI Service] Contains "tool_use_failed":', error.message?.includes('tool_use_failed'));
+        
         if (error.message?.includes('Failed to call a function') || error.message?.includes('tool_use_failed')) {
           console.log('\n🔄 [AI Service] ====== TRYING FALLBACK WITHOUT TOOLS ======');
+          console.log('[AI Service] Function call error detected, activating fallback mode');
           
           try {
             // Create a simplified prompt without tools
@@ -426,6 +455,12 @@ class AIService {
                 content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nPlease respond in JSON format with this structure: {"response": "your answer", "data": null, "source": "general_response", "error": false}` 
               }
             ];
+            
+            console.log('[AI Service] Fallback messages prepared:');
+            simplifiedMessages.forEach((msg, index) => {
+              console.log(`  [${index}] Role: ${msg.role}`);
+              console.log(`  [${index}] Content: ${msg.content}`);
+            });
             
             completeResponse = await callLLM({
               apiKey: this.GROQ_API_KEY,
