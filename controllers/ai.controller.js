@@ -12,7 +12,7 @@ const makeRequest = async (req, res) => {
   
   try {
     const { uid } = req.user || {};
-    const { prompt, profileId, messages, screen, dataScreen } = req.body || {};
+    const { prompt, profileId, messages, screen, dataScreen, context } = req.body || {};
     
     console.log('\n📋 [AI Controller] ====== REQUEST VALIDATION ======');
     console.log("[AI Controller] Received request:", { 
@@ -24,6 +24,8 @@ const makeRequest = async (req, res) => {
       messagesCount: messages ? messages.length : 0,
       screen,
       dataScreen,
+      hasContext: !!context,
+      contextKeys: context ? Object.keys(context) : [],
       bodyKeys: req.body ? Object.keys(req.body) : [],
       bodySize: req.body ? JSON.stringify(req.body).length : 0,
       userKeys: req.user ? Object.keys(req.user) : [],
@@ -78,7 +80,8 @@ const makeRequest = async (req, res) => {
       messages || [],
       screen,
       null, // Don't pass res object to avoid circular references
-      dataScreen
+      dataScreen,
+      context || {} // Pass context to AI service
     );
     
     console.log('\n📥 [AI Controller] ====== AI SERVICE RESPONSE ======');

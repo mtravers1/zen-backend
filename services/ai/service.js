@@ -47,7 +47,8 @@ class AIService {
     incomingMessages,
     screen,
     res = null,
-    dataScreen
+    dataScreen,
+    context = {}
   ) {
     try {
       // Validate required parameters
@@ -249,8 +250,8 @@ class AIService {
         }
       }
 
-      // Enhanced response processing with LLM self-evaluation
-      const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId);
+             // Enhanced response processing with LLM self-evaluation
+       const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId, context);
 
       // Handle streaming responses if res is provided
       if (res && processedResponse) {
@@ -308,16 +309,175 @@ class AIService {
     try {
       console.log("🔍 [AI Service] Processing LLM response with self-evaluation");
       
+      // Check if response contains unnecessary apologies or cut-off mentions
+      const hasUnnecessaryApologies = (
+        llmResponse.response.includes('I apologize') ||
+        llmResponse.response.includes('I\'m sorry') ||
+        llmResponse.response.includes('my response was cut off') ||
+        llmResponse.response.includes('Please try asking your question again') ||
+        llmResponse.response.includes('response was cut') ||
+        llmResponse.includes('cut off')
+      );
+      
+      // Check if response actually has useful content
+      const hasUsefulContent = (
+        // Financial data indicators
+        llmResponse.response.includes('$') ||
+        llmResponse.response.includes('net worth') ||
+        llmResponse.response.includes('balance') ||
+        llmResponse.response.includes('transactions') ||
+        llmResponse.response.includes('accounts') ||
+        llmResponse.response.includes('assets') ||
+        llmResponse.response.includes('liabilities') ||
+        llmResponse.response.includes('income') ||
+        llmResponse.response.includes('expenses') ||
+        llmResponse.response.includes('savings') ||
+        llmResponse.response.includes('investments') ||
+        llmResponse.response.includes('debt') ||
+        llmResponse.response.includes('credit') ||
+        llmResponse.response.includes('cash') ||
+        llmResponse.response.includes('bank') ||
+        // Numeric data
+        /\d+/.test(llmResponse.response) ||
+        // Data arrays
+        (llmResponse.data && Array.isArray(llmResponse.data) && llmResponse.data.length > 0) ||
+        // Specific financial terms
+        llmResponse.response.includes('portfolio') ||
+        llmResponse.response.includes('budget') ||
+        llmResponse.response.includes('spending') ||
+        llmResponse.response.includes('revenue') ||
+        llmResponse.response.includes('profit') ||
+        llmResponse.response.includes('loss')
+      );
+      
+      // If response has useful content but contains unnecessary apologies, clean it up
+      if (hasUsefulContent && hasUnnecessaryApologies) {
+        console.log("⚠️ [AI Service] Response has useful content but unnecessary apologies - cleaning up");
+        
+        // Remove the apology part and keep only the useful content
+        let cleanedResponse = llmResponse.response;
+        
+        // Remove common apology patterns
+        const apologyPatterns = [
+          /I apologize,? but my response was cut off\.? Please try asking your question again\.?/i,
+          /I'm sorry,? but my response was cut off\.? Please try asking your question again\.?/i,
+          /my response was cut off\.? Please try asking your question again\.?/i,
+          /response was cut off\.? Please try asking your question again\.?/i,
+          /cut off\.? Please try asking your question again\.?/i,
+          /Please try asking your question again\.?/i,
+          /I apologize,? but my response was cut off\.?/i,
+          /I'm sorry,? but my response was cut off\.?/i,
+          /my response was cut off\.?/i,
+          /response was cut off\.?/i
+        ];
+        
+        // Apply each pattern to clean the response
+        apologyPatterns.forEach(pattern => {
+          cleanedResponse = cleanedResponse.replace(pattern, '');
+        });
+        
+        // Clean up any double spaces or periods that might be left
+        cleanedResponse = cleanedResponse
+          .replace(/\s{2,}/g, ' ')  // Replace multiple spaces with single space
+          .replace(/\.{2,}/g, '.')  // Replace multiple periods with single period
+          .replace(/\s+\./g, '.')   // Remove spaces before periods
+          .trim();
+        
+        console.log("✅ [AI Service] Cleaned response:", {
+          original: llmResponse.response.substring(0, 100) + '...',
+          cleaned: cleanedResponse.substring(0, 100) + '...'
+        });
+        
+        // Return cleaned response
+        return {
+          ...llmResponse,
+          response: cleanedResponse
+        };
+      }
+      
       // Check if response needs quality evaluation
       const needsEvaluation = (
         !llmResponse.data || 
         (Array.isArray(llmResponse.data) && llmResponse.data.length === 0) ||
         llmResponse.response.includes('no data') ||
         llmResponse.response.includes('empty data') ||
-        llmResponse.response.includes('Profile not found') ||
+        llmResponse.response.includes('Response has no data') ||
+        llmResponse.response.includes('Response source unclear') ||
+        llmResponse.response.includes('may contain hallucinations') ||
         llmResponse.response.includes('unclear') ||
-        llmResponse.response.includes('hallucinations')
+        llmResponse.response.includes('hallucinations') ||
+        llmResponse.response.includes('Profile not found') ||
+        llmResponse.response.includes('profile not found') ||
+        llmResponse.response.includes('returning empty result instead of error')
       );
+      
+      // Check if this is a context question that doesn't need financial data
+      const isContextQuestion = (
+        userMessage.toLowerCase().includes('what screen') ||
+        userMessage.toLowerCase().includes('which screen') ||
+        userMessage.toLowerCase().includes('where am i') ||
+        userMessage.toLowerCase().includes('current screen') ||
+        userMessage.toLowerCase().includes('what page') ||
+        userMessage.toLowerCase().includes('which page') ||
+        userMessage.toLowerCase().includes('current page') ||
+        userMessage.toLowerCase().includes('what tab') ||
+        userMessage.toLowerCase().includes('which tab') ||
+        userMessage.toLowerCase().includes('current tab') ||
+        userMessage.toLowerCase().includes('what time') ||
+        userMessage.toLowerCase().includes('current time') ||
+        userMessage.toLowerCase().includes('what day') ||
+        userMessage.toLowerCase().includes('current day') ||
+        userMessage.toLowerCase().includes('device info') ||
+        userMessage.toLowerCase().includes('app version') ||
+        userMessage.toLowerCase().includes('platform')
+      );
+      
+      // If it's a context question and the response is inadequate, provide context-based answer
+      if (isContextQuestion && needsEvaluation) {
+        console.log("🔍 [AI Service] Context question detected - providing context-based answer");
+        
+        // Use the actual context from frontend
+        const currentScreen = context.screen?.currentScreen || 'dashboard';
+        const dataScreen = context.screen?.dataScreen || 'overview';
+        const platform = context.device?.platform || 'mobile';
+        const appVersion = context.device?.appVersion || 'unknown';
+        const timezone = context.time?.timezone || 'UTC';
+        
+        let contextResponse = '';
+        
+        if (userMessage.toLowerCase().includes('screen')) {
+          contextResponse = `You are currently on the **${currentScreen}** screen`;
+          if (dataScreen && dataScreen !== currentScreen) {
+            contextResponse += ` with the **${dataScreen}** view active`;
+          }
+          contextResponse += '.';
+        } else if (userMessage.toLowerCase().includes('time')) {
+          const now = new Date();
+          contextResponse = `The current time is **${now.toLocaleTimeString()}**`;
+          if (timezone) {
+            contextResponse += ` (${timezone})`;
+          }
+          contextResponse += '.';
+        } else if (userMessage.toLowerCase().includes('day')) {
+          const now = new Date();
+          contextResponse = `Today is **${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}**.`;
+        } else if (userMessage.toLowerCase().includes('device') || userMessage.toLowerCase().includes('platform')) {
+          contextResponse = `You're using the **Zentavos mobile app** (version ${appVersion}) on a **${platform}** device.`;
+        } else {
+          contextResponse = `You are currently on the **${currentScreen}** screen. This is the main dashboard where you can view your financial overview.`;
+        }
+        
+        console.log("✅ [AI Service] Context response generated:", contextResponse);
+        
+        return {
+          response: contextResponse,
+          data: null,
+          error: false,
+          errorMessage: null,
+          needsClarification: false,
+          suggestedQuestions: []
+        };
+      }
       
       if (needsEvaluation) {
         console.log("⚠️ [AI Service] Response needs quality evaluation - asking LLM to self-assess");
