@@ -343,9 +343,17 @@ class AIService {
         };
       }
       
-      // Ensure response property exists
-      if (!llmResponse.response || typeof llmResponse.response !== 'string') {
-        console.error("❌ [AI Service] Missing or invalid response property:", llmResponse.response);
+      // Ensure response property exists - support both 'text' and 'response' properties
+      const responseText = llmResponse.response || llmResponse.text;
+      if (!responseText || typeof responseText !== 'string') {
+        console.error("❌ [AI Service] Missing or invalid response property:", {
+          hasResponse: !!llmResponse.response,
+          hasText: !!llmResponse.text,
+          responseType: typeof llmResponse.response,
+          textType: typeof llmResponse.text,
+          responseValue: llmResponse.response,
+          textValue: llmResponse.text
+        });
         return {
           response: "I encountered an issue processing your request. Please try again.",
           data: null,
@@ -356,54 +364,60 @@ class AIService {
         };
       }
       
+      // Normalize the response structure to use 'response' property
+      const normalizedResponse = {
+        ...llmResponse,
+        response: responseText
+      };
+      
       // Check if response contains unnecessary apologies or cut-off mentions
       const hasUnnecessaryApologies = (
-        llmResponse.response.includes('I apologize') ||
-        llmResponse.response.includes('I\'m sorry') ||
-        llmResponse.response.includes('my response was cut off') ||
-        llmResponse.response.includes('Please try asking your question again') ||
-        llmResponse.response.includes('response was cut') ||
-        llmResponse.response.includes('cut off') ||
-        llmResponse.response.includes('apologize') ||
-        llmResponse.response.includes('sorry')
+        normalizedResponse.response.includes('I apologize') ||
+        normalizedResponse.response.includes('I\'m sorry') ||
+        normalizedResponse.response.includes('my response was cut off') ||
+        normalizedResponse.response.includes('Please try asking your question again') ||
+        normalizedResponse.response.includes('response was cut') ||
+        normalizedResponse.response.includes('cut off') ||
+        normalizedResponse.response.includes('apologize') ||
+        normalizedResponse.response.includes('sorry')
       );
       
       // Check if response actually has useful content
       const hasUsefulContent = (
         // Financial data indicators
-        llmResponse.response.includes('$') ||
-        llmResponse.response.includes('net worth') ||
-        llmResponse.response.includes('balance') ||
-        llmResponse.response.includes('transactions') ||
-        llmResponse.response.includes('accounts') ||
-        llmResponse.response.includes('assets') ||
-        llmResponse.response.includes('liabilities') ||
-        llmResponse.response.includes('income') ||
-        llmResponse.response.includes('expenses') ||
-        llmResponse.response.includes('savings') ||
-        llmResponse.response.includes('investments') ||
-        llmResponse.response.includes('debt') ||
-        llmResponse.response.includes('credit') ||
-        llmResponse.response.includes('cash') ||
-        llmResponse.response.includes('bank') ||
+        normalizedResponse.response.includes('$') ||
+        normalizedResponse.response.includes('net worth') ||
+        normalizedResponse.response.includes('balance') ||
+        normalizedResponse.response.includes('transactions') ||
+        normalizedResponse.response.includes('accounts') ||
+        normalizedResponse.response.includes('assets') ||
+        normalizedResponse.response.includes('liabilities') ||
+        normalizedResponse.response.includes('income') ||
+        normalizedResponse.response.includes('expenses') ||
+        normalizedResponse.response.includes('savings') ||
+        normalizedResponse.response.includes('investments') ||
+        normalizedResponse.response.includes('debt') ||
+        normalizedResponse.response.includes('credit') ||
+        normalizedResponse.response.includes('cash') ||
+        normalizedResponse.response.includes('bank') ||
         // Numeric data
-        /\d+/.test(llmResponse.response) ||
+        /\d+/.test(normalizedResponse.response) ||
         // Data arrays
-        (llmResponse.data && Array.isArray(llmResponse.data) && llmResponse.data.length > 0) ||
+        (normalizedResponse.data && Array.isArray(normalizedResponse.data) && normalizedResponse.data.length > 0) ||
         // Specific financial terms
-        llmResponse.response.includes('portfolio') ||
-        llmResponse.response.includes('budget') ||
-        llmResponse.response.includes('spending') ||
-        llmResponse.response.includes('revenue') ||
-        llmResponse.response.includes('profit') ||
-        llmResponse.response.includes('loss')
+        normalizedResponse.response.includes('portfolio') ||
+        normalizedResponse.response.includes('budget') ||
+        normalizedResponse.response.includes('spending') ||
+        normalizedResponse.response.includes('revenue') ||
+        normalizedResponse.response.includes('profit') ||
+        normalizedResponse.response.includes('loss')
       );
       
       // If response has useful content but contains unnecessary apologies, clean it up
       if (hasUsefulContent && hasUnnecessaryApologies) {
         console.log("⚠️ [AI Service] Response has useful content but unnecessary apologies - cleaning up");
         
-        let cleanedResponse = llmResponse.response;
+        let cleanedResponse = normalizedResponse.response;
         
         // Remove common apology patterns - more aggressive cleaning
         const apologyPatterns = [
@@ -447,31 +461,31 @@ class AIService {
         cleanedResponse = cleanedResponse.replace(/[,.]$/, '');
         
         console.log("✅ [AI Service] Cleaned response:", {
-          original: llmResponse.response.substring(0, 100) + '...',
+          original: normalizedResponse.response.substring(0, 100) + '...',
           cleaned: cleanedResponse.substring(0, 100) + '...'
         });
         
         // Return cleaned response
         return {
-          ...llmResponse,
+          ...normalizedResponse,
           response: cleanedResponse
         };
       }
       
       // Check if response needs quality evaluation
       const needsEvaluation = (
-        !llmResponse.data || 
-        (Array.isArray(llmResponse.data) && llmResponse.data.length === 0) ||
-        llmResponse.response.includes('no data') ||
-        llmResponse.response.includes('empty data') ||
-        llmResponse.response.includes('Response has no data') ||
-        llmResponse.response.includes('Response source unclear') ||
-        llmResponse.response.includes('may contain hallucinations') ||
-        llmResponse.response.includes('unclear') ||
-        llmResponse.response.includes('hallucinations') ||
-        llmResponse.response.includes('Profile not found') ||
-        llmResponse.response.includes('profile not found') ||
-        llmResponse.response.includes('returning empty result instead of error')
+        !normalizedResponse.data || 
+        (Array.isArray(normalizedResponse.data) && normalizedResponse.data.length === 0) ||
+        normalizedResponse.response.includes('no data') ||
+        normalizedResponse.response.includes('empty data') ||
+        normalizedResponse.response.includes('Response has no data') ||
+        normalizedResponse.response.includes('Response source unclear') ||
+        normalizedResponse.response.includes('may contain hallucinations') ||
+        normalizedResponse.response.includes('unclear') ||
+        normalizedResponse.response.includes('hallucinations') ||
+        normalizedResponse.response.includes('Profile not found') ||
+        normalizedResponse.response.includes('profile not found') ||
+        normalizedResponse.response.includes('returning empty result instead of error')
       );
       
       // Check if this is a context question that doesn't need financial data
@@ -550,8 +564,8 @@ class AIService {
 You are an AI assistant that just provided a response to a user. Please evaluate your response and provide a better one if needed.
 
 USER QUESTION: "${userMessage}"
-YOUR CURRENT RESPONSE: "${llmResponse.response}"
-CURRENT DATA: ${JSON.stringify(llmResponse.data)}
+YOUR CURRENT RESPONSE: "${normalizedResponse.response}"
+CURRENT DATA: ${JSON.stringify(normalizedResponse.data)}
 
 EVALUATION CRITERIA:
 1. Does your response actually answer the user's question?
@@ -579,15 +593,15 @@ RESPONSE FORMAT:
 
         // Get LLM to evaluate its own response
         const evaluationResponse = await callLLM(evaluationPrompt, profileId, [], 'evaluation');
-        
+
         if (evaluationResponse && evaluationResponse.response) {
           try {
             const evaluated = JSON.parse(evaluationResponse.response);
             console.log("✅ [AI Service] LLM self-evaluation completed:", evaluated);
-            
+
             // Return the improved response
             return {
-              response: evaluated.response || llmResponse.response,
+              response: evaluated.response || normalizedResponse.response,
               data: evaluated.data || null,
               error: evaluated.error || false,
               errorMessage: evaluated.errorMessage || null,
@@ -598,9 +612,9 @@ RESPONSE FORMAT:
             console.warn("⚠️ [AI Service] Failed to parse LLM self-evaluation, using fallback");
           }
         }
-        
+
         // Fallback: Provide a helpful response based on the issue
-        if (!llmResponse.data || (Array.isArray(llmResponse.data) && llmResponse.data.length === 0)) {
+        if (!normalizedResponse.data || (Array.isArray(normalizedResponse.data) && normalizedResponse.data.length === 0)) {
           return {
             response: `I couldn't find the specific data you're looking for. This might be because:\n\n• Your question is too broad - try being more specific\n• The data doesn't exist yet in your account\n• There might be a temporary issue\n\nTry asking something like:\n• "Show me my transactions from this month"\n• "What's my current account balance?"\n• "List my recent purchases"`,
             data: null,
@@ -615,9 +629,9 @@ RESPONSE FORMAT:
           };
         }
       }
-      
-      // If no evaluation needed, return original response
-      return llmResponse;
+
+      // If no evaluation needed, return normalized response
+      return normalizedResponse;
       
     } catch (error) {
       console.error("❌ [AI Service] Error in LLM response processing:", error);
