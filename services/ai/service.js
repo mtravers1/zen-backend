@@ -249,7 +249,7 @@ class AIService {
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nIMPORTANT: Follow the two-phase workflow:\n1. Use tools if needed (wait for results)\n2. Return ONLY a JSON response (never use <tool-use> tags)\n\nRespond in the exact JSON format specified in the system prompt.` },
+        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nRespond in JSON format as specified.` },
       ];
 
       // Check total prompt length to prevent LLM confusion
@@ -412,160 +412,45 @@ class AIService {
         };
       }
 
-      // Validate and correct the LLM response if needed
+      // Simple JSON parsing
       let parsedResponse;
-      if (isValidJSON(completeResponse)) {
-        try {
+      try {
+        if (completeResponse.trim().startsWith('{')) {
           parsedResponse = JSON.parse(completeResponse);
-        } catch (parseError) {
-          console.error("[AI Service] JSON parsing failed despite validation:", parseError.message);
-          console.log("[AI Service] Failed response content:", completeResponse);
-          
-          // Try to clean and parse again
-          parsedResponse = await getCorrectedJsonResponse({
-            invalidJson: completeResponse,
-            groqClient: this.groqClient,
-            model: this.GROQ_AI_MODEL,
-          });
-        }
-      } else {
-        console.warn("[AI Service] Response is not valid JSON, attempting correction");
-        parsedResponse = await getCorrectedJsonResponse({
-          invalidJson: completeResponse,
-          groqClient: this.groqClient,
-          model: this.GROQ_AI_MODEL,
-        });
-      }
-
-      console.log('\n🔍 [AI Service] ====== VALIDATING RESPONSE ======');
-      
-      // Check for cut-off responses
-      if (parsedResponse.text && (
-        parsedResponse.text.includes('cut off') || 
-        parsedResponse.text.includes('response was cut') || 
-        parsedResponse.text.includes('my response was cut') ||
-        parsedResponse.text.includes('I apologize, but my response was cut off')
-      )) {
-        console.warn('[AI Service] 🚨 CUT-OFF RESPONSE DETECTED in parsed response');
-        
-        // Try to fix the response by removing the cut-off part
-        const fixedText = parsedResponse.text.split(/cut off|response was cut|my response was cut|I apologize, but my response was cut off/i)[0].trim();
-        
-        if (fixedText && fixedText.length > 10) {
-          console.log('[AI Service]  Fixed cut-off response:', fixedText.substring(0, 100) + '...');
-          parsedResponse.text = fixedText;
         } else {
-          console.warn('[AI Service]  Could not fix cut-off response, using fallback');
-          parsedResponse.text = "I'm sorry, I encountered an issue with my response. Please try asking your question again.";
-          parsedResponse.error = true;
+          // If not JSON, create a simple response
+          parsedResponse = {
+            response: completeResponse,
+            data: null,
+            source: "general_response",
+            error: false
+          };
         }
-      }
-      
-      // CRITICAL: Validate response structure and data
-      console.log('\n🔍 [AI Service] ====== VALIDATING RESPONSE ======');
-      
-      // Step 1: Validate basic structure
-      const structureValidation = {
-        hasResponse: !!parsedResponse?.response,
-        hasData: !!parsedResponse?.data,
-        hasSource: !!parsedResponse?.source,
-        dataType: typeof parsedResponse?.data,
-        sourceType: typeof parsedResponse?.source,
-        isDataArray: Array.isArray(parsedResponse?.data)
-      };
-      console.log("[AI Service] Structure validation:", structureValidation);
-
-      // Step 2: Validate data content
-      if (parsedResponse?.data) {
-        const dataValidation = {
-          isEmpty: Array.isArray(parsedResponse.data) ? parsedResponse.data.length === 0 : Object.keys(parsedResponse.data).length === 0,
-          isValidJSON: true,
-          hasExpectedFields: false,
-          dataType: typeof parsedResponse.data
+      } catch (parseError) {
+        console.error("[AI Service] JSON parsing failed:", parseError.message);
+        
+        // Create fallback response
+        parsedResponse = {
+          response: "I encountered an issue processing your request. Please try again.",
+          data: null,
+          source: "error_fallback",
+          error: true,
+          errorMessage: parseError.message
         };
-
-        // Validate data is proper JSON
-        try {
-          if (typeof parsedResponse.data === 'string') {
-            parsedResponse.data = JSON.parse(parsedResponse.data);
-          }
-          
-          // Check for expected fields based on tool type
-          if (parsedResponse.source === 'tool_result') {
-            // Check for common financial data fields
-            const expectedFields = ['netWorth', 'balance', 'amount', 'transactions', 'accounts'];
-            dataValidation.hasExpectedFields = expectedFields.some(field => 
-              parsedResponse.data[field] !== undefined || 
-              (Array.isArray(parsedResponse.data) && parsedResponse.data[0]?.[field] !== undefined)
-            );
-          }
-        } catch (error) {
-          dataValidation.isValidJSON = false;
-          console.error("[AI Service] Data validation error:", error);
-        }
-
-        console.log("[AI Service] Data validation:", dataValidation);
-
-        // Check if data matches expected format
-        if (!dataValidation.isEmpty && dataValidation.isValidJSON) {
-          if (parsedResponse.source === 'tool_result') {
-            // Verify tool data integrity
-            const hasValidData = typeof parsedResponse.data === 'object' && 
-                               (Object.keys(parsedResponse.data).length > 0 || 
-                               (Array.isArray(parsedResponse.data) && parsedResponse.data.length > 0));
-            
-            if (hasValidData) {
-              console.log("[AI Service]  Response contains verified tool data");
-              
-              // Ensure data is properly structured
-              if (Array.isArray(parsedResponse.data)) {
-                // If array, each item should be an object
-                parsedResponse.data = parsedResponse.data.map(item => 
-                  typeof item === 'object' ? item : { value: item }
-                );
-              } else if (typeof parsedResponse.data !== 'object') {
-                // If not object, wrap in object
-                parsedResponse.data = { value: parsedResponse.data };
-              }
-            } else {
-              console.warn("[AI Service]  Tool data invalid or empty");
-              parsedResponse.warning = "Tool data validation failed";
-              parsedResponse.source = 'tool_result_error';
-            }
-          }
-        } else {
-          console.warn("[AI Service]  Data field is empty or invalid");
-          parsedResponse.warning = dataValidation.isValidJSON ? 
-            "Response data is empty" : 
-            "Response data is not valid JSON";
-          parsedResponse.source = 'tool_result_error';
-        }
-      } else if (parsedResponse) {
-        // No data field but response exists
-        if (!parsedResponse.source) {
-          // Determine appropriate source based on content
-          parsedResponse.source = this.determineResponseSource(parsedResponse.response);
-          console.log("[AI Service] Determined source:", parsedResponse.source);
-        }
       }
 
-      // Step 3: Final validation
-      if (parsedResponse) {
-        const finalValidation = {
-          isValid: !!parsedResponse.response && (
-            !parsedResponse.data || 
-            (parsedResponse.data && parsedResponse.source === 'tool_result')
-          ),
-          source: parsedResponse.source,
-          hasWarning: !!parsedResponse.warning,
-          responseLength: parsedResponse.response?.length
-        };
-        console.log("[AI Service] Final validation:", finalValidation);
-
-        if (!finalValidation.isValid) {
-          console.warn("[AI Service]  Response validation failed");
-          parsedResponse.warning = "Response validation failed - data may be unreliable";
-        }
+      // Basic response validation
+      console.log('\n🔍 [AI Service] ====== RESPONSE READY ======');
+      
+      // Ensure basic structure
+      if (!parsedResponse.response && !parsedResponse.text) {
+        parsedResponse.response = "I couldn't generate a proper response. Please try again.";
+        parsedResponse.error = true;
+      }
+      
+      // Set source if missing
+      if (!parsedResponse.source) {
+        parsedResponse.source = parsedResponse.data ? 'tool_result' : 'general_response';
       }
 
       // Enhanced response processing with LLM self-evaluation
@@ -1003,161 +888,44 @@ class AIService {
 
   /**
    * Normalizes the response structure to ensure mobile compatibility
-   * @param {object} parsedResponse - The parsed LLM response
-   * @param {string} completeResponse - The complete raw response
-   * @returns {object} Normalized response object
    */
   normalizeResponse(parsedResponse, completeResponse) {
-    // If no parsed response, create a fallback
     if (!parsedResponse) {
-      console.warn("[AI Service] No parsed response available, creating fallback");
       return {
         text: "I'm having trouble processing your request. Please try again.",
         response: "I'm having trouble processing your request. Please try again.",
         data: {},
         error: true,
         errorMessage: "Failed to parse AI response",
-        source: "normalization_fallback",
-        needsClarification: false,
-        suggestedQuestions: []
+        source: "error_fallback"
       };
     }
 
-    // CRITICAL: Always prioritize real tool data over any other data
-    let text = parsedResponse.text || parsedResponse.response || "";
-    let data = parsedResponse.data || {};
-    let error = parsedResponse.error || false;
-    let errorMessage = parsedResponse.errorMessage || undefined;
-    let source = parsedResponse.source || "unknown";
-    let warning = parsedResponse.warning || undefined;
-
-    // If we have real tool data, ensure it's the primary data
-    if (source.includes('tool_result') && data && Object.keys(data).length > 0) {
-      console.log("[AI Service]  Using real tool data as primary data source");
-      
-      // Ensure text is appropriate for the real data
-      if (!text || text.trim() === '') {
-        text = "Here is your requested information based on your actual financial data.";
-      }
-      
-      // Mark this as verified real data
-      source = "verified_tool_result";
-      warning = undefined; // Clear any warnings since we have real data
-    } else if (source === 'llm_general_knowledge') {
-      console.log("[AI Service]  Response is general knowledge - no financial data");
-      warning = "This response is based on general knowledge and may not be specific to your financial data";
-    } else if (!source.includes('tool_result')) {
-      console.warn("[AI Service]  Response source unclear - may contain hallucinations");
-      warning = "This response may contain AI-generated content and should be verified";
-    }
-
-    // Validate data structure
-    if (data && typeof data === 'object') {
-      // Check for common data corruption issues
-      const dataKeys = Object.keys(data);
-      if (dataKeys.length > 0) {
-        // Validate that data values are not corrupted
-        for (const [key, value] of Object.entries(data)) {
-          if (value === null || value === undefined) {
-            console.warn(`[AI Service] Data field '${key}' has null/undefined value, removing to prevent corruption`);
-            delete data[key];
-          }
-        }
-      }
-    }
-
-    // If we have no text but have data, create a default text
-    if (!text && data && Object.keys(data).length > 0) {
-      text = "Here is your requested information.";
-    }
-
-    // If we still have no text, provide a fallback
+    // Get the main response text
+    let text = parsedResponse.response || parsedResponse.text || "";
+    
+    // Ensure we have some response
     if (!text) {
-      if (error) {
-        text = errorMessage || "An error occurred while processing your request.";
-      } else {
-        text = "I've processed your request but couldn't provide a specific response.";
-      }
+      text = parsedResponse.error ? 
+        (parsedResponse.errorMessage || "An error occurred.") : 
+        "I processed your request.";
     }
 
-    // Clean up the text to remove any remaining "unknown" or empty references
-    if (text) {
-      // First, check if this is a general financial question that shouldn't mention screens
-      const generalFinancialIndicators = [
-        'how can i save',
-        'how to save',
-        'how do i save',
-        'how to budget',
-        'how do i budget',
-        'what is budgeting',
-        'how to invest',
-        'how do i invest',
-        'what is a 401k',
-        'what is investing',
-        'how to reduce expenses',
-        'how do i reduce expenses',
-        'financial advice',
-        'money saving tips',
-        'budgeting tips',
-        'investment advice'
-      ];
-      
-      const isGeneralFinancialQuestion = generalFinancialIndicators.some(indicator => 
-        text.toLowerCase().includes(indicator.toLowerCase())
-      );
-      
-      if (isGeneralFinancialQuestion) {
-        // For general financial questions, remove any screen references completely
-        text = text
-          .replace(/with the \*\*.*?\*\* view active/g, '')
-          .replace(/view active\./g, '.')
-          .replace(/view active\?/g, '?')
-          .replace(/view active!/g, '!')
-          .replace(/view active$/g, '')
-          .replace(/on the \*\*.*?\*\* screen/g, '')
-          .replace(/You are currently on the \*\*.*?\*\* screen/g, '')
-          .replace(/You're currently on the \*\*.*?\*\* screen/g, '')
-          .replace(/You are on the \*\*.*?\*\* screen/g, '')
-          .replace(/You're on the \*\*.*?\*\* screen/g, '')
-          .replace(/\*\*.*?\*\*/g, '')
-          .replace(/\s{2,}/g, ' ')
-          .trim();
-      } else {
-        // For other questions, use the existing cleanup logic
-        text = text
-          .replace(/with the \*\*unknown\*\* view active/g, '')
-          .replace(/with the \*\*overview\*\* view active/g, '')
-          .replace(/view active\./g, '.')
-          .replace(/view active\?/g, '?')
-          .replace(/view active!/g, '!')
-          .replace(/view active$/g, '')
-          .replace(/on the \*\*unknown\*\* screen/g, 'on the dashboard screen')
-          .replace(/on the \*\*overview\*\* screen/g, 'on the dashboard screen')
-          .replace(/\*\*unknown\*\*/g, '')
-          .replace(/\*\*overview\*\*/g, '')
-          .replace(/\s{2,}/g, ' ')
-          .trim();
-      }
-      
-      // Remove trailing punctuation that might be left after cleanup
-      text = text.replace(/[,.]$/, '');
-    }
-
-    // Ensure data is always an object or array
+    // Ensure data is always an object
+    let data = parsedResponse.data;
     if (data === null || data === undefined) {
       data = {};
     }
 
     return {
       text,
-      response: text, // Ensure both text and response exist
+      response: text,
       data,
-      error,
-      errorMessage,
-      source,
-      warning,
+      error: parsedResponse.error || false,
+      errorMessage: parsedResponse.errorMessage || null,
+      source: parsedResponse.source || "general_response",
       needsClarification: false,
-      suggestedQuestions: []
+      suggestedQuestions: parsedResponse.suggestedQuestions || []
     };
   }
 

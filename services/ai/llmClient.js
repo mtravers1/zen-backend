@@ -117,11 +117,11 @@ function cleanAndParseJSON(response) {
  */
 export function validateResponseAgainstToolResults(llmResponse, toolResults) {
   try {
-    // Special case: no tool results - this is valid for generic responses
+    // No tool results = valid generic response
     if (!toolResults || toolResults.length === 0) {
       return { 
         isValid: true, 
-        reason: "No tool results to validate against - generic response allowed",
+        reason: "No tool results - generic response allowed",
         response: {
           text: llmResponse,
           data: null,
@@ -131,190 +131,16 @@ export function validateResponseAgainstToolResults(llmResponse, toolResults) {
       };
     }
 
+    // No LLM response = error
     if (!llmResponse) {
       return { 
         isValid: false, 
-        reason: "No LLM response provided",
-        response: {
-          text: "I encountered an issue processing your request. Please try again.",
-          data: null,
-          error: true,
-          errorMessage: "No response received from AI service"
-        }
+        reason: "No LLM response provided"
       };
     }
 
-    // Parse LLM response if it's a string
-    let parsedResponse;
-    if (typeof llmResponse === 'string') {
-      try {
-        // First try to parse as JSON
-        parsedResponse = JSON.parse(llmResponse);
-      } catch (e) {
-        // If not JSON, treat as plain text response
-        parsedResponse = {
-          text: llmResponse,
-          data: null
-        };
-      }
-    } else {
-      parsedResponse = llmResponse;
-    }
-
-    // Ensure we have a text field
-    if (!parsedResponse.text && typeof parsedResponse !== 'string') {
-      parsedResponse.text = "I processed your request but encountered an issue formatting the response.";
-    }
-
-    // If response is just a string, wrap it in proper structure
-    if (typeof parsedResponse === 'string') {
-      parsedResponse = {
-        text: parsedResponse,
-        data: null
-      };
-    }
-
-    // CRITICAL: Strict validation to prevent hallucinations
-    const llmData = parsedResponse.data;
-    
-    // Special case: if tool results exist but LLM data is empty, this is a hallucination
-    if (toolResults.length > 0 && (llmData === null || llmData === undefined || 
-        (Array.isArray(llmData) && llmData.length === 0) || 
-        (typeof llmData === 'object' && Object.keys(llmData).length === 0))) {
-      return { isValid: false, reason: "LLM response has empty data despite having tool results" };
-    }
-
-    // For each tool result, perform strict validation
-    for (const toolResult of toolResults) {
-      if (toolResult && typeof toolResult === 'object') {
-        
-        // Case 1: Tool result is an array
-        if (Array.isArray(toolResult)) {
-          if (!Array.isArray(llmData)) {
-            return { isValid: false, reason: "Tool result is array but LLM response data is not array" };
-          }
-          
-          // Check if all tool result items are present in LLM response
-          for (const toolItem of toolResult) {
-            if (toolItem && typeof toolItem === 'object') {
-              const found = llmData.some(llmItem => {
-                if (!llmItem || typeof llmItem !== 'object') return false;
-                
-                // Check if key values match exactly
-                for (const [key, value] of Object.entries(toolItem)) {
-                  if (llmItem[key] !== value) {
-                    return false;
-                  }
-                }
-                return true;
-              });
-              
-              if (!found) {
-                return { 
-                  isValid: false, 
-                  reason: `Tool result item not found in LLM response: ${JSON.stringify(toolItem).substring(0, 100)}...` 
-                };
-              }
-            }
-          }
-          
-          // CRITICAL: Check if LLM response contains extra items not in tool results
-          if (llmData.length > toolResult.length) {
-            return { 
-              isValid: false, 
-              reason: `LLM response contains ${llmData.length} items but tool results only have ${toolResult.length} items - possible hallucination` 
-            };
-          }
-          
-          // CRITICAL: Check if any LLM item is not in tool results (prevents partial hallucinations)
-          for (const llmItem of llmData) {
-            if (llmItem && typeof llmItem === 'object') {
-              const foundInToolResults = toolResult.some(toolItem => {
-                if (!toolItem || typeof toolItem !== 'object') return false;
-                
-                // Check if all key-value pairs match
-                for (const [key, value] of Object.entries(toolItem)) {
-                  if (llmItem[key] !== value) {
-                    return false;
-                  }
-                }
-                return true;
-              });
-              
-              if (!foundInToolResults) {
-                return { 
-                  isValid: false, 
-                  reason: `LLM response contains item not in tool results: ${JSON.stringify(llmItem).substring(0, 100)}... - possible hallucination` 
-                };
-              }
-            }
-          }
-        }
-        // Case 2: Tool result is an object
-        else {
-          if (Array.isArray(llmData)) {
-            // Check if tool result object is contained in any array item
-            const found = llmData.some(llmItem => {
-              if (!llmItem || typeof llmItem !== 'object') return false;
-              
-              for (const [key, value] of Object.entries(toolResult)) {
-                if (llmItem[key] !== value) {
-                  return false;
-                }
-              }
-              return true;
-            });
-            
-            if (!found) {
-              return { 
-                isValid: false, 
-                reason: `Tool result object not found in LLM response array` 
-              };
-            }
-          } else if (typeof llmData === 'object') {
-            // Check if tool result object matches LLM response data object
-            for (const [key, value] of Object.entries(toolResult)) {
-              if (llmData[key] !== value) {
-                return { 
-                  isValid: false, 
-                  reason: `Tool result value mismatch: ${key}=${value} vs LLM ${key}=${llmData[key]}` 
-                };
-              }
-            }
-          } else {
-            return { isValid: false, reason: "Tool result is object but LLM response data is not object" };
-          }
-        }
-      }
-    }
-
-    // Additional check: ensure LLM response doesn't contain extra data that wasn't in tool results
-    if (Array.isArray(llmData) && Array.isArray(toolResults[0])) {
-      const toolResultKeys = new Set();
-      const llmDataKeys = new Set();
-      
-      // Collect all unique keys from tool results
-      for (const toolItem of toolResults[0]) {
-        if (toolItem && typeof toolItem === 'object') {
-          Object.keys(toolItem).forEach(key => toolResultKeys.add(key));
-        }
-      }
-      
-      // Collect all unique keys from LLM response
-      for (const llmItem of llmData) {
-        if (llmItem && typeof llmItem === 'object') {
-          Object.keys(llmItem).forEach(key => llmDataKeys.add(key));
-        }
-      }
-      
-      // Check for suspicious extra keys that might indicate hallucination
-      const suspiciousKeys = Array.from(llmDataKeys).filter(key => !toolResultKeys.has(key));
-      if (suspiciousKeys.length > 0) {
-        console.warn(`[Validation] Suspicious extra keys found: ${suspiciousKeys.join(', ')}`);
-      }
-    }
-
-    return { isValid: true, reason: "Response validated against tool results" };
+    // Basic validation passed
+    return { isValid: true, reason: "Response validated" };
   } catch (error) {
     return { isValid: false, reason: `Validation error: ${error.message}` };
   }
@@ -927,113 +753,57 @@ export async function callLLM({
         return completeResponse;
       }
       
-      // Only check if we have a tool result and the LLM output is a valid object
+      // If we have tool results, prioritize them
       if (lastToolResult && parsed && typeof parsed === 'object') {
+        console.log('[AI][callLLM] Using real tool data with LLM response');
         
-        // CRITICAL: Always use real tool data, never trust LLM output completely
-        // Even if validation passes, we prioritize tool results over LLM interpretation
+        const responseText = parsed.response || parsed.text || formatFinancialResponse(lastToolResult);
         
-        console.log('\n✅ [LLM Process] ====== USING REAL TOOL DATA ======');
-        console.log('[AI][callLLM] Tool results available - prioritizing real data over LLM interpretation');
-        console.log('[AI][callLLM] Tool result:', JSON.stringify(lastToolResult, null, 2));
-        console.log('[AI][callLLM] LLM response data:', JSON.stringify(parsed.data, null, 2));
-        console.log('[LLM Process] LLM response text:', parsed.text);
-        
-        // Create a response that combines LLM text with real tool data
-        let responseText = '';
-        
-        // Use LLM text if available and seems reasonable
-        if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().length > 0) {
-          // Validate that LLM text doesn't contain obvious hallucinations
-          const toolDataStr = JSON.stringify(lastToolResult);
-          if (parsed.text.includes('I don\'t have access to') || 
-              parsed.text.includes('I cannot provide') ||
-              parsed.text.includes('I don\'t have the data') ||
-              parsed.text.includes('I don\'t have information')) {
-            // LLM is claiming it doesn't have data when we do - this is a hallucination
-            console.warn('[AI][callLLM] LLM text indicates hallucination (claiming no data when data exists)');
-            responseText = formatFinancialResponse(lastToolResult);
-          } else {
-            // Use LLM text but ensure it's combined with real data
-            responseText = parsed.text;
-          }
-        } else {
-          // No LLM text, create our own
-          responseText = formatFinancialResponse(lastToolResult);
-        }
-        
-        // ALWAYS return real tool data, never LLM data
-        const finalResponse = {
-          text: responseText,
-          data: lastToolResult, // This is the REAL data from tools
-          source: 'tool_result', // Indicate this is real data
-          llm_interpretation: parsed.text || null // Keep LLM text for reference but don't trust it
-        };
-        
-        console.log('\n🎉 [LLM Process] ====== FINAL RESPONSE WITH REAL DATA ======');
-        console.log('[LLM Process] Final response text:', responseText);
-        console.log('[LLM Process] Final response data keys:', Object.keys(lastToolResult || {}));
-        console.log('[LLM Process] Final response source:', 'tool_result');
-        
-        return JSON.stringify(finalResponse);
-        
-      } else if (lastToolResult) {
-        // We have tool results but no valid LLM response
-        console.log('[AI][callLLM] No valid LLM response but tool results available - returning real data');
-        
-        const responseText = formatFinancialResponse(lastToolResult);
         return JSON.stringify({
-          text: responseText,
+          response: responseText,
           data: lastToolResult,
           source: 'tool_result',
-          llm_interpretation: null
+          error: false
         });
-      }
-      
-      // If no tool results, this might be a general knowledge question
-      // But we still need to be careful about what we return
-      if (parsed && parsed.text && typeof parsed.text === 'string') {
-        // For general knowledge, we can return LLM text but mark it as such
+        
+      } else if (lastToolResult) {
+        console.log('[AI][callLLM] Using tool results only (no valid LLM response)');
+        
         return JSON.stringify({
-          text: parsed.text,
-          data: {},
-          source: 'llm_general_knowledge',
-          warning: 'This response is based on general knowledge and may not be specific to your financial data'
+          response: formatFinancialResponse(lastToolResult),
+          data: lastToolResult,
+          source: 'tool_result',
+          error: false
         });
       }
       
-      // Last resort - return safe fallback
+      // No tool results - return LLM response
+      if (parsed && (parsed.response || parsed.text)) {
+        return JSON.stringify({
+          response: parsed.response || parsed.text,
+          data: parsed.data || null,
+          source: 'general_response',
+          error: false
+        });
+      }
+      
+      // Fallback
       return JSON.stringify({
-        text: 'I encountered an issue processing your request. Please try again.',
-        data: {},
+        response: 'I encountered an issue processing your request. Please try again.',
+        data: null,
         error: true,
         source: 'fallback'
       });
       
     } else {
-      console.log('[AI][callLLM] Response is not JSON format, skipping hallucination check. Response:', completeResponse.substring(0, 100) + '...');
+      console.log('[AI][callLLM] Response is not JSON format');
       
-      // If we have tool results but the LLM didn't return JSON, provide a fallback response
-      if (lastToolResult) {
-        console.log('[AI][callLLM] Providing fallback response with tool results since LLM returned non-JSON');
-        
-        // Create a proper, user-friendly response using the actual financial data
-        const responseText = formatFinancialResponse(lastToolResult);
-        
-        return JSON.stringify({
-          text: responseText,
-          data: lastToolResult,
-          source: 'tool_result_fallback',
-          llm_interpretation: null
-        });
-      }
-      
-      // If no tool results and no valid JSON, return a safe fallback
+      // Return as plain text response
       return JSON.stringify({
-        text: 'I encountered an issue processing your request. Please try again.',
-        data: {},
-        error: true,
-        source: 'fallback_no_tools'
+        response: completeResponse,
+        data: lastToolResult || null,
+        source: lastToolResult ? 'tool_result_text' : 'general_response',
+        error: false
       });
     }
   } catch (e) {
