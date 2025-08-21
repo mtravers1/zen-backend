@@ -160,6 +160,18 @@ export async function callLLM({
   uid,
   aiController,
 }) {
+  // Debug: Log received parameters
+  console.log('[LLM Client] Received parameters:', {
+    hasApiKey: !!apiKey,
+    hasModel: !!model,
+    hasMessages: !!messages,
+    hasTools: !!tools,
+    hasToolFunctions: !!toolFunctions,
+    hasUid: !!uid,
+    hasAiController: !!aiController,
+    toolFunctionsType: typeof toolFunctions,
+    toolFunctionsKeys: toolFunctions ? Object.keys(toolFunctions) : 'null'
+  });
   // Initialize logging context with safe defaults
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const timestamp = new Date().toISOString();
@@ -370,6 +382,18 @@ export async function callLLM({
 
   // Helper: Run a tool function with a timeout to prevent hanging
   async function runToolWithTimeout(fn, args, timeoutMs = 15000) {
+    // Debug: Log function call
+    console.log('[LLM Client] runToolWithTimeout called:', {
+      fn,
+      fnType: typeof fn,
+      args,
+      timeoutMs
+    });
+    
+    if (typeof fn !== 'function') {
+      throw new Error(`Expected function but got ${typeof fn}`);
+    }
+    
     return Promise.race([
       fn(args),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Tool call timed out')), timeoutMs))
@@ -418,7 +442,10 @@ export async function callLLM({
         
         // Log tool call detection with context
         console.log('\n🔧 [LLM Process] ====== TOOL CALLS DETECTED ======', {
-          ...logContext,
+          requestId,
+          timestamp,
+          userId: uid,
+          model,
           stage: 'tool_calls',
           tools: delta.tool_calls.map(tc => ({
             name: tc.function?.name,
@@ -436,7 +463,10 @@ export async function callLLM({
         
         for (const toolCall of delta.tool_calls) {
           const toolContext = {
-            ...logContext,
+            requestId,
+            timestamp,
+            userId: uid,
+            model,
             stage: 'tool_execution',
             tool: {
               name: toolCall.function?.name,
@@ -492,7 +522,24 @@ export async function callLLM({
             // Always use the backend-authenticated UID
             args.uid = uid;
             
+            // Debug: Log before accessing toolFunctions
+            console.log('[LLM Client] Before accessing toolFunctions:', {
+              fnName,
+              hasToolFunctions: !!toolFunctions,
+              toolFunctionsType: typeof toolFunctions,
+              availableKeys: toolFunctions ? Object.keys(toolFunctions) : 'null'
+            });
+            
             const fn = toolFunctions[fnName];
+            
+            // Debug: Log after accessing toolFunctions
+            console.log('[LLM Client] After accessing toolFunctions:', {
+              fnName,
+              fn,
+              fnType: typeof fn,
+              isFunction: typeof fn === 'function'
+            });
+            
             if (!fn) {
               console.error('\n❌ [LLM Process] ====== TOOL NOT FOUND ======', {
                 ...toolContext,
@@ -508,8 +555,23 @@ export async function callLLM({
             let result;
             const toolStartTime = Date.now();
             try {
+              // Debug: Log before calling function
+              console.log('[LLM Client] Before calling function:', {
+                fnName,
+                args,
+                fnType: typeof fn,
+                isFunction: typeof fn === 'function'
+              });
+              
               result = await runToolWithTimeout(fn, args, 30000);
               const toolDuration = Date.now() - toolStartTime;
+              
+              // Debug: Log result
+              console.log('[LLM Client] Tool execution result:', {
+                result,
+                resultType: typeof result,
+                resultKeys: result && typeof result === 'object' ? Object.keys(result) : 'not object'
+              });
               
               // Log successful tool execution
               console.log('\n✅ [LLM Process] ====== TOOL SUCCESS ======', {
@@ -546,6 +608,13 @@ export async function callLLM({
             
             lastToolResult = result;
             console.log(`[AI][callLLM] Tool ${fnName} result:`, result);
+            
+            // Debug: Log lastToolResult assignment
+            console.log('[LLM Client] lastToolResult assigned:', {
+              lastToolResult,
+              lastToolResultType: typeof lastToolResult,
+              lastToolResultKeys: lastToolResult && typeof lastToolResult === 'object' ? Object.keys(lastToolResult) : 'not object'
+            });
             
             // Add tool result to messages
             finalMessages.push({
@@ -614,6 +683,16 @@ export async function callLLM({
   console.log('\n🎯 [LLM Process] ====== POST-PROCESSING ======');
   console.log("[AI][callLLM] Complete LLM response:", completeResponse);
   console.log('[LLM Process] Last tool result available:', !!lastToolResult);
+  
+  // Debug: Log lastToolResult before post-processing
+  console.log('[LLM Client] Before post-processing:', {
+    lastToolResult,
+    lastToolResultType: typeof lastToolResult,
+    lastToolResultKeys: lastToolResult && typeof lastToolResult === 'object' ? Object.keys(lastToolResult) : 'not object',
+    completeResponseType: typeof completeResponse,
+    completeResponseLength: completeResponse ? completeResponse.length : 0
+  });
+  
   if (lastToolResult) {
     console.log('[LLM Process] Last tool result type:', typeof lastToolResult);
     console.log('[LLM Process] Last tool result preview:', JSON.stringify(lastToolResult).substring(0, 200) + '...');
@@ -753,6 +832,15 @@ export async function callLLM({
         return completeResponse;
       }
       
+      // Debug: Log before tool result check
+      console.log('[LLM Client] Before tool result check:', {
+        hasLastToolResult: !!lastToolResult,
+        lastToolResultType: typeof lastToolResult,
+        hasParsed: !!parsed,
+        parsedType: typeof parsed,
+        isParsedObject: parsed && typeof parsed === 'object'
+      });
+      
       // If we have tool results, prioritize them
       if (lastToolResult && parsed && typeof parsed === 'object') {
         console.log('[AI][callLLM] Using real tool data with LLM response');
@@ -824,6 +912,13 @@ export async function callLLM({
         llm_interpretation: null
       });
     }
+    
+    // Debug: Log error fallback
+    console.log('[LLM Client] Error fallback:', {
+      error: e.message,
+      lastToolResult,
+      lastToolResultType: typeof lastToolResult
+    });
     
     // If no tool results and error occurred, return safe fallback
     return JSON.stringify({

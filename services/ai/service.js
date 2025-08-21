@@ -294,6 +294,19 @@ class AIService {
         filterTransactions,
       };
       const toolsImpl = toolFunctions(toolContext);
+      
+      // Debug: Log tools implementation
+      console.log('[AI Service] Tools implementation created:', {
+        hasToolFunctions: !!toolsImpl,
+        toolCount: Object.keys(toolsImpl || {}).length,
+        toolNames: Object.keys(toolsImpl || {}),
+        toolContext: {
+          hasEmail: !!toolContext.email,
+          hasProfile: !!toolContext.profile,
+          hasFilterAccounts: !!toolContext.filterAccounts,
+          hasFilterTransactions: !!toolContext.filterTransactions
+        }
+      });
 
       console.log('\n🚀 [AI Service] ====== CALLING LLM ======');
       console.log("[AI] Calling LLM with messages:", messages);
