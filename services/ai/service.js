@@ -149,53 +149,20 @@ class AIService {
         dataScreen: currentDataScreen
       });
 
-      // Check if this is a general financial question that doesn't need screen context
-      const generalFinancialQuestions = [
-        'how can i save money',
-        'how to save money',
-        'how do i save money',
-        'how to budget',
-        'how do i budget',
-        'what is budgeting',
-        'how to invest',
-        'how do i invest',
-        'what is a 401k',
-        'what is investing',
-        'how to reduce expenses',
-        'how do i reduce expenses',
-        'financial advice',
-        'money saving tips',
-        'budgeting tips',
-        'investment advice'
-      ];
-      
-      const isGeneralFinancialQuestion = generalFinancialQuestions.some(question => 
-        prompt.toLowerCase().includes(question.toLowerCase())
-      );
-      
-      // Build the system and screen prompts only when needed
+      // Build the system and screen prompts
       let screenPrompt = '';
       let enhancedScreenPrompt = '';
       
       // Always build system prompt (it's lightweight and doesn't include screen-specific data)
       const systemPrompt = getProductionSystemPrompt(currentScreen);
       
-      if (isGeneralFinancialQuestion) {
-        console.log('[AI Service] 🎯 General financial question detected, using simplified prompt without screen context');
-        enhancedScreenPrompt = `You are a helpful financial assistant. Provide clear, actionable financial advice for the user's question.
-
-## 💡 FINANCIAL GUIDANCE PRINCIPLES
-- Be specific and actionable
-- Provide practical tips and strategies
-- Use examples when helpful
-- Focus on the user's question, not their current location
-- Offer follow-up suggestions when appropriate`;
-      } else {
-        // Only build screen-specific prompts when screen context is actually needed
-        console.log('[AI Service] 🎯 Screen-specific question detected, building screen context');
-        screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen, context);
-        enhancedScreenPrompt = screenPrompt;
-      }
+      // Let the LLM intelligently determine the type of question
+      // No hardcoded classification - the LLM will analyze the context
+      console.log('[AI Service] 🎯 Letting LLM intelligently classify question type');
+      
+      // Build screen context for all questions - the LLM will decide how to use it
+      screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen, context);
+      enhancedScreenPrompt = screenPrompt;
 
       // Construct the message array for the LLM
       const messages = [
