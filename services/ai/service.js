@@ -153,10 +153,57 @@ class AIService {
       const screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen);
       const systemPrompt = getProductionSystemPrompt(currentScreen);
 
+      // Enhance prompts with rich context from mobile
+      let enhancedScreenPrompt = screenPrompt;
+      if (context && Object.keys(context).length > 0) {
+        console.log("🔍 [AI Service] Rich context received from mobile:", {
+          contextKeys: Object.keys(context),
+          screen: context.screen,
+          device: context.device,
+          time: context.time,
+          user: context.user
+        });
+        
+        // Add context information to the screen prompt
+        enhancedScreenPrompt = `${screenPrompt}
+
+## 📱 RICH CONTEXT FROM MOBILE APP
+
+### 🖥️ Current Screen Information
+- **Main Screen**: ${context.screen?.currentScreen || currentScreen || 'unknown'}
+- **Data View**: ${context.screen?.dataScreen || currentDataScreen || 'overview'}
+- **Screen Type**: ${context.screen?.isMainScreen ? 'Main Dashboard' : 'Secondary Screen'}
+- **Financial Context**: ${context.screen?.isFinancialScreen ? 'Financial Data Screen' : 'General Screen'}
+
+### 📱 Device Information
+- **Platform**: ${context.device?.platform || 'unknown'}
+- **App Version**: ${context.device?.appVersion || 'unknown'}
+- **Screen Size**: ${context.device?.screenWidth || 'unknown'} x ${context.device?.screenHeight || 'unknown'}
+- **Device Type**: ${context.device?.isTablet ? 'Tablet' : 'Phone'}
+
+### ⏰ Temporal Context
+- **Current Time**: ${context.time?.currentTime || 'unknown'}
+- **Timezone**: ${context.time?.timezone || 'unknown'}
+- **Day**: ${context.time?.dayOfWeek || 'unknown'}
+- **Business Hours**: ${context.time?.isBusinessHours ? 'Yes' : 'No'}
+- **Weekend**: ${context.time?.isWeekend ? 'Yes' : 'No'}
+
+### 👤 User Context
+- **Profile ID**: ${context.user?.profileId || 'unknown'}
+- **Profile Name**: ${context.user?.profileName || 'Unknown'}
+- **Active Session**: ${context.user?.hasActiveSession ? 'Yes' : 'No'}
+
+### 💬 Chat Context
+- **Message Count**: ${context.chat?.messageCount || 0}
+- **First Time User**: ${context.chat?.isFirstTimeUser ? 'Yes' : 'No'}
+
+**IMPORTANT**: Use this rich context to provide more personalized and relevant responses. You can answer context questions directly without needing to call tools.`;
+      }
+
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: "user", content: `${screenPrompt}\n\nUser question: ${prompt}` },
+        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}` },
       ];
 
       // Use the tool definitions for function calling
@@ -412,7 +459,49 @@ class AIService {
         normalizedResponse.response.includes('spending') ||
         normalizedResponse.response.includes('revenue') ||
         normalizedResponse.response.includes('profit') ||
-        normalizedResponse.response.includes('loss')
+        normalizedResponse.response.includes('loss') ||
+        // Context information
+        normalizedResponse.response.includes('screen') ||
+        normalizedResponse.response.includes('dashboard') ||
+        normalizedResponse.response.includes('page') ||
+        normalizedResponse.response.includes('tab') ||
+        normalizedResponse.response.includes('time') ||
+        normalizedResponse.response.includes('day') ||
+        normalizedResponse.response.includes('device') ||
+        normalizedResponse.response.includes('platform') ||
+        normalizedResponse.response.includes('app') ||
+        normalizedResponse.response.includes('version') ||
+        // General helpful content
+        normalizedResponse.response.includes('You are currently') ||
+        normalizedResponse.response.includes('You\'re currently') ||
+        normalizedResponse.response.includes('You\'re on the') ||
+        normalizedResponse.response.includes('You are on the') ||
+        normalizedResponse.response.includes('The current time is') ||
+        normalizedResponse.response.includes('Today is') ||
+        normalizedResponse.response.includes('You\'re using the') ||
+        normalizedResponse.response.includes('This screen shows') ||
+        normalizedResponse.response.includes('Here is your') ||
+        normalizedResponse.response.includes('Based on your') ||
+        normalizedResponse.response.includes('Your account') ||
+        normalizedResponse.response.includes('Your profile') ||
+        normalizedResponse.response.includes('Your financial') ||
+        normalizedResponse.response.includes('Your current') ||
+        normalizedResponse.response.includes('Your recent') ||
+        normalizedResponse.response.includes('Your total') ||
+        normalizedResponse.response.includes('Your balance') ||
+        normalizedResponse.response.includes('Your net worth') ||
+        normalizedResponse.response.includes('Your transactions') ||
+        normalizedResponse.response.includes('Your accounts') ||
+        normalizedResponse.response.includes('Your assets') ||
+        normalizedResponse.response.includes('Your liabilities') ||
+        normalizedResponse.response.includes('Your income') ||
+        normalizedResponse.response.includes('Your expenses') ||
+        normalizedResponse.response.includes('Your savings') ||
+        normalizedResponse.response.includes('Your investments') ||
+        normalizedResponse.response.includes('Your debt') ||
+        normalizedResponse.response.includes('Your credit') ||
+        normalizedResponse.response.includes('Your cash') ||
+        normalizedResponse.response.includes('Your bank')
       );
       
       // If response has useful content but contains unnecessary apologies, clean it up
@@ -441,7 +530,27 @@ class AIService {
           /my response was cut off/gi,
           /response was cut off/gi,
           /was cut off/gi,
-          /cut off/gi
+          /cut off/gi,
+          // Additional patterns for complete cleanup
+          /I apologize,? but/gi,
+          /I'm sorry,? but/gi,
+          /I apologize\.?/gi,
+          /I'm sorry\.?/gi,
+          /apologize,? but/gi,
+          /sorry,? but/gi,
+          /apologize\.?/gi,
+          /sorry\.?/gi,
+          /but my response was cut off/gi,
+          /my response was cut off/gi,
+          /response was cut off/gi,
+          /was cut off/gi,
+          /cut off/gi,
+          /Please try asking your question again/gi,
+          /try asking your question again/gi,
+          /asking your question again/gi,
+          /your question again/gi,
+          /question again/gi,
+          /again/gi
         ];
         
         // Apply each pattern to clean the response
@@ -462,6 +571,25 @@ class AIService {
         // Remove trailing commas or periods
         cleanedResponse = cleanedResponse.replace(/[,.]$/, '');
         
+        // Final cleanup - remove any remaining apology-like phrases
+        cleanedResponse = cleanedResponse
+          .replace(/I apologize,?/gi, '')
+          .replace(/I'm sorry,?/gi, '')
+          .replace(/apologize,?/gi, '')
+          .replace(/sorry,?/gi, '')
+          .replace(/my response was cut off/gi, '')
+          .replace(/response was cut off/gi, '')
+          .replace(/was cut off/gi, '')
+          .replace(/cut off/gi, '')
+          .replace(/Please try asking your question again/gi, '')
+          .replace(/try asking your question again/gi, '')
+          .replace(/asking your question again/gi, '')
+          .replace(/your question again/gi, '')
+          .replace(/question again/gi, '')
+          .replace(/again/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        
         console.log("✅ [AI Service] Cleaned response:", {
           original: normalizedResponse.response.substring(0, 100) + '...',
           cleaned: cleanedResponse.substring(0, 100) + '...'
@@ -474,6 +602,64 @@ class AIService {
           text: cleanedResponse,
           error: false,
           errorMessage: null
+        };
+      }
+      
+      // Check if response is just an empty apology (no useful content)
+      const isJustApology = (
+        !hasUsefulContent &&
+        (normalizedResponse.response.includes('I apologize') ||
+         normalizedResponse.response.includes('I\'m sorry') ||
+         normalizedResponse.response.includes('apologize') ||
+         normalizedResponse.response.includes('sorry') ||
+         normalizedResponse.response.includes('cut off') ||
+         normalizedResponse.response.includes('Please try asking your question again') ||
+         normalizedResponse.response.includes('try asking your question again') ||
+         normalizedResponse.response.includes('asking your question again') ||
+         normalizedResponse.response.includes('your question again') ||
+         normalizedResponse.response.includes('question again') ||
+         normalizedResponse.response.includes('again'))
+      );
+      
+      // If response is just an apology with no useful content, provide a helpful fallback
+      if (isJustApology) {
+        console.log("⚠️ [AI Service] Response is just an apology with no useful content - providing fallback");
+        
+        // Try to provide context-based help
+        if (context && context.screen) {
+          const currentScreen = context.screen.currentScreen || 'dashboard';
+          const dataScreen = context.screen.dataScreen || 'overview';
+          
+          return {
+            response: `You are currently on the **${currentScreen}** screen${dataScreen && dataScreen !== currentScreen ? ` with the **${dataScreen}** view active` : ''}. How can I help you with your finances today?`,
+            text: `You are currently on the **${currentScreen}** screen${dataScreen && dataScreen !== currentScreen ? ` with the **${dataScreen}** view active` : ''}. How can I help you with your finances today?`,
+            data: {},
+            error: false,
+            errorMessage: null,
+            needsClarification: false,
+            suggestedQuestions: [
+              "What's my current net worth?",
+              "Show me my recent transactions",
+              "What's my account balance?",
+              "How am I doing financially?"
+            ]
+          };
+        }
+        
+        // Generic helpful response
+        return {
+          response: "I'm here to help you with your finances! What would you like to know?",
+          text: "I'm here to help you with your finances! What would you like to know?",
+          data: {},
+          error: false,
+          errorMessage: null,
+          needsClarification: false,
+          suggestedQuestions: [
+            "What's my current net worth?",
+            "Show me my recent transactions",
+            "What's my account balance?",
+            "How am I doing financially?"
+          ]
         };
       }
       
