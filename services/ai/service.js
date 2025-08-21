@@ -40,6 +40,55 @@ class AIService {
    * @param {object} res - Express response object (optional, for streaming).
    * @returns {Promise<object>} LLM response and related data.
    */
+  // Validate request parameters
+  validateRequestParams(params) {
+    const {
+      prompt,
+      uid,
+      profileId,
+      incomingMessages,
+      screen,
+      dataScreen
+    } = params;
+
+    const validation = {
+      isValid: true,
+      errors: [],
+      warnings: []
+    };
+
+    // Required fields
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      validation.isValid = false;
+      validation.errors.push('Prompt is required and must be a non-empty string');
+    }
+
+    if (!uid) {
+      validation.isValid = false;
+      validation.errors.push('User ID is required');
+    }
+
+    if (!profileId) {
+      validation.isValid = false;
+      validation.errors.push('Profile ID is required');
+    }
+
+    // Optional fields with type validation
+    if (incomingMessages !== undefined && !Array.isArray(incomingMessages)) {
+      validation.warnings.push('Messages should be an array');
+    }
+
+    if (screen !== undefined && typeof screen !== 'string') {
+      validation.warnings.push('Screen should be a string');
+    }
+
+    if (dataScreen !== undefined && typeof dataScreen !== 'string') {
+      validation.warnings.push('Data screen should be a string');
+    }
+
+    return validation;
+  }
+
   async makeRequest(
     prompt,
     uid,
@@ -50,6 +99,39 @@ class AIService {
     dataScreen,
     context = {}
   ) {
+    // Validate request parameters
+    const validation = this.validateRequestParams({
+      prompt,
+      uid,
+      profileId,
+      incomingMessages,
+      screen,
+      dataScreen
+    });
+
+    // Log validation results
+    console.log('\n🔍 [AI Service] ====== REQUEST VALIDATION ======', {
+      timestamp: new Date().toISOString(),
+      validation,
+      requestParams: {
+        hasPrompt: !!prompt,
+        hasUid: !!uid,
+        hasProfile: !!profileId,
+        messageCount: Array.isArray(incomingMessages) ? incomingMessages.length : 0,
+        screen: screen || 'unknown',
+        dataScreen: dataScreen || 'none'
+      }
+    });
+
+    // Return early if validation fails
+    if (!validation.isValid) {
+      return {
+        text: "I cannot process your request due to missing or invalid parameters.",
+        data: null,
+        error: true,
+        errorMessage: validation.errors.join('. ')
+      };
+    }
     try {
       // Validate required parameters
       if (!uid) throw new Error("User ID (uid) is required");
@@ -230,17 +312,27 @@ class AIService {
         secondMessageLength: messages[1]?.content?.length
       });
       
-      // Initialize request context
+      // Initialize request context with safe defaults
       const requestContext = {
         id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
-        userId: uid,
-        profileId,
-        screen,
-        dataScreen,
-        messageCount: messages.length,
-        toolCount: tools.length,
-        promptLength: prompt.length
+        userId: uid || 'anonymous',
+        profileId: profileId || 'unknown',
+        screen: screen || 'unknown',
+        dataScreen: dataScreen || 'none',
+        messageCount: Array.isArray(messages) ? messages.length : 0,
+        toolCount: Array.isArray(tools) ? tools.length : 0,
+        promptLength: typeof prompt === 'string' ? prompt.length : 0,
+        requestType: 'ai_chat',
+        environment: process.env.NODE_ENV || 'development',
+        validationStatus: {
+          hasUid: !!uid,
+          hasProfile: !!profileId,
+          hasScreen: !!screen,
+          hasMessages: Array.isArray(messages) && messages.length > 0,
+          hasTools: Array.isArray(tools) && tools.length > 0,
+          hasPrompt: typeof prompt === 'string' && prompt.length > 0
+        }
       };
 
       // Log request context
@@ -276,14 +368,23 @@ class AIService {
           responseType: typeof completeResponse
         });
       } catch (error) {
+        // Log error with validation status
         console.error('\n❌ [AI Service] ====== LLM ERROR ======', {
           ...requestContext,
           stage: 'error',
           error: {
-            message: error.message,
-            code: error.code,
-            type: error.type,
-            stack: error.stack
+            message: error.message || 'Unknown error',
+            code: error.code || 'NO_CODE',
+            type: error.type || 'UNKNOWN',
+            stack: error.stack || new Error().stack,
+            timestamp: new Date().toISOString()
+          },
+          context: {
+            modelName: this.GROQ_AI_MODEL || 'unknown',
+            hasApiKey: !!this.GROQ_API_KEY,
+            messageCount: requestContext.messageCount,
+            toolCount: requestContext.toolCount,
+            validationStatus: requestContext.validationStatus
           }
         });
         

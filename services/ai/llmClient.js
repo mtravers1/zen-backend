@@ -341,24 +341,21 @@ export async function callLLM({
   // Safely calculate message stats
   const messageStats = (() => {
     try {
-      if (!Array.isArray(messages)) {
-        return {
-          total: 0,
-          totalLength: 0,
-          averageLength: 0,
-          types: {}
-        };
-      }
+      // Ensure messages is an array
+      const validMessages = Array.isArray(messages) ? messages : [];
       
-      const totalLength = messages.reduce((total, msg) => {
+      // Calculate total length of valid messages
+      const totalLength = validMessages.reduce((total, msg) => {
         if (!msg || !msg.content) return total;
         return total + (typeof msg.content === 'string' ? msg.content.length : 0);
       }, 0);
       
-      const validMessages = messages.filter(msg => msg && msg.content);
-      const averageLength = validMessages.length > 0 ? Math.round(totalLength / validMessages.length) : 0;
+      // Calculate average length
+      const messagesWithContent = validMessages.filter(msg => msg && msg.content);
+      const averageLength = messagesWithContent.length > 0 ? Math.round(totalLength / messagesWithContent.length) : 0;
       
-      const types = messages.reduce((acc, msg) => {
+      // Count message types
+      const types = validMessages.reduce((acc, msg) => {
         if (msg && msg.role) {
           acc[msg.role] = (acc[msg.role] || 0) + 1;
         }
@@ -366,7 +363,7 @@ export async function callLLM({
       }, {});
       
       return {
-        total: messages.length,
+        total: validMessages.length,
         totalLength,
         averageLength,
         types
@@ -385,38 +382,49 @@ export async function callLLM({
   // Safely calculate tool stats
   const toolStats = (() => {
     try {
-      if (!Array.isArray(tools)) {
-        return {
-          available: 0,
-          names: []
-        };
-      }
+      // Ensure tools is an array
+      const validTools = Array.isArray(tools) ? tools : [];
+      
+      // Extract valid tool names
+      const validToolNames = validTools
+        .filter(t => t && t.function && typeof t.function.name === 'string')
+        .map(t => t.function.name);
       
       return {
-        available: tools.length,
-        names: tools
-          .filter(t => t && t.function && typeof t.function.name === 'string')
-          .map(t => t.function.name)
+        available: validTools.length,
+        names: validToolNames,
+        validCount: validToolNames.length
       };
     } catch (error) {
       console.error('Error calculating tool stats:', error);
       return {
         available: 0,
-        names: []
+        names: [],
+        validCount: 0
       };
     }
   })();
   
   // Create a logger function that includes context
   const logWithContext = (level, stage, message, details = {}) => {
+    // Ensure all fields have default values
     const logData = {
-      requestId,
-      timestamp,
+      requestId: requestId || 'unknown',
+      timestamp: timestamp || new Date().toISOString(),
       userId: uid || 'anonymous',
       model: model || 'unknown',
-      stage,
-      messageStats,
-      toolStats,
+      stage: stage || 'unknown',
+      messageStats: messageStats || {
+        total: 0,
+        totalLength: 0,
+        averageLength: 0,
+        types: {}
+      },
+      toolStats: toolStats || {
+        available: 0,
+        names: [],
+        validCount: 0
+      },
       ...details
     };
 
