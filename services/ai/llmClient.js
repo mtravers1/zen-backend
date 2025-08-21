@@ -340,22 +340,38 @@ export async function callLLM({
         message: apiError.message,
         code: apiError.code,
         type: apiError.type,
-        stack: apiError.stack
+        stack: apiError.stack,
+        fullError: apiError
       }
     });
     
-    // Check if it's a tool_use_failed error
-    if (apiError.error?.code === 'tool_use_failed') {
+    // Check if it's a tool_use_failed error or function call failure
+    if (apiError.error?.code === 'tool_use_failed' || apiError.message?.includes('Failed to call a function')) {
       console.error('[LLM Process] Tool use failed error detected. This usually means the LLM is confused about the response format.');
-      console.error('[LLM Process] Failed generation:', apiError.error.failed_generation);
+      console.error('[LLM Process] Failed generation:', apiError.error?.failed_generation);
+      console.error('[LLM Process] Full error details:', JSON.stringify(apiError, null, 2));
       
-      // Return a helpful error message
+      // Try to extract more details about which function failed
+      let failureDetails = 'Function call format confusion';
+      if (apiError.error?.failed_generation) {
+        failureDetails = `Failed generation: ${apiError.error.failed_generation}`;
+      } else if (apiError.message?.includes('Failed to call a function')) {
+        failureDetails = 'Function call parameters or format issue';
+      }
+      
+      // Return a helpful error message with fallback
       return JSON.stringify({
-        text: "I encountered an issue processing your request. The AI model got confused about how to respond. Please try rephrasing your question or contact support if the problem persists.",
+        text: "I'm having trouble with a technical function call. Let me try to help you in a different way. What would you like to know about your finances?",
         data: {},
         error: true,
-        errorDetails: "Tool use failed - LLM response format confusion",
-        source: 'groq_api_error'
+        errorDetails: failureDetails,
+        source: 'groq_function_error',
+        suggestedQuestions: [
+          "What's my current balance?",
+          "Show me my recent transactions",
+          "What's my net worth?",
+          "How can I improve my finances?"
+        ]
       });
     }
     

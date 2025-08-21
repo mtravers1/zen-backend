@@ -281,10 +281,30 @@ class AIService {
         };
       }
 
-      console.log('[AI Service] Tool configuration validated:', {
-        toolsCount: tools.length,
-        toolNames: tools.map(t => t.function?.name).filter(Boolean)
+      // Validate each tool definition for Groq compatibility
+      const validatedTools = tools.filter(tool => {
+        if (!tool || !tool.function || !tool.function.name) {
+          console.warn('[AI Service] Invalid tool found - missing function or name:', tool);
+          return false;
+        }
+        
+        if (!tool.function.parameters || typeof tool.function.parameters !== 'object') {
+          console.warn('[AI Service] Invalid tool parameters:', tool.function.name);
+          return false;
+        }
+        
+        return true;
       });
+
+      console.log('[AI Service] Tool configuration validated:', {
+        totalTools: tools.length,
+        validTools: validatedTools.length,
+        invalidTools: tools.length - validatedTools.length,
+        toolNames: validatedTools.map(t => t.function?.name).filter(Boolean)
+      });
+      
+      // Use validated tools
+      const finalTools = validatedTools;
 
       // Prepare the context for tool functions (injects user/profile info)
       const toolContext = {
@@ -294,19 +314,6 @@ class AIService {
         filterTransactions,
       };
       const toolsImpl = toolFunctions(toolContext);
-      
-      // Debug: Log tools implementation
-      console.log('[AI Service] Tools implementation created:', {
-        hasToolFunctions: !!toolsImpl,
-        toolCount: Object.keys(toolsImpl || {}).length,
-        toolNames: Object.keys(toolsImpl || {}),
-        toolContext: {
-          hasEmail: !!toolContext.email,
-          hasProfile: !!toolContext.profile,
-          hasFilterAccounts: !!toolContext.filterAccounts,
-          hasFilterTransactions: !!toolContext.filterTransactions
-        }
-      });
 
       console.log('\n🚀 [AI Service] ====== CALLING LLM ======');
       console.log("[AI] Calling LLM with messages:", messages);
@@ -334,7 +341,7 @@ class AIService {
         screen: screen || 'unknown',
         dataScreen: dataScreen || 'none',
         messageCount: Array.isArray(messages) ? messages.length : 0,
-        toolCount: Array.isArray(tools) ? tools.length : 0,
+        toolCount: Array.isArray(finalTools) ? finalTools.length : 0,
         promptLength: typeof prompt === 'string' ? prompt.length : 0,
         requestType: 'ai_chat',
         environment: process.env.NODE_ENV || 'development',
@@ -343,7 +350,7 @@ class AIService {
           hasProfile: !!profileId,
           hasScreen: !!screen,
           hasMessages: Array.isArray(messages) && messages.length > 0,
-          hasTools: Array.isArray(tools) && tools.length > 0,
+          hasTools: Array.isArray(finalTools) && finalTools.length > 0,
           hasPrompt: typeof prompt === 'string' && prompt.length > 0
         }
       };
@@ -362,12 +369,14 @@ class AIService {
 
       // Call the LLM (Groq/vLLM) with all context and tool functions
       let completeResponse;
+      let usedFallbackMode = false;
+      
       try {
         completeResponse = await callLLM({
           apiKey: this.GROQ_API_KEY,
           model: this.GROQ_AI_MODEL,
           messages,
-          tools,
+          tools: finalTools,
           toolFunctions: toolsImpl,
           uid,
           aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
@@ -401,13 +410,60 @@ class AIService {
           }
         });
         
-        // Return a user-friendly error response
-        return {
-          text: "I encountered an issue processing your request. Please try asking your question again.",
-          data: null,
-          error: true,
-          errorMessage: error.message
-        };
+        // Check if this is a function call error and try fallback without tools
+        if (error.message?.includes('Failed to call a function') || error.message?.includes('tool_use_failed')) {
+          console.log('\n🔄 [AI Service] ====== TRYING FALLBACK WITHOUT TOOLS ======');
+          
+          try {
+            // Create a simplified prompt without tools
+            const simplifiedMessages = [
+              { 
+                role: 'system', 
+                content: `You are Zentavos, a helpful financial assistant. Answer the user's question directly without using any tools or functions. Provide general financial advice and guidance.` 
+              },
+              { 
+                role: 'user', 
+                content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nPlease respond in JSON format with this structure: {"response": "your answer", "data": null, "source": "general_response", "error": false}` 
+              }
+            ];
+            
+            completeResponse = await callLLM({
+              apiKey: this.GROQ_API_KEY,
+              model: this.GROQ_AI_MODEL,
+              messages: simplifiedMessages,
+              tools: [], // No tools in fallback mode
+              toolFunctions: {},
+              uid,
+              aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
+            });
+            
+            usedFallbackMode = true;
+            console.log('\n✅ [AI Service] ====== FALLBACK SUCCESSFUL ======');
+            
+          } catch (fallbackError) {
+            console.error('\n❌ [AI Service] ====== FALLBACK FAILED ======', {
+              fallbackError: fallbackError.message,
+              originalError: error.message
+            });
+            
+            // Return a user-friendly error response if even fallback fails
+            return {
+              text: "I'm experiencing technical difficulties right now. Please try again in a few moments or rephrase your question.",
+              data: null,
+              error: true,
+              errorMessage: `Original: ${error.message}, Fallback: ${fallbackError.message}`,
+              source: 'complete_failure'
+            };
+          }
+        } else {
+          // Return a user-friendly error response for non-function errors
+          return {
+            text: "I encountered an issue processing your request. Please try asking your question again.",
+            data: null,
+            error: true,
+            errorMessage: error.message
+          };
+        }
       }
 
       // Check for malformed responses that might contain tool-use markers
@@ -468,6 +524,20 @@ class AIService {
 
       // Enhanced response processing with LLM self-evaluation
       const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId, context);
+      
+      // Add fallback mode indicator if used
+      if (usedFallbackMode && processedResponse) {
+        processedResponse.fallbackMode = true;
+        processedResponse.warning = 'Response generated without real-time financial data due to technical issues';
+        if (!processedResponse.suggestedQuestions) {
+          processedResponse.suggestedQuestions = [
+            "What's my current balance?",
+            "Show me my recent transactions", 
+            "What's my net worth?",
+            "How can I improve my finances?"
+          ];
+        }
+      }
 
       // Handle streaming responses if res is provided
       if (res && processedResponse) {
