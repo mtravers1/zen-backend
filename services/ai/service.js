@@ -230,21 +230,71 @@ class AIService {
         secondMessageLength: messages[1]?.content?.length
       });
       
-      // Call the LLM (Groq/vLLM) with all context and tool functions
-      let completeResponse = await callLLM({
-        apiKey: this.GROQ_API_KEY,
-        model: this.GROQ_AI_MODEL,
-        messages,
-        tools,
-        toolFunctions: toolsImpl,
-        uid,
-        aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
+      // Initialize request context
+      const requestContext = {
+        id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: new Date().toISOString(),
+        userId: uid,
+        profileId,
+        screen,
+        dataScreen,
+        messageCount: messages.length,
+        toolCount: tools.length,
+        promptLength: prompt.length
+      };
+
+      // Log request context
+      console.log('\n📝 [AI Service] ====== REQUEST CONTEXT ======', {
+        ...requestContext,
+        stage: 'init',
+        context: {
+          hasScreen: !!screen,
+          hasDataScreen: !!dataScreen,
+          hasProfile: !!profileId,
+          hasMessages: messages.length > 0
+        }
       });
-      
-      console.log('\n📥 [AI Service] ====== LLM RESPONSE RECEIVED ======');
-      console.log("[AI] LLM response:", completeResponse);
-      console.log("[AI Service] Response length:", completeResponse?.length || 0);
-      console.log("[AI Service] Response type:", typeof completeResponse);
+
+      // Call the LLM (Groq/vLLM) with all context and tool functions
+      let completeResponse;
+      try {
+        completeResponse = await callLLM({
+          apiKey: this.GROQ_API_KEY,
+          model: this.GROQ_AI_MODEL,
+          messages,
+          tools,
+          toolFunctions: toolsImpl,
+          uid,
+          aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
+        });
+        
+        console.log('\n📥 [AI Service] ====== LLM RESPONSE RECEIVED ======', {
+          ...requestContext,
+          stage: 'response',
+          status: 'success',
+          responseLength: completeResponse?.length || 0,
+          responseType: typeof completeResponse
+        });
+      } catch (error) {
+        console.error('\n❌ [AI Service] ====== LLM ERROR ======', {
+          ...requestContext,
+          stage: 'error',
+          error: {
+            message: error.message,
+            code: error.code,
+            type: error.type,
+            stack: error.stack
+          }
+        });
+        
+        // Return a user-friendly error response
+        return {
+          text: "I encountered an issue processing your request. Please try asking your question again.",
+          data: null,
+          error: true,
+          errorMessage: error.message
+        };
+      }
 
       // Check for malformed responses that might contain tool-use markers
       if (typeof completeResponse === 'string' && (completeResponse.includes('<tool-use>') || completeResponse.includes('</tool-use>'))) {

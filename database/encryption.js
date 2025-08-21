@@ -310,6 +310,36 @@ async function encryptValue(value, dek, uid = null) {
   }
 }
 
+// Track decryption attempts to prevent infinite loops
+const decryptionAttempts = new Map();
+const MAX_ATTEMPTS = 3;
+const ATTEMPT_EXPIRY = 120000; // 120 seconds
+
+function trackDecryptionAttempt(cipherTextBase64, uid) {
+  const key = `${cipherTextBase64}:${uid || 'no-uid'}`;
+  const now = Date.now();
+  
+  // Clean up expired attempts
+  for (const [attemptKey, attempt] of decryptionAttempts.entries()) {
+    if (now - attempt.timestamp > ATTEMPT_EXPIRY) {
+      decryptionAttempts.delete(attemptKey);
+    }
+  }
+  
+  // Get or create attempt tracking
+  const attempt = decryptionAttempts.get(key) || {
+    count: 0,
+    timestamp: now,
+    failures: new Set()
+  };
+  
+  // Update attempt count
+  attempt.count++;
+  decryptionAttempts.set(key, attempt);
+  
+  return attempt;
+}
+
 // Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
 async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = null) {
   if (
@@ -318,6 +348,23 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     cipherTextBase64 === ""
   )
     return cipherTextBase64;
+    
+  // Track decryption attempts
+  const attempt = trackDecryptionAttempt(cipherTextBase64, uid);
+  
+  // Check if we've exceeded max attempts
+  if (attempt.count > MAX_ATTEMPTS) {
+    logEncryptionOperation('decryptValue', false, {
+      uid,
+      error: 'Max decryption attempts exceeded',
+      details: {
+        attempts: attempt.count,
+        maxAllowed: MAX_ATTEMPTS,
+        timeSinceFirst: Date.now() - attempt.timestamp
+      }
+    });
+    return null;
+  }
 
   // Validate input type
   if (typeof cipherTextBase64 !== 'string') {
@@ -345,22 +392,41 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
   }
 
   // Try with current DEK first
-  try {
-    const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
-    if (result.success) {
-      return result.value;
+  if (!attempt.failures.has('current')) {
+    try {
+      const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
+      if (result.success) {
+        return result.value;
+      }
+      // Track failed attempt
+      attempt.failures.add('current');
+    } catch (error) {
+      // Track failed attempt
+      attempt.failures.add('current');
+      logEncryptionOperation('decryptValue', false, { 
+        uid, 
+        attempt: 'current', 
+        error: error.message,
+        errorCode: error.code
+      });
     }
-  } catch (error) {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      attempt: 'current', 
-      error: error.message,
-      errorCode: error.code
+  } else {
+    logEncryptionOperation('decryptValue', false, {
+      uid,
+      attempt: 'current',
+      error: 'Skipping previously failed attempt',
+      details: {
+        failedAttempts: Array.from(attempt.failures)
+      }
     });
   }
 
+  // Track decryption attempts to prevent infinite loops
+  const attempts = new Set();
+
   // Try with fallback DEK if provided
-  if (fallbackDek) {
+  if (fallbackDek && !attempts.has('fallback')) {
+    attempts.add('fallback');
     try {
       const result = await attemptDecryption(cipherTextBase64, fallbackDek, uid, 'fallback');
       if (result.success) {
@@ -382,25 +448,60 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
   }
 
   // Try to get previous DEK and attempt decryption
-  try {
-    const previousDek = await getPreviousDek(uid);
-    if (previousDek) {
-      const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
-      if (result.success) {
-        logEncryptionOperation('decryptValue', true, { 
-          uid, 
-          attempt: 'previous', 
-          note: 'Successfully decrypted with previous key'
+  if (!attempt.failures.has('previous') && uid) {
+    try {
+      const previousDek = await getPreviousDek(uid);
+      if (previousDek) {
+        const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
+        if (result.success) {
+          logEncryptionOperation('decryptValue', true, { 
+            uid, 
+            attempt: 'previous', 
+            note: 'Successfully decrypted with previous key'
+          });
+          return result.value;
+        }
+        // Track failed attempt
+        attempt.failures.add('previous');
+      } else {
+        logEncryptionOperation('decryptValue', false, {
+          uid,
+          attempt: 'previous',
+          error: 'No previous key available',
+          details: {
+            hasUid: true,
+            keyFound: false
+          }
         });
-        return result.value;
       }
+    } catch (error) {
+      // Track failed attempt
+      attempt.failures.add('previous');
+      logEncryptionOperation('decryptValue', false, { 
+        uid, 
+        attempt: 'previous', 
+        error: error.message,
+        errorCode: error.code
+      });
     }
-  } catch (error) {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      attempt: 'previous', 
-      error: error.message,
-      errorCode: error.code
+  } else if (!uid) {
+    logEncryptionOperation('decryptValue', false, {
+      uid: null,
+      attempt: 'previous',
+      error: 'No uid provided for key version lookup',
+      details: {
+        hasUid: false,
+        inputLength: cipherTextBase64.length
+      }
+    });
+  } else {
+    logEncryptionOperation('decryptValue', false, {
+      uid,
+      attempt: 'previous',
+      error: 'Skipping previously failed attempt',
+      details: {
+        failedAttempts: Array.from(attempt.failures)
+      }
     });
   }
 
@@ -416,19 +517,46 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
 
 // Helper function to attempt decryption with a specific key
 async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
-  // Validate DEK
+  // Early validation to prevent unnecessary processing
   if (!dek || !Buffer.isBuffer(dek) || dek.length !== 32) {
-    throw new Error(`Invalid DEK provided for ${attemptType} attempt: ${dek ? `length=${dek.length}, type=${typeof dek}` : 'null/undefined'}`);
+    logEncryptionOperation('attemptDecryption', false, {
+      uid,
+      attemptType,
+      error: 'Invalid DEK',
+      details: {
+        hasKey: !!dek,
+        keyType: typeof dek,
+        keyLength: dek ? dek.length : 0,
+        isBuffer: Buffer.isBuffer(dek)
+      }
+    });
+    return { success: false, error: 'Invalid encryption key' };
   }
 
-  // Validate cipherTextBase64 is a string
-  if (typeof cipherTextBase64 !== 'string') {
-    throw new Error(`cipherTextBase64 must be a string for ${attemptType} attempt, got ${typeof cipherTextBase64}`);
+  if (!cipherTextBase64 || typeof cipherTextBase64 !== 'string') {
+    logEncryptionOperation('attemptDecryption', false, {
+      uid,
+      attemptType,
+      error: 'Invalid input',
+      details: {
+        inputType: typeof cipherTextBase64,
+        hasInput: !!cipherTextBase64
+      }
+    });
+    return { success: false, error: 'Invalid input format' };
   }
 
   // Check if the string looks like base64 (including URL-safe base64)
   if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(cipherTextBase64)) {
-    throw new Error(`Invalid base64 format for ${attemptType} attempt`);
+    logEncryptionOperation('attemptDecryption', false, {
+      uid,
+      attemptType,
+      error: 'Invalid base64',
+      details: {
+        inputLength: cipherTextBase64.length
+      }
+    });
+    return { success: false, error: 'Invalid base64 format' };
   }
 
   try {
@@ -437,7 +565,16 @@ async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
 
     // Validate buffer length (IV + Auth Tag + minimum encrypted content)
     if (cipherBuffer.length < 33) {
-      throw new Error(`Invalid ciphertext length for ${attemptType} attempt: ${cipherBuffer.length} bytes (minimum 33 required)`);
+      logEncryptionOperation('attemptDecryption', false, {
+        uid,
+        attemptType,
+        error: 'Invalid length',
+        details: {
+          length: cipherBuffer.length,
+          minRequired: 33
+        }
+      });
+      return { success: false, error: 'Invalid ciphertext length' };
     }
 
     // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
@@ -447,7 +584,31 @@ async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
 
     // Validate IV and tag
     if (iv.length !== 16 || tag.length !== 16) {
-      throw new Error(`Invalid IV or auth tag length for ${attemptType} attempt: IV=${iv.length}, Tag=${tag.length}`);
+      logEncryptionOperation('attemptDecryption', false, {
+        uid,
+        attemptType,
+        error: 'Invalid components',
+        details: {
+          ivLength: iv.length,
+          tagLength: tag.length,
+          expectedLength: 16
+        }
+      });
+      return { success: false, error: 'Invalid encryption components' };
+    }
+
+    // Validate encrypted content length
+    if (encrypted.length === 0) {
+      logEncryptionOperation('attemptDecryption', false, {
+        uid,
+        attemptType,
+        error: 'Empty content',
+        details: {
+          totalLength: cipherBuffer.length,
+          encryptedLength: encrypted.length
+        }
+      });
+      return { success: false, error: 'Empty encrypted content' };
     }
 
     // Create a decipher using AES-256-GCM with the same DEK and IV

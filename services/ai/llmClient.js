@@ -334,40 +334,116 @@ export async function callLLM({
   uid,
   aiController,
 }) {
-  // Initialize logging context
-  const logContext = {
-    requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    timestamp: new Date().toISOString(),
-    userId: uid,
-    model,
-    messageStats: {
-      total: messages.length,
-      totalLength: messages.reduce((total, msg) => total + (msg.content?.length || 0), 0),
-      averageLength: Math.round(messages.reduce((total, msg) => total + (msg.content?.length || 0), 0) / messages.length),
-      types: messages.reduce((acc, msg) => {
-        acc[msg.role] = (acc[msg.role] || 0) + 1;
+  // Initialize logging context with safe defaults
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const timestamp = new Date().toISOString();
+  
+  // Safely calculate message stats
+  const messageStats = (() => {
+    try {
+      if (!Array.isArray(messages)) {
+        return {
+          total: 0,
+          totalLength: 0,
+          averageLength: 0,
+          types: {}
+        };
+      }
+      
+      const totalLength = messages.reduce((total, msg) => {
+        if (!msg || !msg.content) return total;
+        return total + (typeof msg.content === 'string' ? msg.content.length : 0);
+      }, 0);
+      
+      const validMessages = messages.filter(msg => msg && msg.content);
+      const averageLength = validMessages.length > 0 ? Math.round(totalLength / validMessages.length) : 0;
+      
+      const types = messages.reduce((acc, msg) => {
+        if (msg && msg.role) {
+          acc[msg.role] = (acc[msg.role] || 0) + 1;
+        }
         return acc;
-      }, {})
-    },
-    toolStats: {
-      available: tools.length,
-      names: tools.map(t => t.function?.name).filter(Boolean)
+      }, {});
+      
+      return {
+        total: messages.length,
+        totalLength,
+        averageLength,
+        types
+      };
+    } catch (error) {
+      console.error('Error calculating message stats:', error);
+      return {
+        total: 0,
+        totalLength: 0,
+        averageLength: 0,
+        types: {}
+      };
+    }
+  })();
+  
+  // Safely calculate tool stats
+  const toolStats = (() => {
+    try {
+      if (!Array.isArray(tools)) {
+        return {
+          available: 0,
+          names: []
+        };
+      }
+      
+      return {
+        available: tools.length,
+        names: tools
+          .filter(t => t && t.function && typeof t.function.name === 'string')
+          .map(t => t.function.name)
+      };
+    } catch (error) {
+      console.error('Error calculating tool stats:', error);
+      return {
+        available: 0,
+        names: []
+      };
+    }
+  })();
+  
+  // Create a logger function that includes context
+  const logWithContext = (level, stage, message, details = {}) => {
+    const logData = {
+      requestId,
+      timestamp,
+      userId: uid || 'anonymous',
+      model: model || 'unknown',
+      stage,
+      messageStats,
+      toolStats,
+      ...details
+    };
+
+    switch (level) {
+      case 'info':
+        console.log(`\n🔵 [LLM Process] ====== ${message} ======`, logData);
+        break;
+      case 'warn':
+        console.warn(`\n⚠️ [LLM Process] ====== ${message} ======`, logData);
+        break;
+      case 'error':
+        console.error(`\n❌ [LLM Process] ====== ${message} ======`, logData);
+        break;
+      default:
+        console.log(`\n[LLM Process] ====== ${message} ======`, logData);
     }
   };
 
-  // Log request start with full context
-  console.log('\n🤖 [LLM Process] ====== REQUEST START ======', {
-    ...logContext,
-    stage: 'start',
+  // Log request start
+  logWithContext('info', 'start', 'REQUEST START', {
     latestMessage: messages[messages.length - 1]?.content?.substring(0, 100) + '...'
   });
 
   const groqClient = new Groq({ apiKey });
   
   // Log request configuration
-  console.log('\n🌐 [LLM Process] ====== REQUEST CONFIG ======', {
-    ...logContext,
-    stage: 'config',
+  logWithContext('info', 'config', 'REQUEST CONFIG', {
     config: {
       model,
       temperature: 0.0,
@@ -382,21 +458,16 @@ export async function callLLM({
   });
 
   // Log validation warnings
-  if (logContext.messageStats.totalLength > 32000) {
-    console.warn('\n⚠️ [LLM Process] ====== VALIDATION WARNING ======', {
-      ...logContext,
-      stage: 'validation',
+  if (totalLength > 32000) {
+    logWithContext('warn', 'validation', 'VALIDATION WARNING', {
       warning: 'Total message length exceeds recommended limit',
       details: {
-        currentLength: logContext.messageStats.totalLength,
+        currentLength: totalLength,
         recommendedMax: 32000,
-        overagePercent: Math.round((logContext.messageStats.totalLength / 32000 - 1) * 100)
+        overagePercent: Math.round((totalLength / 32000 - 1) * 100)
       }
     });
   }
-
-  // Attach logging context to the request for use in error handling
-  req.logContext = logContext;
   
   if (totalMessageLength > 32000) {
     console.warn('[LLM Process] ⚠️ Total message length is very long, this might cause issues with some models');
@@ -404,6 +475,8 @@ export async function callLLM({
   
   let response;
   try {
+    logWithContext('info', 'request', 'SENDING REQUEST TO GROQ');
+    
     response = await groqClient.chat.completions.create({
       model,
       messages,
@@ -413,9 +486,19 @@ export async function callLLM({
       tool_choice: "auto",
     });
     
-    console.log('[LLM Process] Groq response object created successfully');
+    logWithContext('info', 'response', 'GROQ RESPONSE RECEIVED', {
+      status: 'success',
+      hasResponse: !!response
+    });
   } catch (apiError) {
-    console.error('[LLM Process] Groq API error:', apiError);
+    logWithContext('error', 'error', 'GROQ API ERROR', {
+      error: {
+        message: apiError.message,
+        code: apiError.code,
+        type: apiError.type,
+        stack: apiError.stack
+      }
+    });
     
     // Check if it's a tool_use_failed error
     if (apiError.error?.code === 'tool_use_failed') {
