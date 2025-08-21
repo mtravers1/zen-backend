@@ -324,7 +324,22 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     logEncryptionOperation('decryptValue', false, { 
       uid, 
       error: 'Invalid input type - expected string',
-      inputType: typeof cipherTextBase64
+      inputType: typeof cipherTextBase64,
+      inputValue: cipherTextBase64 === null ? 'null' : cipherTextBase64 === undefined ? 'undefined' : 'other'
+    });
+    
+    // Return null instead of throwing to prevent crashes
+    console.warn(`[Encryption] Skipping decryption for non-string value: ${typeof cipherTextBase64} (${cipherTextBase64 === null ? 'null' : cipherTextBase64 === undefined ? 'undefined' : 'other'})`);
+    return null;
+  }
+
+  // Additional validation for string content
+  if (cipherTextBase64.trim() === '') {
+    logEncryptionOperation('decryptValue', false, { 
+      uid, 
+      error: 'Empty string provided for decryption',
+      inputType: 'string',
+      inputLength: cipherTextBase64.length
     });
     return null;
   }

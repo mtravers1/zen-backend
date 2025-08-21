@@ -4,6 +4,68 @@
 import Groq from "groq-sdk";
 import { formatFinancialResponse } from "./responseFormatter.js";
 
+// Configuration constants for robustness
+const MAX_RETRIES = 3;
+const JSON_CLEANUP_TIMEOUT = 5000; // 5 seconds
+const HALLUCINATION_CHECK_TIMEOUT = 10000; // 10 seconds
+
+/**
+ * Attempts to clean and parse malformed JSON responses
+ * @param {string} response - The potentially malformed JSON response
+ * @returns {object|null} Parsed JSON object or null if cleaning fails
+ */
+function cleanAndParseJSON(response) {
+  if (!response || typeof response !== 'string') {
+    return null;
+  }
+
+  try {
+    // First attempt: direct parsing
+    return JSON.parse(response);
+  } catch (firstError) {
+    console.warn('[AI][cleanAndParseJSON] First parsing attempt failed:', firstError.message);
+  }
+
+  try {
+    // Second attempt: remove trailing characters after last }
+    let cleaned = response;
+    const lastBraceIndex = cleaned.lastIndexOf('}');
+    if (lastBraceIndex !== -1) {
+      cleaned = cleaned.substring(0, lastBraceIndex + 1);
+    }
+    
+    // Remove leading characters before first {
+    const firstBraceIndex = cleaned.indexOf('{');
+    if (firstBraceIndex !== -1) {
+      cleaned = cleaned.substring(firstBraceIndex);
+    }
+    
+    return JSON.parse(cleaned);
+  } catch (secondError) {
+    console.warn('[AI][cleanAndParseJSON] Second parsing attempt failed:', secondError.message);
+  }
+
+  try {
+    // Third attempt: find JSON-like content between braces
+    const braceMatches = response.match(/\{.*\}/gs);
+    if (braceMatches && braceMatches.length > 0) {
+      // Try the longest match first
+      const sortedMatches = braceMatches.sort((a, b) => b.length - a.length);
+      for (const match of sortedMatches) {
+        try {
+          return JSON.parse(match);
+        } catch (parseError) {
+          continue;
+        }
+      }
+    }
+  } catch (thirdError) {
+    console.warn('[AI][cleanAndParseJSON] Third parsing attempt failed:', thirdError.message);
+  }
+
+  return null;
+}
+
 /**
  * Validates if LLM response matches tool results to prevent hallucinations
  * @param {string|object} llmResponse - The LLM response to validate
@@ -373,7 +435,27 @@ export async function callLLM({
   try {
     // Only attempt to parse if the response looks like it might be JSON
     if (completeResponse && completeResponse.trim().startsWith('{') && completeResponse.trim().endsWith('}')) {
-      const parsed = JSON.parse(completeResponse);
+      let parsed = cleanAndParseJSON(completeResponse);
+      
+      if (!parsed) {
+        console.error('[AI][callLLM] Failed to parse JSON response even after cleaning attempts');
+        
+        // If we have tool results, provide a fallback response
+        if (lastToolResult) {
+          const responseText = formatFinancialResponse(lastToolResult);
+          return JSON.stringify({
+            text: responseText,
+            data: lastToolResult
+          });
+        }
+        
+        // Return a safe fallback
+        return JSON.stringify({
+          text: 'I encountered an issue processing your request. Please try again.',
+          data: {},
+          error: true
+        });
+      }
       
       // Check if this is a general knowledge response (no tool result validation needed)
       if (parsed.data && parsed.data.type === 'general_knowledge') {
@@ -384,56 +466,76 @@ export async function callLLM({
       // Only check if we have a tool result and the LLM output is a valid object
       if (lastToolResult && parsed && typeof parsed === 'object') {
         
-        // IMPROVED VALIDATION: Check if LLM response contains the tool result data
-        // instead of strict equality comparison
-        const toolDataStr = JSON.stringify(lastToolResult);
-        const llmDataStr = JSON.stringify(parsed.data);
+        // CRITICAL: Always use real tool data, never trust LLM output completely
+        // Even if validation passes, we prioritize tool results over LLM interpretation
         
-        // Check if tool result is contained in LLM response (more flexible validation)
-        let isValidResponse = false;
+        console.log('[AI][callLLM] Tool results available - prioritizing real data over LLM interpretation');
+        console.log('[AI][callLLM] Tool result:', lastToolResult);
+        console.log('[AI][callLLM] LLM response data:', parsed.data);
         
-        if (Array.isArray(lastToolResult) && Array.isArray(parsed.data)) {
-          // For arrays, check if all tool result items are present in LLM response
-          isValidResponse = lastToolResult.every(toolItem => {
-            if (!toolItem || typeof toolItem !== 'object') return true;
-            return parsed.data.some(llmItem => {
-              if (!llmItem || typeof llmItem !== 'object') return false;
-              // Check if key values match (allowing for different formatting)
-              for (const [key, value] of Object.entries(toolItem)) {
-                if (llmItem[key] !== value) return false;
-              }
-              return true;
-            });
-          });
-        } else if (typeof lastToolResult === 'object' && typeof parsed.data === 'object') {
-          // For objects, check if tool result values are present in LLM response
-          isValidResponse = Object.entries(lastToolResult).every(([key, value]) => {
-            return parsed.data[key] === value;
-          });
+        // Create a response that combines LLM text with real tool data
+        let responseText = '';
+        
+        // Use LLM text if available and seems reasonable
+        if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().length > 0) {
+          // Validate that LLM text doesn't contain obvious hallucinations
+          const toolDataStr = JSON.stringify(lastToolResult);
+          if (parsed.text.includes('I don\'t have access to') || 
+              parsed.text.includes('I cannot provide') ||
+              parsed.text.includes('I don\'t have the data') ||
+              parsed.text.includes('I don\'t have information')) {
+            // LLM is claiming it doesn't have data when we do - this is a hallucination
+            console.warn('[AI][callLLM] LLM text indicates hallucination (claiming no data when data exists)');
+            responseText = formatFinancialResponse(lastToolResult);
+          } else {
+            // Use LLM text but ensure it's combined with real data
+            responseText = parsed.text;
+          }
         } else {
-          // For other types, use simple containment check
-          isValidResponse = llmDataStr.includes(toolDataStr.substring(1, toolDataStr.length - 1));
+          // No LLM text, create our own
+          responseText = formatFinancialResponse(lastToolResult);
         }
         
-        if (!isValidResponse) {
-          console.warn('[AI][callLLM] LLM output does not contain tool result data. Creating proper response with real data to prevent hallucination.');
-          console.warn('[AI][callLLM] Tool result:', lastToolResult);
-          console.warn('[AI][callLLM] LLM response data:', parsed.data);
-          
-          // Create a proper, user-friendly response using the actual financial data
-          const responseText = formatFinancialResponse(lastToolResult);
-          
-          return JSON.stringify({
-            text: responseText,
-            data: lastToolResult
-          });
-        } else {
-          console.log('[AI][callLLM] LLM response validated successfully against tool result');
-        }
+        // ALWAYS return real tool data, never LLM data
+        return JSON.stringify({
+          text: responseText,
+          data: lastToolResult, // This is the REAL data from tools
+          source: 'tool_result', // Indicate this is real data
+          llm_interpretation: parsed.text || null // Keep LLM text for reference but don't trust it
+        });
+        
+      } else if (lastToolResult) {
+        // We have tool results but no valid LLM response
+        console.log('[AI][callLLM] No valid LLM response but tool results available - returning real data');
+        
+        const responseText = formatFinancialResponse(lastToolResult);
+        return JSON.stringify({
+          text: responseText,
+          data: lastToolResult,
+          source: 'tool_result',
+          llm_interpretation: null
+        });
       }
       
-      // If validation passed or no tool result, return the LLM response
-      return completeResponse;
+      // If no tool results, this might be a general knowledge question
+      // But we still need to be careful about what we return
+      if (parsed && parsed.text && typeof parsed.text === 'string') {
+        // For general knowledge, we can return LLM text but mark it as such
+        return JSON.stringify({
+          text: parsed.text,
+          data: {},
+          source: 'llm_general_knowledge',
+          warning: 'This response is based on general knowledge and may not be specific to your financial data'
+        });
+      }
+      
+      // Last resort - return safe fallback
+      return JSON.stringify({
+        text: 'I encountered an issue processing your request. Please try again.',
+        data: {},
+        error: true,
+        source: 'fallback'
+      });
       
     } else {
       console.log('[AI][callLLM] Response is not JSON format, skipping hallucination check. Response:', completeResponse.substring(0, 100) + '...');
@@ -447,39 +549,46 @@ export async function callLLM({
         
         return JSON.stringify({
           text: responseText,
-          data: lastToolResult
+          data: lastToolResult,
+          source: 'tool_result_fallback',
+          llm_interpretation: null
         });
       }
       
-      // If no tool results and no valid JSON, return the raw response
-      return completeResponse;
+      // If no tool results and no valid JSON, return a safe fallback
+      return JSON.stringify({
+        text: 'I encountered an issue processing your request. Please try again.',
+        data: {},
+        error: true,
+        source: 'fallback_no_tools'
+      });
     }
   } catch (e) {
     console.error('[AI][callLLM] Error in post-processing hallucination check:', e);
     console.log('[AI][callLLM] Failed response content:', completeResponse);
     
-    // On error, return the original response if possible
-    if (completeResponse && completeResponse.trim()) {
-      return completeResponse;
-    }
-    
-    // Last resort fallback
+    // CRITICAL: Even on error, prioritize real tool data over any LLM response
     if (lastToolResult) {
-      // Create a proper, user-friendly response using the actual financial data
-      const responseText = formatFinancialResponse(lastToolResult);
+      console.log('[AI][callLLM] Error occurred but tool results available - returning real data');
       
+      const responseText = formatFinancialResponse(lastToolResult);
       return JSON.stringify({
         text: responseText,
-        data: lastToolResult
+        data: lastToolResult,
+        source: 'tool_result_error_fallback',
+        error: true,
+        errorDetails: e.message,
+        llm_interpretation: null
       });
     }
     
+    // If no tool results and error occurred, return safe fallback
     return JSON.stringify({
       text: 'I encountered an issue processing your request. Please try again.',
       data: {},
-      error: true
+      error: true,
+      source: 'error_fallback',
+      errorDetails: e.message
     });
   }
-  // Send [DONE] only after the final answer is sent
-  return completeResponse;
 } 

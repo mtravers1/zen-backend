@@ -141,13 +141,44 @@ class AIService {
       // Validate and correct the LLM response if needed
       let parsedResponse;
       if (isValidJSON(completeResponse)) {
-        parsedResponse = JSON.parse(completeResponse);
+        try {
+          parsedResponse = JSON.parse(completeResponse);
+        } catch (parseError) {
+          console.error("[AI Service] JSON parsing failed despite validation:", parseError.message);
+          console.log("[AI Service] Failed response content:", completeResponse);
+          
+          // Try to clean and parse again
+          parsedResponse = await getCorrectedJsonResponse({
+            invalidJson: completeResponse,
+            groqClient: this.groqClient,
+            model: this.GROQ_AI_MODEL,
+          });
+        }
       } else {
+        console.warn("[AI Service] Response is not valid JSON, attempting correction");
         parsedResponse = await getCorrectedJsonResponse({
           invalidJson: completeResponse,
           groqClient: this.groqClient,
           model: this.GROQ_AI_MODEL,
         });
+      }
+
+      // CRITICAL: Validate that we're returning real data, not hallucinations
+      if (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
+        // Check if this is marked as real tool data
+        if (parsedResponse.source === 'tool_result' || 
+            parsedResponse.source === 'tool_result_fallback' || 
+            parsedResponse.source === 'tool_result_error_fallback') {
+          console.log("[AI Service] ✅ Response contains real tool data - safe to return");
+        } else if (parsedResponse.source === 'llm_general_knowledge') {
+          console.log("[AI Service] ⚠️ Response is general knowledge - no financial data");
+        } else {
+          console.warn("[AI Service] ⚠️ Response source unclear - may contain hallucinations");
+          // If we can't verify the source, be conservative and mark as potentially unreliable
+          parsedResponse.warning = "This response may contain AI-generated content and should be verified";
+        }
+      } else {
+        console.warn("[AI Service] ⚠️ Response has no data or empty data");
       }
 
       // Handle streaming responses if res is provided
@@ -198,19 +229,58 @@ class AIService {
   normalizeResponse(parsedResponse, completeResponse) {
     // If no parsed response, create a fallback
     if (!parsedResponse) {
+      console.warn("[AI Service] No parsed response available, creating fallback");
       return {
         text: "I'm having trouble processing your request. Please try again.",
         data: {},
         error: true,
-        errorMessage: "Failed to parse AI response"
+        errorMessage: "Failed to parse AI response",
+        source: "normalization_fallback"
       };
     }
 
-    // Ensure we have the required fields for mobile
+    // CRITICAL: Always prioritize real tool data over any other data
     let text = parsedResponse.text || parsedResponse.response || "";
     let data = parsedResponse.data || {};
     let error = parsedResponse.error || false;
     let errorMessage = parsedResponse.errorMessage || undefined;
+    let source = parsedResponse.source || "unknown";
+    let warning = parsedResponse.warning || undefined;
+
+    // If we have real tool data, ensure it's the primary data
+    if (source.includes('tool_result') && data && Object.keys(data).length > 0) {
+      console.log("[AI Service] ✅ Using real tool data as primary data source");
+      
+      // Ensure text is appropriate for the real data
+      if (!text || text.trim() === '') {
+        text = "Here is your requested information based on your actual financial data.";
+      }
+      
+      // Mark this as verified real data
+      source = "verified_tool_result";
+      warning = undefined; // Clear any warnings since we have real data
+    } else if (source === 'llm_general_knowledge') {
+      console.log("[AI Service] ⚠️ Response is general knowledge - no financial data");
+      warning = "This response is based on general knowledge and may not be specific to your financial data";
+    } else if (!source.includes('tool_result')) {
+      console.warn("[AI Service] ⚠️ Response source unclear - may contain hallucinations");
+      warning = "This response may contain AI-generated content and should be verified";
+    }
+
+    // Validate data structure
+    if (data && typeof data === 'object') {
+      // Check for common data corruption issues
+      const dataKeys = Object.keys(data);
+      if (dataKeys.length > 0) {
+        // Validate that data values are not corrupted
+        for (const [key, value] of Object.entries(data)) {
+          if (value === null || value === undefined) {
+            console.warn(`[AI Service] Data field '${key}' has null/undefined value, removing to prevent corruption`);
+            delete data[key];
+          }
+        }
+      }
+    }
 
     // If we have no text but have data, create a default text
     if (!text && data && Object.keys(data).length > 0) {
@@ -235,7 +305,9 @@ class AIService {
       text,
       data,
       error,
-      errorMessage
+      errorMessage,
+      source,
+      warning
     };
   }
 

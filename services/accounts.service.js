@@ -23,11 +23,23 @@ const safeDecryptValue = async (value, dek) => {
   }
   
   if (typeof value !== 'string') {
+    console.warn(`[Accounts Service] Attempting to decrypt non-string value: ${typeof value} (${value === null ? 'null' : value === undefined ? 'undefined' : 'other'})`);
+    return value;
+  }
+  
+  // Additional validation for string content
+  if (value.trim() === '') {
+    console.warn("[Accounts Service] Attempting to decrypt empty string");
     return value;
   }
   
   try {
-    return await decryptValue(value, dek);
+    const decrypted = await decryptValue(value, dek);
+    if (decrypted === null) {
+      console.warn("[Accounts Service] Decryption returned null, this might indicate data corruption");
+      return null;
+    }
+    return decrypted;
   } catch (error) {
     console.warn("Failed to decrypt value, returning null instead of encrypted value:", error.message);
     return null; // Return null instead of the encrypted value to avoid data corruption
