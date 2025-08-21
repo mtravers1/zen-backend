@@ -321,15 +321,65 @@ export async function callLLM({
     messagesCount: messages.length
   });
   
-  let response = await groqClient.chat.completions.create({
-    model,
-    messages,
-    temperature: 0.0,
-    stream: true,
-    tools,
-  });
+  // Log the first few messages to help debug
+  console.log('[LLM Process] First message preview:', messages[0]?.content?.substring(0, 200) + '...');
+  console.log('[LLM Process] Last message preview:', messages[messages.length - 1]?.content?.substring(0, 200) + '...');
   
-  console.log('[LLM Process] Groq response object created successfully');
+  // Log tool definitions for debugging
+  if (tools.length > 0) {
+    console.log('[LLM Process] Tool names:', tools.map(t => t.function?.name).filter(Boolean));
+  }
+  
+  // Check total message length to prevent potential issues
+  const totalMessageLength = messages.reduce((total, msg) => total + (msg.content?.length || 0), 0);
+  console.log('[LLM Process] Total message content length:', totalMessageLength, 'characters');
+  
+  if (totalMessageLength > 32000) {
+    console.warn('[LLM Process] ⚠️ Total message length is very long, this might cause issues with some models');
+  }
+  
+  let response;
+  try {
+    response = await groqClient.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.0,
+      stream: true,
+      tools,
+      tool_choice: "auto",
+    });
+    
+    console.log('[LLM Process] Groq response object created successfully');
+  } catch (apiError) {
+    console.error('[LLM Process] Groq API error:', apiError);
+    
+    // Check if it's a tool_use_failed error
+    if (apiError.error?.code === 'tool_use_failed') {
+      console.error('[LLM Process] Tool use failed error detected. This usually means the LLM is confused about the response format.');
+      console.error('[LLM Process] Failed generation:', apiError.error.failed_generation);
+      
+      // Return a helpful error message
+      return JSON.stringify({
+        text: "I encountered an issue processing your request. The AI model got confused about how to respond. Please try rephrasing your question or contact support if the problem persists.",
+        data: {},
+        error: true,
+        errorDetails: "Tool use failed - LLM response format confusion",
+        source: 'groq_api_error'
+      });
+    }
+    
+    // Handle other API errors
+    const errorMessage = apiError.error?.message || apiError.message || 'Unknown Groq API error';
+    console.error('[LLM Process] Groq API error details:', errorMessage);
+    
+    return JSON.stringify({
+      text: "I encountered a technical issue while processing your request. Please try again in a moment or contact support if the problem persists.",
+      data: {},
+      error: true,
+      errorDetails: errorMessage,
+      source: 'groq_api_error'
+    });
+  }
 
   let finalMessages = [...messages];
   let toolCallsRemaining = true;
@@ -366,10 +416,20 @@ export async function callLLM({
 
       // Handle content chunks - accumulate the complete response
       if (delta?.content) {
-        completeResponse += delta.content;
+        // Check for malformed content that might cause issues
+        const content = delta.content;
+        if (content.includes('<tool-use>') || content.includes('</tool-use>')) {
+          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains tool-use markers');
+          console.warn('[AI][callLLM] Content with tool-use markers:', content);
+          
+          // Skip this content chunk as it's malformed
+          continue;
+        }
+        
+        completeResponse += content;
         receivedContent = true;
-        console.log(`[AI][callLLM] Received content chunk:`, delta.content.substring(0, 100) + '...');
-        console.log(`[AI][callLLM] Content chunk length:`, delta.content.length);
+        console.log(`[AI][callLLM] Received content chunk:`, content.substring(0, 100) + '...');
+        console.log(`[AI][callLLM] Content chunk length:`, content.length);
         console.log(`[AI][callLLM] Total accumulated response length:`, completeResponse.length);
       }
 
@@ -514,6 +574,50 @@ export async function callLLM({
   console.log('[AI][callLLM] Response length:', completeResponse.length);
   console.log('[AI][callLLM] Response preview:', completeResponse.substring(0, 200));
   
+  // Check for malformed content that might contain tool-use markers or other problematic content
+  if (completeResponse.includes('<tool-use>') || completeResponse.includes('</tool-use>')) {
+    console.warn('[AI][callLLM] 🚨 MALFORMED RESPONSE DETECTED - contains tool-use markers');
+    console.warn('[AI][callLLM] Malformed response:', completeResponse);
+    
+    // Try to clean the response by removing tool-use markers
+    let cleanedResponse = completeResponse;
+    cleanedResponse = cleanedResponse.replace(/<tool-use>.*?<\/tool-use>/gs, '');
+    cleanedResponse = cleanedResponse.replace(/<tool-use>.*$/s, '');
+    cleanedResponse = cleanedResponse.replace(/^.*<\/tool-use>/s, '');
+    
+    // Remove any remaining XML-like tags
+    cleanedResponse = cleanedResponse.replace(/<[^>]*>/g, '');
+    
+    // Trim and check if we have usable content
+    cleanedResponse = cleanedResponse.trim();
+    
+    if (cleanedResponse && cleanedResponse.length > 10) {
+      console.log('[AI][callLLM] ✅ Cleaned malformed response:', cleanedResponse.substring(0, 200));
+      completeResponse = cleanedResponse;
+    } else {
+      console.warn('[AI][callLLM] ⚠️ Could not clean malformed response, using fallback');
+      
+      // If we have tool results, provide a fallback response
+      if (lastToolResult) {
+        const responseText = formatFinancialResponse(lastToolResult);
+        return JSON.stringify({
+          text: responseText,
+          data: lastToolResult,
+          source: 'tool_result_fallback',
+          warning: 'Response was malformed but tool results are available'
+        });
+      }
+      
+      // Return a safe fallback
+      return JSON.stringify({
+        text: 'I encountered an issue processing your request. Please try again.',
+        data: {},
+        error: true,
+        source: 'malformed_response_fallback'
+      });
+    }
+  }
+  
   // Check for cut-off responses and fix them
   if (completeResponse.includes('cut off') || completeResponse.includes('response was cut') || completeResponse.includes('my response was cut')) {
     console.warn('[AI][callLLM] 🚨 CUT-OFF RESPONSE DETECTED - Attempting to fix');
@@ -544,6 +648,32 @@ export async function callLLM({
   try {
     // Only attempt to parse if the response looks like it might be JSON
     if (completeResponse && completeResponse.trim().startsWith('{') && completeResponse.trim().endsWith('}')) {
+      
+      // Final check for any remaining malformed content
+      if (completeResponse.includes('<tool-use>') || completeResponse.includes('</tool-use>')) {
+        console.error('[AI][callLLM] 🚨 MALFORMED CONTENT STILL PRESENT after cleaning attempts');
+        console.error('[AI][callLLM] This suggests the LLM is fundamentally confused about the response format');
+        
+        // If we have tool results, provide a fallback response
+        if (lastToolResult) {
+          const responseText = formatFinancialResponse(lastToolResult);
+          return JSON.stringify({
+            text: responseText,
+            data: lastToolResult,
+            source: 'tool_result_fallback',
+            warning: 'LLM response format confusion detected'
+          });
+        }
+        
+        // Return a safe fallback
+        return JSON.stringify({
+          text: 'I encountered an issue processing your request. The AI model got confused about how to respond. Please try rephrasing your question.',
+          data: {},
+          error: true,
+          source: 'llm_format_confusion'
+        });
+      }
+      
       let parsed = cleanAndParseJSON(completeResponse);
       
       if (!parsed) {

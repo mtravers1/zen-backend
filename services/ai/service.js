@@ -1,7 +1,7 @@
 // Zentavos AI Service - Centralized Exports
 // This module centralizes all AI-related logic for maintainability and clarity.
 
-import { buildScreenPrompt, getProductionSystemPrompt } from "./prompts.js";
+import { buildScreenPrompt, getProductionSystemPrompt, getSimplifiedSystemPrompt } from "./prompts.js";
 import { toolFunctions } from "./toolFunctions.js";
 import { callLLM } from "./llmClient.js";
 import { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
@@ -216,11 +216,42 @@ ${contextInfo.join('\n')}
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}` },
+        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nIMPORTANT: Respond in the exact JSON format specified in the system prompt. Do not use any other format.` },
       ];
+
+      // Check total prompt length to prevent LLM confusion
+      const totalPromptLength = systemPrompt.length + enhancedScreenPrompt.length + prompt.length;
+      console.log('[AI Service] Total prompt length:', totalPromptLength, 'characters');
+      
+      if (totalPromptLength > 25000) {
+        console.warn('[AI Service] ⚠️ Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
+        
+        // Use simplified prompt for very long requests
+        const simplifiedSystemPrompt = getSimplifiedSystemPrompt(currentScreen);
+        messages[0] = { role: 'system', content: simplifiedSystemPrompt };
+        
+        console.log('[AI Service] Switched to simplified system prompt');
+      }
 
       // Use the tool definitions for function calling
       const tools = toolDefinitions;
+
+      // Validate tool configuration
+      if (!tools || !Array.isArray(tools) || tools.length === 0) {
+        console.error('[AI Service] 🚨 No tools available for function calling');
+        return {
+          text: "I encountered a technical issue - no tools are available for processing your request. Please contact support.",
+          data: null,
+          error: true,
+          errorMessage: "No tools available",
+          source: 'no_tools'
+        };
+      }
+
+      console.log('[AI Service] Tool configuration validated:', {
+        toolsCount: tools.length,
+        toolNames: tools.map(t => t.function?.name).filter(Boolean)
+      });
 
       // Prepare the context for tool functions (injects user/profile info)
       const toolContext = {
@@ -235,6 +266,18 @@ ${contextInfo.join('\n')}
       console.log("[AI] Calling LLM with messages:", messages);
       console.log("[AI Service] User question:", prompt);
       console.log("[AI Service] Screen context:", screen, dataScreen);
+      
+      // Log message details for debugging
+      console.log('[AI Service] Message details:', {
+        systemPromptLength: systemPrompt.length,
+        screenPromptLength: enhancedScreenPrompt.length,
+        userQuestionLength: prompt.length,
+        totalMessages: messages.length,
+        firstMessageRole: messages[0]?.role,
+        firstMessageLength: messages[0]?.content?.length,
+        secondMessageRole: messages[1]?.role,
+        secondMessageLength: messages[1]?.content?.length
+      });
       
       // Call the LLM (Groq/vLLM) with all context and tool functions
       let completeResponse = await callLLM({
@@ -251,6 +294,21 @@ ${contextInfo.join('\n')}
       console.log("[AI] LLM response:", completeResponse);
       console.log("[AI Service] Response length:", completeResponse?.length || 0);
       console.log("[AI Service] Response type:", typeof completeResponse);
+
+      // Check for malformed responses that might contain tool-use markers
+      if (typeof completeResponse === 'string' && (completeResponse.includes('<tool-use>') || completeResponse.includes('</tool-use>'))) {
+        console.error('[AI Service] 🚨 MALFORMED RESPONSE DETECTED - contains tool-use markers');
+        console.error('[AI Service] This suggests the LLM is fundamentally confused about the response format');
+        
+        // Return a helpful error response
+        return {
+          text: "I encountered an issue processing your request. The AI model got confused about how to respond. Please try rephrasing your question or contact support if the problem persists.",
+          data: null,
+          error: true,
+          errorMessage: "LLM response format confusion detected",
+          source: 'malformed_response'
+        };
+      }
 
       // Validate and correct the LLM response if needed
       let parsedResponse;
