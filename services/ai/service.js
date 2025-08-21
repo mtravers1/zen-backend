@@ -249,11 +249,14 @@ class AIService {
         }
       }
 
+      // Enhanced response processing with LLM self-evaluation
+      const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId);
+
       // Handle streaming responses if res is provided
-      if (res && parsedResponse) {
+      if (res && processedResponse) {
         const { default: aiController } = await import("../../controllers/ai.controller.js");
         if (aiController) {
-          aiController.sendToUser(uid, parsedResponse);
+          aiController.sendToUser(uid, processedResponse);
           aiController.sendToUser(uid, "[DONE]");
         }
       }
@@ -261,7 +264,7 @@ class AIService {
       console.log('\n🎯 [AI Service] ====== NORMALIZING RESPONSE ======');
       
       // Normalize the response structure for mobile compatibility
-      const normalizedResponse = this.normalizeResponse(parsedResponse, completeResponse);
+      const normalizedResponse = this.normalizeResponse(processedResponse, completeResponse);
       
       console.log('\n🎉 [AI Service] ====== FINAL NORMALIZED RESPONSE ======');
       console.log("[AI Service] Final response structure:", {
@@ -297,6 +300,105 @@ class AIService {
       
       // Return the user-friendly error instead of throwing
       return userFriendlyError;
+    }
+  }
+
+  // Enhanced response processing with LLM self-evaluation
+  async processLLMResponse(llmResponse, userMessage, profileId) {
+    try {
+      console.log("🔍 [AI Service] Processing LLM response with self-evaluation");
+      
+      // Check if response needs quality evaluation
+      const needsEvaluation = (
+        !llmResponse.data || 
+        (Array.isArray(llmResponse.data) && llmResponse.data.length === 0) ||
+        llmResponse.response.includes('no data') ||
+        llmResponse.response.includes('empty data') ||
+        llmResponse.response.includes('Profile not found') ||
+        llmResponse.response.includes('unclear') ||
+        llmResponse.response.includes('hallucinations')
+      );
+      
+      if (needsEvaluation) {
+        console.log("⚠️ [AI Service] Response needs quality evaluation - asking LLM to self-assess");
+        
+        // Create self-evaluation prompt for the LLM
+        const evaluationPrompt = `
+You are an AI assistant that just provided a response to a user. Please evaluate your response and provide a better one if needed.
+
+USER QUESTION: "${userMessage}"
+YOUR CURRENT RESPONSE: "${llmResponse.response}"
+CURRENT DATA: ${JSON.stringify(llmResponse.data)}
+
+EVALUATION CRITERIA:
+1. Does your response actually answer the user's question?
+2. Do you have access to the data needed to answer properly?
+3. Is your response clear and helpful?
+4. Are you making assumptions without data?
+
+INSTRUCTIONS:
+- If your response is inadequate, provide a better one
+- If you don't have the data needed, explain why and suggest alternatives
+- If the user's question is unclear, ask for clarification
+- Be specific about what you can and cannot do
+- Provide examples of better ways to ask the question
+
+RESPONSE FORMAT:
+{
+  "response": "Your improved response here",
+  "data": null,
+  "error": false,
+  "errorMessage": null,
+  "needsClarification": true/false,
+  "suggestedQuestions": ["Question 1", "Question 2"]
+}
+`;
+
+        // Get LLM to evaluate its own response
+        const evaluationResponse = await callLLM(evaluationPrompt, profileId, [], 'evaluation');
+        
+        if (evaluationResponse && evaluationResponse.response) {
+          try {
+            const evaluated = JSON.parse(evaluationResponse.response);
+            console.log("✅ [AI Service] LLM self-evaluation completed:", evaluated);
+            
+            // Return the improved response
+            return {
+              response: evaluated.response || llmResponse.response,
+              data: evaluated.data || null,
+              error: evaluated.error || false,
+              errorMessage: evaluated.errorMessage || null,
+              needsClarification: evaluated.needsClarification || false,
+              suggestedQuestions: evaluated.suggestedQuestions || []
+            };
+          } catch (parseError) {
+            console.warn("⚠️ [AI Service] Failed to parse LLM self-evaluation, using fallback");
+          }
+        }
+        
+        // Fallback: Provide a helpful response based on the issue
+        if (!llmResponse.data || (Array.isArray(llmResponse.data) && llmResponse.data.length === 0)) {
+          return {
+            response: `I couldn't find the specific data you're looking for. This might be because:\n\n• Your question is too broad - try being more specific\n• The data doesn't exist yet in your account\n• There might be a temporary issue\n\nTry asking something like:\n• "Show me my transactions from this month"\n• "What's my current account balance?"\n• "List my recent purchases"`,
+            data: null,
+            error: false,
+            errorMessage: null,
+            needsClarification: true,
+            suggestedQuestions: [
+              "Show me my transactions from this month",
+              "What's my current account balance?",
+              "List my recent purchases"
+            ]
+          };
+        }
+      }
+      
+      // If no evaluation needed, return original response
+      return llmResponse;
+      
+    } catch (error) {
+      console.error("❌ [AI Service] Error in LLM response processing:", error);
+      return llmResponse; // Return original response on error
     }
   }
 
