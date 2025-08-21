@@ -825,17 +825,17 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('net worth') ||
         normalizedResponse.response.includes('balance') ||
         normalizedResponse.response.includes('transactions') ||
-        normalizedResponse.includes('accounts') ||
-        normalizedResponse.includes('assets') ||
-        normalizedResponse.includes('liabilities') ||
-        normalizedResponse.includes('income') ||
-        normalizedResponse.includes('expenses') ||
-        normalizedResponse.includes('savings') ||
-        normalizedResponse.includes('investments') ||
-        normalizedResponse.includes('debt') ||
-        normalizedResponse.includes('credit') ||
-        normalizedResponse.includes('cash') ||
-        normalizedResponse.includes('bank') ||
+        normalizedResponse.response.includes('accounts') ||
+        normalizedResponse.response.includes('assets') ||
+        normalizedResponse.response.includes('liabilities') ||
+        normalizedResponse.response.includes('income') ||
+        normalizedResponse.response.includes('expenses') ||
+        normalizedResponse.response.includes('savings') ||
+        normalizedResponse.response.includes('investments') ||
+        normalizedResponse.response.includes('debt') ||
+        normalizedResponse.response.includes('credit') ||
+        normalizedResponse.response.includes('cash') ||
+        normalizedResponse.response.includes('bank') ||
         // Data arrays
         (normalizedResponse.data && Array.isArray(normalizedResponse.data) && normalizedResponse.data.length > 0) ||
         // Specific financial terms
@@ -852,10 +852,10 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('tab') ||
         normalizedResponse.response.includes('time') ||
         normalizedResponse.response.includes('day') ||
-        normalizedResponse.includes('device') ||
-        normalizedResponse.includes('platform') ||
-        normalizedResponse.includes('app') ||
-        normalizedResponse.includes('version') ||
+        normalizedResponse.response.includes('device') ||
+        normalizedResponse.response.includes('platform') ||
+        normalizedResponse.response.includes('app') ||
+        normalizedResponse.response.includes('version') ||
         // General helpful content
         normalizedResponse.response.includes('You are currently') ||
         normalizedResponse.response.includes('You\'re currently') ||
@@ -886,7 +886,7 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('Your debt') ||
         normalizedResponse.response.includes('Your credit') ||
         normalizedResponse.response.includes('Your cash') ||
-        normalizedResponse.includes('Your bank') ||
+        normalizedResponse.response.includes('Your bank') ||
         // Business and investment guidance
         normalizedResponse.response.includes('LLC') ||
         normalizedResponse.response.includes('business') ||
@@ -897,8 +897,8 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         normalizedResponse.response.includes('cash flow') ||
         normalizedResponse.response.includes('expenses') ||
         normalizedResponse.response.includes('revenue') ||
-        normalizedResponse.includes('profit') ||
-        normalizedResponse.includes('tax') ||
+        normalizedResponse.response.includes('profit') ||
+        normalizedResponse.response.includes('tax') ||
         normalizedResponse.response.includes('IRS') ||
         normalizedResponse.response.includes('professional') ||
         // Form and procedure guidance

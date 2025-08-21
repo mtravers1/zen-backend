@@ -790,30 +790,61 @@ export async function callLLM({
     }
   }
   
-  // Check for cut-off responses and fix them
-  if (completeResponse.includes('cut off') || completeResponse.includes('response was cut') || completeResponse.includes('my response was cut')) {
-    console.warn('[AI][callLLM] 🚨 CUT-OFF RESPONSE DETECTED - Attempting to fix');
+  // Check for cut-off responses and apologetic messages - reject them completely
+  const hasCutoffIndicators = (
+    completeResponse.includes('cut off') ||
+    completeResponse.includes('response was cut') ||
+    completeResponse.includes('my response was cut') ||
+    completeResponse.includes('I apologize') ||
+    completeResponse.includes("I'm sorry") ||
+    completeResponse.includes('sorry') ||
+    completeResponse.includes('Please try asking your question again') ||
+    completeResponse.includes('try asking your question again')
+  );
+  
+  if (hasCutoffIndicators) {
+    console.warn('[AI][callLLM] 🚨 CUT-OFF OR APOLOGY RESPONSE DETECTED - Rejecting completely');
     
-    // Try to extract the useful part before the cut-off
-    const usefulPart = completeResponse.split(/cut off|response was cut|my response was cut/i)[0].trim();
-    
-    if (usefulPart && usefulPart.length > 10) {
-      console.log('[AI][callLLM] ✅ Extracted useful content:', usefulPart.substring(0, 100) + '...');
-      
-      // Create a complete response with the useful part
-      completeResponse = usefulPart;
-      
-      // If it's JSON, try to make it complete
-      if (completeResponse.startsWith('{') && !completeResponse.endsWith('}')) {
-        // Find the last complete JSON object
-        const lastBraceIndex = completeResponse.lastIndexOf('}');
-        if (lastBraceIndex > 0) {
-          completeResponse = completeResponse.substring(0, lastBraceIndex + 1);
-          console.log('[AI][callLLM] ✅ Fixed incomplete JSON response');
-        }
+    // Check if this looks like JSON that might have useful data despite the apology
+    let hasUsefulData = false;
+    try {
+      const parsed = JSON.parse(completeResponse);
+      if (parsed.data && Object.keys(parsed.data).length > 0) {
+        hasUsefulData = true;
+        console.log('[AI][callLLM] Found useful data despite apology, keeping data but changing response');
+        
+        // Return a clean response with the data but without apologies
+        return JSON.stringify({
+          text: "Here's the information you requested.",
+          response: "Here's the information you requested.",
+          data: parsed.data,
+          source: parsed.source || 'tool_result',
+          error: false,
+          errorMessage: null
+        });
       }
-    } else {
-      console.warn('[AI][callLLM] ⚠️ Could not extract useful content from cut-off response');
+    } catch (e) {
+      // Not valid JSON or no useful data
+    }
+    
+    if (!hasUsefulData) {
+      console.warn('[AI][callLLM] ⚠️ No useful data found in cut-off/apology response - returning fallback');
+      
+      // Return a generic helpful response instead of the cut-off message
+      return JSON.stringify({
+        text: "I'm here to help with your financial questions. What would you like to know?",
+        response: "I'm here to help with your financial questions. What would you like to know?",
+        data: {},
+        error: false,
+        errorMessage: null,
+        source: 'fallback_response',
+        suggestedQuestions: [
+          "What's my net worth?",
+          "Show me my recent transactions",
+          "What's my account balance?",
+          "How are my finances looking?"
+        ]
+      });
     }
   }
   
