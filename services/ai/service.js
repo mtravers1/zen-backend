@@ -200,7 +200,7 @@ class AIService {
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nIMPORTANT: Respond in the exact JSON format specified in the system prompt. Do not use any other format.` },
+        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nIMPORTANT: Follow the two-phase workflow:\n1. Use tools if needed (wait for results)\n2. Return ONLY a JSON response (never use <tool-use> tags)\n\nRespond in the exact JSON format specified in the system prompt.` },
       ];
 
       // Check total prompt length to prevent LLM confusion
