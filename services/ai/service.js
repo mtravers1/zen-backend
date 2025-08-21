@@ -141,6 +141,14 @@ class AIService {
       const currentDataScreen = dataScreen || (screen || "").split("/")[1];
       const currentScreen = baseScreen.toLowerCase().trim();
 
+      console.log("🔍 [AI Service] Request analysis:", {
+        prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+        hasContext: !!context,
+        contextKeys: context ? Object.keys(context) : [],
+        screen: currentScreen,
+        dataScreen: currentDataScreen
+      });
+
       // Build the system and screen prompts
       const screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen);
       const systemPrompt = getProductionSystemPrompt();
