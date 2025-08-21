@@ -508,11 +508,38 @@ export async function callLLM({
     console.log('[LLM Process] Last tool result preview:', JSON.stringify(lastToolResult).substring(0, 200) + '...');
   }
 
-  // --- POST-PROCESSING: Prevent hallucinations by validating the LLM's output against the tool result ---
+  // --- POST-PROCESSING: Prevent hallucinations and cut-off responses ---
   console.log('[AI][callLLM] Response type check - starts with {:', completeResponse.trim().startsWith('{'));
   console.log('[AI][callLLM] Response type check - ends with }:', completeResponse.trim().endsWith('}'));
   console.log('[AI][callLLM] Response length:', completeResponse.length);
   console.log('[AI][callLLM] Response preview:', completeResponse.substring(0, 200));
+  
+  // Check for cut-off responses and fix them
+  if (completeResponse.includes('cut off') || completeResponse.includes('response was cut') || completeResponse.includes('my response was cut')) {
+    console.warn('[AI][callLLM] 🚨 CUT-OFF RESPONSE DETECTED - Attempting to fix');
+    
+    // Try to extract the useful part before the cut-off
+    const usefulPart = completeResponse.split(/cut off|response was cut|my response was cut/i)[0].trim();
+    
+    if (usefulPart && usefulPart.length > 10) {
+      console.log('[AI][callLLM] ✅ Extracted useful content:', usefulPart.substring(0, 100) + '...');
+      
+      // Create a complete response with the useful part
+      completeResponse = usefulPart;
+      
+      // If it's JSON, try to make it complete
+      if (completeResponse.startsWith('{') && !completeResponse.endsWith('}')) {
+        // Find the last complete JSON object
+        const lastBraceIndex = completeResponse.lastIndexOf('}');
+        if (lastBraceIndex > 0) {
+          completeResponse = completeResponse.substring(0, lastBraceIndex + 1);
+          console.log('[AI][callLLM] ✅ Fixed incomplete JSON response');
+        }
+      }
+    } else {
+      console.warn('[AI][callLLM] ⚠️ Could not extract useful content from cut-off response');
+    }
+  }
   
   try {
     // Only attempt to parse if the response looks like it might be JSON

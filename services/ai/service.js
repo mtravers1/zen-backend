@@ -198,6 +198,28 @@ class AIService {
 
       console.log('\n🔍 [AI Service] ====== VALIDATING RESPONSE ======');
       
+      // Check for cut-off responses
+      if (parsedResponse.text && (
+        parsedResponse.text.includes('cut off') || 
+        parsedResponse.text.includes('response was cut') || 
+        parsedResponse.text.includes('my response was cut') ||
+        parsedResponse.text.includes('I apologize, but my response was cut off')
+      )) {
+        console.warn('[AI Service] 🚨 CUT-OFF RESPONSE DETECTED in parsed response');
+        
+        // Try to fix the response by removing the cut-off part
+        const fixedText = parsedResponse.text.split(/cut off|response was cut|my response was cut|I apologize, but my response was cut off/i)[0].trim();
+        
+        if (fixedText && fixedText.length > 10) {
+          console.log('[AI Service] ✅ Fixed cut-off response:', fixedText.substring(0, 100) + '...');
+          parsedResponse.text = fixedText;
+        } else {
+          console.warn('[AI Service] ⚠️ Could not fix cut-off response, using fallback');
+          parsedResponse.text = "I'm sorry, I encountered an issue with my response. Please try asking your question again.";
+          parsedResponse.error = true;
+        }
+      }
+      
       // CRITICAL: Validate that we're returning real data, not hallucinations
       if (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
         console.log("[AI Service] Response has data with keys:", Object.keys(parsedResponse.data));
