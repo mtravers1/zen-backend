@@ -63,6 +63,49 @@ function cleanAndParseJSON(response) {
     console.warn('[AI][cleanAndParseJSON] Third parsing attempt failed:', thirdError.message);
   }
 
+  try {
+    // Fourth attempt: aggressive cleaning for control characters
+    let cleaned = response;
+    
+    // Remove common control characters that break JSON
+    cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+    
+    // Remove any trailing text after the last complete JSON object
+    const jsonObjects = [];
+    let braceCount = 0;
+    let startIndex = -1;
+    
+    for (let i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') {
+        if (braceCount === 0) {
+          startIndex = i;
+        }
+        braceCount++;
+      } else if (cleaned[i] === '}') {
+        braceCount--;
+        if (braceCount === 0 && startIndex !== -1) {
+          const jsonCandidate = cleaned.substring(startIndex, i + 1);
+          try {
+            const parsed = JSON.parse(jsonCandidate);
+            jsonObjects.push(parsed);
+          } catch (e) {
+            // Skip invalid JSON
+          }
+          startIndex = -1;
+        }
+      }
+    }
+    
+    // Return the last valid JSON object found
+    if (jsonObjects.length > 0) {
+      console.log('[AI][cleanAndParseJSON] Found valid JSON after aggressive cleaning');
+      return jsonObjects[jsonObjects.length - 1];
+    }
+    
+  } catch (fourthError) {
+    console.warn('[AI][cleanAndParseJSON] Fourth parsing attempt failed:', fourthError.message);
+  }
+
   return null;
 }
 
