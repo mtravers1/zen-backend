@@ -317,6 +317,12 @@ class AIService {
       
       // Use validated tools
       const finalTools = validatedTools;
+      
+      // Enable full functionality with robust fallback system
+      console.log('\n✅ [AI Service] ====== TOOLS ENABLED WITH FALLBACK PROTECTION ======');
+      console.log('[AI Service] Using validated tools with intelligent fallback system');
+      console.log('[AI Service] Available tools:', finalTools.length);
+      const temporaryFinalTools = finalTools;
 
       // Prepare the context for tool functions (injects user/profile info)
       const toolContext = {
@@ -361,7 +367,7 @@ class AIService {
         screen: screen || 'unknown',
         dataScreen: dataScreen || 'none',
         messageCount: Array.isArray(messages) ? messages.length : 0,
-        toolCount: Array.isArray(finalTools) ? finalTools.length : 0,
+        toolCount: Array.isArray(temporaryFinalTools) ? temporaryFinalTools.length : 0,
         promptLength: typeof prompt === 'string' ? prompt.length : 0,
         requestType: 'ai_chat',
         environment: process.env.NODE_ENV || 'development',
@@ -370,7 +376,7 @@ class AIService {
           hasProfile: !!profileId,
           hasScreen: !!screen,
           hasMessages: Array.isArray(messages) && messages.length > 0,
-          hasTools: Array.isArray(finalTools) && finalTools.length > 0,
+          hasTools: Array.isArray(temporaryFinalTools) && temporaryFinalTools.length > 0,
           hasPrompt: typeof prompt === 'string' && prompt.length > 0
         }
       };
@@ -396,8 +402,8 @@ class AIService {
           apiKey: this.GROQ_API_KEY,
           model: this.GROQ_AI_MODEL,
           messages,
-          tools: finalTools,
-          toolFunctions: toolsImpl,
+          tools: temporaryFinalTools, // Now using actual validated tools
+          toolFunctions: toolsImpl, // Using proper tool implementations
           uid,
           aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
         });
@@ -444,15 +450,25 @@ class AIService {
           console.log('[AI Service] Function call error detected, activating fallback mode');
           
           try {
-            // Create a simplified prompt without tools
+            // Classify the question for intelligent fallback response
+            const questionClassification = this.classifyUserQuestion(prompt);
+            
+            // Create a simplified prompt without tools based on question type
             const simplifiedMessages = [
               { 
                 role: 'system', 
-                content: `You are Zentavos, a helpful financial assistant. Answer the user's question directly without using any tools or functions. Provide general financial advice and guidance.` 
+                content: this.buildFallbackSystemPrompt(questionClassification)
               },
               { 
                 role: 'user', 
-                content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nPlease respond in JSON format with this structure: {"response": "your answer", "data": null, "source": "general_response", "error": false}` 
+                content: `User question: "${prompt}"
+
+Question type detected: ${questionClassification.category} (${questionClassification.subcategory})
+Confidence: ${Math.round(questionClassification.confidence * 100)}%
+
+Provide a helpful response based on the question type. Always be specific and actionable.
+
+Respond in JSON format: {"response": "your answer", "data": null, "source": "general_response", "error": false, "fallbackMode": true}` 
               }
             ];
             
@@ -563,14 +579,79 @@ class AIService {
       // Add fallback mode indicator if used
       if (usedFallbackMode && processedResponse) {
         processedResponse.fallbackMode = true;
-        processedResponse.warning = 'Response generated without real-time financial data due to technical issues';
-        if (!processedResponse.suggestedQuestions) {
-          processedResponse.suggestedQuestions = [
-            "What's my current balance?",
-            "Show me my recent transactions", 
-            "What's my net worth?",
-            "How can I improve my finances?"
-          ];
+        processedResponse.warning = 'Temporarily unable to access your real financial data due to technical issues. For specific financial information, please check your dashboard directly.';
+        
+        // Intelligent question classification for comprehensive responses
+        const questionType = this.classifyUserQuestion(prompt);
+        
+        // Provide contextual suggestions and guidance based on question type
+        switch (questionType.category) {
+          case 'financial_data':
+            processedResponse.suggestedQuestions = [
+              "Check the Dashboard for your current financial overview",
+              "Visit the Accounts section for balance details",
+              "Go to Transactions for recent activity",
+              "Navigate to Net Worth section for wealth tracking"
+            ];
+            
+            // Add specific navigation guidance
+            if (questionType.subcategory === 'net_worth') {
+              processedResponse.response += "\n\nTo view your current net worth, navigate to the 'Net Worth' section on your dashboard.";
+            } else if (questionType.subcategory === 'balance') {
+              processedResponse.response += "\n\nTo check your account balances, go to the 'Accounts' section in your app.";
+            } else if (questionType.subcategory === 'transactions') {
+              processedResponse.response += "\n\nTo view your transactions, visit the 'Transactions' section for detailed activity.";
+            }
+            break;
+            
+          case 'financial_forms':
+            processedResponse.suggestedQuestions = [
+              "How do I add a new account?",
+              "Where can I upload financial documents?",
+              "How to categorize my expenses?",
+              "How to set up budget goals?"
+            ];
+            processedResponse.response += "\n\nFor forms and data entry, check the relevant sections in your dashboard or use the '+' button to add new information.";
+            break;
+            
+          case 'business_advice':
+            processedResponse.suggestedQuestions = [
+              "How to improve cash flow?",
+              "What are key business metrics to track?",
+              "How to reduce business expenses?",
+              "Tips for business growth strategies"
+            ];
+            processedResponse.response += "\n\nFor detailed business insights, check your Business Profile section and cash flow analytics.";
+            break;
+            
+          case 'investment_advice':
+            processedResponse.suggestedQuestions = [
+              "What are safe investment options?",
+              "How to diversify my portfolio?",
+              "When should I start investing?",
+              "How to track investment performance?"
+            ];
+            processedResponse.response += "\n\nTrack your investments in the Assets section and consult with financial advisors for personalized advice.";
+            break;
+            
+          case 'platform_navigation':
+            processedResponse.suggestedQuestions = [
+              "How to navigate the dashboard?",
+              "Where to find account settings?",
+              "How to export financial reports?",
+              "How to connect bank accounts?"
+            ];
+            processedResponse.response += "\n\nUse the main navigation menu to access different sections, or check the Help section for detailed guides.";
+            break;
+            
+          default: // general_advice
+            processedResponse.suggestedQuestions = [
+              "How can I improve my savings?",
+              "What's the best budgeting strategy?",
+              "How to plan for retirement?",
+              "Tips for debt management?"
+            ];
+            break;
         }
       }
 
@@ -1098,6 +1179,241 @@ class AIService {
       data: {},
       errorMessage: error.message || "Unknown error occurred"
     };
+  }
+
+  // Intelligent question classifier for comprehensive response handling
+  classifyUserQuestion(prompt) {
+    if (!prompt || typeof prompt !== 'string') {
+      return { category: 'general_advice', subcategory: 'unknown', confidence: 0 };
+    }
+    
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Define comprehensive keyword patterns for different categories
+    const patterns = {
+      financial_data: {
+        net_worth: ['net worth', 'patrimônio', 'wealth', 'total value', 'valor total', 'quanto tenho'],
+        balance: ['balance', 'saldo', 'money', 'cash', 'current balance', 'account balance'],
+        transactions: ['transaction', 'transação', 'spending', 'gastos', 'purchases', 'compras', 'payments', 'pagamentos'],
+        accounts: ['account', 'conta', 'bank account', 'savings', 'poupança', 'checking'],
+        cash_flow: ['cash flow', 'fluxo de caixa', 'income', 'revenue', 'receita', 'expenses', 'despesas'],
+        debts: ['debt', 'dívida', 'loan', 'empréstimo', 'credit card', 'cartão de crédito', 'liability']
+      },
+      
+      financial_forms: {
+        add_account: ['add account', 'adicionar conta', 'connect bank', 'conectar banco', 'new account'],
+        upload_documents: ['upload', 'document', 'documento', 'file', 'arquivo', 'receipt', 'recibo'],
+        categorize: ['category', 'categoria', 'categorize', 'categorizar', 'organize', 'organizar'],
+        budget_setup: ['budget', 'orçamento', 'goal', 'meta', 'target', 'objetivo', 'plan', 'plano']
+      },
+      
+      business_advice: {
+        cash_flow: ['business cash flow', 'fluxo de caixa empresarial', 'company finances'],
+        growth: ['business growth', 'crescimento', 'expand', 'expandir', 'scale', 'escalar'],
+        metrics: ['kpi', 'metrics', 'métricas', 'performance', 'desempenho', 'analytics'],
+        expenses: ['business expenses', 'custos empresariais', 'reduce costs', 'reduzir custos'],
+        strategy: ['business strategy', 'estratégia', 'planning', 'planejamento empresarial']
+      },
+      
+      investment_advice: {
+        portfolio: ['investment', 'investimento', 'portfolio', 'portfólio', 'stocks', 'ações'],
+        diversification: ['diversify', 'diversificar', 'risk', 'risco', 'allocation', 'alocação'],
+        strategy: ['investment strategy', 'estratégia de investimento', 'when to invest', 'quando investir'],
+        tracking: ['track investment', 'acompanhar investimento', 'performance', 'rentabilidade']
+      },
+      
+      platform_navigation: {
+        navigation: ['how to', 'como', 'where', 'onde', 'find', 'encontrar', 'navigate', 'navegar'],
+        settings: ['settings', 'configurações', 'config', 'setup', 'configure'],
+        reports: ['report', 'relatório', 'export', 'exportar', 'download', 'baixar'],
+        connection: ['connect', 'conectar', 'sync', 'sincronizar', 'link', 'vincular']
+      }
+    };
+    
+    let bestMatch = { category: 'general_advice', subcategory: 'unknown', confidence: 0 };
+    
+    // Check each category for matches
+    for (const [category, subcategories] of Object.entries(patterns)) {
+      for (const [subcategory, keywords] of Object.entries(subcategories)) {
+        let matchCount = 0;
+        let totalKeywords = keywords.length;
+        
+        for (const keyword of keywords) {
+          if (lowerPrompt.includes(keyword)) {
+            matchCount++;
+          }
+        }
+        
+        // Calculate confidence based on keyword matches
+        const confidence = matchCount / totalKeywords;
+        
+        // Also check for exact phrase matches (higher weight)
+        const exactMatches = keywords.filter(keyword => lowerPrompt.includes(keyword)).length;
+        const adjustedConfidence = confidence + (exactMatches * 0.1);
+        
+        if (adjustedConfidence > bestMatch.confidence) {
+          bestMatch = { category, subcategory, confidence: adjustedConfidence };
+        }
+      }
+    }
+    
+    // Additional context-based classification
+    if (bestMatch.confidence < 0.3) {
+      // Check for question words and financial context
+      const hasQuestionWords = ['what', 'how', 'where', 'when', 'why', 'qual', 'como', 'onde', 'quando', 'por que']
+        .some(word => lowerPrompt.includes(word));
+      
+      const hasFinancialContext = ['money', 'financial', 'finance', 'banco', 'conta', 'dinheiro']
+        .some(word => lowerPrompt.includes(word));
+      
+      if (hasQuestionWords && hasFinancialContext) {
+        bestMatch = { 
+          category: 'platform_navigation', 
+          subcategory: 'general_help', 
+          confidence: 0.5 
+        };
+      }
+    }
+    
+    // Log classification for debugging
+    console.log('\n🧠 [AI Service] ====== QUESTION CLASSIFICATION ======', {
+      prompt: prompt.substring(0, 100),
+      classification: bestMatch,
+      confidence: Math.round(bestMatch.confidence * 100) + '%'
+    });
+    
+    return bestMatch;
+  }
+
+  // Build fallback system prompt based on question classification
+  buildFallbackSystemPrompt(questionClassification) {
+    const basePrompt = `You are Zentavos, a helpful financial assistant. You are currently in fallback mode due to technical issues accessing real financial data.`;
+    
+    switch (questionClassification.category) {
+      case 'financial_data':
+        return `${basePrompt}
+
+FINANCIAL DATA REQUEST DETECTED
+The user is asking for specific financial information that requires real-time data access.
+
+GUIDANCE STRATEGY:
+- Acknowledge that you cannot access their real financial data right now
+- Direct them to the specific dashboard section where they can find this information
+- Provide context about what they'll find in that section
+- Be encouraging and helpful despite the limitation
+
+SPECIFIC GUIDANCE:
+- Net Worth → "Navigate to the 'Net Worth' section on your dashboard"
+- Account Balances → "Check the 'Accounts' section for detailed balance information"
+- Transactions → "Visit the 'Transactions' section for recent activity and history"
+- Cash Flow → "Review the 'Cash Flow' analytics in your dashboard"
+
+Be direct, specific, and always end with actionable next steps.`;
+
+      case 'financial_forms':
+        return `${basePrompt}
+
+FINANCIAL FORMS & PROCEDURES QUESTION
+The user needs help with forms, data entry, or platform procedures.
+
+GUIDANCE STRATEGY:
+- Provide clear, step-by-step instructions
+- Mention specific UI elements when possible (buttons, menus, sections)
+- Offer alternatives if the primary method isn't available
+- Be detailed and practical
+
+COMMON SCENARIOS:
+- Adding accounts → Guide to connection process and security considerations
+- Document uploads → Explain accepted formats and where to find upload features
+- Categorization → Describe the categorization system and benefits
+- Budget setup → Walk through the goal-setting process
+
+Focus on being a helpful tutorial guide.`;
+
+      case 'business_advice':
+        return `${basePrompt}
+
+BUSINESS ADVICE REQUEST
+The user is seeking business-related financial guidance and strategies.
+
+GUIDANCE STRATEGY:
+- Provide professional, actionable business advice
+- Focus on practical strategies they can implement
+- Reference relevant business financial principles
+- Connect advice to features available in their Zentavos platform
+
+KEY AREAS TO COVER:
+- Cash flow management and optimization
+- Business expense tracking and reduction
+- Growth strategies and financial planning
+- Key performance indicators (KPIs) to monitor
+- Risk management and financial stability
+
+Be professional, insightful, and strategic in your advice.`;
+
+      case 'investment_advice':
+        return `${basePrompt}
+
+INVESTMENT GUIDANCE REQUEST
+The user is asking for investment-related advice and information.
+
+GUIDANCE STRATEGY:
+- Provide educational, general investment principles
+- Emphasize the importance of professional financial advice for specific investments
+- Focus on portfolio management concepts available in the platform
+- Include appropriate disclaimers about investment risks
+
+TOPICS TO COVER:
+- Diversification principles and strategies
+- Risk assessment and tolerance
+- Investment tracking and performance monitoring
+- General market education and concepts
+- How to use Zentavos' investment tracking features
+
+Always include disclaimer: "This is educational information only. Consult with a qualified financial advisor for personalized investment advice."`;
+
+      case 'platform_navigation':
+        return `${basePrompt}
+
+PLATFORM NAVIGATION HELP
+The user needs help navigating or using features of the Zentavos platform.
+
+GUIDANCE STRATEGY:
+- Provide clear, step-by-step navigation instructions
+- Mention specific menu items, buttons, and interface elements
+- Offer multiple ways to accomplish the same task when possible
+- Include helpful tips for efficient platform usage
+
+NAVIGATION ASSISTANCE:
+- Dashboard overview and main sections
+- Menu structure and how to access different features
+- Settings and customization options
+- Report generation and data export
+- Account connection and management
+
+Be like a friendly platform expert helping them master the interface.`;
+
+      default: // general_advice
+        return `${basePrompt}
+
+GENERAL FINANCIAL ADVICE
+The user is seeking general financial guidance and education.
+
+GUIDANCE STRATEGY:
+- Provide helpful, actionable financial advice
+- Keep advice practical and implementable
+- Reference how they can track progress using Zentavos features
+- Be encouraging and supportive of their financial journey
+
+ADVICE AREAS:
+- Budgeting strategies and techniques
+- Saving tips and goal-setting
+- Debt management and reduction strategies
+- Financial planning and goal achievement
+- Money management best practices
+
+Focus on empowering them with knowledge and practical steps they can take today.`;
+    }
   }
 
   // Helper method to ensure consistent response structure for mobile compatibility
