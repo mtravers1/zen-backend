@@ -55,7 +55,19 @@ class AIService {
       if (!uid) throw new Error("User ID (uid) is required");
       if (!profileId) throw new Error("Profile ID is required");
 
-      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen, dataScreen });
+      console.log("[AI Service] Starting request with:", { uid, profileId, hasPrompt: !!prompt, screen, dataScreen, hasContext: !!context, contextKeys: context ? Object.keys(context) : [] });
+
+      // Log context details if available
+      if (context) {
+        console.log("🔍 [AI Service] Context received:", {
+          screen: context.screen,
+          device: context.device,
+          time: context.time,
+          user: context.user,
+          chat: context.chat,
+          contextSize: JSON.stringify(context).length
+        });
+      }
 
       // Check if environment variables are set
       if (!this.GROQ_API_KEY) {

@@ -26,6 +26,13 @@ const makeRequest = async (req, res) => {
       dataScreen,
       hasContext: !!context,
       contextKeys: context ? Object.keys(context) : [],
+      contextDetails: context ? {
+        screen: context.screen,
+        device: context.device,
+        time: context.time,
+        user: context.user,
+        chat: context.chat
+      } : 'NO_CONTEXT',
       bodyKeys: req.body ? Object.keys(req.body) : [],
       bodySize: req.body ? JSON.stringify(req.body).length : 0,
       userKeys: req.user ? Object.keys(req.user) : [],
