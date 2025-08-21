@@ -64,17 +64,27 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   }
   
   const baseContext = `
-    ## CURRENT SCREEN CONTEXT
+    ## INTERACTION CONTEXT
     
-    You are currently on the **${baseScreen}** screen${isSpecificView ? ` viewing **${currentDataScreen}**` : ''}.
+    ${contextInfo.length > 0 ? `### Current Context\n${contextInfo.join('\n')}` : ''}
     
-    ### CONTEXT QUESTIONS YOU CAN ANSWER DIRECTLY
+    ### Response Guidelines
     
-    Since you know the current screen, you can answer these questions without tools:
-    - "What screen am I on?" → "You're on the **${baseScreen}** screen"
-    - "Where am I?" → "You're in the **${baseScreen}** section"
-    - "What can I do here?" → Explain based on screen context
-    - "How do I navigate from here?" → Provide navigation guidance
+    1. For navigation or UI questions:
+       - "What screen am I on?" → Mention current screen
+       - "Where am I?" → Describe current location
+       - "What can I do here?" → Explain available actions
+       - "How do I navigate?" → Provide guidance
+       
+    2. For financial questions:
+       - Focus on providing accurate financial information
+       - Only mention the current screen if it's directly relevant
+       - Use appropriate tools to fetch real data
+       
+    3. For general questions:
+       - Focus on the question's substance
+       - Avoid mentioning UI/screens unless specifically asked
+       - Provide clear, direct answers
     
     ### FINANCIAL QUESTIONS THAT NEED TOOLS
     
@@ -104,10 +114,13 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   const screenContexts = {
     dashboard: {
       overview: `
-        ## DASHBOARD SCREEN DETAILS
+        ## Available Data
         
-        This screen shows:
-        - Overall financial overview
+        This context provides access to:
+        - Account balances and transactions
+        - Net worth calculation
+        - Cash flow analysis
+        - Recent financial activity
         - Cash flow summary
         - Net worth
         - Recent transactions preview

@@ -119,28 +119,59 @@ export function validateResponseAgainstToolResults(llmResponse, toolResults) {
   try {
     // Special case: no tool results - this is valid for generic responses
     if (!toolResults || toolResults.length === 0) {
-      return { isValid: true, reason: "No tool results to validate against - generic response allowed" };
+      return { 
+        isValid: true, 
+        reason: "No tool results to validate against - generic response allowed",
+        response: {
+          text: llmResponse,
+          data: null,
+          error: false,
+          errorMessage: null
+        }
+      };
     }
 
     if (!llmResponse) {
-      return { isValid: false, reason: "No LLM response provided" };
+      return { 
+        isValid: false, 
+        reason: "No LLM response provided",
+        response: {
+          text: "I encountered an issue processing your request. Please try again.",
+          data: null,
+          error: true,
+          errorMessage: "No response received from AI service"
+        }
+      };
     }
 
-    // Parse LLM response
+    // Parse LLM response if it's a string
     let parsedResponse;
     if (typeof llmResponse === 'string') {
       try {
+        // First try to parse as JSON
         parsedResponse = JSON.parse(llmResponse);
       } catch (e) {
-        return { isValid: false, reason: "LLM response is not valid JSON" };
+        // If not JSON, treat as plain text response
+        parsedResponse = {
+          text: llmResponse,
+          data: null
+        };
       }
     } else {
       parsedResponse = llmResponse;
     }
 
-    // Check if LLM response has data field
-    if (!parsedResponse.data) {
-      return { isValid: false, reason: "LLM response missing data field" };
+    // Ensure we have a text field
+    if (!parsedResponse.text && typeof parsedResponse !== 'string') {
+      parsedResponse.text = "I processed your request but encountered an issue formatting the response.";
+    }
+
+    // If response is just a string, wrap it in proper structure
+    if (typeof parsedResponse === 'string') {
+      parsedResponse = {
+        text: parsedResponse,
+        data: null
+      };
     }
 
     // CRITICAL: Strict validation to prevent hallucinations
@@ -303,36 +334,69 @@ export async function callLLM({
   uid,
   aiController,
 }) {
-  console.log('\n🤖 [LLM Process] ====== STARTING LLM CALL ======');
-  console.log('[LLM Process] User ID:', uid);
-  console.log('[LLM Process] Model:', model);
-  console.log('[LLM Process] Messages count:', messages.length);
-  console.log('[LLM Process] Available tools:', tools.length);
-  console.log('[LLM Process] Last user message:', messages[messages.length - 1]?.content?.substring(0, 100) + '...');
-  
-  const groqClient = new Groq({ apiKey });
-  // Log the tools array/object being sent to the LLM for debugging
-  console.log('\n🌐 [LLM Process] ====== CREATING GROQ REQUEST ======');
-  console.log('[LLM Process] Request parameters:', {
+  // Initialize logging context
+  const logContext = {
+    requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    userId: uid,
     model,
-    temperature: 0.0,
-    stream: true,
-    toolsCount: tools.length,
-    messagesCount: messages.length
+    messageStats: {
+      total: messages.length,
+      totalLength: messages.reduce((total, msg) => total + (msg.content?.length || 0), 0),
+      averageLength: Math.round(messages.reduce((total, msg) => total + (msg.content?.length || 0), 0) / messages.length),
+      types: messages.reduce((acc, msg) => {
+        acc[msg.role] = (acc[msg.role] || 0) + 1;
+        return acc;
+      }, {})
+    },
+    toolStats: {
+      available: tools.length,
+      names: tools.map(t => t.function?.name).filter(Boolean)
+    }
+  };
+
+  // Log request start with full context
+  console.log('\n🤖 [LLM Process] ====== REQUEST START ======', {
+    ...logContext,
+    stage: 'start',
+    latestMessage: messages[messages.length - 1]?.content?.substring(0, 100) + '...'
   });
+
+  const groqClient = new Groq({ apiKey });
   
-  // Log the first few messages to help debug
-  console.log('[LLM Process] First message preview:', messages[0]?.content?.substring(0, 200) + '...');
-  console.log('[LLM Process] Last message preview:', messages[messages.length - 1]?.content?.substring(0, 200) + '...');
-  
-  // Log tool definitions for debugging
-  if (tools.length > 0) {
-    console.log('[LLM Process] Tool names:', tools.map(t => t.function?.name).filter(Boolean));
+  // Log request configuration
+  console.log('\n🌐 [LLM Process] ====== REQUEST CONFIG ======', {
+    ...logContext,
+    stage: 'config',
+    config: {
+      model,
+      temperature: 0.0,
+      stream: true,
+      maxTokens: 4096,
+      requestTimeout: 120000
+    },
+    messagePreview: {
+      first: messages[0]?.content?.substring(0, 200) + '...',
+      last: messages[messages.length - 1]?.content?.substring(0, 200) + '...'
+    }
+  });
+
+  // Log validation warnings
+  if (logContext.messageStats.totalLength > 32000) {
+    console.warn('\n⚠️ [LLM Process] ====== VALIDATION WARNING ======', {
+      ...logContext,
+      stage: 'validation',
+      warning: 'Total message length exceeds recommended limit',
+      details: {
+        currentLength: logContext.messageStats.totalLength,
+        recommendedMax: 32000,
+        overagePercent: Math.round((logContext.messageStats.totalLength / 32000 - 1) * 100)
+      }
+    });
   }
-  
-  // Check total message length to prevent potential issues
-  const totalMessageLength = messages.reduce((total, msg) => total + (msg.content?.length || 0), 0);
-  console.log('[LLM Process] Total message content length:', totalMessageLength, 'characters');
+
+  // Attach logging context to the request for use in error handling
+  req.logContext = logContext;
   
   if (totalMessageLength > 32000) {
     console.warn('[LLM Process] ⚠️ Total message length is very long, this might cause issues with some models');
@@ -436,7 +500,16 @@ export async function callLLM({
       // Handle tool calls
       if (delta?.tool_calls) {
         toolCallsRemaining = true;
-        console.log(`[AI][callLLM] Tool call(s) detected:`, delta.tool_calls.map(tc => tc.function?.name));
+        
+        // Log tool call detection with context
+        console.log('\n🔧 [LLM Process] ====== TOOL CALLS DETECTED ======', {
+          ...logContext,
+          stage: 'tool_calls',
+          tools: delta.tool_calls.map(tc => ({
+            name: tc.function?.name,
+            argumentsLength: tc.function?.arguments?.length || 0
+          }))
+        });
         
         // Send progress message to user
         if (aiController && uid) {
@@ -447,28 +520,72 @@ export async function callLLM({
         }
         
         for (const toolCall of delta.tool_calls) {
+          const toolContext = {
+            ...logContext,
+            stage: 'tool_execution',
+            tool: {
+              name: toolCall.function?.name,
+              startTime: Date.now()
+            }
+          };
+          
           try {
-            if (!toolCall.function) continue;
+            if (!toolCall.function) {
+              console.warn('\n⚠️ [LLM Process] ====== TOOL CALL WARNING ======', {
+                ...toolContext,
+                warning: 'Tool call missing function definition'
+              });
+              continue;
+            }
+            
             const fnName = toolCall.function?.name;
-            if (!fnName) continue;
+            if (!fnName) {
+              console.warn('\n⚠️ [LLM Process] ====== TOOL CALL WARNING ======', {
+                ...toolContext,
+                warning: 'Tool call missing function name'
+              });
+              continue;
+            }
             
             let args = {};
             try {
               args = toolCall.function.arguments
                 ? JSON.parse(toolCall.function.arguments)
                 : {};
+                
+              // Log successful argument parsing
+              console.log('\n🔍 [LLM Process] ====== TOOL ARGS PARSED ======', {
+                ...toolContext,
+                args: {
+                  parsed: true,
+                  keys: Object.keys(args),
+                  size: JSON.stringify(args).length
+                }
+              });
             } catch (e) {
-              console.error(`[AI][callLLM] Error parsing tool arguments for ${fnName}:`, e);
+              console.error('\n❌ [LLM Process] ====== TOOL ARGS ERROR ======', {
+                ...toolContext,
+                error: {
+                  type: 'argument_parsing',
+                  message: e.message,
+                  raw: toolCall.function.arguments?.substring(0, 200) + '...'
+                }
+              });
               continue;
             }
             
             // Always use the backend-authenticated UID
             args.uid = uid;
-            console.log(`[AI][callLLM] Executing tool: ${fnName} with args:`, args);
             
             const fn = toolFunctions[fnName];
             if (!fn) {
-              console.error(`[AI][callLLM] Tool function not found: ${fnName}`);
+              console.error('\n❌ [LLM Process] ====== TOOL NOT FOUND ======', {
+                ...toolContext,
+                error: {
+                  type: 'missing_function',
+                  availableTools: Object.keys(toolFunctions)
+                }
+              });
               continue;
             }
             
@@ -478,10 +595,29 @@ export async function callLLM({
             try {
               result = await runToolWithTimeout(fn, args, 30000);
               const toolDuration = Date.now() - toolStartTime;
-              console.log(`[AI][callLLM] Tool ${fnName} completed in ${toolDuration}ms`);
+              
+              // Log successful tool execution
+              console.log('\n✅ [LLM Process] ====== TOOL SUCCESS ======', {
+                ...toolContext,
+                execution: {
+                  duration: toolDuration,
+                  resultSize: result ? JSON.stringify(result).length : 0,
+                  resultType: result ? typeof result : 'null'
+                }
+              });
             } catch (timeoutErr) {
               const toolDuration = Date.now() - toolStartTime;
-              console.error(`[AI][callLLM] Tool ${fnName} failed after ${toolDuration}ms:`, timeoutErr);
+              
+              // Log tool execution failure
+              console.error('\n❌ [LLM Process] ====== TOOL FAILURE ======', {
+                ...toolContext,
+                error: {
+                  type: 'execution_error',
+                  duration: toolDuration,
+                  message: timeoutErr.message,
+                  stack: timeoutErr.stack
+                }
+              });
               
               if (aiController && uid) {
                 aiController.sendToUser(uid, { 
