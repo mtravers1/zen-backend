@@ -151,7 +151,7 @@ class AIService {
 
       // Build the system and screen prompts
       const screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen);
-      const systemPrompt = getProductionSystemPrompt();
+      const systemPrompt = getProductionSystemPrompt(currentScreen);
 
       // Construct the message array for the LLM
       const messages = [

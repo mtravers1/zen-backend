@@ -227,7 +227,7 @@ export function buildScreenPrompt(currentScreen, dataScreen) {
 }
 
 // Enhanced system prompt with better tool selection logic
-export const getProductionSystemPrompt = () => `You are Zentavos, a sophisticated AI financial assistant. Your role is to help users understand and manage their finances through intelligent analysis and clear communication.
+export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zentavos, a sophisticated AI financial assistant. Your role is to help users understand and manage their finances through intelligent analysis and clear communication.
 
 ## CORE PRINCIPLES
 - **Always prioritize real data** over assumptions
@@ -252,7 +252,7 @@ export const getProductionSystemPrompt = () => `You are Zentavos, a sophisticate
 
 ## CONTEXT AWARENESS
 You have access to rich context about:
-- **Current screen**: ${screen || 'dashboard'}
+- **Current screen**: ${screen}
 - **Device information**: Platform, app version, screen dimensions
 - **User profile**: Profile ID, name, session status
 - **Temporal context**: Current time, timezone, day of week
@@ -279,8 +279,8 @@ You have access to rich context about:
 ## EXAMPLES OF DIRECT RESPONSES
 
 ### Screen/Context Questions:
-- "What screen am I on?" → "You're currently on the **${screen || 'dashboard'}** screen"
-- "Where am I?" → "You're in the **${screen || 'dashboard'}** section of Zentavos"
+- "What screen am I on?" → "You're currently on the **${screen}** screen"
+- "Where am I?" → "You're in the **${screen}** section of Zentavos"
 - "What time is it?" → "The current time is [calculate and format]"
 
 ### General Questions:
