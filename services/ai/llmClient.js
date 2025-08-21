@@ -303,6 +303,13 @@ export async function callLLM({
   uid,
   aiController,
 }) {
+  console.log('\n🤖 [LLM Process] ====== STARTING LLM CALL ======');
+  console.log('[LLM Process] User ID:', uid);
+  console.log('[LLM Process] Model:', model);
+  console.log('[LLM Process] Messages count:', messages.length);
+  console.log('[LLM Process] Available tools:', tools.length);
+  console.log('[LLM Process] Last user message:', messages[messages.length - 1]?.content?.substring(0, 100) + '...');
+  
   const groqClient = new Groq({ apiKey });
   // Log the tools array/object being sent to the LLM for debugging
   console.log("[AI][callLLM] Tools passed to LLM:", JSON.stringify(tools, null, 2));
@@ -467,7 +474,13 @@ export async function callLLM({
   if (iteration >= MAX_ITER) {
     console.error("[AI][callLLM] Max iterations reached. Possible infinite tool call loop.");
   }
+  console.log('\n🎯 [LLM Process] ====== POST-PROCESSING ======');
   console.log("[AI][callLLM] Complete LLM response:", completeResponse);
+  console.log('[LLM Process] Last tool result available:', !!lastToolResult);
+  if (lastToolResult) {
+    console.log('[LLM Process] Last tool result type:', typeof lastToolResult);
+    console.log('[LLM Process] Last tool result preview:', JSON.stringify(lastToolResult).substring(0, 200) + '...');
+  }
 
   // --- POST-PROCESSING: Prevent hallucinations by validating the LLM's output against the tool result ---
   console.log('[AI][callLLM] Response type check - starts with {:', completeResponse.trim().startsWith('{'));
@@ -512,9 +525,11 @@ export async function callLLM({
         // CRITICAL: Always use real tool data, never trust LLM output completely
         // Even if validation passes, we prioritize tool results over LLM interpretation
         
+        console.log('\n✅ [LLM Process] ====== USING REAL TOOL DATA ======');
         console.log('[AI][callLLM] Tool results available - prioritizing real data over LLM interpretation');
-        console.log('[AI][callLLM] Tool result:', lastToolResult);
-        console.log('[AI][callLLM] LLM response data:', parsed.data);
+        console.log('[AI][callLLM] Tool result:', JSON.stringify(lastToolResult, null, 2));
+        console.log('[AI][callLLM] LLM response data:', JSON.stringify(parsed.data, null, 2));
+        console.log('[LLM Process] LLM response text:', parsed.text);
         
         // Create a response that combines LLM text with real tool data
         let responseText = '';
@@ -540,12 +555,19 @@ export async function callLLM({
         }
         
         // ALWAYS return real tool data, never LLM data
-        return JSON.stringify({
+        const finalResponse = {
           text: responseText,
           data: lastToolResult, // This is the REAL data from tools
           source: 'tool_result', // Indicate this is real data
           llm_interpretation: parsed.text || null // Keep LLM text for reference but don't trust it
-        });
+        };
+        
+        console.log('\n🎉 [LLM Process] ====== FINAL RESPONSE WITH REAL DATA ======');
+        console.log('[LLM Process] Final response text:', responseText);
+        console.log('[LLM Process] Final response data keys:', Object.keys(lastToolResult || {}));
+        console.log('[LLM Process] Final response source:', 'tool_result');
+        
+        return JSON.stringify(finalResponse);
         
       } else if (lastToolResult) {
         // We have tool results but no valid LLM response

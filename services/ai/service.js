@@ -125,7 +125,11 @@ class AIService {
       };
       const toolsImpl = toolFunctions(toolContext);
 
+      console.log('\n🚀 [AI Service] ====== CALLING LLM ======');
       console.log("[AI] Calling LLM with messages:", messages);
+      console.log("[AI Service] User question:", prompt);
+      console.log("[AI Service] Screen context:", screen, dataScreen);
+      
       // Call the LLM (Groq/vLLM) with all context and tool functions
       let completeResponse = await callLLM({
         apiKey: this.GROQ_API_KEY,
@@ -136,7 +140,11 @@ class AIService {
         uid,
         aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
       });
+      
+      console.log('\n📥 [AI Service] ====== LLM RESPONSE RECEIVED ======');
       console.log("[AI] LLM response:", completeResponse);
+      console.log("[AI Service] Response length:", completeResponse?.length || 0);
+      console.log("[AI Service] Response type:", typeof completeResponse);
 
       // Validate and correct the LLM response if needed
       let parsedResponse;
@@ -163,8 +171,13 @@ class AIService {
         });
       }
 
+      console.log('\n🔍 [AI Service] ====== VALIDATING RESPONSE ======');
+      
       // CRITICAL: Validate that we're returning real data, not hallucinations
       if (parsedResponse && parsedResponse.data && Object.keys(parsedResponse.data).length > 0) {
+        console.log("[AI Service] Response has data with keys:", Object.keys(parsedResponse.data));
+        console.log("[AI Service] Response source:", parsedResponse.source);
+        
         // Check if this is marked as real tool data
         if (parsedResponse.source === 'tool_result' || 
             parsedResponse.source === 'tool_result_fallback' || 
@@ -179,6 +192,14 @@ class AIService {
         }
       } else {
         console.warn("[AI Service] ⚠️ Response has no data or empty data");
+        if (parsedResponse) {
+          console.log("[AI Service] Response structure:", {
+            hasText: !!parsedResponse.text,
+            hasData: !!parsedResponse.data,
+            dataType: typeof parsedResponse.data,
+            source: parsedResponse.source
+          });
+        }
       }
 
       // Handle streaming responses if res is provided
@@ -190,9 +211,21 @@ class AIService {
         }
       }
 
+      console.log('\n🎯 [AI Service] ====== NORMALIZING RESPONSE ======');
+      
       // Normalize the response structure for mobile compatibility
       const normalizedResponse = this.normalizeResponse(parsedResponse, completeResponse);
       
+      console.log('\n🎉 [AI Service] ====== FINAL NORMALIZED RESPONSE ======');
+      console.log("[AI Service] Final response structure:", {
+        hasText: !!normalizedResponse.text,
+        textLength: normalizedResponse.text?.length || 0,
+        hasData: !!normalizedResponse.data,
+        dataKeys: normalizedResponse.data ? Object.keys(normalizedResponse.data) : [],
+        source: normalizedResponse.source,
+        hasWarning: !!normalizedResponse.warning,
+        hasError: !!normalizedResponse.error
+      });
       console.log("[AI Service] Final normalized response:", normalizedResponse);
       return normalizedResponse;
       
