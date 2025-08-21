@@ -325,9 +325,36 @@ class AIService {
   }
 
   // Enhanced response processing with LLM self-evaluation
-  async processLLMResponse(llmResponse, userMessage, profileId) {
+  async processLLMResponse(llmResponse, userMessage, profileId, context = {}) {
     try {
       console.log("🔍 [AI Service] Processing LLM response with self-evaluation");
+      console.log("🔍 [AI Service] User context received:", context);
+      
+      // Validate llmResponse structure
+      if (!llmResponse || typeof llmResponse !== 'object') {
+        console.error("❌ [AI Service] Invalid llmResponse structure:", llmResponse);
+        return {
+          response: "I encountered an issue processing your request. Please try again.",
+          data: null,
+          error: true,
+          errorMessage: "Invalid response structure",
+          needsClarification: false,
+          suggestedQuestions: []
+        };
+      }
+      
+      // Ensure response property exists
+      if (!llmResponse.response || typeof llmResponse.response !== 'string') {
+        console.error("❌ [AI Service] Missing or invalid response property:", llmResponse.response);
+        return {
+          response: "I encountered an issue processing your request. Please try again.",
+          data: null,
+          error: true,
+          errorMessage: "Missing response content",
+          needsClarification: false,
+          suggestedQuestions: []
+        };
+      }
       
       // Check if response contains unnecessary apologies or cut-off mentions
       const hasUnnecessaryApologies = (
@@ -336,7 +363,9 @@ class AIService {
         llmResponse.response.includes('my response was cut off') ||
         llmResponse.response.includes('Please try asking your question again') ||
         llmResponse.response.includes('response was cut') ||
-        llmResponse.includes('cut off')
+        llmResponse.response.includes('cut off') ||
+        llmResponse.response.includes('apologize') ||
+        llmResponse.response.includes('sorry')
       );
       
       // Check if response actually has useful content
@@ -374,21 +403,29 @@ class AIService {
       if (hasUsefulContent && hasUnnecessaryApologies) {
         console.log("⚠️ [AI Service] Response has useful content but unnecessary apologies - cleaning up");
         
-        // Remove the apology part and keep only the useful content
         let cleanedResponse = llmResponse.response;
         
-        // Remove common apology patterns
+        // Remove common apology patterns - more aggressive cleaning
         const apologyPatterns = [
-          /I apologize,? but my response was cut off\.? Please try asking your question again\.?/i,
-          /I'm sorry,? but my response was cut off\.? Please try asking your question again\.?/i,
-          /my response was cut off\.? Please try asking your question again\.?/i,
-          /response was cut off\.? Please try asking your question again\.?/i,
-          /cut off\.? Please try asking your question again\.?/i,
-          /Please try asking your question again\.?/i,
-          /I apologize,? but my response was cut off\.?/i,
-          /I'm sorry,? but my response was cut off\.?/i,
-          /my response was cut off\.?/i,
-          /response was cut off\.?/i
+          /I apologize,? but my response was cut off\.? Please try asking your question again\.?/gi,
+          /I'm sorry,? but my response was cut off\.? Please try asking your question again\.?/gi,
+          /my response was cut off\.? Please try asking your question again\.?/gi,
+          /response was cut off\.? Please try asking your question again\.?/gi,
+          /cut off\.? Please try asking your question again\.?/gi,
+          /Please try asking your question again\.?/gi,
+          /I apologize,? but my response was cut off\.?/gi,
+          /I'm sorry,? but my response was cut off\.?/gi,
+          /my response was cut off\.?/gi,
+          /response was cut off\.?/gi,
+          /I apologize,? but/gi,
+          /I'm sorry,? but/gi,
+          /I apologize\.?/gi,
+          /I'm sorry\.?/gi,
+          /but my response was cut off/gi,
+          /my response was cut off/gi,
+          /response was cut off/gi,
+          /was cut off/gi,
+          /cut off/gi
         ];
         
         // Apply each pattern to clean the response
@@ -396,12 +433,18 @@ class AIService {
           cleanedResponse = cleanedResponse.replace(pattern, '');
         });
         
-        // Clean up any double spaces or periods that might be left
+        // Clean up any double spaces, periods, or commas that might be left
         cleanedResponse = cleanedResponse
           .replace(/\s{2,}/g, ' ')  // Replace multiple spaces with single space
           .replace(/\.{2,}/g, '.')  // Replace multiple periods with single period
           .replace(/\s+\./g, '.')   // Remove spaces before periods
+          .replace(/,\s*,/g, ',')   // Remove double commas
+          .replace(/\.\s*,/g, '.')  // Remove comma after period
+          .replace(/,\s*\./g, '.')  // Remove period after comma
           .trim();
+        
+        // Remove trailing commas or periods
+        cleanedResponse = cleanedResponse.replace(/[,.]$/, '');
         
         console.log("✅ [AI Service] Cleaned response:", {
           original: llmResponse.response.substring(0, 100) + '...',
