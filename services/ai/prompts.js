@@ -213,6 +213,12 @@ Instead of forcing you to call specific tools, you should:
 Always respond in this JSON format:
 {"text": "Your helpful explanation", "data": toolResult}
 
+**CRITICAL**: 
+- Provide COMPLETE responses - never cut off mid-sentence
+- If you need to provide a long explanation, do so completely
+- Ensure your response is self-contained and doesn't end abruptly
+- The response should be complete and actionable for the user
+
 ## 🚨 ANTI-HALLUCINATION RULES
 
 1. **NEVER** invent, estimate, or guess financial values
@@ -251,6 +257,11 @@ Response: {"text": "You have 2 accounts with a total balance of $7,500. Your Cha
 - **When in doubt, call tools** - it's better to get real data than to guess
 - **Always provide helpful, accurate information** based on real data when available
 - **Use general knowledge tools** for educational content and form help
+- **NEVER cut off responses** - always provide complete, actionable answers
+
+## 🚨 FINAL INSTRUCTION
+
+**IMPORTANT**: Your response must be COMPLETE and self-contained. Never end with phrases like "my response was cut off" or similar incomplete statements. Always provide the full answer the user needs.
 
 This approach gives you the flexibility to be intelligent while ensuring accuracy and preventing hallucinations.`;
 } 

@@ -821,13 +821,9 @@ const getAllUserAccounts = async (email, uid) => {
       
     if (!user) {
       const duration = Date.now() - startTime;
-      console.error(`[getAllUserAccounts] User not found for uid: ${uid}`);
-      structuredLogger.logErrorBlock(new Error("User not found"), {
-        operation: 'getAllUserAccounts',
-        uid,
-        duration
-      });
-      throw new Error("User not found");
+      console.warn(`[getAllUserAccounts] User not found for uid: ${uid} - returning empty result`);
+      structuredLogger.logSuccess('getAllUserAccounts', { uid, duration, result: 'user_not_found' });
+      return [];
     }
 
     console.log(`[getAllUserAccounts] Found user, plaidAccounts count: ${user.plaidAccounts?.length || 0}`);
@@ -1646,7 +1642,18 @@ const getUserTransactions = async (
     .exec();
 
   if (!user) {
-    throw new Error("User not found");
+    console.warn(`[getUserTransactions] User not found for uid: ${uid} - returning empty result`);
+    return pagination.paginate
+      ? {
+          data: [],
+          pagination: {
+            total: 0,
+            page: pagination.page || 1,
+            limit: pagination.limit || 50,
+            totalPages: 0,
+          },
+        }
+      : [];
   }
 
   if (!user.plaidAccounts.length) {
@@ -1674,10 +1681,32 @@ const getProfileTransactions = async (
   uid,
   pagination = { paginate: false }
 ) => {
+  console.log('\n🔍 [getProfileTransactions] ====== DEBUG ======');
+  console.log("[getProfileTransactions] Parameters received:", {
+    email,
+    profileId,
+    uid,
+    profileIdType: typeof profileId,
+    profileIdString: String(profileId)
+  });
+  
   const profiles = await businessService.getUserProfiles(email, uid);
+  console.log("[getProfileTransactions] Profiles found:", {
+    count: profiles.length,
+    profileIds: profiles.map(p => ({ id: p.id, idType: typeof p.id, idString: String(p.id), name: p.name }))
+  });
+  
   const profile = profiles.find((p) => String(p.id) === profileId);
+  console.log("[getProfileTransactions] Profile lookup result:", {
+    found: !!profile,
+    profileId: profile?.id,
+    profileName: profile?.name,
+    comparison: `String(${profile?.id}) === ${profileId} = ${String(profile?.id) === profileId}`
+  });
+  
   if (!profile) {
-    throw new Error("Profile not found");
+    console.warn("[getProfileTransactions] Profile not found - returning empty result instead of error");
+    return [];
   }
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
@@ -1728,7 +1757,8 @@ const getTransactionsByAccount = async (
     .exec();
 
   if (!account) {
-    throw new Error("Account not found");
+    console.warn(`[getTransactionsByAccount] Account not found: ${accountId} - returning empty result`);
+    return [];
   }
 
   const transactionsResponse = await Transaction.find({

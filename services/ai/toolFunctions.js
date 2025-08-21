@@ -201,12 +201,26 @@ export const toolFunctions = (context) => ({
     try {
       const { profile } = context;
       
+      console.log('\n🔍 [AI][getProfileTransactions] ====== DEBUG ======');
+      console.log("[AI][getProfileTransactions] Context received:", {
+        hasProfile: !!profile,
+        profileId: profile?.id,
+        profileEmail: profile?.email,
+        profileName: profile?.name,
+        profileIsPersonal: profile?.isPersonal,
+        contextKeys: Object.keys(context)
+      });
+      
       if (!profile || !profile.id) {
         console.error("[AI][getProfileTransactions] No profile or profile ID in context");
         return { message: "Profile context not available", error: "Profile not found in context" };
       }
       
-      console.log(`[AI][getProfileTransactions] Attempting to get transactions for profile: ${profile.id}, email: ${profile.email}`);
+      console.log(`[AI][getProfileTransactions] ✅ Profile found, calling getProfileTransactions with:`, {
+        email: profile.email,
+        profileId: profile.id,
+        uid: uid
+      });
       
       const transactions = await accountsService.getProfileTransactions(profile.email, profile.id, uid);
       

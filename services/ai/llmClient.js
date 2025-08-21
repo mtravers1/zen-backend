@@ -312,7 +312,15 @@ export async function callLLM({
   
   const groqClient = new Groq({ apiKey });
   // Log the tools array/object being sent to the LLM for debugging
-  console.log("[AI][callLLM] Tools passed to LLM:", JSON.stringify(tools, null, 2));
+  console.log('\n🌐 [LLM Process] ====== CREATING GROQ REQUEST ======');
+  console.log('[LLM Process] Request parameters:', {
+    model,
+    temperature: 0.0,
+    stream: true,
+    toolsCount: tools.length,
+    messagesCount: messages.length
+  });
+  
   let response = await groqClient.chat.completions.create({
     model,
     messages,
@@ -320,6 +328,8 @@ export async function callLLM({
     stream: true,
     tools,
   });
+  
+  console.log('[LLM Process] Groq response object created successfully');
 
   let finalMessages = [...messages];
   let toolCallsRemaining = true;
@@ -346,12 +356,21 @@ export async function callLLM({
     for await (const chunk of response) {
       const delta = chunk.choices?.[0]?.delta;
       const finishReason = chunk.choices?.[0]?.finish_reason;
+      
+      // Log finish reason if present
+      if (finishReason) {
+        console.log(`[AI][callLLM] Finish reason detected:`, finishReason);
+        console.log(`[AI][callLLM] Final response length:`, completeResponse.length);
+        console.log(`[AI][callLLM] Final response preview:`, completeResponse.substring(0, 300) + '...');
+      }
 
       // Handle content chunks - accumulate the complete response
       if (delta?.content) {
         completeResponse += delta.content;
         receivedContent = true;
         console.log(`[AI][callLLM] Received content chunk:`, delta.content.substring(0, 100) + '...');
+        console.log(`[AI][callLLM] Content chunk length:`, delta.content.length);
+        console.log(`[AI][callLLM] Total accumulated response length:`, completeResponse.length);
       }
 
       // Handle tool calls
@@ -447,7 +466,12 @@ export async function callLLM({
     
     // If we have tool calls, continue with updated messages
     if (toolCallsRemaining) {
+      console.log('\n🔄 [LLM Process] ====== CONTINUING WITH TOOL RESULTS ======');
       console.log("[AI][callLLM] Continuing with tool results...");
+      console.log("[AI][callLLM] Final messages count:", finalMessages.length);
+      console.log("[AI][callLLM] Last message role:", finalMessages[finalMessages.length - 1]?.role);
+      console.log("[AI][callLLM] Last message content preview:", finalMessages[finalMessages.length - 1]?.content?.substring(0, 100) + '...');
+      
       response = await groqClient.chat.completions.create({
         model,
         messages: finalMessages,
@@ -456,6 +480,8 @@ export async function callLLM({
         tools,
         tool_choice: "auto",
       });
+      
+      console.log("[AI][callLLM] New response created for tool results continuation");
     }
   }
   // After all tool calls and LLM response is complete

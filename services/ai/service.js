@@ -79,24 +79,49 @@ class AIService {
 
       console.log("[AI Service] Found profiles:", profiles.length);
 
+      console.log('\n🔍 [AI Service] ====== PROFILE LOOKUP DEBUG ======');
+      console.log("[AI Service] Profile lookup details:", {
+        profileId,
+        userId: user._id.toString(),
+        profilesCount: profiles.length,
+        profileIds: profiles.map(p => ({ id: p.id, isPersonal: p.isPersonal, name: p.name }))
+      });
+      
       // Find the correct profile by ID (handles personal and business profiles)
       let profile = profiles.find((p) => {
         if (p.isPersonal) {
-          return user._id.toString() === profileId;
+          const match = user._id.toString() === profileId;
+          console.log(`[AI Service] Checking personal profile: ${p.id} (${p.name}) - user._id (${user._id}) === profileId (${profileId}) = ${match}`);
+          return match;
         }
-        return p.id.toString() === profileId;
+        const match = p.id.toString() === profileId;
+        console.log(`[AI Service] Checking business profile: ${p.id} (${p.name}) - p.id (${p.id}) === profileId (${profileId}) = ${match}`);
+        return match;
       });
+      
       // Fallback for legacy/personal profile ID
       if (!profile) {
+        console.log("[AI Service] No profile found with primary logic, trying fallback...");
         if (user && user._id.toString() === profileId) {
           profile = profiles.find((p) => p.isPersonal);
+          console.log(`[AI Service] Fallback found personal profile:`, profile ? { id: profile.id, name: profile.name } : 'null');
         }
       }
+      
       if (!profile) {
+        console.error("[AI Service] Profile lookup failed completely");
+        console.error("[AI Service] Available profiles:", profiles.map(p => ({ id: p.id, isPersonal: p.isPersonal, name: p.name })));
+        console.error("[AI Service] Requested profileId:", profileId);
+        console.error("[AI Service] User ID:", user._id.toString());
         throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
       }
 
-      console.log("[AI Service] Using profile:", { id: profile.id, name: profile.name, isPersonal: profile.isPersonal });
+      console.log("[AI Service] ✅ Profile found successfully:", { 
+        id: profile.id, 
+        name: profile.name, 
+        isPersonal: profile.isPersonal,
+        hasPlaidAccounts: profile.plaidAccounts ? profile.plaidAccounts.length : 0
+      });
 
       // Parse screen context for prompt construction
       const baseScreen = (screen || "").split("/")[0] || "";

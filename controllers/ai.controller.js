@@ -2,28 +2,32 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import aiService from "../services/ai/service.js";
 
 const makeRequest = async (req, res) => {
+  console.log('\n🎯 [AI Controller] ====== REQUEST RECEIVED ======');
   console.log("[AI Controller] 🚀 ENDPOINT HIT - makeRequest called");
   console.log("[AI Controller] Request method:", req.method);
   console.log("[AI Controller] Request URL:", req.url);
   console.log("[AI Controller] Request path:", req.path);
   console.log("[AI Controller] Headers:", Object.keys(req.headers));
+  console.log("[AI Controller] Timestamp:", new Date().toISOString());
   
   try {
     const { uid } = req.user || {};
     const { prompt, profileId, messages, screen, dataScreen } = req.body || {};
     
+    console.log('\n📋 [AI Controller] ====== REQUEST VALIDATION ======');
     console.log("[AI Controller] Received request:", { 
       uid, 
       profileId, 
       hasPrompt: !!prompt, 
       hasMessages: !!messages, 
+      promptPreview: prompt ? prompt.substring(0, 100) + '...' : 'NO_PROMPT',
+      messagesCount: messages ? messages.length : 0,
       screen,
       dataScreen,
       bodyKeys: req.body ? Object.keys(req.body) : [],
       bodySize: req.body ? JSON.stringify(req.body).length : 0,
       userKeys: req.user ? Object.keys(req.user) : [],
-      hasUser: !!req.user,
-      timestamp: new Date().toISOString()
+      hasUser: !!req.user
     });
     
     if (!uid) {
@@ -56,6 +60,7 @@ const makeRequest = async (req, res) => {
       });
     }
     
+    console.log('\n🚀 [AI Controller] ====== CALLING AI SERVICE ======');
     console.log("[AI Controller] Calling AI service with params:", {
       prompt,
       uid,
@@ -64,6 +69,7 @@ const makeRequest = async (req, res) => {
       screen,
       dataScreen
     });
+    console.log("[AI Controller] AI Service call timestamp:", new Date().toISOString());
     
     const result = await aiService.makeRequest(
       prompt,
@@ -75,6 +81,7 @@ const makeRequest = async (req, res) => {
       dataScreen
     );
     
+    console.log('\n📥 [AI Controller] ====== AI SERVICE RESPONSE ======');
     console.log("[AI Controller] AI service returned:", {
       resultType: typeof result,
       resultKeys: result ? Object.keys(result) : [],
@@ -88,6 +95,11 @@ const makeRequest = async (req, res) => {
       errorMessage: result ? result.errorMessage || 'NO_ERROR' : 'NO_RESULT'
     });
     
+    if (result && result.text) {
+      console.log("[AI Controller] Response text length:", result.text.length);
+      console.log("[AI Controller] Response text preview:", result.text.substring(0, 200) + '...');
+    }
+    
     // Ensure we return a proper response structure
     const response = {
       text: result.text || result.response || "No response received",
@@ -96,13 +108,19 @@ const makeRequest = async (req, res) => {
       errorMessage: result.errorMessage || undefined,
     };
     
+    console.log('\n🎉 [AI Controller] ====== FINAL RESPONSE ======');
     console.log("[AI Controller] Final response being sent to client:", {
       text: response.text,
+      textLength: response.text ? response.text.length : 0,
       hasData: !!response.data,
       dataKeys: response.data ? Object.keys(response.data) : [],
       error: response.error,
       errorMessage: response.errorMessage
     });
+    
+    if (response.text && response.text.length > 200) {
+      console.log("[AI Controller] Full response text:", response.text);
+    }
     
     return res.status(200).json(response);
   } catch (error) {
