@@ -270,8 +270,8 @@ class AIService {
         }
       }
 
-             // Enhanced response processing with LLM self-evaluation
-       const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId, context);
+      // Enhanced response processing with LLM self-evaluation
+      const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId, context);
 
       // Handle streaming responses if res is provided
       if (res && processedResponse) {
@@ -284,21 +284,27 @@ class AIService {
 
       console.log('\n🎯 [AI Service] ====== NORMALIZING RESPONSE ======');
       
-      // Normalize the response structure for mobile compatibility
+      // Ensure consistent response structure for mobile compatibility
       const normalizedResponse = this.normalizeResponse(processedResponse, completeResponse);
+      
+      // Validate and fix response structure before returning
+      const finalResponse = this.ensureConsistentResponseStructure(normalizedResponse);
       
       console.log('\n🎉 [AI Service] ====== FINAL NORMALIZED RESPONSE ======');
       console.log("[AI Service] Final response structure:", {
-        hasText: !!normalizedResponse.text,
-        textLength: normalizedResponse.text?.length || 0,
-        hasData: !!normalizedResponse.data,
-        dataKeys: normalizedResponse.data ? Object.keys(normalizedResponse.data) : [],
-        source: normalizedResponse.source,
-        hasWarning: !!normalizedResponse.warning,
-        hasError: !!normalizedResponse.error
+        hasText: !!finalResponse.text,
+        textLength: finalResponse.text?.length || 0,
+        hasResponse: !!finalResponse.response,
+        responseLength: finalResponse.response?.length || 0,
+        hasData: !!finalResponse.data,
+        dataKeys: finalResponse.data ? Object.keys(finalResponse.data) : [],
+        source: finalResponse.source,
+        hasWarning: !!finalResponse.warning,
+        hasError: !!finalResponse.error,
+        errorMessage: finalResponse.errorMessage
       });
-      console.log("[AI Service] Final normalized response:", normalizedResponse);
-      return normalizedResponse;
+      console.log("[AI Service] Final normalized response:", finalResponse);
+      return finalResponse;
       
     } catch (error) {
       console.error("[AI Service] Error in makeRequest:", error);
@@ -329,18 +335,20 @@ class AIService {
     try {
       console.log("🔍 [AI Service] Processing LLM response with self-evaluation");
       console.log("🔍 [AI Service] User context received:", context);
+      console.log("🔍 [AI Service] LLM Response structure:", {
+        hasResponse: !!llmResponse?.response,
+        hasText: !!llmResponse?.text,
+        hasData: !!llmResponse?.data,
+        responseType: typeof llmResponse?.response,
+        textType: typeof llmResponse?.text,
+        dataType: typeof llmResponse?.data,
+        fullResponse: llmResponse
+      });
       
       // Validate llmResponse structure
       if (!llmResponse || typeof llmResponse !== 'object') {
         console.error("❌ [AI Service] Invalid llmResponse structure:", llmResponse);
-        return {
-          response: "I encountered an issue processing your request. Please try again.",
-          data: null,
-          error: true,
-          errorMessage: "Invalid response structure",
-          needsClarification: false,
-          suggestedQuestions: []
-        };
+        return this.createFallbackResponse("Invalid response structure");
       }
       
       // Ensure response property exists - support both 'text' and 'response' properties
@@ -354,20 +362,14 @@ class AIService {
           responseValue: llmResponse.response,
           textValue: llmResponse.text
         });
-        return {
-          response: "I encountered an issue processing your request. Please try again.",
-          data: null,
-          error: true,
-          errorMessage: "Missing response content",
-          needsClarification: false,
-          suggestedQuestions: []
-        };
+        return this.createFallbackResponse("Missing response content");
       }
       
       // Normalize the response structure to use 'response' property
       const normalizedResponse = {
         ...llmResponse,
-        response: responseText
+        response: responseText,
+        text: responseText // Ensure both properties exist
       };
       
       // Check if response contains unnecessary apologies or cut-off mentions
@@ -465,178 +467,43 @@ class AIService {
           cleaned: cleanedResponse.substring(0, 100) + '...'
         });
         
-        // Return cleaned response
+        // Return cleaned response with consistent structure
         return {
           ...normalizedResponse,
-          response: cleanedResponse
-        };
-      }
-      
-      // Check if response needs quality evaluation
-      const needsEvaluation = (
-        !normalizedResponse.data || 
-        (Array.isArray(normalizedResponse.data) && normalizedResponse.data.length === 0) ||
-        normalizedResponse.response.includes('no data') ||
-        normalizedResponse.response.includes('empty data') ||
-        normalizedResponse.response.includes('Response has no data') ||
-        normalizedResponse.response.includes('Response source unclear') ||
-        normalizedResponse.response.includes('may contain hallucinations') ||
-        normalizedResponse.response.includes('unclear') ||
-        normalizedResponse.response.includes('hallucinations') ||
-        normalizedResponse.response.includes('Profile not found') ||
-        normalizedResponse.response.includes('profile not found') ||
-        normalizedResponse.response.includes('returning empty result instead of error')
-      );
-      
-      // Check if this is a context question that doesn't need financial data
-      const isContextQuestion = (
-        userMessage.toLowerCase().includes('what screen') ||
-        userMessage.toLowerCase().includes('which screen') ||
-        userMessage.toLowerCase().includes('where am i') ||
-        userMessage.toLowerCase().includes('current screen') ||
-        userMessage.toLowerCase().includes('what page') ||
-        userMessage.toLowerCase().includes('which page') ||
-        userMessage.toLowerCase().includes('current page') ||
-        userMessage.toLowerCase().includes('what tab') ||
-        userMessage.toLowerCase().includes('which tab') ||
-        userMessage.toLowerCase().includes('current tab') ||
-        userMessage.toLowerCase().includes('what time') ||
-        userMessage.toLowerCase().includes('current time') ||
-        userMessage.toLowerCase().includes('what day') ||
-        userMessage.toLowerCase().includes('current day') ||
-        userMessage.toLowerCase().includes('device info') ||
-        userMessage.toLowerCase().includes('app version') ||
-        userMessage.toLowerCase().includes('platform')
-      );
-      
-      // If it's a context question and the response is inadequate, provide context-based answer
-      if (isContextQuestion && needsEvaluation) {
-        console.log("🔍 [AI Service] Context question detected - providing context-based answer");
-        
-        // Use the actual context from frontend
-        const currentScreen = context.screen?.currentScreen || 'dashboard';
-        const dataScreen = context.screen?.dataScreen || 'overview';
-        const platform = context.device?.platform || 'mobile';
-        const appVersion = context.device?.appVersion || 'unknown';
-        const timezone = context.time?.timezone || 'UTC';
-        
-        let contextResponse = '';
-        
-        if (userMessage.toLowerCase().includes('screen')) {
-          contextResponse = `You are currently on the **${currentScreen}** screen`;
-          if (dataScreen && dataScreen !== currentScreen) {
-            contextResponse += ` with the **${dataScreen}** view active`;
-          }
-          contextResponse += '.';
-        } else if (userMessage.toLowerCase().includes('time')) {
-          const now = new Date();
-          contextResponse = `The current time is **${now.toLocaleTimeString()}**`;
-          if (timezone) {
-            contextResponse += ` (${timezone})`;
-          }
-          contextResponse += '.';
-        } else if (userMessage.toLowerCase().includes('day')) {
-          const now = new Date();
-          contextResponse = `Today is **${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}**.`;
-        } else if (userMessage.toLowerCase().includes('device') || userMessage.toLowerCase().includes('platform')) {
-          contextResponse = `You're using the **Zentavos mobile app** (version ${appVersion}) on a **${platform}** device.`;
-        } else {
-          contextResponse = `You are currently on the **${currentScreen}** screen. This is the main dashboard where you can view your financial overview.`;
-        }
-        
-        console.log("✅ [AI Service] Context response generated:", contextResponse);
-        
-        return {
-          response: contextResponse,
-          data: null,
+          response: cleanedResponse,
+          text: cleanedResponse,
           error: false,
-          errorMessage: null,
-          needsClarification: false,
-          suggestedQuestions: []
+          errorMessage: null
         };
       }
       
-      if (needsEvaluation) {
-        console.log("⚠️ [AI Service] Response needs quality evaluation - asking LLM to self-assess");
-        
-        // Create self-evaluation prompt for the LLM
-        const evaluationPrompt = `
-You are an AI assistant that just provided a response to a user. Please evaluate your response and provide a better one if needed.
+      // If no cleaning needed, return normalized response with consistent structure
+      return {
+        ...normalizedResponse,
+        error: false,
+        errorMessage: null,
+        needsClarification: false,
+        suggestedQuestions: []
+      };
 
-USER QUESTION: "${userMessage}"
-YOUR CURRENT RESPONSE: "${normalizedResponse.response}"
-CURRENT DATA: ${JSON.stringify(normalizedResponse.data)}
-
-EVALUATION CRITERIA:
-1. Does your response actually answer the user's question?
-2. Do you have access to the data needed to answer properly?
-3. Is your response clear and helpful?
-4. Are you making assumptions without data?
-
-INSTRUCTIONS:
-- If your response is inadequate, provide a better one
-- If you don't have the data needed, explain why and suggest alternatives
-- If the user's question is unclear, ask for clarification
-- Be specific about what you can and cannot do
-- Provide examples of better ways to ask the question
-
-RESPONSE FORMAT:
-{
-  "response": "Your improved response here",
-  "data": null,
-  "error": false,
-  "errorMessage": null,
-  "needsClarification": true/false,
-  "suggestedQuestions": ["Question 1", "Question 2"]
-}
-`;
-
-        // Get LLM to evaluate its own response
-        const evaluationResponse = await callLLM(evaluationPrompt, profileId, [], 'evaluation');
-
-        if (evaluationResponse && evaluationResponse.response) {
-          try {
-            const evaluated = JSON.parse(evaluationResponse.response);
-            console.log("✅ [AI Service] LLM self-evaluation completed:", evaluated);
-
-            // Return the improved response
-            return {
-              response: evaluated.response || normalizedResponse.response,
-              data: evaluated.data || null,
-              error: evaluated.error || false,
-              errorMessage: evaluated.errorMessage || null,
-              needsClarification: evaluated.needsClarification || false,
-              suggestedQuestions: evaluated.suggestedQuestions || []
-            };
-          } catch (parseError) {
-            console.warn("⚠️ [AI Service] Failed to parse LLM self-evaluation, using fallback");
-          }
-        }
-
-        // Fallback: Provide a helpful response based on the issue
-        if (!normalizedResponse.data || (Array.isArray(normalizedResponse.data) && normalizedResponse.data.length === 0)) {
-          return {
-            response: `I couldn't find the specific data you're looking for. This might be because:\n\n• Your question is too broad - try being more specific\n• The data doesn't exist yet in your account\n• There might be a temporary issue\n\nTry asking something like:\n• "Show me my transactions from this month"\n• "What's my current account balance?"\n• "List my recent purchases"`,
-            data: null,
-            error: false,
-            errorMessage: null,
-            needsClarification: true,
-            suggestedQuestions: [
-              "Show me my transactions from this month",
-              "What's my current account balance?",
-              "List my recent purchases"
-            ]
-          };
-        }
-      }
-
-      // If no evaluation needed, return normalized response
-      return normalizedResponse;
-      
     } catch (error) {
       console.error("❌ [AI Service] Error in LLM response processing:", error);
-      return llmResponse; // Return original response on error
+      return this.createFallbackResponse("Error processing response");
     }
+  }
+  
+  // Helper method to create consistent fallback responses
+  createFallbackResponse(errorMessage) {
+    return {
+      response: "I encountered an issue processing your request. Please try again.",
+      text: "I encountered an issue processing your request. Please try again.",
+      data: {},
+      error: true,
+      errorMessage: errorMessage,
+      needsClarification: false,
+      suggestedQuestions: [],
+      source: "error_fallback"
+    };
   }
 
   /**
@@ -651,10 +518,13 @@ RESPONSE FORMAT:
       console.warn("[AI Service] No parsed response available, creating fallback");
       return {
         text: "I'm having trouble processing your request. Please try again.",
+        response: "I'm having trouble processing your request. Please try again.",
         data: {},
         error: true,
         errorMessage: "Failed to parse AI response",
-        source: "normalization_fallback"
+        source: "normalization_fallback",
+        needsClarification: false,
+        suggestedQuestions: []
       };
     }
 
@@ -722,11 +592,14 @@ RESPONSE FORMAT:
 
     return {
       text,
+      response: text, // Ensure both text and response exist
       data,
       error,
       errorMessage,
       source,
-      warning
+      warning,
+      needsClarification: false,
+      suggestedQuestions: []
     };
   }
 
@@ -781,6 +654,51 @@ RESPONSE FORMAT:
       data: {},
       errorMessage: error.message || "Unknown error occurred"
     };
+  }
+
+  // Helper method to ensure consistent response structure for mobile compatibility
+  ensureConsistentResponseStructure(response) {
+    // Ensure 'text' and 'response' are the same
+    if (response.text && response.response && response.text !== response.response) {
+      response.response = response.text;
+    }
+
+    // Ensure 'data' is always an object, even if null
+    if (response.data === null || response.data === undefined) {
+      response.data = {};
+    }
+
+    // Ensure 'error' is a boolean
+    if (response.error === null || response.error === undefined) {
+      response.error = false;
+    }
+
+    // Ensure 'errorMessage' is a string or null
+    if (response.errorMessage === null || response.errorMessage === undefined) {
+      response.errorMessage = null;
+    }
+
+    // Ensure 'needsClarification' is a boolean
+    if (response.needsClarification === null || response.needsClarification === undefined) {
+      response.needsClarification = false;
+    }
+
+    // Ensure 'suggestedQuestions' is an array
+    if (response.suggestedQuestions === null || response.suggestedQuestions === undefined) {
+      response.suggestedQuestions = [];
+    }
+
+    // Ensure 'warning' is a string or null
+    if (response.warning === null || response.warning === undefined) {
+      response.warning = null;
+    }
+
+    // Ensure 'source' is a string
+    if (response.source === null || response.source === undefined) {
+      response.source = "unknown";
+    }
+
+    return response;
   }
 }
 
