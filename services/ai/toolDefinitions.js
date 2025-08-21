@@ -260,7 +260,7 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
-      name: "getUSFormsHelp",
+      name: "getTaxFormsHelp",
       description: "Get comprehensive help and information about US tax forms (W-2, 1099), banking forms, and mortgage applications. This tool provides detailed explanations, required fields, and tips for filling out common US financial forms.",
       parameters: {
         type: "object",

@@ -410,7 +410,7 @@ export const toolFunctions = (context) => ({
    * Provides helpful information about US tax and banking forms.
    * This tool helps users understand how to fill out common US forms.
    */
-  getUSFormsHelp: async ({ formType, question }) => {
+  getTaxFormsHelp: async ({ formType, question }) => {
     try {
       const formTypeLower = (formType || '').toLowerCase();
       const questionLower = (question || '').toLowerCase();
@@ -554,7 +554,7 @@ export const toolFunctions = (context) => ({
       
       return responseData;
     } catch (error) {
-      console.error("[AI][getUSFormsHelp] Error:", error);
+      console.error("[AI][getTaxFormsHelp] Error:", error);
       return { 
         message: "Failed to retrieve forms information", 
         error: error.message,
