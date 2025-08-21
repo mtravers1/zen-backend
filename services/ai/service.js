@@ -164,40 +164,53 @@ class AIService {
           user: context.user
         });
         
-        // Add context information to the screen prompt
-        enhancedScreenPrompt = `${screenPrompt}
+        // Build context information only for fields that have meaningful values
+        const contextInfo = [];
+        
+        // Screen Information (only if meaningful)
+        if (context.screen?.currentScreen && context.screen.currentScreen !== 'unknown') {
+          contextInfo.push(`**Current Screen**: ${context.screen.currentScreen}`);
+        }
+        if (context.screen?.dataScreen && context.screen.dataScreen !== 'unknown' && context.screen.dataScreen !== 'overview') {
+          contextInfo.push(`**Active View**: ${context.screen.dataScreen}`);
+        }
+        
+        // Device Information (only if meaningful)
+        if (context.device?.platform && context.device.platform !== 'unknown') {
+          contextInfo.push(`**Platform**: ${context.device.platform}`);
+        }
+        if (context.device?.appVersion && context.device.appVersion !== 'unknown') {
+          contextInfo.push(`**App Version**: ${context.device.appVersion}`);
+        }
+        
+        // Time Information (only if meaningful)
+        if (context.time?.dayOfWeek) {
+          contextInfo.push(`**Today**: ${context.time.dayOfWeek}`);
+        }
+        if (context.time?.isBusinessHours !== undefined) {
+          contextInfo.push(`**Business Hours**: ${context.time.isBusinessHours ? 'Yes' : 'No'}`);
+        }
+        
+        // User Information (only if meaningful)
+        if (context.user?.profileName && context.user.profileName !== 'Unknown') {
+          contextInfo.push(`**Profile**: ${context.user.profileName}`);
+        }
+        
+        // Chat Information (only if meaningful)
+        if (context.chat?.messageCount > 0) {
+          contextInfo.push(`**Chat History**: ${context.chat.messageCount} messages`);
+        }
+        
+        // Only add context section if we have meaningful information
+        if (contextInfo.length > 0) {
+          enhancedScreenPrompt = `${screenPrompt}
 
-## 📱 RICH CONTEXT FROM MOBILE APP
+## 📱 CONTEXT INFORMATION
 
-### 🖥️ Current Screen Information
-- **Main Screen**: ${context.screen?.currentScreen || currentScreen || 'unknown'}
-- **Data View**: ${context.screen?.dataScreen || currentDataScreen || 'overview'}
-- **Screen Type**: ${context.screen?.isMainScreen ? 'Main Dashboard' : 'Secondary Screen'}
-- **Financial Context**: ${context.screen?.isFinancialScreen ? 'Financial Data Screen' : 'General Screen'}
+${contextInfo.join('\n')}
 
-### 📱 Device Information
-- **Platform**: ${context.device?.platform || 'unknown'}
-- **App Version**: ${context.device?.appVersion || 'unknown'}
-- **Screen Size**: ${context.device?.screenWidth || 'unknown'} x ${context.device?.screenHeight || 'unknown'}
-- **Device Type**: ${context.device?.isTablet ? 'Tablet' : 'Phone'}
-
-### ⏰ Temporal Context
-- **Current Time**: ${context.time?.currentTime || 'unknown'}
-- **Timezone**: ${context.time?.timezone || 'unknown'}
-- **Day**: ${context.time?.dayOfWeek || 'unknown'}
-- **Business Hours**: ${context.time?.isBusinessHours ? 'Yes' : 'No'}
-- **Weekend**: ${context.time?.isWeekend ? 'Yes' : 'No'}
-
-### 👤 User Context
-- **Profile ID**: ${context.user?.profileId || 'unknown'}
-- **Profile Name**: ${context.user?.profileName || 'Unknown'}
-- **Active Session**: ${context.user?.hasActiveSession ? 'Yes' : 'No'}
-
-### 💬 Chat Context
-- **Message Count**: ${context.chat?.messageCount || 0}
-- **First Time User**: ${context.chat?.isFirstTimeUser ? 'Yes' : 'No'}
-
-**IMPORTANT**: Use this rich context to provide more personalized and relevant responses. You can answer context questions directly without needing to call tools.`;
+**IMPORTANT**: Use this context to provide personalized responses. Answer context questions directly without tools when possible.`;
+        }
       }
 
       // Construct the message array for the LLM
@@ -628,11 +641,21 @@ class AIService {
         // Try to provide context-based help
         if (context && context.screen) {
           const currentScreen = context.screen.currentScreen || 'dashboard';
-          const dataScreen = context.screen.dataScreen || 'overview';
+          const dataScreen = context.screen.dataScreen;
+          
+          // Build a clean, direct response
+          let contextResponse = `You are currently on the **${currentScreen}** screen`;
+          
+          // Only add dataScreen if it's meaningful and different from currentScreen
+          if (dataScreen && dataScreen !== 'unknown' && dataScreen !== 'overview' && dataScreen !== currentScreen) {
+            contextResponse += ` with the **${dataScreen}** view active`;
+          }
+          
+          contextResponse += '. How can I help you with your finances today?';
           
           return {
-            response: `You are currently on the **${currentScreen}** screen${dataScreen && dataScreen !== currentScreen ? ` with the **${dataScreen}** view active` : ''}. How can I help you with your finances today?`,
-            text: `You are currently on the **${currentScreen}** screen${dataScreen && dataScreen !== currentScreen ? ` with the **${dataScreen}** view active` : ''}. How can I help you with your finances today?`,
+            response: contextResponse,
+            text: contextResponse,
             data: {},
             error: false,
             errorMessage: null,
@@ -769,6 +792,26 @@ class AIService {
       } else {
         text = "I've processed your request but couldn't provide a specific response.";
       }
+    }
+
+    // Clean up the text to remove any remaining "unknown" or empty references
+    if (text) {
+      text = text
+        .replace(/with the \*\*unknown\*\* view active/g, '')
+        .replace(/with the \*\*overview\*\* view active/g, '')
+        .replace(/view active\./g, '.')
+        .replace(/view active\?/g, '?')
+        .replace(/view active!/g, '!')
+        .replace(/view active$/g, '')
+        .replace(/on the \*\*unknown\*\* screen/g, 'on the dashboard screen')
+        .replace(/on the \*\*overview\*\* screen/g, 'on the dashboard screen')
+        .replace(/\*\*unknown\*\*/g, '')
+        .replace(/\*\*overview\*\*/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      
+      // Remove trailing punctuation that might be left after cleanup
+      text = text.replace(/[,.]$/, '');
     }
 
     // Ensure data is always an object or array

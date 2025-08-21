@@ -14,7 +14,7 @@ export function buildScreenPrompt(currentScreen, dataScreen) {
   const baseContext = `
     ## 📱 CURRENT SCREEN CONTEXT
     
-    You are currently on the **${baseScreen}** screen${currentDataScreen && currentDataScreen !== baseScreen ? ` with the **${currentDataScreen}** view active` : ''}.
+    You are currently on the **${baseScreen}** screen${currentDataScreen && currentDataScreen !== 'unknown' && currentDataScreen !== 'overview' && currentDataScreen !== baseScreen ? ` with the **${currentDataScreen}** view active` : ''}.
     
     ### 💡 CONTEXT QUESTIONS YOU CAN ANSWER DIRECTLY
     
@@ -40,7 +40,11 @@ export function buildScreenPrompt(currentScreen, dataScreen) {
     3. **Is this general guidance I can provide?** → Respond directly
     4. **Would this benefit from both context AND data?** → Use hybrid approach
     
-    **Remember**: Use your intelligence to provide the most helpful response with the least friction for the user.
+    **IMPORTANT RULES:**
+    - NEVER mention "unknown" or "overview" in responses
+    - If a field is empty or meaningless, don't include it
+    - Be direct and concise - avoid unnecessary details
+    - Use your intelligence to provide the most helpful response with the least friction for the user
   `;
   
   switch (baseScreen) {
@@ -283,10 +287,12 @@ You have access to rich context about:
 - "Where am I?" → "You're in the **${screen}** section of Zentavos"
 - "What time is it?" → "The current time is [calculate and format]"
 
-### General Questions:
-- "How does this app work?" → Explain based on available context
-- "What can you help me with?" → List capabilities you have
-- "Explain net worth" → Provide educational information
+### Financial Guidance (no tools needed):
+- "How do I save money?" → Provide general financial advice
+- "What is a 401k?" → Explain financial concepts
+- "How do I budget?" → Give budgeting tips
+
+**IMPORTANT**: These responses should be direct, helpful, and never mention "unknown" or empty fields.
 
 ## TOOL USAGE GUIDELINES
 When you DO need to use tools:
