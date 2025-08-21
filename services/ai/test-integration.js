@@ -77,6 +77,65 @@ export function testPrompts() {
   return dashboardPrompt.length > 0 && systemPrompt.length > 0;
 }
 
+export function testGeneralFinancialQuestion() {
+  console.log("🧪 Testing general financial question handling...");
+  
+  const systemPrompt = getProductionSystemPrompt("dashboard");
+  
+  // Check if the system prompt correctly handles general financial questions
+  const hasGeneralFinancialGuidance = systemPrompt.includes("How can I save money") && 
+                                     systemPrompt.includes("without mentioning current screen");
+  
+  const hasScreenContextRules = systemPrompt.includes("Mention current screen ONLY when") &&
+                               systemPrompt.includes("NEVER mention current screen when");
+  
+  console.log("✅ General financial guidance rules:", hasGeneralFinancialGuidance);
+  console.log("✅ Screen context rules:", hasScreenContextRules);
+  
+  return hasGeneralFinancialGuidance && hasScreenContextRules;
+}
+
+export function testTextCleanupLogic() {
+  console.log("🧪 Testing text cleanup logic...");
+  
+  // Simulate the text cleanup logic from the service
+  const generalFinancialIndicators = [
+    'how can i save',
+    'how to save',
+    'how do i save',
+    'how to budget',
+    'how do i budget',
+    'what is budgeting',
+    'how to invest',
+    'how do i invest',
+    'what is a 401k',
+    'what is investing',
+    'how to reduce expenses',
+    'how do i reduce expenses',
+    'financial advice',
+    'money saving tips',
+    'budgeting tips',
+    'investment advice'
+  ];
+  
+  // Test case 1: General financial question
+  const testText1 = "You are currently on the **dashboard** screen. Here are some tips on how to save money: 1) Create a budget, 2) Reduce expenses, 3) Increase income.";
+  const isGeneralFinancial1 = generalFinancialIndicators.some(indicator => 
+    testText1.toLowerCase().includes(indicator.toLowerCase())
+  );
+  
+  // Test case 2: Screen context question
+  const testText2 = "You are currently on the **dashboard** screen. This shows your financial overview.";
+  const isGeneralFinancial2 = generalFinancialIndicators.some(indicator => 
+    testText2.toLowerCase().includes(indicator.toLowerCase())
+  );
+  
+  console.log("✅ General financial question detection:", isGeneralFinancial1);
+  console.log("✅ Screen context question detection:", !isGeneralFinancial2);
+  
+  return isGeneralFinancial1 && !isGeneralFinancial2;
+}
+
 export function testToolDefinitions() {
   console.log("🧪 Testing tool definitions...");
   

@@ -213,6 +213,43 @@ ${contextInfo.join('\n')}
         }
       }
 
+      // Check if this is a general financial question that doesn't need screen context
+      const generalFinancialQuestions = [
+        'how can i save money',
+        'how to save money',
+        'how do i save money',
+        'how to budget',
+        'how do i budget',
+        'what is budgeting',
+        'how to invest',
+        'how do i invest',
+        'what is a 401k',
+        'what is investing',
+        'how to reduce expenses',
+        'how do i reduce expenses',
+        'financial advice',
+        'money saving tips',
+        'budgeting tips',
+        'investment advice'
+      ];
+      
+      const isGeneralFinancialQuestion = generalFinancialQuestions.some(question => 
+        prompt.toLowerCase().includes(question.toLowerCase())
+      );
+      
+      // For general financial questions, use a simplified prompt without screen context
+      if (isGeneralFinancialQuestion) {
+        console.log('[AI Service] 🎯 General financial question detected, using simplified prompt');
+        enhancedScreenPrompt = `You are a helpful financial assistant. Provide clear, actionable financial advice for the user's question.
+
+## 💡 FINANCIAL GUIDANCE PRINCIPLES
+- Be specific and actionable
+- Provide practical tips and strategies
+- Use examples when helpful
+- Focus on the user's question, not their current location
+- Offer follow-up suggestions when appropriate`;
+      }
+
       // Construct the message array for the LLM
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -854,19 +891,62 @@ ${contextInfo.join('\n')}
 
     // Clean up the text to remove any remaining "unknown" or empty references
     if (text) {
-      text = text
-        .replace(/with the \*\*unknown\*\* view active/g, '')
-        .replace(/with the \*\*overview\*\* view active/g, '')
-        .replace(/view active\./g, '.')
-        .replace(/view active\?/g, '?')
-        .replace(/view active!/g, '!')
-        .replace(/view active$/g, '')
-        .replace(/on the \*\*unknown\*\* screen/g, 'on the dashboard screen')
-        .replace(/on the \*\*overview\*\* screen/g, 'on the dashboard screen')
-        .replace(/\*\*unknown\*\*/g, '')
-        .replace(/\*\*overview\*\*/g, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+      // First, check if this is a general financial question that shouldn't mention screens
+      const generalFinancialIndicators = [
+        'how can i save',
+        'how to save',
+        'how do i save',
+        'how to budget',
+        'how do i budget',
+        'what is budgeting',
+        'how to invest',
+        'how do i invest',
+        'what is a 401k',
+        'what is investing',
+        'how to reduce expenses',
+        'how do i reduce expenses',
+        'financial advice',
+        'money saving tips',
+        'budgeting tips',
+        'investment advice'
+      ];
+      
+      const isGeneralFinancialQuestion = generalFinancialIndicators.some(indicator => 
+        text.toLowerCase().includes(indicator.toLowerCase())
+      );
+      
+      if (isGeneralFinancialQuestion) {
+        // For general financial questions, remove any screen references completely
+        text = text
+          .replace(/with the \*\*.*?\*\* view active/g, '')
+          .replace(/view active\./g, '.')
+          .replace(/view active\?/g, '?')
+          .replace(/view active!/g, '!')
+          .replace(/view active$/g, '')
+          .replace(/on the \*\*.*?\*\* screen/g, '')
+          .replace(/You are currently on the \*\*.*?\*\* screen/g, '')
+          .replace(/You're currently on the \*\*.*?\*\* screen/g, '')
+          .replace(/You are on the \*\*.*?\*\* screen/g, '')
+          .replace(/You're on the \*\*.*?\*\* screen/g, '')
+          .replace(/\*\*.*?\*\*/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      } else {
+        // For other questions, use the existing cleanup logic
+        text = text
+          .replace(/with the \*\*unknown\*\* view active/g, '')
+          .replace(/with the \*\*overview\*\* view active/g, '')
+          .replace(/view active\./g, '.')
+          .replace(/view active\?/g, '?')
+          .replace(/view active!/g, '!')
+          .replace(/view active$/g, '')
+          .replace(/on the \*\*unknown\*\* screen/g, 'on the dashboard screen')
+          .replace(/on the \*\*overview\*\* screen/g, 'on the dashboard screen')
+          .replace(/\*\*unknown\*\*/g, '')
+          .replace(/\*\*overview\*\*/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
       
       // Remove trailing punctuation that might be left after cleanup
       text = text.replace(/[,.]$/, '');
