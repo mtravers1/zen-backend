@@ -149,70 +149,6 @@ class AIService {
         dataScreen: currentDataScreen
       });
 
-      // Build the system and screen prompts
-      const screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen);
-      const systemPrompt = getProductionSystemPrompt(currentScreen);
-
-      // Enhance prompts with rich context from mobile
-      let enhancedScreenPrompt = screenPrompt;
-      if (context && Object.keys(context).length > 0) {
-        console.log("🔍 [AI Service] Rich context received from mobile:", {
-          contextKeys: Object.keys(context),
-          screen: context.screen,
-          device: context.device,
-          time: context.time,
-          user: context.user
-        });
-        
-        // Build context information only for fields that have meaningful values
-        const contextInfo = [];
-        
-        // Screen Information (only if meaningful)
-        if (context.screen?.currentScreen && context.screen.currentScreen !== 'unknown') {
-          contextInfo.push(`**Current Screen**: ${context.screen.currentScreen}`);
-        }
-        if (context.screen?.dataScreen && context.screen.dataScreen !== 'unknown' && context.screen.dataScreen !== 'overview') {
-          contextInfo.push(`**Active View**: ${context.screen.dataScreen}`);
-        }
-        
-        // Device Information (only if meaningful)
-        if (context.device?.platform && context.device.platform !== 'unknown') {
-          contextInfo.push(`**Platform**: ${context.device.platform}`);
-        }
-        if (context.device?.appVersion && context.device.appVersion !== 'unknown') {
-          contextInfo.push(`**App Version**: ${context.device.appVersion}`);
-        }
-        
-        // Time Information (only if meaningful)
-        if (context.time?.dayOfWeek) {
-          contextInfo.push(`**Today**: ${context.time.dayOfWeek}`);
-        }
-        if (context.time?.isBusinessHours !== undefined) {
-          contextInfo.push(`**Business Hours**: ${context.time.isBusinessHours ? 'Yes' : 'No'}`);
-        }
-        
-        // User Information (only if meaningful)
-        if (context.user?.profileName && context.user.profileName !== 'Unknown') {
-          contextInfo.push(`**Profile**: ${context.user.profileName}`);
-        }
-        
-        // Chat Information (only if meaningful)
-        if (context.chat?.messageCount > 0) {
-          contextInfo.push(`**Chat History**: ${context.chat.messageCount} messages`);
-        }
-        
-        // Only add context section if we have meaningful information
-        if (contextInfo.length > 0) {
-          enhancedScreenPrompt = `${screenPrompt}
-
-## 📱 CONTEXT INFORMATION
-
-${contextInfo.join('\n')}
-
-**IMPORTANT**: Use this context to provide personalized responses. Answer context questions directly without tools when possible.`;
-        }
-      }
-
       // Check if this is a general financial question that doesn't need screen context
       const generalFinancialQuestions = [
         'how can i save money',
@@ -237,9 +173,15 @@ ${contextInfo.join('\n')}
         prompt.toLowerCase().includes(question.toLowerCase())
       );
       
-      // For general financial questions, use a simplified prompt without screen context
+      // Build the system and screen prompts only when needed
+      let screenPrompt = '';
+      let enhancedScreenPrompt = '';
+      
+      // Always build system prompt (it's lightweight and doesn't include screen-specific data)
+      const systemPrompt = getProductionSystemPrompt(currentScreen);
+      
       if (isGeneralFinancialQuestion) {
-        console.log('[AI Service] 🎯 General financial question detected, using simplified prompt');
+        console.log('[AI Service] 🎯 General financial question detected, using simplified prompt without screen context');
         enhancedScreenPrompt = `You are a helpful financial assistant. Provide clear, actionable financial advice for the user's question.
 
 ## 💡 FINANCIAL GUIDANCE PRINCIPLES
@@ -248,6 +190,11 @@ ${contextInfo.join('\n')}
 - Use examples when helpful
 - Focus on the user's question, not their current location
 - Offer follow-up suggestions when appropriate`;
+      } else {
+        // Only build screen-specific prompts when screen context is actually needed
+        console.log('[AI Service] 🎯 Screen-specific question detected, building screen context');
+        screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen, context);
+        enhancedScreenPrompt = screenPrompt;
       }
 
       // Construct the message array for the LLM
