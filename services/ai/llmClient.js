@@ -4,85 +4,6 @@
 import Groq from "groq-sdk";
 import { formatFinancialResponse } from "./responseFormatter.js";
 
-/**
- * Estimate token count for text (rough approximation: 1 token ≈ 4 characters)
- * @param {string} text - Text to estimate tokens for
- * @returns {number} Estimated token count
- */
-function estimateTokens(text) {
-  if (!text || typeof text !== 'string') return 0;
-  // Rough approximation: 1 token ≈ 4 characters for English text
-  return Math.ceil(text.length / 4);
-}
-
-/**
- * Create comprehensive logging summary for LLM call
- * @param {object} params - Logging parameters
- */
-function logLLMCallSummary({
-  requestId,
-  messages,
-  finalResponse,
-  startTime,
-  model,
-  uid,
-  toolCallsCount = 0,
-  hasError = false
-}) {
-  const endTime = Date.now();
-  const duration = endTime - startTime;
-  
-  // Extract user message (usually the last user message)
-  const userMessages = messages.filter(m => m.role === 'user');
-  const lastUserMessage = userMessages[userMessages.length - 1];
-  const userPrompt = lastUserMessage?.content || 'No user message found';
-  
-  // Extract system prompt
-  const systemMessages = messages.filter(m => m.role === 'system');
-  const systemPrompt = systemMessages[0]?.content || 'No system prompt found';
-  
-  // Estimate tokens
-  const inputTokens = messages.reduce((total, msg) => total + estimateTokens(msg.content), 0);
-  const outputTokens = estimateTokens(finalResponse);
-  const totalTokens = inputTokens + outputTokens;
-  
-  // Parse response to get clean text
-  let responseText = finalResponse;
-  try {
-    const parsed = JSON.parse(finalResponse);
-    responseText = parsed.response || parsed.text || finalResponse;
-  } catch (e) {
-    // Keep original if not JSON
-  }
-  
-  console.log('\n🎯 ============ LLM CALL SUMMARY ============');
-  console.log(`📋 Request ID: ${requestId}`);
-  console.log(`🤖 Model: ${model}`);
-  console.log(`👤 User ID: ${uid}`);
-  console.log(`⏱️  Duration: ${duration}ms (${(duration / 1000).toFixed(2)}s)`);
-  console.log(`🔧 Tool Calls: ${toolCallsCount}`);
-  console.log(`${hasError ? '❌' : '✅'} Status: ${hasError ? 'ERROR' : 'SUCCESS'}`);
-  
-  console.log('\n📝 USER MESSAGE:');
-  console.log(`"${userPrompt.substring(0, 300)}${userPrompt.length > 300 ? '...' : ''}"`);
-  
-  console.log('\n🎭 SYSTEM PROMPT (first 200 chars):');
-  console.log(`"${systemPrompt.substring(0, 200)}..."`);
-  
-  console.log('\n🤖 AI RESPONSE:');
-  console.log(`"${responseText.substring(0, 500)}${responseText.length > 500 ? '...' : ''}"`);
-  
-  console.log('\n📊 TOKEN USAGE (estimated):');
-  console.log(`   Input tokens: ${inputTokens}`);
-  console.log(`   Output tokens: ${outputTokens}`);
-  console.log(`   Total tokens: ${totalTokens}`);
-  
-  console.log('\n📦 FULL RESPONSE DATA:');
-  console.log(finalResponse.substring(0, 1000) + (finalResponse.length > 1000 ? '...' : ''));
-  
-  console.log('🎯 ========================================\n');
-}
-
 // Configuration constants for robustness
 const MAX_RETRIES = 3;
 const JSON_CLEANUP_TIMEOUT = 5000; // 5 seconds
@@ -239,10 +160,6 @@ export async function callLLM({
   uid,
   aiController,
 }) {
-  // Start timing
-  const startTime = Date.now();
-  let totalToolCalls = 0;
-  
   // Debug: Log received parameters
   console.log('[LLM Client] Received parameters:', {
     hasApiKey: !!apiKey,
@@ -521,28 +438,11 @@ export async function callLLM({
       if (delta?.content) {
         // Check for malformed content that might cause issues
         const content = delta.content;
-        if (content.includes('<tool-use>') || content.includes('</tool-use>') || content.includes('<tool') || content.includes('</tool')) {
-          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains XML/tool-use markers');
+        if (content.includes('<tool-use>') || content.includes('</tool-use>')) {
+          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains tool-use markers');
           console.warn('[AI][callLLM] Content with tool-use markers:', content);
           
-          // Try to extract JSON from the malformed content
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            console.log('[AI][callLLM] Attempting to extract JSON from malformed content');
-            const extractedJson = jsonMatch[0];
-            try {
-              JSON.parse(extractedJson);
-              console.log('[AI][callLLM] Successfully extracted valid JSON from malformed content');
-              completeResponse += extractedJson;
-              receivedContent = true;
-              continue;
-            } catch (e) {
-              console.warn('[AI][callLLM] Extracted JSON is still invalid:', e.message);
-            }
-          }
-          
-          // Skip this content chunk as it's malformed and couldn't extract JSON
-          console.warn('[AI][callLLM] Skipping malformed content chunk');
+          // Skip this content chunk as it's malformed
           continue;
         }
         
@@ -579,7 +479,6 @@ export async function callLLM({
         }
         
         for (const toolCall of delta.tool_calls) {
-          totalToolCalls++; // Count each tool call
           const toolContext = {
             requestId,
             timestamp,
@@ -1043,23 +942,6 @@ export async function callLLM({
         });
       }
       
-      // Clean up any remaining XML/tool-use markers from the response
-      if (typeof completeResponse === 'string') {
-        // Remove any remaining tool-use tags and extract JSON content
-        const originalResponse = completeResponse;
-        completeResponse = completeResponse
-          .replace(/<tool-use>/g, '')
-          .replace(/<\/tool-use>/g, '')
-          .replace(/<tool[^>]*>/g, '')
-          .replace(/<\/tool[^>]*>/g, '')
-          .trim();
-        
-        if (completeResponse !== originalResponse) {
-          console.log('[AI][callLLM] Cleaned malformed response markers from final response');
-          console.log('[AI][callLLM] Original response contained XML tags that were removed');
-        }
-      }
-
       let parsed = cleanAndParseJSON(completeResponse);
       
       if (!parsed) {
@@ -1103,122 +985,52 @@ export async function callLLM({
         
         const responseText = parsed.response || parsed.text || formatFinancialResponse(lastToolResult);
         
-        const finalResponse = JSON.stringify({
+        return JSON.stringify({
           response: responseText,
           data: lastToolResult,
           source: 'tool_result',
           error: false
         });
         
-        // Log comprehensive summary
-        logLLMCallSummary({
-          requestId,
-          messages,
-          finalResponse,
-          startTime,
-          model,
-          uid,
-          toolCallsCount: totalToolCalls,
-          hasError: false
-        });
-        
-        return finalResponse;
-        
       } else if (lastToolResult) {
         console.log('[AI][callLLM] Using tool results only (no valid LLM response)');
         
-        const finalResponse = JSON.stringify({
+        return JSON.stringify({
           response: formatFinancialResponse(lastToolResult),
           data: lastToolResult,
           source: 'tool_result',
           error: false
         });
-        
-        // Log comprehensive summary
-        logLLMCallSummary({
-          requestId,
-          messages,
-          finalResponse,
-          startTime,
-          model,
-          uid,
-          toolCallsCount: totalToolCalls,
-          hasError: false
-        });
-        
-        return finalResponse;
       }
       
       // No tool results - return LLM response
       if (parsed && (parsed.response || parsed.text)) {
-        const finalResponse = JSON.stringify({
+        return JSON.stringify({
           response: parsed.response || parsed.text,
           data: parsed.data || null,
           source: 'general_response',
           error: false
         });
-        
-        // Log comprehensive summary
-        logLLMCallSummary({
-          requestId,
-          messages,
-          finalResponse,
-          startTime,
-          model,
-          uid,
-          toolCallsCount: totalToolCalls,
-          hasError: false
-        });
-        
-        return finalResponse;
       }
       
       // Fallback
-      const finalResponse = JSON.stringify({
+      return JSON.stringify({
         response: 'I encountered an issue processing your request. Please try again.',
         data: null,
         error: true,
         source: 'fallback'
       });
       
-      // Log comprehensive summary for fallback
-      logLLMCallSummary({
-        requestId,
-        messages,
-        finalResponse,
-        startTime,
-        model,
-        uid,
-        toolCallsCount: totalToolCalls,
-        hasError: true
-      });
-      
-      return finalResponse;
-      
     } else {
       console.log('[AI][callLLM] Response is not JSON format');
       
       // Return as plain text response
-      const finalResponse = JSON.stringify({
+      return JSON.stringify({
         response: completeResponse,
         data: lastToolResult || null,
         source: lastToolResult ? 'tool_result_text' : 'general_response',
         error: false
       });
-      
-      // Log comprehensive summary for plain text response
-      logLLMCallSummary({
-        requestId,
-        messages,
-        finalResponse,
-        startTime,
-        model,
-        uid,
-        toolCallsCount: totalToolCalls,
-        hasError: false
-      });
-      
-      return finalResponse;
     }
   } catch (e) {
     console.error('[AI][callLLM] Error in post-processing hallucination check:', e);
@@ -1247,26 +1059,12 @@ export async function callLLM({
     });
     
     // If no tool results and error occurred, return safe fallback
-    const finalResponse = JSON.stringify({
+    return JSON.stringify({
       text: 'I encountered an issue processing your request. Please try again.',
       data: {},
       error: true,
       source: 'error_fallback',
       errorDetails: e.message
     });
-    
-    // Log comprehensive summary for error case
-    logLLMCallSummary({
-      requestId,
-      messages,
-      finalResponse,
-      startTime,
-      model,
-      uid,
-      toolCallsCount: totalToolCalls,
-      hasError: true
-    });
-    
-    return finalResponse;
   }
 } 

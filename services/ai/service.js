@@ -9,7 +9,11 @@ import { formatFinancialResponse } from "./responseFormatter.js";
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
+import accountsService from "../accounts.service.js";
 import businessService from "../businesses.service.js";
+import authService from "../auth.service.js";
+import assetsService from "../assets.service.js";
+import tripService from "../trips.service.js";
 // Circular import prevention - import aiController only when needed
 // import aiController from "../../controllers/ai.controller.js";
 import { getUserDek } from "../../database/encryption.js";
@@ -173,17 +177,8 @@ class AIService {
       console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
-      console.log("[AI Service] Looking up user with authUid:", uid);
       const dek = await getUserDek(uid);
       const user = await User.findOne({ authUid: uid }).lean();
-      console.log("[AI Service] User lookup result:", {
-        found: !!user,
-        hasEmail: !!user?.email,
-        emailArray: user?.email,
-        emailCount: user?.email?.length || 0,
-        firstEmail: user?.email?.[0],
-        userId: user?._id
-      });
       if (!user?.email?.[0]?.email) throw new Error("User email not found");
       const email = user.email[0].email;
       const profiles = await businessService.getUserProfiles(email, uid);

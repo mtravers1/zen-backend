@@ -6,7 +6,6 @@ import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
-import filesService from "../files.service.js";
 import { filterAccounts, filterTransactions } from "./filters.js";
 
 /**
@@ -64,32 +63,10 @@ export const toolFunctions = (context) => ({
    */
   getAccountsByProfile: async ({ uid, filters = {} }) => {
     try {
-      console.log('\n🔍 [AI][getAccountsByProfile] ====== DEBUG START ======');
-      console.log('[AI][getAccountsByProfile] Received parameters:', {
-        uid,
-        filters,
-        hasContext: !!context,
-        hasProfile: !!context?.profile
-      });
-      
       const { profile } = context;
-      console.log('[AI][getAccountsByProfile] Profile context:', {
-        profileId: profile?.id,
-        profileEmail: profile?.email,
-        profileName: profile?.name,
-        hasPlaidAccounts: !!profile?.plaidAccounts,
-        plaidAccountsCount: profile?.plaidAccounts?.length || 0
-      });
-      
       const accounts = await accountsService.getAccounts(profile, uid);
-      console.log('[AI][getAccountsByProfile] Raw accounts from service:', {
-        accountsType: typeof accounts,
-        accountsKeys: accounts ? Object.keys(accounts) : 'null',
-        accountsData: accounts
-      });
       
       if (!accounts) {
-        console.log('[AI][getAccountsByProfile] ❌ No accounts returned from service');
         return [];
       }
       
@@ -129,37 +106,8 @@ export const toolFunctions = (context) => ({
       }
       
       const allAccounts = Object.values(cleaned).flat();
-      console.log('[AI][getAccountsByProfile] All accounts after cleaning:', {
-        allAccountsCount: allAccounts.length,
-        allAccountsData: allAccounts.map(acc => ({
-          account_id: acc.account_id,
-          name: acc.name,
-          account_type: acc.account_type,
-          account_subtype: acc.account_subtype,
-          balance: acc.balance,
-          institution_name: acc.institution_name
-        }))
-      });
-      
       const filteredAccounts = filterAccounts(allAccounts, filters);
-      console.log('[AI][getAccountsByProfile] Filtered accounts:', {
-        filtersApplied: filters,
-        filteredCount: filteredAccounts.length,
-        filteredData: filteredAccounts.map(acc => ({
-          account_id: acc.account_id,
-          name: acc.name,
-          account_type: acc.account_type,
-          account_subtype: acc.account_subtype,
-          balance: acc.balance
-        }))
-      });
-      
       const formattedAccounts = accountsService.formatAccountsBalances(filteredAccounts);
-      console.log('[AI][getAccountsByProfile] Final formatted accounts:', {
-        formattedCount: formattedAccounts.length,
-        formattedData: formattedAccounts
-      });
-      console.log('🔍 [AI][getAccountsByProfile] ====== DEBUG END ======\n');
       
       return formattedAccounts;
     } catch (error) {
@@ -260,7 +208,7 @@ export const toolFunctions = (context) => ({
       
       const cashFlows = await accountsService.getCashFlows(profile, uid);
       
-      console.log("[AI][getNetWorth] ✅ getCashFlows result:", {
+      console.log("[AI][getNetWorth] getCashFlows result:", {
         hasCashFlows: !!cashFlows,
         cashFlowsType: typeof cashFlows,
         keys: cashFlows ? Object.keys(cashFlows) : 'null',
@@ -516,48 +464,6 @@ export const toolFunctions = (context) => ({
     } catch (error) {
       console.error("[AI][getAccountsBreakdown] Error:", error);
       return { message: "Failed to retrieve account breakdown", error: error.message };
-    }
-  },
-
-  /**
-   * Retrieves files for the current profile from the file cabinet
-   */
-  getFiles: async ({ uid, folder = null }) => {
-    try {
-      const { profile } = context;
-      
-      if (!profile || !profile.id) {
-        return { message: "Profile context not available", error: "Profile not found in context" };
-      }
-      
-      console.log(`[AI][getFiles] Getting files for profile ${profile.id}, folder: ${folder || 'all'}`);
-      
-      let files;
-      if (folder) {
-        files = await filesService.getFilesByFolder(profile.id, uid, folder);
-      } else {
-        files = await filesService.getFiles(profile.id, uid);
-      }
-      
-      if (!files || files.length === 0) {
-        return [];
-      }
-      
-      console.log(`[AI][getFiles] Found ${files.length} files for profile ${profile.id}`);
-      
-      // Clean and format file data for AI consumption
-      const cleanedFiles = files.map(file => ({
-        id: file.id,
-        type: file.type,
-        info: file.info,
-        folder: file.folder,
-        updatedAt: file.updatedAt
-      }));
-      
-      return cleanedFiles;
-    } catch (error) {
-      console.error("[AI][getFiles] Error:", error);
-      return { message: "Failed to retrieve files", error: error.message };
     }
   },
 

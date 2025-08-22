@@ -82,37 +82,13 @@ export function filterAccounts(accounts, filters = {}) {
     const { accountType, accountSubtype, institutionName, nameIncludes } =
       filters;
 
-    // Enhanced account type filtering that handles smart mapping
-    if (accountType) {
-      const filterTypeNormalized = accountType.toLowerCase();
-      const accountTypeNormalized = account.account_type?.toLowerCase();
-      const accountSubtypeNormalized = account.account_subtype?.toLowerCase();
-      
-      // Handle smart filtering for common user queries
-      if (filterTypeNormalized === 'savings') {
-        // For savings, check if account_subtype is 'savings' and account_type is 'depository'
-        if (!(accountTypeNormalized === 'depository' && accountSubtypeNormalized === 'savings')) {
-          return false;
-        }
-      } else if (filterTypeNormalized === 'checking') {
-        // For checking, check if account_subtype is 'checking' and account_type is 'depository'
-        if (!(accountTypeNormalized === 'depository' && accountSubtypeNormalized === 'checking')) {
-          return false;
-        }
-      } else if (filterTypeNormalized === 'credit card' || filterTypeNormalized === 'credit') {
-        // For credit cards, check if account_type is 'credit' 
-        if (accountTypeNormalized !== 'credit') {
-          return false;
-        }
-      } else {
-        // Default behavior: match account_type directly
-        if (accountTypeNormalized !== filterTypeNormalized) {
-          return false;
-        }
-      }
+    if (
+      accountType &&
+      account.account_type?.toLowerCase() !== accountType.toLowerCase()
+    ) {
+      return false;
     }
 
-    // Standard account subtype filtering
     if (
       accountSubtype &&
       account.account_subtype?.toLowerCase() !== accountSubtype.toLowerCase()

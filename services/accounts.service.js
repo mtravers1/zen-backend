@@ -1085,26 +1085,10 @@ const getCashFlowsWeekly = async (profile, uid) => {
 };
 
 const getCashFlows = async (profile, uid) => {
-  console.log('\n🔍 [getCashFlows] ====== FUNCTION START ======');
-  console.log('[getCashFlows] Profile data:', {
-    profileId: profile.id,
-    profileEmail: profile.email,
-    profileName: profile.name,
-    plaidAccountsCount: profile.plaidAccounts?.length || 0,
-    plaidAccountIds: profile.plaidAccounts
-  });
-  
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
   }).lean();
-
-  console.log('[getCashFlows] Raw Plaid accounts from DB:', {
-    requestedIds: plaidIds,
-    foundAccountsCount: plaidAccountsResponse.length,
-    foundAccountIds: plaidAccountsResponse.map(acc => acc._id),
-    accountTypes: plaidAccountsResponse.map(acc => ({ id: acc._id, type: 'encrypted' }))
-  });
 
   const dek = await getUserDek(uid);
 
@@ -1126,37 +1110,14 @@ const getCashFlows = async (profile, uid) => {
       plaidAccount.account_subtype,
       dek
     );
-    const decryptedAccount = {
+    plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
       availableBalance: parseInt(decryptedAvailableBalance),
       account_type: decryptedAccountType,
       account_subtype: decryptedAccountSubtype,
-    };
-    
-    console.log('[getCashFlows] Decrypted account:', {
-      accountId: plaidAccount._id,
-      plaid_account_id: plaidAccount.plaid_account_id,
-      account_type: decryptedAccountType,
-      account_subtype: decryptedAccountSubtype,
-      currentBalance: decryptedCurrentBalance,
-      availableBalance: parseInt(decryptedAvailableBalance),
-      institution_name: plaidAccount.institution_name
     });
-    
-    plaidAccounts.push(decryptedAccount);
   }
-  
-  console.log('[getCashFlows] Total decrypted accounts:', {
-    count: plaidAccounts.length,
-    accountBreakdown: plaidAccounts.map(acc => ({
-      id: acc._id,
-      type: acc.account_type,
-      subtype: acc.account_subtype,
-      currentBalance: acc.currentBalance,
-      availableBalance: acc.availableBalance
-    }))
-  });
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -1417,22 +1378,7 @@ const getCashFlows = async (profile, uid) => {
 
   /// Calculate total cash balance
 
-  console.log('\n🔍 [getCashFlows] ====== NET WORTH CALCULATION DEBUG ======');
-  console.log('[getCashFlows] Balance breakdown:', {
-    balanceDebit: balanceDebit,
-    balanceCredit: balanceCredit,
-    balanceAvailableInvestment: balanceAvailableInvestment,
-    balanceCurrentInvestment: balanceCurrentInvestment,
-    allInvestmentsCurrentBalance: allInvestmentsCurrentBalance,
-    balanceLoan: balanceLoan
-  });
-  
   const totalCashBalance = balanceDebit + balanceAvailableInvestment;
-  console.log('[getCashFlows] Total cash balance calculation:', {
-    balanceDebit,
-    balanceAvailableInvestment,
-    totalCashBalance
-  });
 
   /// Calculate net worth
   // (bank accounts + investments accounts + assets - credit accounts - loan accounts)
@@ -1441,27 +1387,11 @@ const getCashFlows = async (profile, uid) => {
   const profileAssets = assets.filter(
     (asset) => asset.profileId === profile.id.toString()
   );
-  console.log('[getCashFlows] Assets data:', {
-    totalAssets: assets.length,
-    profileAssets: profileAssets.length,
-    profileId: profile.id.toString(),
-    assetsData: profileAssets.map(a => ({ id: a._id, basis: a.basis, profileId: a.profileId }))
-  });
-  
   let totalAssets = 0;
   for (const asset of profileAssets) {
     const cleanBasis = String(asset.basis).replace(/,/g, "");
-    const assetValue = Number(cleanBasis) || 0;
-    console.log('[getCashFlows] Processing asset:', {
-      assetId: asset._id,
-      rawBasis: asset.basis,
-      cleanBasis,
-      assetValue,
-      totalAssetsSoFar: totalAssets
-    });
-    totalAssets += assetValue;
+    totalAssets += Number(cleanBasis) || 0;
   }
-  console.log('[getCashFlows] Final assets total:', totalAssets);
 
   const netWorth =
     balanceDebit +
@@ -1469,17 +1399,6 @@ const getCashFlows = async (profile, uid) => {
     totalAssets -
     balanceCredit -
     balanceLoan;
-    
-  console.log('[getCashFlows] Net worth calculation:', {
-    formula: 'balanceDebit + allInvestmentsCurrentBalance + totalAssets - balanceCredit - balanceLoan',
-    balanceDebit,
-    allInvestmentsCurrentBalance,
-    totalAssets,
-    balanceCredit,
-    balanceLoan,
-    netWorth
-  });
-  console.log('🔍 [getCashFlows] ====== END NET WORTH DEBUG ======\n');
   /// Calculate cash runway
   let cashRunway = null;
   let advice = null;

@@ -126,7 +126,7 @@ export const toolDefinitions = [
             description: "Optional filters to refine account results",
             properties: {
               institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type - use 'savings' for savings accounts, 'checking' for checking accounts, 'investment' for investment accounts, 'credit' for credit cards, 'loan' for loans. Note: For depository accounts, this filters by account_subtype (savings/checking) not account_type." },
+              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
               accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
               nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
@@ -150,7 +150,7 @@ export const toolDefinitions = [
             description: "Optional filters to refine account results",
             properties: {
               institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type - use 'savings' for savings accounts, 'checking' for checking accounts, 'investment' for investment accounts, 'credit' for credit cards, 'loan' for loans. Note: For depository accounts, this filters by account_subtype (savings/checking) not account_type." },
+              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
               accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
               nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
@@ -275,21 +275,6 @@ export const toolDefinitions = [
           },
         },
         required: [],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "getFiles",
-      description: "Get files from the user's file cabinet for the current profile. Use this for questions about files, documents, or file cabinet contents.",
-      parameters: {
-        type: "object",
-        properties: {
-          uid: { type: "string", description: "User ID" },
-          folder: { type: "string", description: "Optional folder name to filter files by specific folder" },
-        },
-        required: ["uid"],
       },
     },
   },
