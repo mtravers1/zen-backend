@@ -56,19 +56,12 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 
 **MANDATORY TOOL USAGE for:**
 - Net worth questions → MUST call getNetWorth()
-- Account balances (all accounts) → MUST call getAccountsByProfile()
-- Specific account types (savings, checking, etc.) → MUST call getAccountsByProfile() with filters
+- Account balances → MUST call getAccountsByProfile()  
 - Transaction history → MUST call getProfileTransactions()
 - Cash flow data → MUST call getCashFlows()
 - Account lists → MUST call getAccountsByProfile()
 - Asset information → MUST call getAssets()
 - Business metrics → MUST call getBusinessMetrics()
-
-**ACCOUNT FILTERING EXAMPLES:**
-- "savings balance" → getAccountsByProfile({filters: {accountSubtype: "savings"}})
-- "checking account" → getAccountsByProfile({filters: {accountSubtype: "checking"}})  
-- "investment accounts" → getAccountsByProfile({filters: {accountType: "investment"}})
-- "credit cards" → getAccountsByProfile({filters: {accountType: "credit"}})
 
 **NEVER use tools for:**
 - General advice ("How to save money?")
@@ -145,14 +138,6 @@ User: "What's my account balance?"
 1. MUST call getAccountsByProfile()
 2. Return data from tool
 
-User: "How much do I have in savings?"
-1. MUST call getAccountsByProfile({filters: {accountSubtype: "savings"}})
-2. Return: "You have $X in your savings account(s)"
-
-User: "Show me my checking account balance"
-1. MUST call getAccountsByProfile({filters: {accountSubtype: "checking"}})
-2. Return checking account data only
-
 User: "Show me my recent transactions"
 1. MUST call getProfileTransactions()
 2. Return transaction data
@@ -199,11 +184,7 @@ export const getSimplifiedSystemPrompt = (screen = 'dashboard') => `You are Zent
 
 1. **FINANCIAL DATA** → MUST use tools
    - Net worth → Call getNetWorth()
-   - All balances → Call getAccountsByProfile()
-   - Specific account types → Call getAccountsByProfile() with filters
-     * Savings → {filters: {accountSubtype: "savings"}}
-     * Checking → {filters: {accountSubtype: "checking"}}
-     * Credit → {filters: {accountType: "credit"}}
+   - Balance → Call getAccountsByProfile()
    - Transactions → Call getProfileTransactions()
    - Response: Include real data
 
