@@ -817,34 +817,85 @@ export async function callLLM({
   );
   
   if (hasCutoffIndicators) {
-    console.warn('[AI][callLLM] 🚨 CUT-OFF OR APOLOGY RESPONSE DETECTED - Rejecting completely');
+    console.warn('[AI][callLLM] 🚨 CUT-OFF OR APOLOGY RESPONSE DETECTED');
     
-    // Check if this looks like JSON that might have useful data despite the apology
-    let hasUsefulData = false;
+    // Check if this is a valid JSON response with actual financial data
+    let hasValidFinancialData = false;
+    let parsedResponse = null;
+    
     try {
-      const parsed = JSON.parse(completeResponse);
-      if (parsed.data && Object.keys(parsed.data).length > 0) {
-        hasUsefulData = true;
-        console.log('[AI][callLLM] Found useful data despite apology, keeping data but changing response');
+      parsedResponse = JSON.parse(completeResponse);
+      
+      // Check for real financial data (not just empty objects)
+      if (parsedResponse.data) {
+        const data = parsedResponse.data;
         
-        // Return a clean response with the data but without apologies
-        return JSON.stringify({
-          text: "Here's the information you requested.",
-          response: "Here's the information you requested.",
-          data: parsed.data,
-          source: parsed.source || 'tool_result',
-          error: false,
-          errorMessage: null
-        });
+        // Look for meaningful financial data
+        const hasFinancialNumbers = (
+          (data.netWorth !== undefined && data.netWorth !== null) ||
+          (data.totalCashBalance !== undefined && data.totalCashBalance !== null) ||
+          (data.balance !== undefined && data.balance !== null) ||
+          (data.amount !== undefined && data.amount !== null) ||
+          (Array.isArray(data) && data.length > 0) ||
+          (typeof data === 'object' && Object.keys(data).length > 0 && 
+           Object.values(data).some(val => typeof val === 'number' || Array.isArray(val)))
+        );
+        
+        // Check if response text has actual financial information (not just cutoff message)
+        const responseHasFinancialInfo = (
+          parsedResponse.response && (
+            parsedResponse.response.includes('$') ||
+            /\$\d+/.test(parsedResponse.response) ||
+            parsedResponse.response.includes('net worth') ||
+            parsedResponse.response.includes('balance') ||
+            parsedResponse.response.includes('transactions') ||
+            parsedResponse.response.includes('accounts')
+          )
+        );
+        
+        if (hasFinancialNumbers || responseHasFinancialInfo) {
+          hasValidFinancialData = true;
+          console.log('[AI][callLLM] Found valid financial data despite cutoff indicators - keeping response but cleaning text');
+        }
       }
     } catch (e) {
-      // Not valid JSON or no useful data
+      // Not valid JSON
+      console.warn('[AI][callLLM] Response is not valid JSON');
     }
     
-    if (!hasUsefulData) {
-      console.warn('[AI][callLLM] ⚠️ No useful data found in cut-off/apology response - returning fallback');
+    if (hasValidFinancialData && parsedResponse) {
+      // Clean the response text but keep the data
+      let cleanedText = parsedResponse.response || parsedResponse.text || "";
       
-      // Return a generic helpful response instead of the cut-off message
+      // Remove cutoff phrases but preserve financial information
+      const cutoffPatterns = [
+        /I apologize, but my response was cut off\. Please try asking your question again\./gi,
+        /I'm sorry, but my response was cut off\. Please try asking your question again\./gi,
+        /my response was cut off\. Please try asking your question again\./gi,
+        /Please try asking your question again\./gi,
+        /\. I apologize, but my response was cut off$/gi,
+        /\. I'm sorry, but my response was cut off$/gi
+      ];
+      
+      cutoffPatterns.forEach(pattern => {
+        cleanedText = cleanedText.replace(pattern, '');
+      });
+      
+      cleanedText = cleanedText.trim();
+      
+      console.log('[AI][callLLM] ✅ Cleaned cutoff message from valid financial response');
+      
+      return JSON.stringify({
+        ...parsedResponse,
+        text: cleanedText,
+        response: cleanedText,
+        error: false,
+        errorMessage: null
+      });
+    } else {
+      console.warn('[AI][callLLM] ⚠️ No valid financial data found in cutoff response - returning fallback');
+      
+      // Return a generic helpful response
       return JSON.stringify({
         text: "I'm here to help with your financial questions. What would you like to know?",
         response: "I'm here to help with your financial questions. What would you like to know?",

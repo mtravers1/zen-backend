@@ -161,28 +161,89 @@ export const toolFunctions = (context) => ({
    */
   getNetWorth: async ({ uid }) => {
     try {
-      const { profile } = context;
-      const cashFlows = await accountsService.getCashFlows(profile, uid);
+      console.log('\n🔍 [AI][getNetWorth] ====== DEBUG START ======');
+      console.log("[AI][getNetWorth] Context received:", {
+        hasProfile: !!context?.profile,
+        profileId: context?.profile?.id,
+        profileEmail: context?.profile?.email,
+        profileName: context?.profile?.name,
+        profileIsPersonal: context?.profile?.isPersonal,
+        profileHasPlaidAccounts: !!context?.profile?.plaidAccounts,
+        plaidAccountsCount: context?.profile?.plaidAccounts?.length || 0,
+        uid: uid,
+        contextKeys: Object.keys(context || {})
+      });
       
-      if (!cashFlows) {
+      const { profile } = context;
+      
+      if (!profile) {
+        console.error("[AI][getNetWorth] ❌ No profile found in context");
         return { 
           netWorth: 0, 
           totalCashBalance: 0,
           totalAssets: 0,
           totalLiabilities: 0,
-          message: "No financial data available" 
+          message: "No profile context available",
+          error: "Profile not found in context"
         };
       }
       
-      return {
+      if (!profile.plaidAccounts || profile.plaidAccounts.length === 0) {
+        console.warn("[AI][getNetWorth] ⚠️ Profile has no Plaid accounts");
+        return { 
+          netWorth: 0, 
+          totalCashBalance: 0,
+          totalAssets: 0,
+          totalLiabilities: 0,
+          message: "No connected accounts found for this profile" 
+        };
+      }
+      
+      console.log("[AI][getNetWorth] ✅ Profile validated, calling getCashFlows with:", {
+        profileId: profile.id,
+        profileEmail: profile.email,
+        plaidAccountIds: profile.plaidAccounts,
+        uid: uid
+      });
+      
+      const cashFlows = await accountsService.getCashFlows(profile, uid);
+      
+      console.log("[AI][getNetWorth] getCashFlows result:", {
+        hasCashFlows: !!cashFlows,
+        cashFlowsType: typeof cashFlows,
+        keys: cashFlows ? Object.keys(cashFlows) : 'null',
+        netWorth: cashFlows?.netWorth,
+        totalCashBalance: cashFlows?.totalCashBalance,
+        totalAssets: cashFlows?.totalAssets,
+        totalLiabilities: cashFlows?.totalLiabilities
+      });
+      
+      if (!cashFlows) {
+        console.error("[AI][getNetWorth] ❌ getCashFlows returned null/undefined");
+        return { 
+          netWorth: 0, 
+          totalCashBalance: 0,
+          totalAssets: 0,
+          totalLiabilities: 0,
+          message: "No financial data available from accounts service" 
+        };
+      }
+      
+      const result = {
         netWorth: cashFlows.netWorth || 0,
         totalCashBalance: cashFlows.totalCashBalance || 0,
         totalAssets: cashFlows.totalAssets || 0,
         totalLiabilities: cashFlows.totalLiabilities || 0,
         message: "Net worth calculated from current financial data"
       };
+      
+      console.log("[AI][getNetWorth] ✅ Final result:", result);
+      console.log('[AI][getNetWorth] ====== DEBUG END ======\n');
+      
+      return result;
     } catch (error) {
-      console.error("[AI][getNetWorth] Error:", error);
+      console.error("[AI][getNetWorth] ❌ Error:", error);
+      console.error("[AI][getNetWorth] Error stack:", error.stack);
       return { 
         netWorth: 0, 
         totalCashBalance: 0,
