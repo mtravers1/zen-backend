@@ -438,29 +438,11 @@ export async function callLLM({
       if (delta?.content) {
         // Check for malformed content that might cause issues
         const content = delta.content;
-        
-        // Detect various forms of malformed content early
-        if (content.includes('<tool-use>') || content.includes('</tool-use>') || 
-            content.includes('<response>') || content.includes('</response>') ||
-            content.includes('tool-use') || content.includes('xml')) {
-          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains XML-like markers');
-          console.warn('[AI][callLLM] Malformed content:', content);
+        if (content.includes('<tool-use>') || content.includes('</tool-use>')) {
+          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains tool-use markers');
+          console.warn('[AI][callLLM] Content with tool-use markers:', content);
           
-          // Try to extract JSON if present, otherwise skip
-          const jsonMatch = content.match(/\{.*\}/s);
-          if (jsonMatch) {
-            try {
-              JSON.parse(jsonMatch[0]);
-              console.log('[AI][callLLM] 🔧 Extracted valid JSON from malformed content');
-              completeResponse += jsonMatch[0];
-              receivedContent = true;
-              continue;
-            } catch (e) {
-              console.warn('[AI][callLLM] ⚠️ No valid JSON found in malformed content');
-            }
-          }
-          
-          // Skip this malformed chunk completely
+          // Skip this content chunk as it's malformed
           continue;
         }
         
@@ -769,34 +751,23 @@ export async function callLLM({
     console.warn('[AI][callLLM] 🚨 MALFORMED RESPONSE DETECTED - contains tool-use markers');
     console.warn('[AI][callLLM] Malformed response:', completeResponse);
     
-    // Extract JSON content from tool-use tags
+    // Try to clean the response by removing tool-use markers
     let cleanedResponse = completeResponse;
-    
-    // Try to extract content between tool-use tags
-    const toolUseMatch = cleanedResponse.match(/<tool-use>(.*?)<\/tool-use>/s);
-    if (toolUseMatch) {
-      cleanedResponse = toolUseMatch[1].trim();
-      console.log('[AI][callLLM] 🔧 Extracted content from tool-use tags:', cleanedResponse.substring(0, 200));
-    } else {
-      // If no closing tag, extract everything after opening tag
-      const openTagMatch = cleanedResponse.match(/<tool-use>(.*)/s);
-      if (openTagMatch) {
-        cleanedResponse = openTagMatch[1].trim();
-        console.log('[AI][callLLM] 🔧 Extracted content from incomplete tool-use tag:', cleanedResponse.substring(0, 200));
-      }
-    }
+    cleanedResponse = cleanedResponse.replace(/<tool-use>.*?<\/tool-use>/gs, '');
+    cleanedResponse = cleanedResponse.replace(/<tool-use>.*$/s, '');
+    cleanedResponse = cleanedResponse.replace(/^.*<\/tool-use>/s, '');
     
     // Remove any remaining XML-like tags
     cleanedResponse = cleanedResponse.replace(/<[^>]*>/g, '');
+    
+    // Trim and check if we have usable content
     cleanedResponse = cleanedResponse.trim();
     
-    // Validate if it's proper JSON
-    try {
-      const parsed = JSON.parse(cleanedResponse);
-      console.log('[AI][callLLM] ✅ Successfully extracted and parsed JSON from tool-use tags');
+    if (cleanedResponse && cleanedResponse.length > 10) {
+      console.log('[AI][callLLM] ✅ Cleaned malformed response:', cleanedResponse.substring(0, 200));
       completeResponse = cleanedResponse;
-    } catch (e) {
-      console.warn('[AI][callLLM] ⚠️ Extracted content is not valid JSON, using fallback');
+    } else {
+      console.warn('[AI][callLLM] ⚠️ Could not clean malformed response, using fallback');
       
       // If we have tool results, provide a fallback response
       if (lastToolResult) {
@@ -820,50 +791,45 @@ export async function callLLM({
   }
   
   // Check for cut-off responses and apologetic messages - reject them completely
-  // Use case-insensitive search and be very aggressive about detection
-  const responseText = completeResponse.toLowerCase();
+  // More aggressive detection to catch all variations
   const hasCutoffIndicators = (
-    // Exact patterns from screenshots - highest priority
-    responseText.includes('i apologize, but my response was cut off. please try asking your question again.') ||
-    responseText.includes("i'm sorry, but my response was cut off. please try asking your question again.") ||
+    // Cut-off patterns (exact matches from screenshot)
+    completeResponse.includes('I apologize, but my response was cut off. Please try asking your question again.') ||
+    completeResponse.includes("I'm sorry, but my response was cut off. Please try asking your question again.") ||
+    completeResponse.includes('my response was cut off. Please try asking your question again.') ||
+    completeResponse.includes('response was cut off. Please try asking your question again.') ||
+    completeResponse.includes('was cut off. Please try asking your question again.') ||
+    completeResponse.includes('cut off. Please try asking your question again.') ||
     
-    // Any cutoff mention regardless of context
-    responseText.includes('cut off') ||
-    responseText.includes('response was cut') ||
-    responseText.includes('my response was cut') ||
-    responseText.includes('cutoff') ||
-    responseText.includes('cut-off') ||
+    // General cut-off patterns
+    completeResponse.includes('cut off') ||
+    completeResponse.includes('response was cut') ||
+    completeResponse.includes('my response was cut') ||
     
-    // Any retry prompt variations
-    responseText.includes('please try asking your question again') ||
-    responseText.includes('try asking your question again') ||
-    responseText.includes('asking your question again') ||
-    responseText.includes('your question again') ||
-    responseText.includes('ask your question again') ||
-    responseText.includes('question again') ||
-    responseText.includes('try again') ||
-    
-    // Apology patterns that indicate incomplete responses
-    (responseText.includes('i apologize') && (
-      responseText.includes('cut') ||
-      responseText.includes('try asking') ||
-      responseText.includes('question again') ||
-      responseText.includes('incomplete') ||
-      responseText.includes('error')
+    // Any apology combined with cutoff (broader detection)
+    (completeResponse.includes('I apologize') && (
+      completeResponse.includes('cut off') ||
+      completeResponse.includes('Please try asking') ||
+      completeResponse.includes('try asking your question again')
     )) ||
-    (responseText.includes("i'm sorry") && (
-      responseText.includes('cut') ||
-      responseText.includes('try asking') ||
-      responseText.includes('question again') ||
-      responseText.includes('incomplete') ||
-      responseText.includes('error')
+    (completeResponse.includes("I'm sorry") && (
+      completeResponse.includes('cut off') ||
+      completeResponse.includes('Please try asking') ||
+      completeResponse.includes('try asking your question again')
     )) ||
     
-    // Generic incomplete response indicators
-    responseText.includes('incomplete response') ||
-    responseText.includes('response incomplete') ||
-    responseText.includes('response was interrupted') ||
-    responseText.includes('please try again')
+    // Retry prompts (any variation)
+    completeResponse.includes('Please try asking your question again') ||
+    completeResponse.includes('try asking your question again') ||
+    completeResponse.includes('asking your question again') ||
+    completeResponse.includes('your question again') ||
+    completeResponse.includes('Please try asking') ||
+    
+    // Broader apology detection at end of responses
+    /\. I apologize[^.]*$/i.test(completeResponse) ||
+    /\. I'm sorry[^.]*$/i.test(completeResponse) ||
+    completeResponse.endsWith('. I apologize, but my response was cut off.') ||
+    completeResponse.endsWith('. Please try asking your question again.')
   );
   
   if (hasCutoffIndicators) {
@@ -917,14 +883,31 @@ export async function callLLM({
       // Clean the response text but keep the data
       let cleanedText = parsedResponse.response || parsedResponse.text || "";
       
-      // Remove cutoff phrases but preserve financial information
+      // Remove cutoff phrases but preserve financial information - be more aggressive
       const cutoffPatterns = [
+        // Exact patterns from screenshot
         /I apologize, but my response was cut off\. Please try asking your question again\./gi,
         /I'm sorry, but my response was cut off\. Please try asking your question again\./gi,
         /my response was cut off\. Please try asking your question again\./gi,
         /Please try asking your question again\./gi,
-        /\. I apologize, but my response was cut off$/gi,
-        /\. I'm sorry, but my response was cut off$/gi
+        
+        // End-of-response patterns
+        /\. I apologize, but my response was cut off\.?$/gi,
+        /\. I'm sorry, but my response was cut off\.?$/gi,
+        /\. I apologize[^.]*cut off[^.]*\.?$/gi,
+        /\. I'm sorry[^.]*cut off[^.]*\.?$/gi,
+        
+        // Any apology at end of sentence
+        /\. I apologize[^.]*$/gi,
+        /\. I'm sorry[^.]*$/gi,
+        
+        // Standalone retry prompts
+        /\. Please try asking your question again\.?$/gi,
+        /\. Please try asking[^.]*$/gi,
+        
+        // Cut off patterns anywhere
+        /[^.]*cut off[^.]*Please try asking your question again[^.]*$/gi,
+        /[^.]*response was cut[^.]*$/gi
       ];
       
       cutoffPatterns.forEach(pattern => {
