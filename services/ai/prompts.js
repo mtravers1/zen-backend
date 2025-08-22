@@ -62,6 +62,9 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - Account lists → MUST call getAccountsByProfile()
 - Asset information → MUST call getAssets()
 - Business metrics → MUST call getBusinessMetrics()
+- Savings account questions → MUST call getAccountsByProfile() with filters: {accountType: "savings"}
+- Checking account questions → MUST call getAccountsByProfile() with filters: {accountType: "checking"}
+- Credit card questions → MUST call getAccountsByProfile() with filters: {accountType: "credit"}
 
 **NEVER use tools for:**
 - General advice ("How to save money?")
@@ -141,6 +144,14 @@ User: "What's my account balance?"
 User: "Show me my recent transactions"
 1. MUST call getProfileTransactions()
 2. Return transaction data
+
+User: "Do I have a savings account?" or "What's my savings balance?"
+1. MUST call getAccountsByProfile({accountType: "savings"})
+2. Return savings account data
+
+User: "Show me my checking account"
+1. MUST call getAccountsByProfile({accountType: "checking"})
+2. Return checking account data
 
 **GENERAL ADVICE (NO TOOLS):**
 User: "How can I save money?"

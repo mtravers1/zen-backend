@@ -126,7 +126,7 @@ export const toolDefinitions = [
             description: "Optional filters to refine account results",
             properties: {
               institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
+              accountType: { type: "string", description: "Account type - use 'savings' for savings accounts, 'checking' for checking accounts, 'investment' for investment accounts, 'credit' for credit cards, 'loan' for loans. Note: For depository accounts, this filters by account_subtype (savings/checking) not account_type." },
               accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
               nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
@@ -150,7 +150,7 @@ export const toolDefinitions = [
             description: "Optional filters to refine account results",
             properties: {
               institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
+              accountType: { type: "string", description: "Account type - use 'savings' for savings accounts, 'checking' for checking accounts, 'investment' for investment accounts, 'credit' for credit cards, 'loan' for loans. Note: For depository accounts, this filters by account_subtype (savings/checking) not account_type." },
               accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
               nameIncludes: { type: "string", description: "Partial account name to search for" },
             },
