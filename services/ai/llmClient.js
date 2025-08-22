@@ -791,7 +791,6 @@ export async function callLLM({
   }
   
   // Check for cut-off responses and apologetic messages - reject them completely
-  // More aggressive detection to catch all variations
   const hasCutoffIndicators = (
     // Cut-off patterns (exact matches from screenshot)
     completeResponse.includes('I apologize, but my response was cut off. Please try asking your question again.') ||
@@ -806,30 +805,15 @@ export async function callLLM({
     completeResponse.includes('response was cut') ||
     completeResponse.includes('my response was cut') ||
     
-    // Any apology combined with cutoff (broader detection)
-    (completeResponse.includes('I apologize') && (
-      completeResponse.includes('cut off') ||
-      completeResponse.includes('Please try asking') ||
-      completeResponse.includes('try asking your question again')
-    )) ||
-    (completeResponse.includes("I'm sorry") && (
-      completeResponse.includes('cut off') ||
-      completeResponse.includes('Please try asking') ||
-      completeResponse.includes('try asking your question again')
-    )) ||
+    // Apology patterns (only flag if they appear with cutoff indicators)
+    (completeResponse.includes('I apologize') && completeResponse.includes('cut off')) ||
+    (completeResponse.includes("I'm sorry") && completeResponse.includes('cut off')) ||
     
-    // Retry prompts (any variation)
+    // Retry prompts
     completeResponse.includes('Please try asking your question again') ||
     completeResponse.includes('try asking your question again') ||
     completeResponse.includes('asking your question again') ||
-    completeResponse.includes('your question again') ||
-    completeResponse.includes('Please try asking') ||
-    
-    // Broader apology detection at end of responses
-    /\. I apologize[^.]*$/i.test(completeResponse) ||
-    /\. I'm sorry[^.]*$/i.test(completeResponse) ||
-    completeResponse.endsWith('. I apologize, but my response was cut off.') ||
-    completeResponse.endsWith('. Please try asking your question again.')
+    completeResponse.includes('your question again')
   );
   
   if (hasCutoffIndicators) {
@@ -883,31 +867,14 @@ export async function callLLM({
       // Clean the response text but keep the data
       let cleanedText = parsedResponse.response || parsedResponse.text || "";
       
-      // Remove cutoff phrases but preserve financial information - be more aggressive
+      // Remove cutoff phrases but preserve financial information
       const cutoffPatterns = [
-        // Exact patterns from screenshot
         /I apologize, but my response was cut off\. Please try asking your question again\./gi,
         /I'm sorry, but my response was cut off\. Please try asking your question again\./gi,
         /my response was cut off\. Please try asking your question again\./gi,
         /Please try asking your question again\./gi,
-        
-        // End-of-response patterns
-        /\. I apologize, but my response was cut off\.?$/gi,
-        /\. I'm sorry, but my response was cut off\.?$/gi,
-        /\. I apologize[^.]*cut off[^.]*\.?$/gi,
-        /\. I'm sorry[^.]*cut off[^.]*\.?$/gi,
-        
-        // Any apology at end of sentence
-        /\. I apologize[^.]*$/gi,
-        /\. I'm sorry[^.]*$/gi,
-        
-        // Standalone retry prompts
-        /\. Please try asking your question again\.?$/gi,
-        /\. Please try asking[^.]*$/gi,
-        
-        // Cut off patterns anywhere
-        /[^.]*cut off[^.]*Please try asking your question again[^.]*$/gi,
-        /[^.]*response was cut[^.]*$/gi
+        /\. I apologize, but my response was cut off$/gi,
+        /\. I'm sorry, but my response was cut off$/gi
       ];
       
       cutoffPatterns.forEach(pattern => {
