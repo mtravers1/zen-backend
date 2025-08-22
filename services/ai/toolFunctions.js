@@ -64,10 +64,32 @@ export const toolFunctions = (context) => ({
    */
   getAccountsByProfile: async ({ uid, filters = {} }) => {
     try {
+      console.log('\n🔍 [AI][getAccountsByProfile] ====== DEBUG START ======');
+      console.log('[AI][getAccountsByProfile] Received parameters:', {
+        uid,
+        filters,
+        hasContext: !!context,
+        hasProfile: !!context?.profile
+      });
+      
       const { profile } = context;
+      console.log('[AI][getAccountsByProfile] Profile context:', {
+        profileId: profile?.id,
+        profileEmail: profile?.email,
+        profileName: profile?.name,
+        hasPlaidAccounts: !!profile?.plaidAccounts,
+        plaidAccountsCount: profile?.plaidAccounts?.length || 0
+      });
+      
       const accounts = await accountsService.getAccounts(profile, uid);
+      console.log('[AI][getAccountsByProfile] Raw accounts from service:', {
+        accountsType: typeof accounts,
+        accountsKeys: accounts ? Object.keys(accounts) : 'null',
+        accountsData: accounts
+      });
       
       if (!accounts) {
+        console.log('[AI][getAccountsByProfile] ❌ No accounts returned from service');
         return [];
       }
       
@@ -107,8 +129,37 @@ export const toolFunctions = (context) => ({
       }
       
       const allAccounts = Object.values(cleaned).flat();
+      console.log('[AI][getAccountsByProfile] All accounts after cleaning:', {
+        allAccountsCount: allAccounts.length,
+        allAccountsData: allAccounts.map(acc => ({
+          account_id: acc.account_id,
+          name: acc.name,
+          account_type: acc.account_type,
+          account_subtype: acc.account_subtype,
+          balance: acc.balance,
+          institution_name: acc.institution_name
+        }))
+      });
+      
       const filteredAccounts = filterAccounts(allAccounts, filters);
+      console.log('[AI][getAccountsByProfile] Filtered accounts:', {
+        filtersApplied: filters,
+        filteredCount: filteredAccounts.length,
+        filteredData: filteredAccounts.map(acc => ({
+          account_id: acc.account_id,
+          name: acc.name,
+          account_type: acc.account_type,
+          account_subtype: acc.account_subtype,
+          balance: acc.balance
+        }))
+      });
+      
       const formattedAccounts = accountsService.formatAccountsBalances(filteredAccounts);
+      console.log('[AI][getAccountsByProfile] Final formatted accounts:', {
+        formattedCount: formattedAccounts.length,
+        formattedData: formattedAccounts
+      });
+      console.log('🔍 [AI][getAccountsByProfile] ====== DEBUG END ======\n');
       
       return formattedAccounts;
     } catch (error) {
@@ -209,7 +260,7 @@ export const toolFunctions = (context) => ({
       
       const cashFlows = await accountsService.getCashFlows(profile, uid);
       
-      console.log("[AI][getNetWorth] getCashFlows result:", {
+      console.log("[AI][getNetWorth] ✅ getCashFlows result:", {
         hasCashFlows: !!cashFlows,
         cashFlowsType: typeof cashFlows,
         keys: cashFlows ? Object.keys(cashFlows) : 'null',

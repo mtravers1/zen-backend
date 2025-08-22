@@ -173,8 +173,17 @@ class AIService {
       console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
+      console.log("[AI Service] Looking up user with authUid:", uid);
       const dek = await getUserDek(uid);
       const user = await User.findOne({ authUid: uid }).lean();
+      console.log("[AI Service] User lookup result:", {
+        found: !!user,
+        hasEmail: !!user?.email,
+        emailArray: user?.email,
+        emailCount: user?.email?.length || 0,
+        firstEmail: user?.email?.[0],
+        userId: user?._id
+      });
       if (!user?.email?.[0]?.email) throw new Error("User email not found");
       const email = user.email[0].email;
       const profiles = await businessService.getUserProfiles(email, uid);
