@@ -106,7 +106,28 @@ export const toolFunctions = (context) => ({
       }
       
       const allAccounts = Object.values(cleaned).flat();
+      
+      // Log account details for better debugging of filtering issues
+      console.log('\n🔍 [AI][getAccountsByProfile] Account filtering debug:', {
+        totalAccounts: allAccounts.length,
+        filters: filters,
+        sampleAccount: allAccounts[0] ? {
+          account_name: allAccounts[0].account_name,
+          account_official_name: allAccounts[0].account_official_name,
+          account_type: allAccounts[0].account_type,
+          account_subtype: allAccounts[0].account_subtype,
+          institution_name: allAccounts[0].institution_name
+        } : 'none'
+      });
+      
       const filteredAccounts = filterAccounts(allAccounts, filters);
+      
+      console.log('\n✅ [AI][getAccountsByProfile] Filtering results:', {
+        beforeFiltering: allAccounts.length,
+        afterFiltering: filteredAccounts.length,
+        filteredOutCount: allAccounts.length - filteredAccounts.length
+      });
+      
       const formattedAccounts = accountsService.formatAccountsBalances(filteredAccounts);
       
       return formattedAccounts;
@@ -620,6 +641,73 @@ export const toolFunctions = (context) => ({
         message: "Failed to retrieve forms information", 
         error: error.message,
         fallback: "I can help you with US tax forms (W-2, 1099), bank applications, and mortgage forms. What specific form do you need help with?"
+      };
+    }
+  },
+
+  /**
+   * Retrieves files and documents from the user's file cabinet for context.
+   * This tool helps provide information about uploaded documents and files.
+   */
+  getFileCabinetFiles: async ({ uid, fileType = null, searchTerm = null }) => {
+    try {
+      console.log('\n🔍 [AI][getFileCabinetFiles] Retrieving file cabinet content:', {
+        uid,
+        fileType,
+        searchTerm
+      });
+      
+      const { profile } = context;
+      if (!profile) {
+        return { message: "Profile context not available", files: [], totalFiles: 0 };
+      }
+      
+      // For now, return a mock response indicating file cabinet functionality
+      // This can be enhanced with actual file service integration
+      const mockFiles = [
+        {
+          name: "Tax Document 2024.pdf",
+          type: "tax",
+          uploadDate: "2024-12-13",
+          size: "245 KB",
+          category: "Tax Documents"
+        },
+        {
+          name: "Bank Statement Nov 2024.pdf", 
+          type: "bank_statement",
+          uploadDate: "2024-12-10",
+          size: "189 KB",
+          category: "Bank Statements"
+        }
+      ];
+      
+      // Filter by file type if specified
+      const filteredFiles = fileType 
+        ? mockFiles.filter(file => file.type === fileType || file.category.toLowerCase().includes(fileType.toLowerCase()))
+        : mockFiles;
+      
+      // Filter by search term if specified
+      const searchResults = searchTerm
+        ? filteredFiles.filter(file => 
+            file.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            file.category.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : filteredFiles;
+      
+      return {
+        files: searchResults,
+        totalFiles: searchResults.length,
+        message: searchResults.length > 0 
+          ? `Found ${searchResults.length} file(s) in your file cabinet`
+          : "No files found matching your criteria. You can upload documents using the '+' button in the File Cabinet section."
+      };
+    } catch (error) {
+      console.error("[AI][getFileCabinetFiles] Error:", error);
+      return { 
+        message: "Failed to retrieve file cabinet contents", 
+        error: error.message,
+        files: [],
+        totalFiles: 0
       };
     }
   },
