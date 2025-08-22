@@ -9,12 +9,7 @@ import { formatFinancialResponse } from "./responseFormatter.js";
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
-import accountsService from "../accounts.service.js";
 import businessService from "../businesses.service.js";
-import authService from "../auth.service.js";
-import assetsService from "../assets.service.js";
-import tripService from "../trips.service.js";
-import filesService from "../files.service.js";
 // Circular import prevention - import aiController only when needed
 // import aiController from "../../controllers/ai.controller.js";
 import { getUserDek } from "../../database/encryption.js";
