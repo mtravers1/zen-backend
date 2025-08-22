@@ -805,12 +805,30 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
       // Check if response contains unnecessary apologies or cut-off mentions
       // Only flag if the response is actually incomplete or just an apology
       const hasUnnecessaryApologies = (
-        // Check for cut-off indicators
+        // Check for exact cut-off patterns from screenshot
+        normalizedResponse.response.includes('I apologize, but my response was cut off. Please try asking your question again.') ||
+        normalizedResponse.response.includes("I'm sorry, but my response was cut off. Please try asking your question again.") ||
+        normalizedResponse.response.includes('my response was cut off. Please try asking your question again.') ||
+        normalizedResponse.response.includes('response was cut off. Please try asking your question again.') ||
+        normalizedResponse.response.includes('was cut off. Please try asking your question again.') ||
+        normalizedResponse.response.includes('cut off. Please try asking your question again.') ||
+        
+        // General cut-off indicators
         normalizedResponse.response.includes('my response was cut off') ||
         normalizedResponse.response.includes('response was cut') ||
         normalizedResponse.response.includes('cut off') ||
+        
+        // Retry prompts
         normalizedResponse.response.includes('Please try asking your question again') ||
-        // Check for apologies ONLY if they're the main content
+        normalizedResponse.response.includes('try asking your question again') ||
+        normalizedResponse.response.includes('asking your question again') ||
+        normalizedResponse.response.includes('your question again') ||
+        
+        // Apology patterns with cutoff context
+        (normalizedResponse.response.includes('I apologize') && normalizedResponse.response.includes('cut off')) ||
+        (normalizedResponse.response.includes('I\'m sorry') && normalizedResponse.response.includes('cut off')) ||
+        
+        // Check for apologies ONLY if they're the main content (short responses)
         (normalizedResponse.response.includes('I apologize') && normalizedResponse.response.length < 100) ||
         (normalizedResponse.response.includes('I\'m sorry') && normalizedResponse.response.length < 100) ||
         (normalizedResponse.response.includes('apologize') && normalizedResponse.response.length < 100) ||
@@ -921,7 +939,15 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
         
         // Remove common apology patterns - more intelligent cleaning
         const apologyPatterns = [
-          // Cut-off patterns (always remove)
+          // Exact cut-off patterns from screenshot (highest priority)
+          /I apologize, but my response was cut off\. Please try asking your question again\./gi,
+          /I'm sorry, but my response was cut off\. Please try asking your question again\./gi,
+          /my response was cut off\. Please try asking your question again\./gi,
+          /response was cut off\. Please try asking your question again\./gi,
+          /was cut off\. Please try asking your question again\./gi,
+          /cut off\. Please try asking your question again\./gi,
+          
+          // General cut-off patterns (always remove)
           /I apologize,? but my response was cut off\.? Please try asking your question again\.?/gi,
           /I'm sorry,? but my response was cut off\.? Please try asking your question again\.?/gi,
           /my response was cut off\.? Please try asking your question again\.?/gi,
@@ -932,6 +958,7 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
           /asking your question again\.?/gi,
           /your question again\.?/gi,
           /question again\.?/gi,
+          
           // Cut-off indicators (always remove)
           /I apologize,? but my response was cut off\.?/gi,
           /I'm sorry,? but my response was cut off\.?/gi,
@@ -939,6 +966,7 @@ Respond in JSON format: {"response": "your answer", "data": null, "source": "gen
           /response was cut off\.?/gi,
           /was cut off\.?/gi,
           /cut off\.?/gi,
+          
           // Apologies only if they're standalone (not part of useful content)
           /^I apologize,?\s*$/gi,
           /^I'm sorry,?\s*$/gi,

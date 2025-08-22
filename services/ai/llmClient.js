@@ -792,14 +792,28 @@ export async function callLLM({
   
   // Check for cut-off responses and apologetic messages - reject them completely
   const hasCutoffIndicators = (
+    // Cut-off patterns (exact matches from screenshot)
+    completeResponse.includes('I apologize, but my response was cut off. Please try asking your question again.') ||
+    completeResponse.includes("I'm sorry, but my response was cut off. Please try asking your question again.") ||
+    completeResponse.includes('my response was cut off. Please try asking your question again.') ||
+    completeResponse.includes('response was cut off. Please try asking your question again.') ||
+    completeResponse.includes('was cut off. Please try asking your question again.') ||
+    completeResponse.includes('cut off. Please try asking your question again.') ||
+    
+    // General cut-off patterns
     completeResponse.includes('cut off') ||
     completeResponse.includes('response was cut') ||
     completeResponse.includes('my response was cut') ||
-    completeResponse.includes('I apologize') ||
-    completeResponse.includes("I'm sorry") ||
-    completeResponse.includes('sorry') ||
+    
+    // Apology patterns (only flag if they appear with cutoff indicators)
+    (completeResponse.includes('I apologize') && completeResponse.includes('cut off')) ||
+    (completeResponse.includes("I'm sorry") && completeResponse.includes('cut off')) ||
+    
+    // Retry prompts
     completeResponse.includes('Please try asking your question again') ||
-    completeResponse.includes('try asking your question again')
+    completeResponse.includes('try asking your question again') ||
+    completeResponse.includes('asking your question again') ||
+    completeResponse.includes('your question again')
   );
   
   if (hasCutoffIndicators) {
