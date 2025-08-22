@@ -438,11 +438,29 @@ export async function callLLM({
       if (delta?.content) {
         // Check for malformed content that might cause issues
         const content = delta.content;
-        if (content.includes('<tool-use>') || content.includes('</tool-use>')) {
-          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains tool-use markers');
-          console.warn('[AI][callLLM] Content with tool-use markers:', content);
+        
+        // Detect various forms of malformed content early
+        if (content.includes('<tool-use>') || content.includes('</tool-use>') || 
+            content.includes('<response>') || content.includes('</response>') ||
+            content.includes('tool-use') || content.includes('xml')) {
+          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains XML-like markers');
+          console.warn('[AI][callLLM] Malformed content:', content);
           
-          // Skip this content chunk as it's malformed
+          // Try to extract JSON if present, otherwise skip
+          const jsonMatch = content.match(/\{.*\}/s);
+          if (jsonMatch) {
+            try {
+              JSON.parse(jsonMatch[0]);
+              console.log('[AI][callLLM] 🔧 Extracted valid JSON from malformed content');
+              completeResponse += jsonMatch[0];
+              receivedContent = true;
+              continue;
+            } catch (e) {
+              console.warn('[AI][callLLM] ⚠️ No valid JSON found in malformed content');
+            }
+          }
+          
+          // Skip this malformed chunk completely
           continue;
         }
         

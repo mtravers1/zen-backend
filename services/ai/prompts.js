@@ -113,6 +113,8 @@ If user asks "How to [do something]?" → NO TOOLS, provide guidance
 5. **Format as JSON response**
 
 ## RESPONSE FORMAT
+**CRITICAL: Always return ONLY valid JSON - never use XML tags like <tool-use>**
+
 Always return this JSON structure:
 {
   "response": "Your answer using real data when available",
@@ -122,6 +124,8 @@ Always return this JSON structure:
   "errorMessage": null,
   "suggestedQuestions": ["Question 1", "Question 2"]
 }
+
+**NEVER use <tool-use> tags or any XML format - return raw JSON only**
 
 ## EXAMPLES
 
@@ -210,6 +214,8 @@ export const getSimplifiedSystemPrompt = (screen = 'dashboard') => `You are Zent
    - Response: Specific directions
 
 ## RESPONSE FORMAT
+**CRITICAL: Return ONLY valid JSON - NEVER use <tool-use> or XML tags**
+
 Return ONLY this JSON structure:
 {
   "response": "Your clear, specific answer",
@@ -221,6 +227,8 @@ Return ONLY this JSON structure:
   "errorCode": null,
   "citations": null
 }
+
+**FORBIDDEN: Do not use <tool-use>, <response>, or any XML tags**
 
 ## TOOL USAGE
 **For financial data:**
