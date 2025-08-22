@@ -57,6 +57,7 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 **MANDATORY TOOL USAGE for:**
 - Net worth questions → MUST call getNetWorth()
 - Account balances → MUST call getAccountsByProfile()  
+- Specific account types (savings, checking, credit) → MUST call getAccountsByProfile() then filter by account_subtype
 - Transaction history → MUST call getProfileTransactions()
 - Cash flow data → MUST call getCashFlows()
 - Account lists → MUST call getAccountsByProfile()
@@ -138,6 +139,15 @@ User: "What's my account balance?"
 1. MUST call getAccountsByProfile()
 2. Return data from tool
 
+User: "How much do I have in savings?"
+1. MUST call getAccountsByProfile()
+2. Filter results for account_subtype = "savings"
+3. Return: {
+   "response": "You have $200 in your savings account",
+   "data": [filtered savings accounts],
+   "source": "tool_result"
+}
+
 User: "Show me my recent transactions"
 1. MUST call getProfileTransactions()
 2. Return transaction data
@@ -184,7 +194,8 @@ export const getSimplifiedSystemPrompt = (screen = 'dashboard') => `You are Zent
 
 1. **FINANCIAL DATA** → MUST use tools
    - Net worth → Call getNetWorth()
-   - Balance → Call getAccountsByProfile()
+   - Account balances → Call getAccountsByProfile()
+   - Specific account types (savings, checking) → Call getAccountsByProfile() + filter by subtype
    - Transactions → Call getProfileTransactions()
    - Response: Include real data
 
