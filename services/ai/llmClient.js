@@ -438,11 +438,28 @@ export async function callLLM({
       if (delta?.content) {
         // Check for malformed content that might cause issues
         const content = delta.content;
-        if (content.includes('<tool-use>') || content.includes('</tool-use>')) {
-          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains tool-use markers');
+        if (content.includes('<tool-use>') || content.includes('</tool-use>') || content.includes('<tool') || content.includes('</tool')) {
+          console.warn('[AI][callLLM] 🚨 MALFORMED CONTENT DETECTED - contains XML/tool-use markers');
           console.warn('[AI][callLLM] Content with tool-use markers:', content);
           
-          // Skip this content chunk as it's malformed
+          // Try to extract JSON from the malformed content
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            console.log('[AI][callLLM] Attempting to extract JSON from malformed content');
+            const extractedJson = jsonMatch[0];
+            try {
+              JSON.parse(extractedJson);
+              console.log('[AI][callLLM] Successfully extracted valid JSON from malformed content');
+              completeResponse += extractedJson;
+              receivedContent = true;
+              continue;
+            } catch (e) {
+              console.warn('[AI][callLLM] Extracted JSON is still invalid:', e.message);
+            }
+          }
+          
+          // Skip this content chunk as it's malformed and couldn't extract JSON
+          console.warn('[AI][callLLM] Skipping malformed content chunk');
           continue;
         }
         
@@ -942,6 +959,23 @@ export async function callLLM({
         });
       }
       
+      // Clean up any remaining XML/tool-use markers from the response
+      if (typeof completeResponse === 'string') {
+        // Remove any remaining tool-use tags and extract JSON content
+        const originalResponse = completeResponse;
+        completeResponse = completeResponse
+          .replace(/<tool-use>/g, '')
+          .replace(/<\/tool-use>/g, '')
+          .replace(/<tool[^>]*>/g, '')
+          .replace(/<\/tool[^>]*>/g, '')
+          .trim();
+        
+        if (completeResponse !== originalResponse) {
+          console.log('[AI][callLLM] Cleaned malformed response markers from final response');
+          console.log('[AI][callLLM] Original response contained XML tags that were removed');
+        }
+      }
+
       let parsed = cleanAndParseJSON(completeResponse);
       
       if (!parsed) {

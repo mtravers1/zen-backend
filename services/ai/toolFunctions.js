@@ -6,6 +6,7 @@ import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
+import filesService from "../files.service.js";
 import { filterAccounts, filterTransactions } from "./filters.js";
 
 /**
@@ -464,6 +465,48 @@ export const toolFunctions = (context) => ({
     } catch (error) {
       console.error("[AI][getAccountsBreakdown] Error:", error);
       return { message: "Failed to retrieve account breakdown", error: error.message };
+    }
+  },
+
+  /**
+   * Retrieves files for the current profile from the file cabinet
+   */
+  getFiles: async ({ uid, folder = null }) => {
+    try {
+      const { profile } = context;
+      
+      if (!profile || !profile.id) {
+        return { message: "Profile context not available", error: "Profile not found in context" };
+      }
+      
+      console.log(`[AI][getFiles] Getting files for profile ${profile.id}, folder: ${folder || 'all'}`);
+      
+      let files;
+      if (folder) {
+        files = await filesService.getFilesByFolder(profile.id, uid, folder);
+      } else {
+        files = await filesService.getFiles(profile.id, uid);
+      }
+      
+      if (!files || files.length === 0) {
+        return [];
+      }
+      
+      console.log(`[AI][getFiles] Found ${files.length} files for profile ${profile.id}`);
+      
+      // Clean and format file data for AI consumption
+      const cleanedFiles = files.map(file => ({
+        id: file.id,
+        type: file.type,
+        info: file.info,
+        folder: file.folder,
+        updatedAt: file.updatedAt
+      }));
+      
+      return cleanedFiles;
+    } catch (error) {
+      console.error("[AI][getFiles] Error:", error);
+      return { message: "Failed to retrieve files", error: error.message };
     }
   },
 

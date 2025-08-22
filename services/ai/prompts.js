@@ -14,9 +14,19 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   // Build minimal context information
   const contextInfo = [];
   
-  // Only include meaningful context
-  if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
-    contextInfo.push(`Current screen: ${richContext.screen.currentScreen}`);
+  // Handle screen context detection
+  const screenContext = richContext.screen?.currentScreen || currentScreen || baseScreen;
+  
+  // Detect file cabinet screen context
+  if (screenContext && (
+    screenContext.toLowerCase().includes('file') || 
+    screenContext.toLowerCase().includes('cabinet') ||
+    baseScreen.toLowerCase().includes('file') ||
+    baseScreen.toLowerCase().includes('cabinet')
+  )) {
+    contextInfo.push(`Current screen: File Cabinet`);
+  } else if (screenContext && screenContext !== 'unknown') {
+    contextInfo.push(`Current screen: ${screenContext}`);
   }
   
   if (richContext.user?.profileName && richContext.user.profileName !== 'Unknown') {
@@ -27,13 +37,29 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
     contextInfo.push(`Viewing: ${dataScreen}`);
   }
   
+  // Add file cabinet specific guidance
+  let additionalGuidelines = '';
+  if (screenContext && (
+    screenContext.toLowerCase().includes('file') || 
+    screenContext.toLowerCase().includes('cabinet')
+  )) {
+    additionalGuidelines = `
+    ## FILE CABINET CONTEXT
+    - User is in the File Cabinet section
+    - For file-related questions, ALWAYS use getFiles() tool
+    - Show actual file data, not generic responses about dashboard
+    - Answer based on real file cabinet contents
+    `;
+  }
+  
   const baseContext = `
     ## CONTEXT
     ${contextInfo.length > 0 ? contextInfo.join(' | ') : 'Dashboard'}
+    ${additionalGuidelines}
     
     ## GUIDELINES
     - Answer the user's specific question directly
-    - Use tools only for financial data requests
+    - Use tools for data requests (financial, files, etc.)
     - Mention screen context only if specifically asked
     - Be concise and helpful
   `;
@@ -48,7 +74,8 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - **ANALYZE each user question carefully**
 - **USE TOOLS for any financial data requests (if available)**
 - **RESPOND directly for general questions**
-- **RETURN only valid JSON format**
+- **RETURN only valid JSON format (NO XML tags or tool-use markers)**
+- **NEVER use angle brackets < > in your response**
 - **If no tools available, guide users to dashboard sections**
 
 ## WHEN TO USE TOOLS (if available)
@@ -65,6 +92,8 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - Savings account questions → MUST call getAccountsByProfile() with filters: {accountType: "savings"}
 - Checking account questions → MUST call getAccountsByProfile() with filters: {accountType: "checking"}
 - Credit card questions → MUST call getAccountsByProfile() with filters: {accountType: "credit"}
+- File cabinet questions → MUST call getFiles() to get user files and documents
+- Document questions → MUST call getFiles() to check what files are available
 
 **NEVER use tools for:**
 - General advice ("How to save money?")
@@ -115,7 +144,8 @@ If user asks "How to [do something]?" → NO TOOLS, provide guidance
 5. **Format as JSON response**
 
 ## RESPONSE FORMAT
-Always return this JSON structure:
+CRITICAL: NEVER use XML tags like <tool-use> or any angle brackets in responses.
+Always return ONLY this JSON structure (no wrapping tags):
 {
   "response": "Your answer using real data when available",
   "data": [exact tool results or null],
@@ -152,6 +182,14 @@ User: "Do I have a savings account?" or "What's my savings balance?"
 User: "Show me my checking account"
 1. MUST call getAccountsByProfile({accountType: "checking"})
 2. Return checking account data
+
+User: "Do I have any files?" or "What's in my file cabinet?"
+1. MUST call getFiles()
+2. Return file data with count and types
+
+User: "Show me my documents"
+1. MUST call getFiles()
+2. Return list of available documents
 
 **GENERAL ADVICE (NO TOOLS):**
 User: "How can I save money?"

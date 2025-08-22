@@ -281,6 +281,21 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "getFiles",
+      description: "Get files from the user's file cabinet for the current profile. Use this for questions about files, documents, or file cabinet contents.",
+      parameters: {
+        type: "object",
+        properties: {
+          uid: { type: "string", description: "User ID" },
+          folder: { type: "string", description: "Optional folder name to filter files by specific folder" },
+        },
+        required: ["uid"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "getFinancialKnowledge",
       description: "Get general financial education and tax guidance on topics like tax deadlines, deductions, investments, credit management, and retirement planning. This tool provides educational content without requiring personal financial data.",
       parameters: {
