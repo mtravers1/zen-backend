@@ -82,75 +82,11 @@ export function filterAccounts(accounts, filters = {}) {
     const { accountType, accountSubtype, institutionName, nameIncludes } =
       filters;
 
-    // Enhanced account type filtering with intelligent matching
-    if (accountType) {
-      const filterTypeKey = accountType.toLowerCase();
-      const accountTypeKey = account.account_type?.toLowerCase();
-      const accountName = account.account_name?.toLowerCase() || '';
-      const accountOfficialName = account.account_official_name?.toLowerCase() || '';
-      
-      // Direct type match
-      if (accountTypeKey === filterTypeKey) {
-        // Direct match - continue to other filters
-      }
-      // Smart savings account detection
-      else if (filterTypeKey === 'savings' || filterTypeKey === 'saving') {
-        const isSavingsAccount = (
-          accountTypeKey === 'depository' && (
-            accountName.includes('saving') ||
-            accountOfficialName.includes('saving') ||
-            account.account_subtype?.toLowerCase() === 'savings'
-          )
-        ) || accountTypeKey === 'savings';
-        
-        if (!isSavingsAccount) {
-          return false;
-        }
-      }
-      // Smart checking account detection
-      else if (filterTypeKey === 'checking') {
-        const isCheckingAccount = (
-          accountTypeKey === 'depository' && (
-            accountName.includes('checking') ||
-            accountOfficialName.includes('checking') ||
-            account.account_subtype?.toLowerCase() === 'checking'
-          )
-        ) || accountTypeKey === 'checking';
-        
-        if (!isCheckingAccount) {
-          return false;
-        }
-      }
-      // Smart credit account detection  
-      else if (filterTypeKey === 'credit' || filterTypeKey === 'credit card') {
-        const isCreditAccount = (
-          accountTypeKey === 'credit' ||
-          accountName.includes('credit') ||
-          accountOfficialName.includes('credit')
-        );
-        
-        if (!isCreditAccount) {
-          return false;
-        }
-      }
-      // Smart investment account detection
-      else if (filterTypeKey === 'investment' || filterTypeKey === 'investing') {
-        const isInvestmentAccount = (
-          accountTypeKey === 'investment' ||
-          accountName.includes('investment') ||
-          accountOfficialName.includes('investment') ||
-          accountName.includes('brokerage') ||
-          accountOfficialName.includes('brokerage')
-        );
-        
-        if (!isInvestmentAccount) {
-          return false;
-        }
-      }
-      // Fallback to exact match for other types
-      else if (accountTypeKey !== filterTypeKey) {
-        return false;
-      }
+    if (
+      accountType &&
+      account.account_type?.toLowerCase() !== accountType.toLowerCase()
+    ) {
+      return false;
     }
 
     if (

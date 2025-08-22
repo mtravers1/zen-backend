@@ -11,24 +11,12 @@
 export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   const baseScreen = currentScreen || 'dashboard';
   
-  // Build context information with better screen-specific awareness
+  // Build minimal context information
   const contextInfo = [];
   
-  // Enhanced screen context with specific functionality awareness
+  // Only include meaningful context
   if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
-    const screen = richContext.screen.currentScreen;
-    contextInfo.push(`Current screen: ${screen}`);
-    
-    // Add screen-specific functionality context
-    if (screen === 'filecabinet') {
-      contextInfo.push('File Cabinet functionality: Upload documents, organize files, manage tax docs');
-    } else if (screen === 'transactions') {
-      contextInfo.push('Transaction functionality: View spending, categorize expenses, filter by account');
-    } else if (screen === 'assets') {
-      contextInfo.push('Assets functionality: Track investments, real estate, valuable items');
-    } else if (screen === 'trips') {
-      contextInfo.push('Trips functionality: Track business/personal mileage, manage trip expenses');
-    }
+    contextInfo.push(`Current screen: ${richContext.screen.currentScreen}`);
   }
   
   if (richContext.user?.profileName && richContext.user.profileName !== 'Unknown') {
@@ -39,24 +27,15 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
     contextInfo.push(`Viewing: ${dataScreen}`);
   }
   
-  // Add time context for relevance
-  if (richContext.time?.currentTime) {
-    const timeStr = new Date(richContext.time.currentTime).toLocaleDateString();
-    contextInfo.push(`Date: ${timeStr}`);
-  }
-  
   const baseContext = `
-    ## CURRENT CONTEXT
+    ## CONTEXT
     ${contextInfo.length > 0 ? contextInfo.join(' | ') : 'Dashboard'}
     
-    ## CONTEXT-AWARE GUIDELINES
-    - **PRIORITIZE current screen context in responses**
-    - **For File Cabinet**: Use getFileCabinetFiles() to check uploaded documents
-    - **For Account questions**: Use appropriate filtering (savings, checking, credit, etc.)
-    - **Always consider the user's current location in the app**
+    ## GUIDELINES
     - Answer the user's specific question directly
-    - Use tools for financial data requests
-    - Be contextually relevant and helpful
+    - Use tools only for financial data requests
+    - Mention screen context only if specifically asked
+    - Be concise and helpful
   `;
   
   return baseContext;
@@ -77,13 +56,12 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 
 **MANDATORY TOOL USAGE for:**
 - Net worth questions → MUST call getNetWorth()
-- Account balances → MUST call getAccountsByProfile() with proper filters
+- Account balances → MUST call getAccountsByProfile()  
 - Transaction history → MUST call getProfileTransactions()
 - Cash flow data → MUST call getCashFlows()
 - Account lists → MUST call getAccountsByProfile()
 - Asset information → MUST call getAssets()
 - Business metrics → MUST call getBusinessMetrics()
-- File cabinet questions → MUST call getFileCabinetFiles() for document context
 
 **NEVER use tools for:**
 - General advice ("How to save money?")
@@ -93,18 +71,9 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - Business strategy advice ("How to grow my business?")
 - Casual conversation
 
-**DETECTION RULES:**
+**DETECTION RULE:**
 If user asks "What's my [specific financial data]?" → USE TOOLS
 If user asks "How to [do something]?" → NO TOOLS, provide guidance
-If user mentions specific account types (savings, checking, credit) → USE TOOLS with filters
-If user is in File Cabinet and asks about files/documents → USE getFileCabinetFiles()
-
-**SMART ACCOUNT FILTERING:**
-- "savings" or "saving account" → Use filters: {accountType: "savings"}
-- "checking account" → Use filters: {accountType: "checking"}  
-- "credit card" → Use filters: {accountType: "credit"}
-- "Plaid Saving" is a SAVINGS account → matches savings filter
-- Account names with "saving" in them are SAVINGS accounts
 
 ## NO TOOLS AVAILABLE GUIDANCE
 **When no tools are available, provide intelligent responses based on question type:**
@@ -172,14 +141,6 @@ User: "What's my account balance?"
 User: "Show me my recent transactions"
 1. MUST call getProfileTransactions()
 2. Return transaction data
-
-User: "I want my saving account" or "Do I have a Plaid saving?"
-1. MUST call getAccountsByProfile() with filters: {accountType: "savings"}
-2. Return: {"response": "You have a Plaid Saving account with...", "data": [...]}
-
-User: "What files do I have?" (in File Cabinet)
-1. MUST call getFileCabinetFiles()
-2. Return: {"response": "You have 2 files: Tax Document 2024.pdf...", "data": [...]}
 
 **GENERAL ADVICE (NO TOOLS):**
 User: "How can I save money?"

@@ -281,22 +281,6 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
-      name: "getFileCabinetFiles",
-      description: "Get files and documents from the user's file cabinet, useful for file-related context and queries",
-      parameters: {
-        type: "object",
-        properties: {
-          uid: { type: "string", description: "User ID" },
-          fileType: { type: "string", description: "Filter by file type (tax, bank_statement, receipt, etc.)" },
-          searchTerm: { type: "string", description: "Search term to filter files by name or category" },
-        },
-        required: ["uid"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "getFinancialKnowledge",
       description: "Get general financial education and tax guidance on topics like tax deadlines, deductions, investments, credit management, and retirement planning. This tool provides educational content without requiring personal financial data.",
       parameters: {
