@@ -1063,8 +1063,8 @@ async function checkEncryptionKeyHealth(uid) {
     // Test current key with a simple encryption/decryption
     try {
       const testValue = { test: 'encryption_health_check', timestamp: Date.now() };
-      const encrypted = await encryptValue(testValue, currentDek, uid);
-      const decrypted = await decryptValue(encrypted, currentDek, uid);
+      const encrypted = await encryptValue(testValue, currentDek.dek, uid);
+      const decrypted = await decryptValue(encrypted, currentDek.dek, uid);
       
       if (JSON.stringify(decrypted) === JSON.stringify(testValue)) {
         logEncryptionOperation('checkEncryptionKeyHealth', true, { 
