@@ -2,6 +2,163 @@ import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
 import businessService from "../services/business.service.js";
 
+const debugCache = async (req, res) => {
+  try {
+    console.log('\n🔍 [DEBUG CACHE] Cache Debug Request:', {
+      timestamp: new Date().toISOString(),
+      userAgent: req.get('User-Agent')
+    });
+    
+    // Import the cache functions
+    const { getDekCacheStats, clearDekCache } = await import('../services/accounts.service.js');
+    
+    const stats = getDekCacheStats();
+    
+    res.status(200).send({
+      cache: {
+        stats,
+        timestamp: new Date().toISOString(),
+        info: {
+          description: 'DEK Cache Statistics',
+          ttl: '5 minutes',
+          purpose: 'Cache Data Encryption Keys to avoid repeated database calls'
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('[DEBUG CACHE] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+};
+
+const debugDecryption = async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const uid = req.user.uid;
+    
+    console.log('\n🔍 [DEBUG DECRYPT] Decryption Debug Request:', {
+      profileId,
+      uid,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Get profile details
+    const profiles = await businessService.getUserProfiles(req.user.email, uid);
+    const profile = profiles.find((p) => String(p.id) === profileId);
+    
+    if (!profile) {
+      return res.status(404).send({ 
+        error: 'Profile not found',
+        profileId,
+        availableProfiles: profiles.map(p => ({ id: p.id, name: p.name }))
+      });
+    }
+    
+    // Get DEK using cache
+    const { getCachedDek } = await import('../services/accounts.service.js');
+    const dek = await getCachedDek(uid);
+    console.log('[DEBUG DECRYPT] DEK obtained:', {
+      hasDek: !!dek,
+      dekType: typeof dek,
+      dekLength: dek ? dek.length : 0,
+      uid
+    });
+    
+    // Check if plaid accounts exist
+    const PlaidAccount = (await import('../database/models/PlaidAccount.js')).default;
+    const plaidAccounts = await PlaidAccount.find({
+      _id: { $in: profile.plaidAccounts }
+    }).lean();
+    
+    console.log('[DEBUG DECRYPT] Plaid accounts found:', {
+      count: plaidAccounts.length,
+      accounts: plaidAccounts.map(acc => ({
+        _id: acc._id,
+        plaid_account_id: acc.plaid_account_id,
+        account_type: acc.account_type,
+        hasBalance: !!acc.currentBalance,
+        hasName: !!acc.account_name
+      }))
+    });
+    
+    // Test decryption for first account
+    if (plaidAccounts.length > 0) {
+      const testAccount = plaidAccounts[0];
+      console.log('[DEBUG DECRYPT] Testing decryption for account:', {
+        _id: testAccount._id,
+        plaid_account_id: testAccount.plaid_account_id
+      });
+      
+      // Test each encrypted field
+      const encryptedFields = ['currentBalance', 'availableBalance', 'account_type', 'account_name', 'institution_name'];
+      
+      for (const field of encryptedFields) {
+        if (testAccount[field]) {
+          console.log(`[DEBUG DECRYPT] Testing field: ${field}`);
+          try {
+            const { decryptValue } = await import('../services/encryption.service.js');
+            const decrypted = await decryptValue(testAccount[field], dek);
+            console.log(`[DEBUG DECRYPT] ${field} decryption result:`, {
+              success: true,
+              originalLength: testAccount[field].length,
+              decryptedValue: decrypted,
+              decryptedType: typeof decrypted
+            });
+          } catch (error) {
+            console.error(`[DEBUG DECRYPT] ${field} decryption failed:`, {
+              error: error.message,
+              stack: error.stack
+            });
+          }
+        } else {
+          console.log(`[DEBUG DECRYPT] Field ${field} is null/undefined`);
+        }
+      }
+    }
+    
+    // Return debug info
+    res.status(200).send({
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        plaidAccountsCount: profile.plaidAccounts?.length || 0
+      },
+      dek: {
+        hasDek: !!dek,
+        dekType: typeof dek,
+        dekLength: dek ? dek.length : 0,
+        uid
+      },
+      plaidAccounts: {
+        count: plaidAccounts.length,
+        accounts: plaidAccounts.map(acc => ({
+          _id: acc._id,
+          plaid_account_id: acc.plaid_account_id,
+          account_type: acc.account_type,
+          hasBalance: !!acc.currentBalance,
+          hasName: !!acc.account_name
+        }))
+      },
+      debug: {
+        timestamp: new Date().toISOString(),
+        uid,
+        profileId
+      }
+    });
+    
+  } catch (error) {
+    console.error('[DEBUG DECRYPT] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+};
+
 const debugProfile = async (req, res) => {
   try {
     const { profileId } = req.params;
@@ -350,4 +507,24 @@ const accountsController = {
   debugProfile,
 };
 
-export default accountsController;
+export default {
+  addAccount,
+  getAccounts,
+  getAllUserAccounts,
+  getCashFlows,
+  getCashFlowsWeekly,
+  getCashFlowsByPlaidAccount,
+  getUserTransactions,
+  getProfileTransactions,
+  getTransactionsByAccount,
+  getAccountDetails,
+  addAccountPhoto,
+  getAccountPhoto,
+  serveAccountPhoto,
+  deleteAccount,
+  generateUploadUrl,
+  generateSignedUrl,
+  debugProfile,
+  debugDecryption,
+  debugCache,
+};
