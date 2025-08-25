@@ -131,7 +131,8 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     throw new Error("User not found");
   }
   let accessToken;
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   if (accountId) {
     const account = await PlaidAccount.findOne({ _id: accountId });
     if (!account) {
@@ -225,7 +226,8 @@ const saveAccessToken = async (
       throw new Error(`User not found for uid: ${uid}`);
     }
 
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     const encryptedAccessToken = await encryptValue(accessToken, dek, uid);
 
     const accessTokenDoc = new AccessToken({
@@ -264,7 +266,8 @@ const getUserAccessTokens = async (email, uid) => {
     }
     
     const accessTokens = await AccessToken.find({ userId: user._id });
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     const fallbackDek = await getPreviousDek(uid);
 
     const decryptedTokens = [];
@@ -585,7 +588,8 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
       return null;
     }
 
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     if (!dek) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
@@ -767,7 +771,8 @@ const updateTransactions = async (item) => {
 
 // Specific function to update Chase transactions
 const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   await updateAccountBalances(dek, accessToken, accounts);
 
@@ -835,7 +840,8 @@ const updateUniversalTransactions = async (item, accessToken, uid, accounts) => 
   const emails = user?.email;
   const emailObject = emails?.find((email) => email.isPrimary === true);
   const email = emailObject?.email;
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   await updateAccountBalances(dek, accessToken, accounts);
 
@@ -1639,7 +1645,8 @@ const recoverStaleTransactions = async (itemId, uid, daysBack = 90) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
 
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     let totalRecovered = 0;
 
     // Recover transactions for each account

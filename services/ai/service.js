@@ -177,7 +177,8 @@ class AIService {
       console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
-      const dek = await getUserDek(uid);
+      const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
       const user = await User.findOne({ authUid: uid }).lean();
       if (!user?.email?.[0]?.email) throw new Error("User email not found");
       const email = user.email[0].email;

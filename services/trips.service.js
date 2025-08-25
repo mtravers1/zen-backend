@@ -16,7 +16,8 @@ const saveTrip = async ({
   email,
   uid,
 }) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   const encryptedLocations = await Promise.all(
     locations.map(async (loc) => ({
@@ -62,7 +63,8 @@ const fetchFilteredTrips = async (query, uid) => {
     authUid: uid,
   });
 
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   const filter = {};
 
@@ -230,7 +232,8 @@ const getLastVehicleIdUsed = async (uid) => {
 };
 
 const updateTrip = async (tripId, updateData, uid) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   const encryptedData = { ...updateData };
 

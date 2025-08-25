@@ -87,7 +87,8 @@ const getUserProfiles = async (email, uid) => {
   }
 
   const profiles = [];
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
   const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
 
@@ -444,7 +445,8 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 };
 
 const updateBusinessProfile = async (profileId, formData, email, uid) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   try {
     if (!profileId) {
       throw new Error("No profile selected to update.");
@@ -542,7 +544,8 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
 };
 
 const deleteProfile = async (profileId, uid) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   try {
     if (!profileId) {
       throw new Error("No profile selected to delete.");

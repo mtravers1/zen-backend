@@ -21,7 +21,8 @@ const own = async (uid) => {
     authUid: uid,
   }).select("-password");
 
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   const emails = await Promise.all(
     userResponse.email.map(async (email) => {
       return {
@@ -106,7 +107,8 @@ const signUp = async (data) => {
 
     // Generate encryption keys first
     console.log("Generating encryption keys for new user:", uid);
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+    const dek = keyData.dek;
     console.log("Generated DEK for new user:", { uid, hasDek: !!dek });
 
     // Now encrypt all the sensitive data
@@ -251,7 +253,8 @@ const signIn = async (uid) => {
     }
 
     structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
     const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
@@ -330,7 +333,8 @@ const signInOrCreate = async (uid, userData = null) => {
       structuredLogger.logOperationStart('auth_service_create_basic_user', { user_id: uid });
       
       // Create a basic user with minimal data
-      const dek = await getUserDek(uid);
+      const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
       
       const encryptedEmail = await encryptValue(
         userData.email.trim().toLowerCase(),
@@ -393,7 +397,8 @@ const signInOrCreate = async (uid, userData = null) => {
 
     // Now proceed with normal sign-in flow
     structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
     const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
@@ -520,7 +525,8 @@ const deleteUser = async (uid) => {
       throw new Error("User not found");
     }
     //get dek
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     //get accounts and save ids
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
