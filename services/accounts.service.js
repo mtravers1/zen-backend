@@ -45,13 +45,29 @@ const getCachedDek = async (uid) => {
     throw new Error(`Failed to get DEK for uid: ${uid}`);
   }
   
+  // Validate DEK format
+  if (!Buffer.isBuffer(keyData.dek)) {
+    console.error(`[getCachedDek] Invalid DEK format for uid: ${uid}:`, {
+      dekType: typeof keyData.dek,
+      dekLength: keyData.dek ? keyData.dek.length : 0,
+      isBuffer: Buffer.isBuffer(keyData.dek),
+      dekValue: keyData.dek
+    });
+    throw new Error(`Invalid DEK format for uid: ${uid} - expected Buffer, got ${typeof keyData.dek}`);
+  }
+  
   // Cache the DEK
   dekCache.set(cacheKey, {
     dek: keyData.dek,
     timestamp: Date.now()
   });
   
-  console.log(`[getCachedDek] DEK cached successfully for uid: ${uid}`);
+  console.log(`[getCachedDek] DEK cached successfully for uid: ${uid}:`, {
+    dekType: typeof keyData.dek,
+    dekLength: keyData.dek.length,
+    isBuffer: Buffer.isBuffer(keyData.dek),
+    version: keyData.version
+  });
   return keyData.dek;
 };
 

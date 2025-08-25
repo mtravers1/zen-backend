@@ -89,17 +89,17 @@ const getUserProfiles = async (email, uid) => {
   const profiles = [];
   const dek = await getUserDek(uid);
 
-  const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+  const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
 
-  const decryptedLastName = await decryptValue(user.name.lastName, dek);
+  const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
 
-  const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+  const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
 
-  const decryptedSuffix = await decryptValue(user.name.suffix, dek);
+  const decryptedSuffix = await decryptValue(user.name.suffix, dek, uid);
 
-  const decryptedPrefix = await decryptValue(user.name.prefix, dek);
+  const decryptedPrefix = await decryptValue(user.name.prefix, dek, uid);
 
-  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
 
   let name;
   if (!decryptedFirstName && !decryptedLastName) {
@@ -111,7 +111,7 @@ const getUserProfiles = async (email, uid) => {
   const decryptedEmail = await Promise.all(
     user.email.map((emailData) =>
       Promise.all([
-        decryptValue(emailData.email, dek),
+        decryptValue(emailData.email, dek, uid),
         emailData.emailType,
         emailData.isPrimary,
       ]).then(([email, emailType, isPrimary]) => ({
@@ -125,7 +125,7 @@ const getUserProfiles = async (email, uid) => {
   const decryptedPhones = await Promise.all(
     user.phones.map((phoneData) =>
       Promise.all([
-        decryptValue(phoneData.phone, dek),
+        decryptValue(phoneData.phone, dek, uid),
         phoneData.phoneType,
       ]).then(([phone, phoneType]) => ({
         phoneNumber: phone,
@@ -162,13 +162,14 @@ const getUserProfiles = async (email, uid) => {
   }
 
   for (const business of businesses) {
-    const decryptedName = await decryptValue(business.name, dek);
+    const decryptedName = await decryptValue(business.name, dek, uid);
 
-    const decryptedIndustry = await decryptValue(business.industryDesc, dek);
+    const decryptedIndustry = await decryptValue(business.industryDesc, dek, uid);
 
     const decryptedBusinessLogo = await decryptValue(
       business.businessLogo,
-      dek
+      dek,
+      uid
     );
 
     let decryptedBusinessOwnersDetails = [];
@@ -177,7 +178,7 @@ const getUserProfiles = async (email, uid) => {
         business.businessOwnersDetails.map(async (owner) => {
           return {
             name: owner.name,
-            email: await decryptValue(owner.email, dek),
+            email: await decryptValue(owner.email, dek, uid),
             percentOwned: owner.percentOwned,
             position: owner.position,
           };
