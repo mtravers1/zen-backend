@@ -238,7 +238,7 @@ class AIService {
       }
 
       console.log(`[AI Service] ✅ Profile found:`, {
-        profileId: profile._id.toString(),
+        profileId: profile.id.toString(),
         profileName: profile.name
       });
 
