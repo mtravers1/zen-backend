@@ -81,5 +81,39 @@ const getFileUrl = async (req, res) => {
   }
 };
 
-const filesController = { addFile, getFiles, getFolders, deleteFiles, generateFileUrl, getFileUrl, genereteImageUrl };
+const getFilesByFolder = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { profileId, folder } = req.params;
+    const response = await filesService.getFilesByFolder(profileId, uid, folder);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getFileCounts = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { profileId } = req.params;
+    const response = await filesService.getFolderCounts(profileId, uid);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const filesController = { 
+  addFile, 
+  getFiles, 
+  getFolders, 
+  deleteFiles, 
+  generateFileUrl, 
+  getFileUrl, 
+  genereteImageUrl,
+  getFilesByFolder,
+  getFileCounts
+};
 export default filesController;

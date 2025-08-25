@@ -9,6 +9,24 @@ const MAX_RETRIES = 3;
 const JSON_CLEANUP_TIMEOUT = 5000; // 5 seconds
 const HALLUCINATION_CHECK_TIMEOUT = 10000; // 10 seconds
 
+// Model-specific configurations
+const MODEL_CONFIGS = {
+  'llama-3.1-8b-instant': {
+    temperature: 0.1,        // Lower temperature for more consistent responses
+    maxTokens: 4096,         // Optimal for this model
+    topP: 0.9,              // Balanced creativity vs consistency
+    frequencyPenalty: 0.1,  // Reduce repetition
+    presencePenalty: 0.1    // Encourage diverse responses
+  },
+  'default': {
+    temperature: 0.0,
+    maxTokens: 2048,
+    topP: 1.0,
+    frequencyPenalty: 0.0,
+    presencePenalty: 0.0
+  }
+};
+
 /**
  * Attempts to clean and parse malformed JSON responses
  * @param {string} response - The potentially malformed JSON response
@@ -321,10 +339,26 @@ export async function callLLM({
   try {
     logWithContext('info', 'request', 'SENDING REQUEST TO GROQ');
     
+    // Get model-specific configuration
+    const modelConfig = MODEL_CONFIGS[model] || MODEL_CONFIGS.default;
+    console.log(`[LLM Client] Using configuration for model ${model}:`, modelConfig);
+    
+    // Model-specific optimizations for llama-3.1-8b-instant
+    if (model === 'llama-3.1-8b-instant') {
+      console.log('\n⚡ [LLM Client] ====== LLAMA 3.1 8B INSTANT OPTIMIZATIONS ======');
+      console.log('[LLM Client] Applying fast inference optimizations');
+      console.log('[LLM Client] Tool choice: auto (model will choose best tools)');
+      console.log('[LLM Client] Streaming: enabled for real-time responses');
+    }
+    
     response = await groqClient.chat.completions.create({
       model,
       messages,
-      temperature: 0.0,
+      temperature: modelConfig.temperature,
+      max_tokens: modelConfig.maxTokens,
+      top_p: modelConfig.topP,
+      frequency_penalty: modelConfig.frequencyPenalty,
+      presence_penalty: modelConfig.presencePenalty,
       stream: true,
       tools,
       tool_choice: "auto",
@@ -332,7 +366,8 @@ export async function callLLM({
     
     logWithContext('info', 'response', 'GROQ RESPONSE RECEIVED', {
       status: 'success',
-      hasResponse: !!response
+      hasResponse: !!response,
+      modelConfig: modelConfig
     });
   } catch (apiError) {
     logWithContext('error', 'error', 'GROQ API ERROR', {
