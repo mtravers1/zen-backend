@@ -56,15 +56,7 @@ export default {
     }),
   ],
   resolve: {
-    extensions: [".ts", ".tsx", ".js", ".mjs"],
-  },
-  module: {
-    rules: [
-      {
-        test: /\.tsx?$/,
-        loader: "ts-loader",
-      },
-    ],
+    extensions: [".js", ".mjs"],
   },
   externals: nodeModules,
 };
