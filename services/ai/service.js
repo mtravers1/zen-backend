@@ -174,19 +174,6 @@ class AIService {
         throw new Error("AI service not properly configured - missing model configuration");
       }
 
-      // Check if model supports function calling
-      const modelSupportsFunctionCalling = this.checkModelFunctionCallingSupport();
-      console.log("[AI Service] Model function calling support:", modelSupportsFunctionCalling);
-      
-      // Log model-specific information
-      if (this.GROQ_AI_MODEL === 'llama-3.1-8b-instant') {
-        console.log('\n🚀 [AI Service] ====== LLAMA 3.1 8B INSTANT DETECTED ======');
-        console.log('[AI Service] This model supports function calling with fast response times');
-        console.log('[AI Service] Optimizing for real-time financial data access');
-        console.log('[AI Service] Model capabilities: Function calling, Tool use, Fast inference');
-        console.log('[AI Service] Recommended for: Production financial applications');
-      }
-      
       console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
@@ -294,15 +281,6 @@ class AIService {
       // Use the tool definitions for function calling
       const tools = toolDefinitions;
 
-      // Check if model supports function calling
-      if (!modelSupportsFunctionCalling) {
-        console.log('\n⚠️ [AI Service] ====== MODEL DOES NOT SUPPORT FUNCTION CALLING ======');
-        console.log('[AI Service] Using intelligent fallback mode for base model');
-        
-        // Use intelligent fallback without tools
-        return this.handleRequestWithoutTools(prompt, uid, profile, currentScreen, currentDataScreen, context);
-      }
-
       // Validate tool configuration
       if (!tools || !Array.isArray(tools) || tools.length === 0) {
         console.error('[AI Service] 🚨 No tools available for function calling');
@@ -313,13 +291,6 @@ class AIService {
           errorMessage: "No tools available",
           source: 'no_tools'
         };
-      }
-
-      // Model-specific tool optimization for llama-3.1-8b-instant
-      if (this.GROQ_AI_MODEL === 'llama-3.1-8b-instant') {
-        console.log('\n⚡ [AI Service] ====== LLAMA 3.1 8B INSTANT TOOL OPTIMIZATION ======');
-        console.log('[AI Service] Optimizing tool set for fast inference model');
-        console.log('[AI Service] Prioritizing essential financial tools for speed');
       }
 
       // Validate each tool definition for Groq compatibility
@@ -347,36 +318,11 @@ class AIService {
       // Use validated tools
       const finalTools = validatedTools;
       
-      // Model-specific tool prioritization for llama-3.1-8b-instant
-      if (this.GROQ_AI_MODEL === 'llama-3.1-8b-instant') {
-        // Prioritize essential financial tools for faster responses
-        const essentialTools = ['getProfileTransactions', 'getAccountsByProfile', 'getNetWorth'];
-        const prioritizedTools = finalTools.sort((a, b) => {
-          const aName = a.function?.name || '';
-          const bName = b.function?.name || '';
-          const aEssential = essentialTools.includes(aName);
-          const bEssential = essentialTools.includes(bName);
-          
-          if (aEssential && !bEssential) return -1;
-          if (!aEssential && bEssential) return 1;
-          return 0;
-        });
-        
-        console.log('[AI Service] Tools prioritized for llama-3.1-8b-instant:', 
-          prioritizedTools.map(t => t.function?.name).filter(Boolean)
-        );
-        
-        // Use prioritized tools
-        const temporaryFinalTools = prioritizedTools;
-      } else {
-        // Use original tools for other models
-        const temporaryFinalTools = finalTools;
-      }
-      
       // Enable full functionality with robust fallback system
       console.log('\n✅ [AI Service] ====== TOOLS ENABLED WITH FALLBACK PROTECTION ======');
       console.log('[AI Service] Using validated tools with intelligent fallback system');
       console.log('[AI Service] Available tools:', finalTools.length);
+      const temporaryFinalTools = finalTools;
 
       // Prepare the context for tool functions (injects user/profile info)
       const toolContext = {
@@ -1541,279 +1487,6 @@ Focus on empowering them with knowledge and practical steps they can take today.
     }
 
     return response;
-  }
-
-  // Helper method to check if the model supports function calling
-  checkModelFunctionCallingSupport() {
-    const model = this.GROQ_AI_MODEL?.toLowerCase() || '';
-    
-    // Models that support function calling (Groq Production Models 2024)
-    const functionCallingModels = [
-      'llama-3.1-8b-instant',
-      'llama-3.3-70b-versatile',
-      'openai/gpt-oss-120b',
-      'openai/gpt-oss-20b',
-      'meta-llama/llama-guard-4-12b'
-    ];
-    
-    // Models that DON'T support function calling (legacy/unsupported)
-    const nonFunctionCallingModels = [
-      'llama3-70b-8192',  // Current model - NO function calling
-      'llama3-8b-8192',
-      'llama3-405b-8192',
-      'llama3.1-8b-8192',
-      'llama3.1-70b-8192',
-      'llama3.1-405b-8192',
-      'llama3.1-8b-version',
-      'llama3.1-70b-version',
-      'llama3.1-405b-version',
-      'mixtral-8x7b-32768',
-      'gemma2-9b-it',
-      'gemma2-27b-it',
-      'gemma2-2b-it'
-    ];
-    
-    if (nonFunctionCallingModels.includes(model)) {
-      console.warn(`[AI Service] Model ${this.GROQ_AI_MODEL} does NOT support function calling`);
-      return false;
-    }
-    
-    if (functionCallingModels.includes(model)) {
-      console.log(`[AI Service] Model ${this.GROQ_AI_MODEL} supports function calling`);
-      return true;
-    }
-    
-    // Default to false for unknown models
-    console.warn(`[AI Service] Unknown model ${this.GROQ_AI_MODEL}, assuming NO function calling support`);
-    return false;
-  }
-
-  // Handle requests when function calling is not available
-  async handleRequestWithoutTools(prompt, uid, profile, currentScreen, currentDataScreen, context) {
-    try {
-      console.log('\n🔄 [AI Service] ====== INTELLIGENT FALLBACK MODE ======');
-      console.log('[AI Service] Processing request without function calling');
-      
-      // Check if user is asking about model upgrade
-      if (this.checkForModelUpgradeRequest(prompt)) {
-        console.log('[AI Service] User requesting model upgrade information');
-        return this.handleModelUpgradeRequest();
-      }
-      
-      // Classify the question to provide intelligent responses
-      const questionClassification = this.classifyUserQuestion(prompt);
-      console.log('[AI Service] Question classified as:', questionClassification);
-      
-      // Build a simplified system prompt for base models
-      const fallbackSystemPrompt = this.buildFallbackSystemPrompt(questionClassification);
-      
-      // Create simplified messages for base model
-      const messages = [
-        { 
-          role: 'system', 
-          content: fallbackSystemPrompt
-        },
-        { 
-          role: 'user', 
-          content: `User question: "${prompt}"
-
-Question type: ${questionClassification.category} (${questionClassification.subcategory})
-Confidence: ${Math.round(questionClassification.confidence * 100)}%
-
-Current screen: ${currentScreen}
-Data screen: ${currentDataScreen}
-
-Provide a helpful response based on the question type and current context. Be specific and actionable.
-
-Respond in JSON format: {"response": "your answer", "data": null, "source": "fallback_response", "error": false, "fallbackMode": true, "modelUpgradeSuggestion": "Consider upgrading to a model that supports real-time data access"}` 
-        }
-      ];
-      
-      console.log('[AI Service] Fallback messages prepared for base model');
-      
-      // Call LLM without tools
-      const completeResponse = await this.callLLMWithoutTools(messages);
-      
-      console.log('\n✅ [AI Service] ====== FALLBACK SUCCESSFUL ======');
-      
-      // Add model upgrade suggestion for financial data requests
-      let responseText = completeResponse.response || completeResponse.text || "I'm here to help with your financial questions. What would you like to know?";
-      
-      if (questionClassification.category === 'financial_data') {
-        responseText += "\n\n💡 **Note**: For real-time access to your financial data (transactions, balances, net worth), consider upgrading to a model that supports advanced data retrieval capabilities.";
-      }
-      
-      return {
-        text: responseText,
-        data: completeResponse.data || null,
-        error: false,
-        errorMessage: null,
-        source: 'fallback_response',
-        fallbackMode: true,
-        modelUpgradeSuggestion: this.getModelUpgradeSuggestion()
-      };
-      
-    } catch (error) {
-      console.error('\n❌ [AI Service] ====== FALLBACK FAILED ======', error);
-      
-      // Return a user-friendly response even if fallback fails
-      return {
-        text: "I'm here to help with your financial questions. What would you like to know?",
-        data: null,
-        error: false,
-        errorMessage: null,
-        source: 'fallback_fallback',
-        fallbackMode: true,
-        modelUpgradeSuggestion: this.getModelUpgradeSuggestion()
-      };
-    }
-  }
-
-  // Handle model upgrade requests
-  handleModelUpgradeRequest() {
-    const suggestion = this.getModelUpgradeSuggestion();
-    
-    const responseText = `## Model Upgrade Information
-
-**Current Model**: ${suggestion.currentModel}
-**Issue**: ${suggestion.upgradeReason}
-
-## Recommended Models
-
-${suggestion.recommendedModels.map(model => `
-### ${model.name} (\`${model.id}\`)
-- **Benefits**: ${model.benefits.join(', ')}
-- **Best for**: ${model.useCase}
-`).join('')}
-
-## How to Upgrade
-
-${suggestion.upgradeInstructions}
-
-**Note**: After upgrading, you'll have access to real-time financial data including transactions, account balances, and net worth calculations.`;
-
-    return {
-      text: responseText,
-      data: suggestion,
-      error: false,
-      errorMessage: null,
-      source: 'model_upgrade_info',
-      fallbackMode: true,
-      modelUpgradeSuggestion: suggestion
-    };
-  }
-
-  // Get model upgrade suggestion
-  getModelUpgradeSuggestion() {
-    return {
-      currentModel: this.GROQ_AI_MODEL,
-      recommendedModels: [
-        {
-          id: 'llama-3.1-8b-instant',
-          name: 'Llama 3.1 8B Instant',
-          benefits: ['Fastest response time', 'Function calling support', 'Real-time data access'],
-          useCase: 'Production applications requiring speed'
-        },
-        {
-          id: 'llama-3.3-70b-versatile',
-          name: 'Llama 3.3 70B Versatile',
-          benefits: ['Highest quality responses', 'Function calling support', 'Advanced reasoning'],
-          useCase: 'Complex financial analysis and insights'
-        },
-        {
-          id: 'openai/gpt-oss-120b',
-          name: 'GPT-OSS 120B',
-          benefits: ['Massive context window', 'Function calling support', 'Deep understanding'],
-          useCase: 'Complex queries with extensive context'
-        }
-      ],
-      upgradeReason: 'Current model does not support function calling, limiting access to real-time financial data',
-      upgradeInstructions: 'To upgrade, update the GROQ_AI_MODEL environment variable with one of the recommended models above'
-    };
-  }
-
-  // Check if user wants to upgrade model
-  checkForModelUpgradeRequest(prompt) {
-    const upgradeKeywords = [
-      'upgrade model',
-      'change model',
-      'better model',
-      'function calling',
-      'real-time data',
-      'access transactions',
-      'get real data'
-    ];
-    
-    const lowerPrompt = prompt.toLowerCase();
-    return upgradeKeywords.some(keyword => lowerPrompt.includes(keyword));
-  }
-
-  // Call LLM without tools for base models
-  async callLLMWithoutTools(messages) {
-    try {
-      console.log('[AI Service] Calling LLM without tools for base model');
-      
-      const groqClient = new Groq({ apiKey: this.GROQ_API_KEY });
-      
-      // Get model-specific configuration
-      const modelConfig = this.getModelConfig();
-      console.log(`[AI Service] Using configuration for model ${this.GROQ_AI_MODEL}:`, modelConfig);
-      
-      const response = await groqClient.chat.completions.create({
-        model: this.GROQ_AI_MODEL,
-        messages,
-        temperature: modelConfig.temperature,
-        max_tokens: modelConfig.maxTokens,
-        top_p: modelConfig.topP,
-        frequency_penalty: modelConfig.frequencyPenalty,
-        presence_penalty: modelConfig.presencePenalty,
-      });
-      
-      const content = response.choices[0]?.message?.content || '';
-      console.log('[AI Service] Base model response received:', content.substring(0, 200) + '...');
-      
-      // Try to parse JSON response
-      try {
-        const parsed = JSON.parse(content);
-        return parsed;
-      } catch (parseError) {
-        console.warn('[AI Service] Failed to parse JSON response, returning as text');
-        return {
-          response: content,
-          text: content,
-          data: null,
-          source: 'fallback_text'
-        };
-      }
-      
-    } catch (error) {
-      console.error('[AI Service] Error calling base model:', error);
-      throw error;
-    }
-  }
-
-  // Get model-specific configuration
-  getModelConfig() {
-    const model = this.GROQ_AI_MODEL?.toLowerCase() || '';
-    
-    if (model === 'llama-3.1-8b-instant') {
-      return {
-        temperature: 0.1,        // Lower temperature for more consistent responses
-        maxTokens: 4096,         // Optimal for this model
-        topP: 0.9,              // Balanced creativity vs consistency
-        frequencyPenalty: 0.1,  // Reduce repetition
-        presencePenalty: 0.1    // Encourage diverse responses
-      };
-    }
-    
-    // Default configuration for other models
-    return {
-      temperature: 0.0,
-      maxTokens: 2048,
-      topP: 1.0,
-      frequencyPenalty: 0.0,
-      presencePenalty: 0.0
-    };
   }
 }
 

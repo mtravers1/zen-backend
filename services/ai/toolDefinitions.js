@@ -299,33 +299,4 @@ export const toolDefinitions = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "getFiles",
-      description: "Get all files for the current profile including file counts, types, and folder organization",
-      parameters: {
-        type: "object",
-        properties: {
-          uid: { type: "string", description: "User ID" },
-          folder: { type: "string", description: "Optional folder name to filter files by" },
-        },
-        required: ["uid"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "getFileCounts",
-      description: "Get file counts by folder and total file count for the current profile",
-      parameters: {
-        type: "object",
-        properties: {
-          uid: { type: "string", description: "User ID" },
-        },
-        required: ["uid"],
-      },
-    },
-  },
 ]; 

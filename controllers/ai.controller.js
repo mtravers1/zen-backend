@@ -126,7 +126,7 @@ const makeRequest = async (req, res) => {
     
     // Ensure we return a proper response structure
     const response = {
-      text: result.text || result.response || "Processing your request...",
+      text: result.text || result.response || "No response received",
       data: result.data || null,
       error: result.error || false,
       errorMessage: result.errorMessage || undefined,

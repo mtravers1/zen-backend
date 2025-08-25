@@ -26,31 +26,17 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   if (dataScreen && dataScreen !== 'unknown' && dataScreen !== 'overview') {
     contextInfo.push(`Viewing: ${dataScreen}`);
   }
-
-  // Add specific context for file cabinet screen
-  let screenSpecificGuidelines = '';
-  if (baseScreen === 'filecabinet' || currentScreen === 'filecabinet') {
-    screenSpecificGuidelines = `
-    ## FILE CABINET CONTEXT
-    - User is in the file cabinet section
-    - Can answer questions about file counts, file organization, and document storage
-    - Use getFileCounts() for file count questions
-    - Use getFiles() to get specific file information
-    - Help with file organization and document management`;
-  }
   
-const baseContext = `
+  const baseContext = `
     ## CONTEXT
     ${contextInfo.length > 0 ? contextInfo.join(' | ') : 'Dashboard'}
-    ${screenSpecificGuidelines}
     
     ## GUIDELINES
     - Answer the user's specific question directly
-    - Use tools only for financial data requests and file information
-    - For account type questions (checking, savings), use accountSubtype filter
+    - Use tools only for financial data requests
     - Mention screen context only if specifically asked
     - Be concise and helpful
-`;
+  `;
   
   return baseContext;
 }
@@ -76,8 +62,6 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - Account lists → MUST call getAccountsByProfile()
 - Asset information → MUST call getAssets()
 - Business metrics → MUST call getBusinessMetrics()
-- File counts or file questions → MUST call getFileCounts() or getFiles()
-- Specific account types (checking, savings) → MUST use accountSubtype filter
 
 **NEVER use tools for:**
 - General advice ("How to save money?")
@@ -154,17 +138,9 @@ User: "What's my account balance?"
 1. MUST call getAccountsByProfile()
 2. Return data from tool
 
-User: "Show me my savings accounts"
-1. MUST call getAccountsByProfile() with filters: { accountSubtype: "savings" }
-2. Return filtered savings account data
-
 User: "Show me my recent transactions"
 1. MUST call getProfileTransactions()
 2. Return transaction data
-
-User: "How many files do I have?"
-1. MUST call getFileCounts()
-2. Return file count data
 
 **GENERAL ADVICE (NO TOOLS):**
 User: "How can I save money?"

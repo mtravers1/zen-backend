@@ -6,7 +6,6 @@ import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
-import filesService from "../files.service.js";
 import { filterAccounts, filterTransactions } from "./filters.js";
 
 /**
@@ -694,69 +693,6 @@ export const toolFunctions = (context) => ({
         error: error.message,
         fallback: "I can help you with general financial education, tax guidance, and investment basics. What specific topic would you like to learn about?"
       };
-    }
-  },
-
-  /**
-   * Retrieves files for the current profile, optionally filtered by folder.
-   * @param {object} args - { uid, folder }
-   */
-  getFiles: async ({ uid, folder = null }) => {
-    try {
-      const { profile } = context;
-      if (!profile) {
-        return { message: "No profile found", data: null };
-      }
-
-      const files = folder 
-        ? await filesService.getFilesByFolder(profile.id, uid, folder)
-        : await filesService.getFiles(profile.id, uid);
-      
-      if (!files || files.length === 0) {
-        return { 
-          message: folder ? `No files found in ${folder} folder` : "No files found", 
-          data: [],
-          totalFiles: 0
-        };
-      }
-
-      return { 
-        message: `Found ${files.length} files${folder ? ` in ${folder} folder` : ''}`, 
-        data: files,
-        totalFiles: files.length,
-        folder: folder || 'all'
-      };
-    } catch (error) {
-      console.error("[AI][getFiles] Error:", error);
-      return { message: "Failed to retrieve files", error: error.message };
-    }
-  },
-
-  /**
-   * Retrieves file counts by folder and total count for the current profile.
-   * @param {object} args - { uid }
-   */
-  getFileCounts: async ({ uid }) => {
-    try {
-      const { profile } = context;
-      if (!profile) {
-        return { message: "No profile found", data: null };
-      }
-
-      const folderCounts = await filesService.getFolderCounts(profile.id, uid);
-      const totalFiles = Object.values(folderCounts).reduce((sum, count) => sum + count, 0);
-      
-      return { 
-        message: `You have ${totalFiles} files total`, 
-        data: {
-          totalFiles,
-          folderCounts,
-          folders: Object.keys(folderCounts)
-        }
-      };
-    } catch (error) {
-      console.error("[AI][getFileCounts] Error:", error);
-      return { message: "Failed to retrieve file counts", error: error.message };
     }
   },
 }); 
