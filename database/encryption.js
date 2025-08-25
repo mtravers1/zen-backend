@@ -70,6 +70,10 @@ const dekVersionCache = new LimitedMap(1000); // Track key versions
 const decryptedDataCache = new LimitedMap(2000); // Limit to 2000 decrypted items
 const DECRYPTED_CACHE_TTL = 10 * 60 * 1000; // 10 minutes TTL
 
+// Cache for successful decryption keys to avoid reprocessing
+const decryptionKeyCache = new LimitedMap(2000); // Limit to 2000 key mappings
+const KEY_CACHE_TTL = 30 * 60 * 1000; // 30 minutes TTL - longer for keys
+
 // Structured logging for encryption operations
 const logEncryptionOperation = (operation, success, details = {}) => {
   const logEntry = {
@@ -329,6 +333,44 @@ function setDecryptedInCache(cipherTextBase64, uid, decryptedData) {
   });
 }
 
+// Cache management functions for decryption keys
+function getDecryptionKeyFromCache(cipherTextBase64, uid) {
+  if (!cipherTextBase64 || !uid) return null;
+  
+  const cacheKey = `${cipherTextBase64}:${uid}`;
+  const cached = decryptionKeyCache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < KEY_CACHE_TTL) {
+    logEncryptionOperation('getDecryptionKeyFromCache', true, { 
+      uid, 
+      source: 'key_cache',
+      keyType: typeof cached.key,
+      keyLength: cached.key?.length
+    });
+    return cached.key;
+  }
+  
+  return null;
+}
+
+function setDecryptionKeyInCache(cipherTextBase64, uid, key, keyType = 'current') {
+  if (!cipherTextBase64 || !uid || !key) return;
+  
+  const cacheKey = `${cipherTextBase64}:${uid}`;
+  decryptionKeyCache.set(cacheKey, {
+    key: key,
+    keyType: keyType, // 'current', 'fallback', 'previous'
+    timestamp: Date.now()
+  });
+  
+  logEncryptionOperation('setDecryptionKeyInCache', true, { 
+    uid, 
+    keyType: keyType,
+    keyLength: key.length,
+    cacheSize: decryptionKeyCache.size
+  });
+}
+
 function clearDecryptedCache(uid = null) {
   if (uid) {
     // Clear cache for specific user
@@ -342,6 +384,22 @@ function clearDecryptedCache(uid = null) {
     // Clear entire cache
     decryptedDataCache.clear();
     logEncryptionOperation('clearDecryptedCache', true, { scope: 'all' });
+  }
+}
+
+function clearDecryptionKeyCache(uid = null) {
+  if (uid) {
+    // Clear cache for specific user
+    for (const [key] of decryptionKeyCache.entries()) {
+      if (key.includes(`:${uid}`)) {
+        decryptionKeyCache.delete(key);
+      }
+    }
+    logEncryptionOperation('clearDecryptionKeyCache', true, { uid, scope: 'user' });
+  } else {
+    // Clear entire cache
+    decryptionKeyCache.clear();
+    logEncryptionOperation('clearDecryptionKeyCache', true, { scope: 'all' });
   }
 }
 
@@ -361,6 +419,33 @@ function getDecryptedCacheStats() {
       stats.expiredEntries++;
     }
     stats.cacheSize += JSON.stringify(value.data).length;
+  }
+  
+  return stats;
+}
+
+function getDecryptionKeyCacheStats() {
+  const now = Date.now();
+  const stats = {
+    totalEntries: decryptionKeyCache.size,
+    validEntries: 0,
+    expiredEntries: 0,
+    cacheSize: 0,
+    keyTypes: {
+      current: 0,
+      fallback: 0,
+      previous: 0
+    }
+  };
+  
+  for (const [key, value] of decryptionKeyCache.entries()) {
+    if ((now - value.timestamp) < KEY_CACHE_TTL) {
+      stats.validEntries++;
+      stats.keyTypes[value.keyType] = (stats.keyTypes[value.keyType] || 0) + 1;
+    } else {
+      stats.expiredEntries++;
+    }
+    stats.cacheSize += value.key.length;
   }
   
   return stats;
@@ -465,16 +550,42 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
   )
     return cipherTextBase64;
     
-  // Check cache first for already decrypted data
+  // Check cache first for successful decryption keys
   if (uid) {
-    const cachedData = getDecryptedFromCache(cipherTextBase64, uid);
-    if (cachedData !== null) {
-      logEncryptionOperation('decryptValue', true, { 
-        uid, 
-        source: 'cache',
-        note: 'Returning cached decrypted data'
-      });
-      return cachedData;
+    const cachedKey = getDecryptionKeyFromCache(cipherTextBase64, uid);
+    if (cachedKey) {
+      try {
+        logEncryptionOperation('decryptValue', true, { 
+          uid, 
+          source: 'key_cache',
+          note: 'Using cached decryption key'
+        });
+        
+        // Try to decrypt with the cached key
+        const result = await attemptDecryption(cipherTextBase64, cachedKey, uid, 'cached');
+        if (result.success) {
+          return result.value;
+        } else {
+          // Cached key failed, remove it from cache
+          logEncryptionOperation('decryptValue', false, {
+            uid,
+            source: 'key_cache',
+            error: 'Cached key failed, removing from cache'
+          });
+          const cacheKey = `${cipherTextBase64}:${uid}`;
+          decryptionKeyCache.delete(cacheKey);
+        }
+      } catch (error) {
+        // Cached key failed, remove it from cache
+        logEncryptionOperation('decryptValue', false, {
+          uid,
+          source: 'key_cache',
+          error: 'Cached key failed with exception',
+          exception: error.message
+        });
+        const cacheKey = `${cipherTextBase64}:${uid}`;
+        decryptionKeyCache.delete(cacheKey);
+      }
     }
   }
     
@@ -525,9 +636,9 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     try {
       const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
       if (result.success) {
-        // Cache successful decryption
+        // Cache successful decryption key
         if (uid) {
-          setDecryptedInCache(cipherTextBase64, uid, result.value);
+          setDecryptionKeyInCache(cipherTextBase64, uid, dek, 'current');
         }
         return result.value;
       }
@@ -550,9 +661,9 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     try {
       const result = await attemptDecryption(cipherTextBase64, fallbackDek, uid, 'fallback');
       if (result.success) {
-        // Cache successful decryption
+        // Cache successful decryption key
         if (uid) {
-          setDecryptedInCache(cipherTextBase64, uid, result.value);
+          setDecryptionKeyInCache(cipherTextBase64, uid, fallbackDek, 'fallback');
         }
         logEncryptionOperation('decryptValue', true, { 
           uid, 
@@ -582,8 +693,8 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
       if (previousDek) {
         const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
         if (result.success) {
-          // Cache successful decryption
-          setDecryptedInCache(cipherTextBase64, uid, result.value);
+          // Cache successful decryption key
+          setDecryptionKeyInCache(cipherTextBase64, uid, previousDek, 'previous');
           logEncryptionOperation('decryptValue', true, { 
             uid, 
             attempt: 'previous', 
@@ -866,5 +977,9 @@ export {
   getDecryptedFromCache,
   setDecryptedInCache,
   clearDecryptedCache,
-  getDecryptedCacheStats
+  getDecryptedCacheStats,
+  getDecryptionKeyFromCache,
+  setDecryptionKeyInCache,
+  clearDecryptionKeyCache,
+  getDecryptionKeyCacheStats
 };

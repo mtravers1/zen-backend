@@ -492,16 +492,18 @@ const deleteAccount = async (req, res) => {
 // Cache management methods
 const getCacheStats = async (req, res) => {
   try {
-    const { getDekCacheStats, getDecryptionCacheStats } = await import('../services/accounts.service.js');
+    const { getDekCacheStats, getDecryptionCacheStats, getDecryptionKeyCacheStats } = await import('../services/accounts.service.js');
     
     const dekStats = getDekCacheStats();
     const decryptionStats = getDecryptionCacheStats();
+    const keyCacheStats = getDecryptionKeyCacheStats();
     
     res.json({
       success: true,
       data: {
         dek: dekStats,
         decryption: decryptionStats,
+        decryptionKeys: keyCacheStats,
         timestamp: new Date().toISOString()
       }
     });
