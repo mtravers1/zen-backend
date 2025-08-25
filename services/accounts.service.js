@@ -93,10 +93,7 @@ const getDecryptionCacheStats = () => {
   return getDecryptedCacheStats();
 };
 
-// Função para obter estatísticas do cache de chaves de descriptografia
-const getDecryptionKeyCacheStats = () => {
-  return getDecryptionKeyCacheStats();
-};
+
 
 // Função para limpar cache de descriptografia
 const clearDecryptionCache = (uid = null) => {
@@ -104,17 +101,12 @@ const clearDecryptionCache = (uid = null) => {
   console.log(`[clearDecryptionCache] Decryption cache cleared for ${uid ? `uid: ${uid}` : 'all users'}`);
 };
 
-// Função para limpar cache de chaves de descriptografia
-const clearDecryptionKeyCache = (uid = null) => {
-  clearDecryptionKeyCache(uid);
-  console.log(`[clearDecryptionKeyCache] Decryption key cache cleared for ${uid ? `uid: ${uid}` : 'all users'}`);
-};
+
 
 // Função para limpar todos os caches
 const clearAllCaches = (uid = null) => {
   clearDekCache(uid);
   clearDecryptionCache(uid);
-  clearDecryptionKeyCache(uid);
   console.log(`[clearAllCaches] All caches cleared for ${uid ? `uid: ${uid}` : 'all users'}`);
 };
 

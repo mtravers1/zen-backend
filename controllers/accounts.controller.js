@@ -1,6 +1,6 @@
 import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
-import businessService from "../services/business.service.js";
+import businessService from "../services/businesses.service.js";
 
 const debugCache = async (req, res) => {
   try {
@@ -100,7 +100,7 @@ const debugDecryption = async (req, res) => {
         if (testAccount[field]) {
           console.log(`[DEBUG DECRYPT] Testing field: ${field}`);
           try {
-            const { decryptValue } = await import('../services/encryption.service.js');
+            const { decryptValue } = await import('../database/encryption.js');
             const decrypted = await decryptValue(testAccount[field], dek, uid);
             console.log(`[DEBUG DECRYPT] ${field} decryption result:`, {
               success: true,
