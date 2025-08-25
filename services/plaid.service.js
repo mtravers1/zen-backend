@@ -550,7 +550,7 @@ const handleCorruptedAccessToken = async (itemId, uid, error) => {
 };
 
 // Enhanced getAccessTokenFromItemId with corruption handling
-const getAccessTokenFromItemId = async (itemId, uid) => {
+const getAccessTokenFromItemId = async (itemId, uid = null) => {
   try {
     if (!itemId) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
@@ -572,7 +572,7 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     if (accessTokenDoc.status === 'corrupted') {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
-        uid,
+        uid: uid || 'not_provided',
         error: 'Access token is marked as corrupted',
         lastError: accessTokenDoc.lastError,
         lastErrorAt: accessTokenDoc.lastErrorAt
@@ -580,44 +580,60 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
       return null;
     }
 
-    if (!uid) {
-      logPlaidOperation('getAccessTokenFromItemId', false, {
-        itemId,
-        error: 'uid is required for decryption'
-      });
-      return null;
+    // If UID not provided, try to get it from the AccessToken document
+    let targetUid = uid;
+    if (!targetUid) {
+      if (accessTokenDoc.userId) {
+        targetUid = accessTokenDoc.userId.toString();
+        logPlaidOperation('getAccessTokenFromItemId', true, {
+          itemId,
+          note: `UID retrieved from AccessToken document: ${targetUid}`,
+          source: 'document'
+        });
+      } else {
+        logPlaidOperation('getAccessTokenFromItemId', false, {
+          itemId,
+          error: 'No UID provided and no userId found in AccessToken document',
+          accessTokenDoc: {
+            hasUserId: !!accessTokenDoc.userId,
+            userIdType: typeof accessTokenDoc.userId,
+            userIdValue: accessTokenDoc.userId
+          }
+        });
+        return null;
+      }
     }
 
-    const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+    const keyData = await getUserDek(targetUid);
+    const dek = keyData.dek;
     if (!dek) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
-        uid,
+        uid: targetUid,
         error: 'Failed to get user DEK'
       });
       return null;
     }
 
     // Try to decrypt with current DEK
-    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek, uid);
+    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek, targetUid);
     
     // If decryption fails, try with fallback DEK
     if (!accessToken) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
-        uid,
+        uid: targetUid,
         error: 'Failed to decrypt access token with current DEK, trying fallback'
       });
       
       // Get fallback DEK (previous version)
-      const fallbackDek = await getPreviousDek(uid);
+      const fallbackDek = await getPreviousDek(targetUid);
       if (fallbackDek) {
-        accessToken = await decryptValue(accessTokenDoc.accessToken, fallbackDek, uid);
+        accessToken = await decryptValue(accessTokenDoc.accessToken, fallbackDek, targetUid);
         if (accessToken) {
           logPlaidOperation('getAccessTokenFromItemId', true, {
             itemId,
-            uid,
+            uid: targetUid,
             note: 'Successfully decrypted with fallback DEK'
           });
         }
@@ -627,26 +643,26 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     if (!accessToken) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
-        uid,
+        uid: targetUid,
         error: 'All decryption attempts failed for access token'
       });
       
       // Handle corrupted access token
-      await handleCorruptedAccessToken(itemId, uid, new Error('Access token decryption failed'));
+      await handleCorruptedAccessToken(itemId, targetUid, new Error('Access token decryption failed'));
       
       return null;
     }
 
     logPlaidOperation('getAccessTokenFromItemId', true, {
       itemId,
-      uid
+      uid: targetUid
     });
 
     return accessToken;
   } catch (error) {
     logPlaidOperation('getAccessTokenFromItemId', false, {
       itemId,
-      uid,
+      uid: uid || 'not_provided',
       error: error.message,
       stack: error.stack
     });
@@ -2167,6 +2183,256 @@ const decryptValueWithMonitoring = async (cipherTextBase64, dek, uid, context = 
   }
 };
 
+// Function to diagnose and potentially fix encryption issues for a user
+const diagnoseAndFixEncryptionIssues = async (uid) => {
+  try {
+    logPlaidOperation('diagnoseAndFixEncryptionIssues', true, {
+      uid,
+      operation: 'start'
+    });
+
+    // First, check the encryption key health
+    const { checkEncryptionKeyHealth, regenerateUserKeys } = await import('../database/encryption.js');
+    const health = await checkEncryptionKeyHealth(uid);
+    
+    if (health.healthy) {
+      logPlaidOperation('diagnoseAndFixEncryptionIssues', true, {
+        uid,
+        result: 'Keys are healthy, no action needed',
+        health
+      });
+      return { 
+        success: true, 
+        action: 'none', 
+        reason: 'Keys are healthy',
+        health 
+      };
+    }
+
+    // If keys are not healthy, try to regenerate them
+    logPlaidOperation('diagnoseAndFixEncryptionIssues', true, {
+      uid,
+      action: 'regenerating_keys',
+      health
+    });
+
+    const regenerationResult = await regenerateUserKeys(uid, true); // force = true
+    
+    if (regenerationResult.success) {
+      logPlaidOperation('diagnoseAndFixEncryptionIssues', true, {
+        uid,
+        result: 'Keys regenerated successfully',
+        newVersion: regenerationResult.newVersion
+      });
+      
+      // Clear any cached encryption errors for this user
+      if (errorMonitoring.encryptionErrors) {
+        for (const [key, error] of errorMonitoring.encryptionErrors.entries()) {
+          if (error.uid === uid) {
+            errorMonitoring.encryptionErrors.delete(key);
+          }
+        }
+      }
+      
+      return { 
+        success: true, 
+        action: 'regenerated', 
+        newVersion: regenerationResult.newVersion,
+        health 
+      };
+    } else {
+      logPlaidOperation('diagnoseAndFixEncryptionIssues', false, {
+        uid,
+        error: 'Failed to regenerate keys',
+        reason: regenerationResult.reason
+      });
+      return { 
+        success: false, 
+        action: 'failed', 
+        reason: regenerationResult.reason,
+        health 
+      };
+    }
+    
+  } catch (error) {
+    logPlaidOperation('diagnoseAndFixEncryptionIssues', false, {
+      uid,
+      error: error.message,
+      stack: error.stack
+    });
+    return { 
+      success: false, 
+      action: 'error', 
+      error: error.message 
+    };
+  }
+};
+
+// Function to identify users with encryption issues
+const identifyUsersWithEncryptionIssues = () => {
+  try {
+    const usersWithIssues = new Map();
+    
+    // Analyze encryption errors
+    for (const [key, error] of errorMonitoring.encryptionErrors.entries()) {
+      if (error.uid) {
+        if (!usersWithIssues.has(error.uid)) {
+          usersWithIssues.set(error.uid, {
+            uid: error.uid,
+            errorCount: 0,
+            lastError: error.timestamp,
+            errorTypes: new Set(),
+            itemIds: new Set()
+          });
+        }
+        
+        const userIssues = usersWithIssues.get(error.uid);
+        userIssues.errorCount++;
+        userIssues.errorTypes.add(error.error || 'unknown');
+        if (error.itemId) {
+          userIssues.itemIds.add(error.itemId);
+        }
+        
+        // Update last error timestamp
+        if (error.timestamp > userIssues.lastError) {
+          userIssues.lastError = error.timestamp;
+        }
+      }
+    }
+    
+    // Convert to array and sort by error count
+    const issuesList = Array.from(usersWithIssues.values()).map(user => ({
+      ...user,
+      errorTypes: Array.from(user.errorTypes),
+      itemIds: Array.from(user.itemIds)
+    })).sort((a, b) => b.errorCount - a.errorCount);
+    
+    logPlaidOperation('identifyUsersWithEncryptionIssues', true, {
+      totalUsersWithIssues: issuesList.length,
+      totalErrors: Array.from(errorMonitoring.encryptionErrors.values()).length
+    });
+    
+    return {
+      success: true,
+      usersWithIssues: issuesList,
+      summary: {
+        totalUsers: issuesList.length,
+        totalErrors: Array.from(errorMonitoring.encryptionErrors.values()).length,
+        criticalUsers: issuesList.filter(u => u.errorCount > 5).length,
+        usersNeedingImmediateAttention: issuesList.filter(u => 
+          u.errorCount > 10 || 
+          u.errorTypes.some(t => t.includes('Unsupported state') || t.includes('authentication'))
+        ).length
+      }
+    };
+    
+  } catch (error) {
+    logPlaidOperation('identifyUsersWithEncryptionIssues', false, {
+      error: error.message,
+      stack: error.stack
+    });
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+};
+
+// Function to identify specific Plaid items failing for a user
+const identifyFailingPlaidItems = async (uid) => {
+  try {
+    logPlaidOperation('identifyFailingPlaidItems', true, {
+      uid,
+      operation: 'start'
+    });
+
+    // Get all access tokens for this user
+    const accessTokens = await AccessToken.find({ userId: uid });
+    
+    if (!accessTokens || accessTokens.length === 0) {
+      logPlaidOperation('identifyFailingPlaidItems', true, {
+        uid,
+        result: 'No access tokens found for user'
+      });
+      return {
+        success: true,
+        uid,
+        failingItems: [],
+        totalItems: 0,
+        summary: 'No access tokens found'
+      };
+    }
+
+    const failingItems = [];
+    const workingItems = [];
+
+    // Test each access token
+    for (const tokenDoc of accessTokens) {
+      try {
+        const accessToken = await getAccessTokenFromItemId(tokenDoc.itemId, uid);
+        
+        if (accessToken) {
+          workingItems.push({
+            itemId: tokenDoc.itemId,
+            institutionId: tokenDoc.institutionId,
+            status: 'working',
+            lastTested: new Date().toISOString()
+          });
+        } else {
+          failingItems.push({
+            itemId: tokenDoc.itemId,
+            institutionId: tokenDoc.institutionId,
+            status: 'failing',
+            lastError: 'Decryption failed',
+            lastTested: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        failingItems.push({
+          itemId: tokenDoc.itemId,
+          institutionId: tokenDoc.institutionId,
+          status: 'error',
+          lastError: error.message,
+          lastTested: new Date().toISOString()
+        });
+      }
+    }
+
+    const summary = {
+      totalItems: accessTokens.length,
+      workingItems: workingItems.length,
+      failingItems: failingItems.length,
+      failureRate: accessTokens.length > 0 ? (failingItems.length / accessTokens.length * 100).toFixed(1) + '%' : '0%'
+    };
+
+    logPlaidOperation('identifyFailingPlaidItems', true, {
+      uid,
+      result: 'Analysis completed',
+      summary
+    });
+
+    return {
+      success: true,
+      uid,
+      failingItems,
+      workingItems,
+      summary
+    };
+
+  } catch (error) {
+    logPlaidOperation('identifyFailingPlaidItems', false, {
+      uid,
+      error: error.message,
+      stack: error.stack
+    });
+    return {
+      success: false,
+      uid,
+      error: error.message
+    };
+  }
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -2212,6 +2478,9 @@ const plaidService = {
   handleCorruptedAccessToken,
   decryptValueWithMonitoring,
   errorMonitoring,
+  diagnoseAndFixEncryptionIssues,
+  identifyUsersWithEncryptionIssues,
+  identifyFailingPlaidItems,
 };
 
 export default plaidService;
