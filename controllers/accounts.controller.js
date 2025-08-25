@@ -101,7 +101,7 @@ const debugDecryption = async (req, res) => {
           console.log(`[DEBUG DECRYPT] Testing field: ${field}`);
           try {
             const { decryptValue } = await import('../services/encryption.service.js');
-            const decrypted = await decryptValue(testAccount[field], dek);
+            const decrypted = await decryptValue(testAccount[field], dek, uid);
             console.log(`[DEBUG DECRYPT] ${field} decryption result:`, {
               success: true,
               originalLength: testAccount[field].length,
@@ -274,31 +274,56 @@ const addAccount = async (req, res) => {
 };
 
 const getAccounts = async (req, res) => {
+  const requestId = req.requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
-    console.log('\n🔍 [getAccounts Controller] ====== DEBUG ======');
-    console.log('[getAccounts Controller] Request user object:', req.user);
-    console.log('[getAccounts Controller] Request user keys:', req.user ? Object.keys(req.user) : 'no user object');
-    console.log('[getAccounts Controller] Request user uid:', req.user?.uid);
-    console.log('[getAccounts Controller] Request body:', req.body);
+    console.log(`\n🔍 [getAccounts Controller ${requestId}] ====== ACCOUNTS REQUEST ======`);
+    console.log(`[getAccounts Controller ${requestId}] Timestamp: ${new Date().toISOString()}`);
+    console.log(`[getAccounts Controller ${requestId}] Request user object:`, req.user);
+    console.log(`[getAccounts Controller ${requestId}] Request user keys:`, req.user ? Object.keys(req.user) : 'no user object');
+    console.log(`[getAccounts Controller ${requestId}] Request user uid:`, req.user?.uid);
+    console.log(`[getAccounts Controller ${requestId}] Request user uid type:`, typeof req.user?.uid);
+    console.log(`[getAccounts Controller ${requestId}] Request user uid length:`, req.user?.uid ? req.user.uid.length : 0);
+    console.log(`[getAccounts Controller ${requestId}] Request body:`, req.body);
+    console.log(`[getAccounts Controller ${requestId}] Request headers:`, Object.keys(req.headers));
+    console.log(`[getAccounts Controller ${requestId}] Request IP:`, req.ip);
+    console.log(`[getAccounts Controller ${requestId}] Request URL:`, req.url);
+    console.log(`[getAccounts Controller ${requestId}] Request method:`, req.method);
     
     const { profile } = req.body;
     const uid = req.user?.uid;
     
     if (!uid) {
-      console.error('[getAccounts Controller] UID is missing from req.user');
+      console.error(`[getAccounts Controller ${requestId}] ❌ UID is missing from req.user`);
+      console.error(`[getAccounts Controller ${requestId}] Full req.user object:`, JSON.stringify(req.user, null, 2));
+      console.error(`[getAccounts Controller ${requestId}] Request headers:`, JSON.stringify(req.headers, null, 2));
+      console.error(`[getAccounts Controller ${requestId}] Request body:`, JSON.stringify(req.body, null, 2));
+      
       return res.status(401).send({ 
         message: 'Authentication failed - UID not found',
+        requestId: requestId,
         userObject: req.user,
-        userKeys: req.user ? Object.keys(req.user) : []
+        userKeys: req.user ? Object.keys(req.user) : [],
+        timestamp: new Date().toISOString()
       });
     }
     
-    console.log('[getAccounts Controller] UID extracted successfully:', uid);
+    console.log(`[getAccounts Controller ${requestId}] ✅ UID extracted successfully:`, {
+      uid: uid,
+      uidType: typeof uid,
+      uidLength: uid.length,
+      timestamp: new Date().toISOString()
+    });
     
     const accounts = await accountsService.getAccounts(profile, uid);
     res.status(200).send(accounts);
   } catch (error) {
-    console.error('[getAccounts Controller] Error:', error);
+    console.error(`[getAccounts Controller ${requestId}] ❌ Error:`, {
+      error: error.message,
+      errorStack: error.stack,
+      timestamp: new Date().toISOString(),
+      requestId: requestId
+    });
     res.status(500).send({ message: error.message });
   }
 };

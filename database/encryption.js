@@ -543,6 +543,45 @@ function trackDecryptionAttempt(cipherTextBase64, uid) {
 
 // Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
 async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = null) {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log(`\n🔍 [decryptValue ${requestId}] ====== DECRYPTION REQUEST ======`);
+  console.log(`[decryptValue ${requestId}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[decryptValue ${requestId}] Input parameters:`, {
+    hasCipherText: !!cipherTextBase64,
+    cipherTextLength: cipherTextBase64?.length || 0,
+    hasDek: !!dek,
+    dekType: typeof dek,
+    dekLength: dek?.length || 0,
+    uid: uid || 'NULL',
+    uidType: typeof uid,
+    uidLength: uid ? uid.length : 0,
+    hasFallbackDek: !!fallbackDek,
+    requestId: requestId
+  });
+  
+  // Validate UID first
+  if (!uid) {
+    console.error(`[decryptValue ${requestId}] ❌ UID is null or undefined`);
+    console.error(`[decryptValue ${requestId}] This will prevent caching and fallback key lookup`);
+    console.error(`[decryptValue ${requestId}] Call stack:`, new Error().stack);
+  } else if (typeof uid !== 'string') {
+    console.error(`[decryptValue ${requestId}] ❌ UID is not a string:`, {
+      uid: uid,
+      uidType: typeof uid,
+      uidValue: uid
+    });
+  } else if (uid.trim() === '') {
+    console.error(`[decryptValue ${requestId}] ❌ UID is empty string`);
+  } else {
+    console.log(`[decryptValue ${requestId}] ✅ UID validation passed:`, {
+      uid: uid,
+      uidType: typeof uid,
+      uidLength: uid.length,
+      uidTrimmed: uid.trim().length
+    });
+  }
+  
   if (
     cipherTextBase64 === null ||
     cipherTextBase64 === undefined ||

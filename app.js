@@ -18,29 +18,28 @@ const app = express();
 // require('./database/database');
 const additionalOrigins = process.env.CORS_URL
           .split(',')
-          .map(url => url.trim())
-          .filter(url => url.length > 0) || [];
-// CORS configuration for development
+          .map(origin => origin.trim())
+          .filter(origin => origin.length > 0);
+
 const corsOptions = {
-  origin: [
-    'https://zentavos.com',
-    ...additionalOrigins
-  ],
+  origin: function (origin, callback) {
+    if (!origin || additionalOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
 app.use(cors(corsOptions));
 app.use(logger("dev"));
-
-// Structured logging middleware - must be early in the chain
-app.use(structuredLoggingMiddleware);
-app.use(cleanupMiddleware);
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+
+// Apply structured logging middleware BEFORE authentication
+app.use(structuredLoggingMiddleware);
 
 // authentication
 app.use(

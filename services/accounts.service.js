@@ -119,79 +119,111 @@ const clearAllCaches = (uid = null) => {
 };
 
 const safeDecryptValue = async (value, dek, uid) => {
-  console.log(`[safeDecryptValue] Input:`, {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log(`\n🔐 [safeDecryptValue ${requestId}] ====== DECRYPTION ATTEMPT ======`);
+  console.log(`[safeDecryptValue ${requestId}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[safeDecryptValue ${requestId}] Input parameters:`, {
     value: value ? `${typeof value} (${value.length || 0} chars)` : 'null/undefined',
     hasDek: !!dek,
     dekType: typeof dek,
     dekLength: dek ? dek.length : 0,
-    uid: uid || 'MISSING'
+    uid: uid || 'MISSING',
+    uidType: typeof uid,
+    uidLength: uid ? uid.length : 0,
+    requestId: requestId
   });
   
   if (value === null || value === undefined || value === "") {
-    console.log(`[safeDecryptValue] Returning original value (null/undefined/empty):`, value);
+    console.log(`[safeDecryptValue ${requestId}] ✅ Returning original value (null/undefined/empty):`, value);
     return value;
   }
   
   if (typeof value !== 'string') {
-    console.warn(`[safeDecryptValue] Attempting to decrypt non-string value: ${typeof value} (${value === null ? 'null' : value === undefined ? 'undefined' : 'other'})`);
+    console.warn(`[safeDecryptValue ${requestId}] ⚠️ Attempting to decrypt non-string value: ${typeof value} (${value === null ? 'null' : value === undefined ? 'undefined' : 'other'})`);
     return value;
   }
   
   // Additional validation for string content
   if (value.trim() === '') {
-    console.warn("[safeDecryptValue] Attempting to decrypt empty string");
+    console.warn(`[safeDecryptValue ${requestId}] ⚠️ Attempting to decrypt empty string`);
     return value;
   }
   
   // Validate DEK
   if (!dek) {
-    console.error(`[safeDecryptValue] DEK is missing for uid: ${uid}`);
+    console.error(`[safeDecryptValue ${requestId}] ❌ DEK is missing for uid: ${uid}`);
     throw new Error(`DEK is required for decryption. UID: ${uid}`);
   }
   
   // Validate UID
   if (!uid) {
-    console.error(`[safeDecryptValue] UID is missing for decryption`);
+    console.error(`[safeDecryptValue ${requestId}] ❌ UID is missing for decryption`);
     throw new Error(`UID is required for decryption`);
   }
   
+  if (typeof uid !== 'string') {
+    console.error(`[safeDecryptValue ${requestId}] ❌ UID is not a string:`, {
+      uid: uid,
+      uidType: typeof uid,
+      uidValue: uid
+    });
+    throw new Error(`UID must be a string, got ${typeof uid}`);
+  }
+  
+  if (uid.trim() === '') {
+    console.error(`[safeDecryptValue ${requestId}] ❌ UID is empty string`);
+    throw new Error(`UID cannot be empty`);
+  }
+  
+  console.log(`[safeDecryptValue ${requestId}] ✅ UID validation passed:`, {
+    uid: uid,
+    uidType: typeof uid,
+    uidLength: uid.length,
+    uidTrimmed: uid.trim().length
+  });
+  
   try {
-    console.log(`[safeDecryptValue] Attempting decryption for value:`, {
+    console.log(`[safeDecryptValue ${requestId}] 🔍 Attempting decryption for value:`, {
       valueLength: value.length,
       valueStart: value.substring(0, 20) + '...',
       hasDek: !!dek,
-      uid: uid
+      uid: uid,
+      requestId: requestId
     });
     
     // Use the new decryptValue function with UID for caching
     const decrypted = await decryptValue(value, dek, uid);
     
-    console.log(`[safeDecryptValue] Decryption result:`, {
+    console.log(`[safeDecryptValue ${requestId}] ✅ Decryption result:`, {
       success: true,
       decryptedType: typeof decrypted,
       decryptedValue: decrypted ? `${decrypted}`.substring(0, 50) + '...' : 'null',
-      uid: uid
+      uid: uid,
+      requestId: requestId
     });
     
     if (decrypted === null) {
-      console.warn("[safeDecryptValue] Decryption returned null, this might indicate data corruption");
+      console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, this might indicate data corruption`);
       return null;
     }
     return decrypted;
   } catch (error) {
-    console.error("[safeDecryptValue] Decryption failed:", {
+    console.error(`[safeDecryptValue ${requestId}] ❌ Decryption failed:`, {
       error: error.message,
       stack: error.stack,
       valueLength: value.length,
       hasDek: !!dek,
-      uid: uid
+      uid: uid,
+      requestId: requestId,
+      timestamp: new Date().toISOString()
     });
     
     // Se o erro for relacionado ao DEK, limpar o cache
     if (error.message.includes('Max decryption attempts exceeded') || 
         error.message.includes('decryption failed') ||
         error.message.includes('Invalid key')) {
-      console.warn(`[safeDecryptValue] Clearing DEK cache for uid: ${uid} due to decryption error`);
+      console.warn(`[safeDecryptValue ${requestId}] 🧹 Clearing DEK cache for uid: ${uid} due to decryption error`);
       clearDekCache(uid);
       // Also clear decrypted cache for this user
       clearDecryptedCache(uid);
@@ -880,10 +912,16 @@ const removeAccount = async (accountId, email) => {
 };
 
 const getAccounts = async (profile, uid) => {
-  console.log('\n🔍 [getAccounts] ====== DEBUG ======');
-  console.log("[getAccounts] Parameters:", {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log(`\n🔍 [getAccounts Service ${requestId}] ====== SERVICE CALL ======`);
+  console.log(`[getAccounts Service ${requestId}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[getAccounts Service ${requestId}] Parameters:`, {
     profileId: profile?.id,
-    uid,
+    uid: uid,
+    uidType: typeof uid,
+    uidLength: uid ? uid.length : 0,
+    hasProfile: !!profile,
     plaidAccountsCount: profile?.plaidAccounts?.length || 0,
     plaidAccounts: profile?.plaidAccounts
   });
@@ -891,19 +929,42 @@ const getAccounts = async (profile, uid) => {
   try {
     // Validate UID first
     if (!uid) {
+      console.error(`[getAccounts Service ${requestId}] ❌ UID is missing`);
       throw new Error('UID is required for getAccounts');
     }
     
+    if (typeof uid !== 'string') {
+      console.error(`[getAccounts Service ${requestId}] ❌ UID is not a string:`, {
+        uid: uid,
+        uidType: typeof uid,
+        uidValue: uid
+      });
+      throw new Error(`UID must be a string, got ${typeof uid}`);
+    }
+    
+    if (uid.trim() === '') {
+      console.error(`[getAccounts Service ${requestId}] ❌ UID is empty string`);
+      throw new Error('UID cannot be empty');
+    }
+    
+    console.log(`[getAccounts Service ${requestId}] ✅ UID validation passed:`, {
+      uid: uid,
+      uidType: typeof uid,
+      uidLength: uid.length,
+      uidTrimmed: uid.trim().length
+    });
+    
     const dek = await getCachedDek(uid);
-    console.log("[getAccounts] DEK obtained:", {
+    console.log(`[getAccounts Service ${requestId}] DEK obtained:`, {
       hasDek: !!dek,
       dekType: typeof dek,
       dekLength: dek ? dek.length : 0,
-      uid
+      uid: uid,
+      requestId: requestId
     });
     
     const plaidIds = profile.plaidAccounts;
-    console.log("[getAccounts] Plaid IDs to search:", plaidIds);
+    console.log(`[getAccounts Service ${requestId}] Plaid IDs to search:`, plaidIds);
     
     const plaidAccountsResponse = await PlaidAccount.find({
       _id: { $in: plaidIds },
@@ -912,7 +973,7 @@ const getAccounts = async (profile, uid) => {
       .select("-accessToken")
       .exec();
 
-    console.log("[getAccounts] Plaid accounts found in DB:", {
+    console.log(`[getAccounts Service ${requestId}] Plaid accounts found in DB:`, {
       count: plaidAccountsResponse.length,
       accountIds: plaidAccountsResponse.map(acc => acc._id),
       hasEncryptedData: plaidAccountsResponse.map(acc => ({
@@ -927,7 +988,7 @@ const getAccounts = async (profile, uid) => {
     let plaidAccounts = [];
 
     for (const plaidAccount of plaidAccountsResponse) {
-      console.log("[getAccounts] Processing account:", {
+      console.log(`[getAccounts Service ${requestId}] Processing account:`, {
         _id: plaidAccount._id,
         plaid_account_id: plaidAccount.plaid_account_id
       });
@@ -971,7 +1032,7 @@ const getAccounts = async (profile, uid) => {
           uid
         );
 
-        console.log("[getAccounts] Decryption results for account:", {
+        console.log(`[getAccounts Service ${requestId}] Decryption results for account:`, {
           _id: plaidAccount._id,
           currentBalance: decryptedCurrentBalance,
           availableBalance: decryptedAvailableBalance,
@@ -992,17 +1053,17 @@ const getAccounts = async (profile, uid) => {
           institution_name: decryptedInstitutionName,
         });
       } catch (decryptError) {
-        console.error("[getAccounts] Decryption error for account:", {
+        console.error(`[getAccounts Service ${requestId}] Decryption error for account:`, {
           _id: plaidAccount._id,
           error: decryptError.message,
           stack: decryptError.stack,
-          uid
+          uid: uid
         });
         // Continue with other accounts
       }
     }
 
-    console.log("[getAccounts] Final plaid accounts array:", {
+    console.log(`[getAccounts Service ${requestId}] Final plaid accounts array:`, {
       count: plaidAccounts.length,
       accounts: plaidAccounts.map(acc => ({
         _id: acc._id,
@@ -1036,7 +1097,7 @@ const getAccounts = async (profile, uid) => {
       otherAccounts,
     };
 
-    console.log("[getAccounts] Final result:", {
+    console.log(`[getAccounts Service ${requestId}] Final result:`, {
       depositoryCount: result.depositoryAccounts.length,
       creditCount: result.creditAccounts.length,
       investmentCount: result.investmentAccounts.length,
@@ -1046,7 +1107,7 @@ const getAccounts = async (profile, uid) => {
 
     return result;
   } catch (error) {
-    console.error("[getAccounts] Error in getAccounts:", error);
+    console.error(`[getAccounts Service ${requestId}] Error in getAccounts:`, error);
     throw error;
   }
 };
@@ -1400,10 +1461,11 @@ const getCashFlows = async (profile, uid) => {
 
     const transactions = [];
     for (const transaction of transactionsResponse) {
-      const decryptedAmount = await decryptValue(transaction.amount, dek);
+      const decryptedAmount = await decryptValue(transaction.amount, dek, uid);
       const decryptedAccountType = await decryptValue(
         transaction.accountType,
-        dek
+        dek,
+        uid
       );
 
       transactions.push({

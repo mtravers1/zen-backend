@@ -68,101 +68,58 @@ function truncateBody(body, maxLength) {
   }
 }
 
-/**
- * Middleware to automatically capture request context and log responses
- * Follows Cursor Rules for comprehensive request/response logging
- */
+// Middleware para logging estruturado
 export const structuredLoggingMiddleware = (req, res, next) => {
-  const startTime = Date.now();
-  const requestId = structuredLogger.startRequestContext(req, req.route?.path || req.path);
-
-  // Capture original response methods
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  
+  console.log(`\n📝 [REQUEST ${requestId}] ====== NEW REQUEST ======`);
+  console.log(`[REQUEST ${requestId}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[REQUEST ${requestId}] Method: ${req.method}`);
+  console.log(`[REQUEST ${requestId}] URL: ${req.url}`);
+  console.log(`[REQUEST ${requestId}] IP: ${req.ip}`);
+  console.log(`[REQUEST ${requestId}] User Agent: ${req.headers['user-agent']}`);
+  console.log(`[REQUEST ${requestId}] Headers:`, Object.keys(req.headers));
+  console.log(`[REQUEST ${requestId}] Has Authorization: ${!!req.headers.authorization}`);
+  console.log(`[REQUEST ${requestId}] Authorization Type: ${req.headers.authorization ? req.headers.authorization.split(' ')[0] : 'none'}`);
+  console.log(`[REQUEST ${requestId}] Content-Type: ${req.headers['content-type']}`);
+  console.log(`[REQUEST ${requestId}] Content-Length: ${req.headers['content-length']}`);
+  
+  // Log request body if present
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`[REQUEST ${requestId}] Request Body Keys:`, Object.keys(req.body));
+    console.log(`[REQUEST ${requestId}] Request Body Preview:`, JSON.stringify(req.body, null, 2));
+  }
+  
+  // Log query parameters if present
+  if (req.query && Object.keys(req.query).length > 0) {
+    console.log(`[REQUEST ${requestId}] Query Parameters:`, req.query);
+  }
+  
+  // Log route parameters if present
+  if (req.params && Object.keys(req.params).length > 0) {
+    console.log(`[REQUEST ${requestId}] Route Parameters:`, req.params);
+  }
+  
+  // Capture response details
   const originalSend = res.send;
-  const originalJson = res.json;
-  const originalStatus = res.status;
-
-  // Override response methods to capture response data
   res.send = function(data) {
-    const durationMs = Date.now() - startTime;
-    const response = {
-      statusCode: res.statusCode,
-      headers: sanitizeHeaders(res.getHeaders()),
-      body: truncateBody(
-        typeof data === 'string' ? data : JSON.stringify(data),
-        MAX_RESPONSE_BODY_LENGTH
-      )
-    };
-
-    // Log successful response
-    if (res.statusCode < 400) {
-      structuredLogger.logSuccess(req.route?.path || req.path, {
-        request_id: requestId,
-        durationMs,
-        response
-      });
-    } else {
-      // Log error response
-      structuredLogger.logErrorBlock(new Error(`HTTP ${res.statusCode}`), {
-        operation: req.route?.path || req.path,
-        request_id: requestId,
-        request: structuredLogger.requestContext.get(requestId)?.request,
-        response,
-        durationMs,
-        error_classification: 'http_error'
-      });
+    console.log(`[REQUEST ${requestId}] ====== RESPONSE ======`);
+    console.log(`[REQUEST ${requestId}] Status Code: ${res.statusCode}`);
+    console.log(`[REQUEST ${requestId}] Response Type: ${typeof data}`);
+    console.log(`[REQUEST ${requestId}] Response Length: ${typeof data === 'string' ? data.length : JSON.stringify(data).length}`);
+    
+    if (typeof data === 'string' && data.length < 200) {
+      console.log(`[REQUEST ${requestId}] Response Preview:`, data);
+    } else if (typeof data === 'object') {
+      console.log(`[REQUEST ${requestId}] Response Keys:`, Object.keys(data));
     }
-
+    
+    console.log(`[REQUEST ${requestId}] ====== REQUEST COMPLETE ======\n`);
+    
     return originalSend.call(this, data);
   };
-
-  res.json = function(data) {
-    const durationMs = Date.now() - startTime;
-    const response = {
-      statusCode: res.statusCode,
-      headers: sanitizeHeaders(res.getHeaders()),
-      body: truncateBody(JSON.stringify(data), MAX_RESPONSE_BODY_LENGTH)
-    };
-
-    // Log successful response
-    if (res.statusCode < 400) {
-      structuredLogger.logSuccess(req.route?.path || req.path, {
-        request_id: requestId,
-        durationMs,
-        response
-      });
-    } else {
-      // Log error response
-      structuredLogger.logErrorBlock(new Error(`HTTP ${res.statusCode}`), {
-        operation: req.route?.path || req.path,
-        request_id: requestId,
-        request: structuredLogger.requestContext.get(requestId)?.request,
-        response,
-        durationMs,
-        error_classification: 'http_error'
-      });
-    }
-
-    return originalJson.call(this, data);
-  };
-
-  res.status = function(code) {
-    res.statusCode = code;
-    return originalStatus.call(this, code);
-  };
-
-  // Add cleanup on request end
-  req.on('end', () => {
-    const durationMs = Date.now() - startTime;
-    if (durationMs > 5000) { // Log slow requests
-      structuredLogger.logErrorBlock(new Error('Slow request detected'), {
-        operation: req.route?.path || req.path,
-        request_id: requestId,
-        durationMs,
-        error_classification: 'performance_warning'
-      });
-    }
-  });
-
+  
   next();
 };
 

@@ -25,7 +25,7 @@ const own = async (uid) => {
   const emails = await Promise.all(
     userResponse.email.map(async (email) => {
       return {
-        email: await decryptValue(email.email, dek),
+        email: await decryptValue(email.email, dek, uid),
         emailType: email.emailType,
         isPrimary: email.isPrimary,
       };
@@ -34,19 +34,21 @@ const own = async (uid) => {
 
   const decryptedFirstName = await decryptValue(
     userResponse.name.firstName,
-    dek
+    dek,
+    uid
   );
-  const decryptedLastName = await decryptValue(userResponse.name.lastName, dek);
+  const decryptedLastName = await decryptValue(userResponse.name.lastName, dek, uid);
   const decryptedMiddleName = await decryptValue(
     userResponse.name.middleName,
-    dek
+    dek,
+    uid
   );
   const decryptedPhone = userResponse.phones && userResponse.phones.length > 0 
-    ? await decryptValue(userResponse.phones[0].phone, dek)
+    ? await decryptValue(userResponse.phones[0].phone, dek, uid)
     : null;
   let decryptedPhotoUrl;
   if (userResponse.profilePhotoUrl) {
-    decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek);
+    decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek, uid);
   }
 
   const retrievedUser = {
@@ -185,13 +187,13 @@ const signUp = async (data) => {
     });
 
     // Now decrypt the data for the response
-    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek);
-    const decryptedLastName = await decryptValue(newUser.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(newUser.name.middleName, dek);
+    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(newUser.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(newUser.name.middleName, dek, uid);
     const decryptedPhone = newUser.phones && newUser.phones.length > 0 
-      ? await decryptValue(newUser.phones[0].phone, dek)
+      ? await decryptValue(newUser.phones[0].phone, dek, uid)
       : null;
-    const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek) : null;
+    const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek, uid) : null;
 
     const retrievedUser = {
       id: newUser._id,
@@ -251,21 +253,21 @@ const signIn = async (uid) => {
     structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
     const dek = await getUserDek(uid);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
     const decryptedPhone = user.phones && user.phones.length > 0 
-      ? await decryptValue(user.phones[0].phone, dek)
+      ? await decryptValue(user.phones[0].phone, dek, uid)
       : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
     }
 
     const emails = await Promise.all(
       user.email.map(async (email) => {
         return {
-          email: await decryptValue(email.email, dek),
+          email: await decryptValue(email.email, dek, uid),
           emailType: email.emailType,
           isPrimary: email.isPrimary,
         };
@@ -393,21 +395,21 @@ const signInOrCreate = async (uid, userData = null) => {
     structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
     const dek = await getUserDek(uid);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
     const decryptedPhone = user.phones && user.phones.length > 0 
-      ? await decryptValue(user.phones[0].phone, dek)
+      ? await decryptValue(user.phones[0].phone, dek, uid)
       : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
     }
 
     const emails = await Promise.all(
       user.email.map(async (email) => {
         return {
-          email: await decryptValue(email.email, dek),
+          email: await decryptValue(email.email, dek, uid),
           emailType: email.emailType,
           isPrimary: email.isPrimary,
         };
@@ -559,7 +561,7 @@ const deleteUser = async (uid) => {
       userId: user._id,
     });
     for (const token of accessToken) {
-      const decryptedAccessToken = await decryptValue(token.accessToken, dek);
+      const decryptedAccessToken = await decryptValue(token.accessToken, dek, uid);
       await plaidService.invalidateAccessToken(decryptedAccessToken);
     }
     await AccessToken.deleteMany({
