@@ -194,16 +194,38 @@ class AIService {
 
       console.log(`[AI Service] ✅ User found:`, {
         userId: user._id,
-        hasProfile: !!user.profile,
-        profileCount: user.profile?.length || 0
+        hasEmail: !!user.email?.length
+      });
+
+      // Get user profiles using the business service
+      console.log(`[AI Service] 👥 Getting user profiles for UID: ${uid}`);
+      const userEmail = user.email?.find(e => e.isPrimary)?.email || user.email?.[0]?.email;
+      
+      if (!userEmail) {
+        console.error(`[AI Service] ❌ No email found for user UID: ${uid}`);
+        return {
+          text: "User email not found. Please contact support.",
+          data: { error: "Email not found" },
+          error: true,
+          errorMessage: "Email not found",
+          source: 'email_error',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      const profiles = await businessService.getUserProfiles(userEmail, uid);
+      console.log(`[AI Service] ✅ Profiles retrieved:`, {
+        profileCount: profiles.length,
+        profileIds: profiles.map(p => ({ id: p.id, name: p.name }))
       });
 
       // Find the specific profile
-      const profile = user.profile?.find(p => p._id.toString() === profileId);
+      const profile = profiles.find(p => p.id.toString() === profileId);
       
       if (!profile) {
         console.error(`[AI Service] ❌ Profile not found for ID: ${profileId}`);
-        console.log(`[AI Service] Available profiles:`, user.profile?.map(p => ({ id: p._id.toString(), name: p.name })));
+        console.log(`[AI Service] Available profiles:`, profiles.map(p => ({ id: p.id.toString(), name: p.name })));
         return {
           text: "Profile not found. Please select a valid profile.",
           data: { error: "Profile not found" },
