@@ -27,6 +27,23 @@ class AIService {
     // Load model and API key from environment variables and initialize Groq client
     this.GROQ_AI_MODEL = process.env.GROQ_AI_MODEL;
     this.GROQ_API_KEY = process.env.GROQ_API_KEY;
+    
+    console.log(`[AI Service] 🔧 Constructor - Environment variables:`, {
+      hasModel: !!this.GROQ_AI_MODEL,
+      model: this.GROQ_AI_MODEL,
+      hasApiKey: !!this.GROQ_API_KEY,
+      apiKeyPreview: this.GROQ_API_KEY ? `${this.GROQ_API_KEY.substring(0, 10)}...` : 'none'
+    });
+    
+    if (!this.GROQ_API_KEY) {
+      console.error(`[AI Service] ❌ GROQ_API_KEY not found in environment variables`);
+      console.error(`[AI Service] Available env vars:`, Object.keys(process.env).filter(key => key.includes('GROQ')));
+    }
+    
+    if (!this.GROQ_AI_MODEL) {
+      console.error(`[AI Service] ❌ GROQ_AI_MODEL not found in environment variables`);
+    }
+    
     this.groqClient = new Groq({ apiKey: this.GROQ_API_KEY });
   }
 
@@ -250,7 +267,42 @@ class AIService {
       console.log(`[AI Service] System prompt built:`, {
         hasSystemPrompt: !!systemPrompt,
         systemPromptLength: systemPrompt?.length || 0,
-        systemPromptPreview: systemPrompt ? systemPrompt.substring(0, 100) + '...' : 'NO_SYSTEM_PROMPT'
+        systemPromptPreview: systemPrompt ? systemPrompt.substring(0, 200) + '...' : 'NO_SYSTEM_PROMPT'
+      });
+
+      // Enhanced system prompt with tool instructions
+      const enhancedSystemPrompt = `${systemPrompt}
+
+## CRITICAL INSTRUCTIONS FOR FINANCIAL DATA REQUESTS
+
+When a user asks for specific financial data, you MUST use the available tools:
+
+**MANDATORY TOOL USAGE:**
+- "What's my net worth?" → CALL getNetWorth()
+- "What's my balance?" → CALL getAccountsByProfile()
+- "Show my transactions" → CALL getProfileTransactions()
+- "What's my cash flow?" → CALL getCashFlows()
+
+**RESPONSE FORMAT:**
+Always return JSON in this exact format:
+{
+  "response": "Your answer using real data from tools",
+  "data": [tool results],
+  "source": "tool_result",
+  "error": false
+}
+
+**EXAMPLE:**
+User: "What's my net worth?"
+1. Call getNetWorth() with uid
+2. Use the real data returned
+3. Format response as JSON above
+
+DO NOT ask for user ID - you already have it in the uid parameter.`;
+      console.log(`[AI Service] Enhanced system prompt built:`, {
+        hasEnhancedPrompt: !!enhancedSystemPrompt,
+        enhancedPromptLength: enhancedSystemPrompt?.length || 0,
+        enhancedPromptPreview: enhancedSystemPrompt ? enhancedSystemPrompt.substring(0, 200) + '...' : 'NO_ENHANCED_PROMPT'
       });
 
       // Get tool definitions and implementations
@@ -261,7 +313,9 @@ class AIService {
         hasTools: !!tools,
         toolsCount: tools?.length || 0,
         hasToolsImpl: !!toolsImpl,
-        toolsImplKeys: toolsImpl ? Object.keys(toolsImpl) : []
+        toolsImplKeys: toolsImpl ? Object.keys(toolsImpl) : [],
+        toolNames: tools?.map(t => t.function.name) || [],
+        toolImplNames: toolsImpl ? Object.keys(toolsImpl) : []
       });
 
       // Validate tools
@@ -276,12 +330,17 @@ class AIService {
       console.log(`[AI Service] Final tools after validation:`, {
         originalCount: tools?.length || 0,
         finalCount: finalTools.length,
-        validatedTools: finalTools.map(t => t.function.name)
+        validatedTools: finalTools.map(t => t.function.name),
+        toolDetails: finalTools.map(t => ({
+          name: t.function.name,
+          description: t.function.description,
+          hasImpl: !!toolsImpl[t.function.name]
+        }))
       });
 
       // Prepare messages for LLM
       const messages = [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: enhancedSystemPrompt },
         ...(incomingMessages || []),
         { role: 'user', content: prompt }
       ];
@@ -305,7 +364,10 @@ class AIService {
           hasApiKey: !!this.GROQ_API_KEY,
           messagesCount: messages.length,
           toolsCount: finalTools.length,
-          requestId: requestId
+          requestId: requestId,
+          toolsPreview: finalTools.map(t => t.function.name),
+          firstMessagePreview: messages[0]?.content?.substring(0, 100) + '...',
+          lastMessagePreview: messages[messages.length - 1]?.content?.substring(0, 100) + '...'
         });
 
         completeResponse = await callLLM({
@@ -379,8 +441,20 @@ class AIService {
       // STEP 4: Process and format the response
       console.log('\n📝 [AI Service] ====== STEP 5: PROCESSING RESPONSE ======');
       
-      if (!completeResponse || (!completeResponse.text && !completeResponse.response)) {
-        console.error(`[AI Service] ❌ Invalid LLM response:`, completeResponse);
+      // Parse the response if it's a string
+      let parsedResponse = completeResponse;
+      if (typeof completeResponse === 'string') {
+        try {
+          parsedResponse = JSON.parse(completeResponse);
+        } catch (parseError) {
+          console.warn(`[AI Service] ⚠️ Response is not JSON, treating as plain text:`, parseError.message);
+          parsedResponse = { response: completeResponse, text: completeResponse };
+        }
+      }
+      
+      // Check if we have a valid response with either text or response field
+      if (!parsedResponse || (!parsedResponse.text && !parsedResponse.response)) {
+        console.error(`[AI Service] ❌ Invalid LLM response:`, parsedResponse);
         return {
           text: "I received an invalid response. Please try again.",
           data: { error: "Invalid LLM response" },
@@ -393,20 +467,22 @@ class AIService {
       }
 
       // Extract text from either text or response field
-      const responseText = completeResponse.text || completeResponse.response;
+      const responseText = parsedResponse.text || parsedResponse.response;
       
       console.log(`[AI Service] ✅ LLM response validated:`, {
         textLength: responseText.length,
         textPreview: responseText.substring(0, 100) + '...',
-        hasData: !!completeResponse.data,
-        dataKeys: completeResponse.data ? Object.keys(completeResponse.data) : []
+        hasData: !!parsedResponse.data,
+        dataKeys: parsedResponse.data ? Object.keys(parsedResponse.data) : [],
+        source: parsedResponse.source,
+        isError: parsedResponse.error
       });
 
       // Format financial data if present
-      let formattedData = completeResponse.data;
-      if (completeResponse.data && typeof completeResponse.data === 'object') {
+      let formattedData = parsedResponse.data;
+      if (parsedResponse.data && typeof parsedResponse.data === 'object') {
         try {
-          formattedData = formatFinancialResponse(completeResponse.data);
+          formattedData = formatFinancialResponse(parsedResponse.data);
           console.log(`[AI Service] ✅ Financial data formatted successfully`);
         } catch (formatError) {
           console.warn(`[AI Service] ⚠️ Financial data formatting failed:`, formatError);
@@ -420,9 +496,9 @@ class AIService {
       const finalResponse = {
         text: responseText || "I'm sorry, but I couldn't generate a proper response. Please try again.",
         data: formattedData || null,
-        error: completeResponse.error || false,
-        errorMessage: completeResponse.errorMessage || undefined,
-        source: completeResponse.source || 'ai_response',
+        error: parsedResponse.error || false,
+        errorMessage: parsedResponse.errorMessage || undefined,
+        source: parsedResponse.source || 'ai_response',
         usedFallback: usedFallbackMode,
         requestId: requestId,
         timestamp: new Date().toISOString()
