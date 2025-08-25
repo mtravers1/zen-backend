@@ -379,7 +379,7 @@ class AIService {
       // STEP 4: Process and format the response
       console.log('\n📝 [AI Service] ====== STEP 5: PROCESSING RESPONSE ======');
       
-      if (!completeResponse || !completeResponse.text) {
+      if (!completeResponse || (!completeResponse.text && !completeResponse.response)) {
         console.error(`[AI Service] ❌ Invalid LLM response:`, completeResponse);
         return {
           text: "I received an invalid response. Please try again.",
@@ -392,9 +392,12 @@ class AIService {
         };
       }
 
+      // Extract text from either text or response field
+      const responseText = completeResponse.text || completeResponse.response;
+      
       console.log(`[AI Service] ✅ LLM response validated:`, {
-        textLength: completeResponse.text.length,
-        textPreview: completeResponse.text.substring(0, 100) + '...',
+        textLength: responseText.length,
+        textPreview: responseText.substring(0, 100) + '...',
         hasData: !!completeResponse.data,
         dataKeys: completeResponse.data ? Object.keys(completeResponse.data) : []
       });
@@ -415,7 +418,7 @@ class AIService {
       console.log('\n🎯 [AI Service] ====== STEP 6: PREPARING FINAL RESPONSE ======');
       
       const finalResponse = {
-        text: completeResponse.text || "I'm sorry, but I couldn't generate a proper response. Please try again.",
+        text: responseText || "I'm sorry, but I couldn't generate a proper response. Please try again.",
         data: formattedData || null,
         error: completeResponse.error || false,
         errorMessage: completeResponse.errorMessage || undefined,
