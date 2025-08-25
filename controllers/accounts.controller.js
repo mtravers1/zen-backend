@@ -460,7 +460,8 @@ const addAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.body;
     console.log(fileName);
-    const url = await accountsService.generateUploadUrl(fileName);
+    const { generateUploadUrl } = await import('../services/accounts.service.js');
+    const url = await generateUploadUrl(fileName);
     res.status(200).send({ uploadUrl: url });
   } catch (error) {
     console.log(error);
@@ -472,7 +473,8 @@ const getAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.body;
     console.log(fileName);
-    const url = await accountsService.generateSignedUrl(fileName);
+    const { generateSignedUrl } = await import('../services/accounts.service.js');
+    const url = await generateSignedUrl(fileName);
     res.status(200).send({ downloadUrl: url });
   } catch (error) {
     console.log(error);
@@ -486,7 +488,8 @@ const serveAccountPhoto = async (req, res) => {
     console.log('Serving photo:', fileName);
     
     // Generate signed URL for the photo
-    const signedUrl = await accountsService.generateSignedUrl(fileName);
+    const { generateSignedUrl } = await import('../services/accounts.service.js');
+    const signedUrl = await generateSignedUrl(fileName);
     
     if (!signedUrl) {
       const error = new Error('Photo not found');
@@ -647,8 +650,6 @@ export default {
   getAccountPhoto,
   serveAccountPhoto,
   deleteAccount,
-  generateUploadUrl,
-  generateSignedUrl,
   debugProfile,
   debugDecryption,
   debugCache,
