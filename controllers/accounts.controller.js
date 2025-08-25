@@ -275,11 +275,30 @@ const addAccount = async (req, res) => {
 
 const getAccounts = async (req, res) => {
   try {
+    console.log('\n🔍 [getAccounts Controller] ====== DEBUG ======');
+    console.log('[getAccounts Controller] Request user object:', req.user);
+    console.log('[getAccounts Controller] Request user keys:', req.user ? Object.keys(req.user) : 'no user object');
+    console.log('[getAccounts Controller] Request user uid:', req.user?.uid);
+    console.log('[getAccounts Controller] Request body:', req.body);
+    
     const { profile } = req.body;
-    const uid = req.user.uid;
+    const uid = req.user?.uid;
+    
+    if (!uid) {
+      console.error('[getAccounts Controller] UID is missing from req.user');
+      return res.status(401).send({ 
+        message: 'Authentication failed - UID not found',
+        userObject: req.user,
+        userKeys: req.user ? Object.keys(req.user) : []
+      });
+    }
+    
+    console.log('[getAccounts Controller] UID extracted successfully:', uid);
+    
     const accounts = await accountsService.getAccounts(profile, uid);
     res.status(200).send(accounts);
   } catch (error) {
+    console.error('[getAccounts Controller] Error:', error);
     res.status(500).send({ message: error.message });
   }
 };

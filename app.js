@@ -72,6 +72,21 @@ app.use(
 // Load routes
 app.use("/api", router);
 
+// Add root route to avoid 401 errors
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "Zentavos API",
+    version: process.env.VERSION || "1.0.1",
+    status: "running",
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Add favicon route to avoid 401 errors
+app.get("/favicon.ico", (req, res) => {
+  res.status(204).end(); // No content for favicon
+});
+
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
 	next(createError(404));
