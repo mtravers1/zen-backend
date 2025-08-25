@@ -100,11 +100,33 @@ class AIService {
     context = {},
     requestId = null
   ) {
+    const startTime = Date.now();
+    
     console.log('\n🚀 [AI Service] ====== STARTING AI CHAT PROCESS ======');
-    console.log('[AI Service] Request ID:', requestId || 'NOT_PROVIDED');
-    console.log('[AI Service] User prompt:', prompt);
-    console.log('[AI Service] UI Context:', JSON.stringify(context, null, 2));
+    console.log(`[AI Service] Request ID: ${requestId || 'not_provided'}`);
+    console.log(`[AI Service] Timestamp: ${new Date().toISOString()}`);
+    console.log(`[AI Service] Input parameters:`, {
+      hasPrompt: !!prompt,
+      promptLength: prompt?.length,
+      promptPreview: prompt ? prompt.substring(0, 100) + '...' : 'NO_PROMPT',
+      hasUid: !!uid,
+      uid,
+      hasProfileId: !!profileId,
+      profileId,
+      hasMessages: !!incomingMessages,
+      messagesCount: incomingMessages?.length || 0,
+      hasScreen: !!screen,
+      screen,
+      hasDataScreen: !!dataScreen,
+      dataScreen,
+      hasContext: !!context,
+      contextKeys: context ? Object.keys(context) : [],
+      contextSize: context ? JSON.stringify(context).length : 0
+    });
 
+    // STEP 1: PREPARING USER CONTEXT
+    console.log('\n🔍 [AI Service] ====== STEP 1: PREPARING USER CONTEXT ======');
+    
     // Validate request parameters
     const validation = this.validateRequestParams({
       prompt,
@@ -115,321 +137,155 @@ class AIService {
       dataScreen
     });
 
-    // Log validation results
-    console.log('\n🔍 [AI Service] ====== REQUEST VALIDATION ======', {
-      timestamp: new Date().toISOString(),
-      requestId: requestId || 'NOT_PROVIDED',
-      validation,
-      requestParams: {
-        hasPrompt: !!prompt,
-        hasUid: !!uid,
-        hasProfile: !!profileId,
-        messageCount: Array.isArray(incomingMessages) ? incomingMessages.length : 0,
-        screen: screen || 'unknown',
-        dataScreen: dataScreen || 'none'
-      }
-    });
+    console.log(`[AI Service] Parameter validation result:`, validation);
 
-    // Return early if validation fails
     if (!validation.isValid) {
-      console.error('[AI Service] Validation failed:', validation.errors);
+      console.error(`[AI Service] ❌ Parameter validation failed:`, validation.errors);
       return {
-        text: "I cannot process your request due to missing or invalid parameters.",
-        data: null,
+        text: `Invalid request parameters: ${validation.errors.join(', ')}`,
+        data: { validationErrors: validation.errors },
         error: true,
-        errorMessage: validation.errors.join('. '),
-        requestId: requestId
+        errorMessage: `Parameter validation failed: ${validation.errors.join(', ')}`,
+        source: 'validation_error',
+        requestId: requestId,
+        timestamp: new Date().toISOString()
       };
     }
 
+    console.log(`[AI Service] ✅ Parameter validation passed`);
+
     try {
-      // Validate required parameters again for safety
-      if (!uid) {
-        console.error('[AI Service] UID is missing after validation');
-        throw new Error("User ID (uid) is required");
-      }
-      if (!profileId) {
-        console.error('[AI Service] Profile ID is missing after validation');
-        throw new Error("Profile ID is required");
-      }
-
-      console.log('\n🎯 [AI Service] ====== STEP 1: PREPARING USER CONTEXT ======');
-      console.log("[AI Service] Starting request with:", { 
-        requestId: requestId || 'NOT_PROVIDED',
-        uid, 
-        profileId, 
-        hasPrompt: !!prompt, 
-        prompt: prompt,
-        promptLength: prompt ? prompt.length : 0,
-        screen, 
-        dataScreen, 
-        hasContext: !!context, 
-        contextKeys: context ? Object.keys(context) : [],
-        fullContext: context
-      });
-
-      // Check if environment variables are set
-      if (!this.GROQ_API_KEY) {
-        console.error("[AI Service] GROQ_API_KEY not set in environment variables");
-        throw new Error("AI service not properly configured - missing API key");
-      }
-      
-      if (!this.GROQ_AI_MODEL) {
-        console.error("[AI Service] GROQ_AI_MODEL not set in environment variables");
-        throw new Error("AI service not properly configured - missing model configuration");
-      }
-
-      console.log("[AI Service] Environment variables check passed");
-
-      // STEP 1: Retrieve user and profile context for tool calls
-      console.log('\n🔑 [AI Service] ====== STEP 2: GETTING USER DATA ======');
-      console.log("[AI Service] Getting user DEK for uid:", uid);
+      // Get user DEK for encryption/decryption
+      console.log(`[AI Service] 🔐 Getting user DEK for UID: ${uid}`);
       const keyData = await getUserDek(uid);
+      
       if (!keyData || !keyData.dek) {
-        console.error("[AI Service] Failed to get DEK for user:", uid);
-        throw new Error("Failed to retrieve user encryption keys");
-      }
-  const dek = keyData.dek;
-      
-      console.log("[AI Service] Getting user data for uid:", uid);
-      const user = await User.findOne({ authUid: uid }).lean();
-      if (!user) {
-        console.error("[AI Service] User not found for uid:", uid);
-        throw new Error("User not found");
-      }
-      if (!user?.email?.[0]?.email) {
-        console.error("[AI Service] User email not found for uid:", uid);
-        throw new Error("User email not found");
-      }
-      
-      const email = user.email[0].email;
-      console.log("[AI Service] Getting user profiles for email:", email);
-      const profiles = await businessService.getUserProfiles(email, uid);
-      if (!profiles?.length) {
-        console.error("[AI Service] No profiles found for user:", uid);
-        throw new Error("No profiles found for user");
-      }
-
-      console.log("[AI Service] Found profiles:", profiles.length);
-
-      console.log('\n🔍 [AI Service] ====== PROFILE LOOKUP DEBUG ======');
-      console.log("[AI Service] Profile lookup details:", {
-        profileId,
-        userId: user._id.toString(),
-        profilesCount: profiles.length,
-        profileIds: profiles.map(p => ({ id: p.id, isPersonal: p.isPersonal, name: p.name }))
-      });
-      
-      // Find the correct profile by ID (handles personal and business profiles)
-      let profile = profiles.find((p) => {
-        if (p.isPersonal) {
-          const match = user._id.toString() === profileId;
-          console.log(`[AI Service] Checking personal profile: ${p.id} (${p.name}) - user._id (${user._id}) === profileId (${profileId}) = ${match}`);
-          return match;
-        }
-        const match = p.id.toString() === profileId;
-        console.log(`[AI Service] Checking business profile: ${p.id} (${p.name}) - p.id (${p.id}) === profileId (${profileId}) = ${match}`);
-        return match;
-      });
-      
-      // Fallback for legacy/personal profile ID
-      if (!profile) {
-        console.log("[AI Service] No profile found with primary logic, trying fallback...");
-        if (user && user._id.toString() === profileId) {
-          profile = profiles.find((p) => p.isPersonal);
-          console.log(`[AI Service] Fallback found personal profile:`, profile ? { id: profile.id, name: profile.name } : 'null');
-        }
-      }
-      
-      if (!profile) {
-        console.error("[AI Service] Profile lookup failed completely");
-        console.error("[AI Service] Available profiles:", profiles.map(p => ({ id: p.id, isPersonal: p.isPersonal, name: p.name })));
-        console.error("[AI Service] Requested profileId:", profileId);
-        console.error("[AI Service] User ID:", user._id.toString());
-        throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
-      }
-
-      console.log("[AI Service] Profile found successfully:", { 
-        id: profile.id, 
-        name: profile.name, 
-        isPersonal: profile.isPersonal,
-        hasPlaidAccounts: profile.plaidAccounts ? profile.plaidAccounts.length : 0
-      });
-
-      // STEP 2: Build system prompt and prepare LLM call
-      console.log('\n🧠 [AI Service] ====== STEP 3: PREPARING LLM CALL ======');
-
-      // Parse screen context for prompt construction
-      const baseScreen = (screen || "").split("/")[0] || "";
-      const currentDataScreen = dataScreen || (screen || "").split("/")[1];
-      const currentScreen = baseScreen.toLowerCase().trim();
-
-      console.log("🔍 [AI Service] Request analysis:", {
-        prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
-        hasContext: !!context,
-        contextKeys: context ? Object.keys(context) : [],
-        screen: currentScreen,
-        dataScreen: currentDataScreen
-      });
-
-      // Build the system and screen prompts
-      let screenPrompt = '';
-      let enhancedScreenPrompt = '';
-      
-      // Always build system prompt (it's lightweight and doesn't include screen-specific data)
-      const systemPrompt = getProductionSystemPrompt(currentScreen);
-      
-      // Let the LLM intelligently determine the type of question
-      // No hardcoded classification - the LLM will analyze the context
-      console.log('[AI Service] 🎯 Letting LLM intelligently classify question type');
-      
-      // Build screen context for all questions - the LLM will decide how to use it
-      screenPrompt = buildScreenPrompt(currentScreen, currentDataScreen, context);
-      enhancedScreenPrompt = screenPrompt;
-
-      // Construct the message array for the LLM
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: "user", content: `${enhancedScreenPrompt}\n\nUser question: ${prompt}\n\nRespond in JSON format as specified.` },
-      ];
-
-      // Check total prompt length to prevent LLM confusion
-      const totalPromptLength = systemPrompt.length + enhancedScreenPrompt.length + prompt.length;
-      console.log('[AI Service] Total prompt length:', totalPromptLength, 'characters');
-      
-      if (totalPromptLength > 25000) {
-        console.warn('[AI Service] Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
-        
-        // Use simplified prompt for very long requests
-        const simplifiedSystemPrompt = getSimplifiedSystemPrompt(currentScreen);
-        messages[0] = { role: 'system', content: simplifiedSystemPrompt };
-        
-        console.log('[AI Service] Switched to simplified system prompt');
-      }
-
-      // Use the tool definitions for function calling
-      const tools = toolDefinitions;
-
-      // Validate tool configuration
-      if (!tools || !Array.isArray(tools) || tools.length === 0) {
-        console.error('[AI Service] 🚨 No tools available for function calling');
+        console.error(`[AI Service] ❌ Failed to get user DEK for UID: ${uid}`);
+        console.log(`[AI Service] keyData received:`, keyData);
         return {
-          text: "I encountered a technical issue - no tools are available for processing your request. Please contact support.",
-          data: null,
+          text: "Unable to access your encrypted data. Please try again or contact support.",
+          data: { error: "DEK retrieval failed" },
           error: true,
-          errorMessage: "No tools available",
-          source: 'no_tools'
+          errorMessage: "Failed to get user DEK",
+          source: 'dek_error',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
         };
       }
 
-      // Validate each tool definition for Groq compatibility
-      const validatedTools = tools.filter(tool => {
-        if (!tool || !tool.function || !tool.function.name) {
-          console.warn('[AI Service] Invalid tool found - missing function or name:', tool);
-          return false;
-        }
-        
-        if (!tool.function.parameters || typeof tool.function.parameters !== 'object') {
-          console.warn('[AI Service] Invalid tool parameters:', tool.function.name);
-          return false;
-        }
-        
-        return true;
+      console.log(`[AI Service] ✅ User DEK retrieved successfully`);
+
+      // Get user and profile information
+      console.log(`[AI Service] 👤 Getting user information for UID: ${uid}`);
+      const user = await User.findOne({ authUid: uid });
+      
+      if (!user) {
+        console.error(`[AI Service] ❌ User not found for UID: ${uid}`);
+        return {
+          text: "User account not found. Please sign in again.",
+          data: { error: "User not found" },
+          error: true,
+          errorMessage: "User not found",
+          source: 'user_error',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      console.log(`[AI Service] ✅ User found:`, {
+        userId: user._id,
+        hasProfile: !!user.profile,
+        profileCount: user.profile?.length || 0
       });
 
-      console.log('[AI Service] Tool configuration validated:', {
-        totalTools: tools.length,
-        validTools: validatedTools.length,
-        invalidTools: tools.length - validatedTools.length,
-        toolNames: validatedTools.map(t => t.function?.name).filter(Boolean)
-      });
+      // Find the specific profile
+      const profile = user.profile?.find(p => p._id.toString() === profileId);
       
-      // Use validated tools
-      const finalTools = validatedTools;
-      
-      // Enable full functionality with robust fallback system
-      console.log('\n✅ [AI Service] ====== TOOLS ENABLED WITH FALLBACK PROTECTION ======');
-      console.log('[AI Service] Using validated tools with intelligent fallback system');
-      console.log('[AI Service] Available tools:', finalTools.length);
+      if (!profile) {
+        console.error(`[AI Service] ❌ Profile not found for ID: ${profileId}`);
+        console.log(`[AI Service] Available profiles:`, user.profile?.map(p => ({ id: p._id.toString(), name: p.name })));
+        return {
+          text: "Profile not found. Please select a valid profile.",
+          data: { error: "Profile not found" },
+          error: true,
+          errorMessage: "Profile not found",
+          source: 'profile_error',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
+        };
+      }
 
-      // Prepare the context for tool functions (injects user/profile info)
-      const toolContext = {
-        email,
-        profile,
-        filterAccounts,
-        filterTransactions,
-      };
-      const toolsImpl = toolFunctions(toolContext);
+      console.log(`[AI Service] ✅ Profile found:`, {
+        profileId: profile._id.toString(),
+        profileName: profile.name
+      });
+
+      // STEP 2: Build system prompt and prepare LLM call
+      console.log('\n🔧 [AI Service] ====== STEP 2: BUILDING PROMPTS AND TOOLS ======');
+      
+      // Build system prompt based on screen context
+      const systemPrompt = buildScreenPrompt(screen, dataScreen);
+      console.log(`[AI Service] System prompt built:`, {
+        hasSystemPrompt: !!systemPrompt,
+        systemPromptLength: systemPrompt?.length || 0,
+        systemPromptPreview: systemPrompt ? systemPrompt.substring(0, 100) + '...' : 'NO_SYSTEM_PROMPT'
+      });
+
+      // Get tool definitions and implementations
+      const tools = toolDefinitions;
+      const toolsImpl = toolFunctions({ user, profile, uid, profileId });
+      
+      console.log(`[AI Service] Tools prepared:`, {
+        hasTools: !!tools,
+        toolsCount: tools?.length || 0,
+        hasToolsImpl: !!toolsImpl,
+        toolsImplKeys: toolsImpl ? Object.keys(toolsImpl) : []
+      });
+
+      // Validate tools
+      const finalTools = tools.filter(tool => {
+        const hasImplementation = toolsImpl[tool.function.name];
+        if (!hasImplementation) {
+          console.warn(`[AI Service] ⚠️ Tool ${tool.function.name} has no implementation`);
+        }
+        return hasImplementation;
+      });
+
+      console.log(`[AI Service] Final tools after validation:`, {
+        originalCount: tools?.length || 0,
+        finalCount: finalTools.length,
+        validatedTools: finalTools.map(t => t.function.name)
+      });
+
+      // Prepare messages for LLM
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...(incomingMessages || []),
+        { role: 'user', content: prompt }
+      ];
+
+      console.log(`[AI Service] Messages prepared for LLM:`, {
+        totalMessages: messages.length,
+        systemMessage: !!messages[0]?.content,
+        userMessages: messages.filter(m => m.role === 'user').length,
+        lastUserMessage: messages[messages.length - 1]?.content?.substring(0, 100) + '...'
+      });
 
       // STEP 3: Call LLM to evaluate what functions are needed
       console.log('\n🚀 [AI Service] ====== STEP 4: CALLING LLM TO EVALUATE FUNCTIONS ======');
-      console.log("[AI Service] User question:", prompt);
-      console.log("[AI Service] Screen context:", screen, dataScreen);
-      console.log("[AI Service] Messages being sent to LLM:");
-      messages.forEach((msg, index) => {
-        console.log(`  [${index}] Role: ${msg.role}`);
-        console.log(`  [${index}] Content length: ${msg.content ? msg.content.length : 0}`);
-        console.log(`  [${index}] Content preview: ${msg.content ? msg.content.substring(0, 200) + '...' : 'No content'}`);
-        if (msg.content && msg.content.length < 500) {
-          console.log(`  [${index}] Full content: ${msg.content}`);
-        }
-      });
       
-      // Log message details for debugging
-      console.log('[AI Service] Message details:', {
-        systemPromptLength: systemPrompt.length,
-        screenPromptLength: enhancedScreenPrompt.length,
-        userQuestionLength: prompt.length,
-        totalMessages: messages.length,
-        firstMessageRole: messages[0]?.role,
-        firstMessageLength: messages[0]?.content?.length,
-        secondMessageRole: messages[1]?.role,
-        secondMessageLength: messages[1]?.content?.length
-      });
-      
-      // Initialize request context with safe defaults
-      const requestContext = {
-        id: requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: new Date().toISOString(),
-        userId: uid || 'anonymous',
-        profileId: profileId || 'unknown',
-        screen: screen || 'unknown',
-        dataScreen: dataScreen || 'none',
-        messageCount: Array.isArray(incomingMessages) ? incomingMessages.length : 0,
-        toolCount: Array.isArray(finalTools) ? finalTools.length : 0,
-        promptLength: typeof prompt === 'string' ? prompt.length : 0,
-        requestType: 'ai_chat',
-        environment: process.env.NODE_ENV || 'development',
-        validationStatus: {
-          hasUid: !!uid,
-          hasProfile: !!profileId,
-          hasScreen: !!screen,
-          hasMessages: Array.isArray(incomingMessages) && incomingMessages.length > 0,
-          hasTools: Array.isArray(finalTools) && finalTools.length > 0,
-          hasPrompt: typeof prompt === 'string' && prompt.length > 0
-        }
-      };
-
-      // Log request context
-      console.log('\n📝 [AI Service] ====== REQUEST CONTEXT ======', {
-        ...requestContext,
-        stage: 'init',
-        context: {
-          hasScreen: !!screen,
-          hasDataScreen: !!dataScreen,
-          hasProfile: !!profileId,
-          hasMessages: incomingMessages.length > 0
-        }
-      });
-
-      // Call the LLM (Groq/vLLM) with all context and tool functions
       let completeResponse;
       let usedFallbackMode = false;
       
       try {
-        console.log('\n🧠 [AI Service] ====== LLM PROCESSING ======');
-        console.log('[AI Service] Calling LLM to evaluate functions needed...');
-        
+        console.log(`[AI Service] 🔄 Calling LLM with:`, {
+          model: this.GROQ_AI_MODEL,
+          hasApiKey: !!this.GROQ_API_KEY,
+          messagesCount: messages.length,
+          toolsCount: finalTools.length,
+          requestId: requestId
+        });
+
         completeResponse = await callLLM({
           apiKey: this.GROQ_API_KEY,
           model: this.GROQ_AI_MODEL,
@@ -437,114 +293,63 @@ class AIService {
           tools: finalTools, // Using validated tools
           toolFunctions: toolsImpl, // Using proper tool implementations
           uid,
-          aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
+          aiController: null, // No controller for direct streaming here
         });
-        
-        console.log('\n📥 [AI Service] ====== LLM RESPONSE RECEIVED ======', {
-          ...requestContext,
-          stage: 'response',
-          status: 'success',
-          responseLength: completeResponse?.length || 0,
-          responseType: typeof completeResponse
+
+        console.log(`[AI Service] ✅ LLM call successful:`, {
+          hasResponse: !!completeResponse,
+          responseType: typeof completeResponse,
+          hasText: !!completeResponse?.text,
+          textLength: completeResponse?.text?.length,
+          hasData: !!completeResponse?.data,
+          hasError: completeResponse?.error,
+          errorMessage: completeResponse?.errorMessage
         });
-        
-        console.log('[AI Service] LLM response:', completeResponse);
-        
+
       } catch (error) {
-        // Log error with validation status
-        console.error('\n❌ [AI Service] ====== LLM ERROR ======', {
-          ...requestContext,
-          stage: 'error',
-          error: {
-            message: error.message || 'Unknown error',
-            code: error.code || 'NO_CODE',
-            type: error.type || 'UNKNOWN',
-            stack: error.stack || new Error().stack,
-            timestamp: new Date().toISOString()
-          },
-          context: {
-            modelName: this.GROQ_AI_MODEL || 'unknown',
-            hasApiKey: !!this.GROQ_API_KEY,
-            messageCount: requestContext.messageCount,
-            toolCount: requestContext.toolCount,
-            validationStatus: requestContext.validationStatus
-          }
+        console.error(`[AI Service] ❌ LLM call failed:`, error);
+        console.error(`[AI Service] Error details:`, {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
         });
-        
-        // Check if this is a function call error and try fallback without tools
-        console.log('\n🔍 [AI Service] ====== ERROR ANALYSIS ======');
-        console.log('[AI Service] Error message:', error.message);
-        console.log('[AI Service] Error stack:', error.stack);
-        console.log('[AI Service] Full error object:', JSON.stringify(error, null, 2));
-        console.log('[AI Service] Checking for function call error...');
-        console.log('[AI Service] Contains "Failed to call a function":', error.message?.includes('Failed to call a function'));
-        console.log('[AI Service] Contains "tool_use_failed":', error.message?.includes('tool_use_failed'));
-        
-        if (error.message?.includes('Failed to call a function') || error.message?.includes('tool_use_failed')) {
-          console.log('\n🔄 [AI Service] ====== TRYING FALLBACK WITHOUT TOOLS ======');
-          console.log('[AI Service] Function call error detected, activating fallback mode');
+
+        // Fallback mode - try without tools
+        console.log(`[AI Service] 🔄 Attempting fallback mode without tools`);
+        usedFallbackMode = true;
+
+        try {
+          const fallbackMessages = [
+            { role: 'system', content: getSimplifiedSystemPrompt() },
+            { role: 'user', content: prompt }
+          ];
+
+          completeResponse = await callLLM({
+            apiKey: this.GROQ_API_KEY,
+            model: this.GROQ_AI_MODEL,
+            messages: fallbackMessages,
+            tools: [],
+            toolFunctions: {},
+            uid,
+            aiController: null,
+          });
+
+          console.log(`[AI Service] ✅ Fallback LLM call successful:`, {
+            hasResponse: !!completeResponse,
+            hasText: !!completeResponse?.text
+          });
+
+        } catch (fallbackError) {
+          console.error(`[AI Service] ❌ Fallback LLM call also failed:`, fallbackError);
           
-          try {
-            // Classify the question for intelligent fallback response
-            const questionClassification = this.classifyUserQuestion(prompt);
-            
-            // Create a simplified prompt without tools based on question type
-            const simplifiedMessages = [
-              { 
-                role: 'system', 
-                content: this.buildFallbackSystemPrompt(questionClassification)
-              },
-              { 
-                role: 'user', 
-                content: `User question: "${prompt}"
-
-Question type detected: ${questionClassification.category} (${questionClassification.subcategory})
-Confidence: ${Math.round(questionClassification.confidence * 100)}%
-
-Please provide a helpful response based on the question type. If this is a financial question that requires data, explain what information would be needed and suggest how the user might access it.` 
-              }
-            ];
-            
-            console.log('[AI Service] Fallback messages prepared:', {
-              systemPrompt: simplifiedMessages[0].content.substring(0, 200) + '...',
-              userPrompt: simplifiedMessages[1].content.substring(0, 200) + '...'
-            });
-            
-            // Call LLM without tools for fallback response
-            completeResponse = await callLLM({
-              apiKey: this.GROQ_API_KEY,
-              model: this.GROQ_AI_MODEL,
-              messages: simplifiedMessages,
-              tools: [], // No tools for fallback
-              toolFunctions: {}, // No tool functions
-              uid,
-              aiController: null, // No controller for fallback
-            });
-            
-            usedFallbackMode = true;
-            console.log('[AI Service] Fallback response received:', completeResponse);
-            
-          } catch (fallbackError) {
-            console.error('[AI Service] Fallback mode also failed:', fallbackError);
-            
-            // Return a generic helpful response
-            completeResponse = {
-              text: `I understand you're asking about "${prompt}". I'm experiencing some technical difficulties right now, but I'd be happy to help you with this question. Could you try rephrasing your question or ask me again in a moment?`,
-              data: null,
-              error: false,
-              source: 'fallback_generic'
-            };
-            
-            usedFallbackMode = true;
-          }
-        } else {
-          // Non-function call error, return helpful message
-          completeResponse = {
-            text: `I'm sorry, but I'm having trouble processing your request right now. The error was: ${error.message}. Please try again in a moment, or if the problem persists, contact support.`,
-            data: null,
+          return {
+            text: "I'm experiencing technical difficulties. Please try again in a moment.",
+            data: { error: "LLM service unavailable" },
             error: true,
-            errorMessage: error.message,
-            source: 'llm_error'
+            errorMessage: "LLM service failed",
+            source: 'llm_fallback_error',
+            requestId: requestId,
+            timestamp: new Date().toISOString()
           };
         }
       }
@@ -552,38 +357,35 @@ Please provide a helpful response based on the question type. If this is a finan
       // STEP 4: Process and format the response
       console.log('\n📝 [AI Service] ====== STEP 5: PROCESSING RESPONSE ======');
       
-      // Validate the response structure
-      if (!completeResponse) {
-        console.error('[AI Service] No response received from LLM');
-        completeResponse = {
-          text: "I'm sorry, but I didn't receive a response from the AI system. Please try again.",
-          data: null,
+      if (!completeResponse || !completeResponse.text) {
+        console.error(`[AI Service] ❌ Invalid LLM response:`, completeResponse);
+        return {
+          text: "I received an invalid response. Please try again.",
+          data: { error: "Invalid LLM response" },
           error: true,
-          errorMessage: "No response received",
-          source: 'no_response'
+          errorMessage: "Invalid LLM response",
+          source: 'invalid_llm_response',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
         };
       }
 
-      // Ensure we have a text field
-      if (!completeResponse.text && completeResponse.response) {
-        completeResponse.text = completeResponse.response;
-      }
+      console.log(`[AI Service] ✅ LLM response validated:`, {
+        textLength: completeResponse.text.length,
+        textPreview: completeResponse.text.substring(0, 100) + '...',
+        hasData: !!completeResponse.data,
+        dataKeys: completeResponse.data ? Object.keys(completeResponse.data) : []
+      });
 
-      if (!completeResponse.text) {
-        console.error('[AI Service] No text in response:', completeResponse);
-        completeResponse.text = "I received a response but it doesn't contain the expected text. Please try again.";
-      }
-
-      // Format financial response if data is present
-      if (completeResponse.data && Object.keys(completeResponse.data).length > 0) {
-        console.log('[AI Service] Formatting financial response with data');
+      // Format financial data if present
+      let formattedData = completeResponse.data;
+      if (completeResponse.data && typeof completeResponse.data === 'object') {
         try {
-          const formattedResponse = formatFinancialResponse(completeResponse.text, completeResponse.data, currentScreen);
-          completeResponse.text = formattedResponse.text;
-          completeResponse.data = formattedResponse.data;
+          formattedData = formatFinancialResponse(completeResponse.data);
+          console.log(`[AI Service] ✅ Financial data formatted successfully`);
         } catch (formatError) {
-          console.warn('[AI Service] Financial response formatting failed:', formatError);
-          // Keep original response if formatting fails
+          console.warn(`[AI Service] ⚠️ Financial data formatting failed:`, formatError);
+          // Continue with unformatted data
         }
       }
 
@@ -592,7 +394,7 @@ Please provide a helpful response based on the question type. If this is a finan
       
       const finalResponse = {
         text: completeResponse.text || "I'm sorry, but I couldn't generate a proper response. Please try again.",
-        data: completeResponse.data || null,
+        data: formattedData || null,
         error: completeResponse.error || false,
         errorMessage: completeResponse.errorMessage || undefined,
         source: completeResponse.source || 'ai_response',
@@ -601,40 +403,28 @@ Please provide a helpful response based on the question type. If this is a finan
         timestamp: new Date().toISOString()
       };
 
-      console.log('\n✅ [AI Service] ====== RESPONSE READY ======');
-      console.log('[AI Service] Final response prepared:', {
+      const duration = Date.now() - startTime;
+      console.log(`[AI Service] 🏁 Final response prepared in ${duration}ms:`, {
         hasText: !!finalResponse.text,
-        textLength: finalResponse.text ? finalResponse.text.length : 0,
+        textLength: finalResponse.text?.length,
         hasData: !!finalResponse.data,
-        dataKeys: finalResponse.data ? Object.keys(finalResponse.data) : [],
-        error: finalResponse.error,
+        hasError: finalResponse.error,
         usedFallback: finalResponse.usedFallback,
-        source: finalResponse.source
+        requestId: finalResponse.requestId
       });
-
-      if (finalResponse.text && finalResponse.text.length > 200) {
-        console.log('[AI Service] Full response text:', finalResponse.text);
-      }
 
       return finalResponse;
-      
-    } catch (error) {
-      console.error('\n💥 [AI Service] ====== CRITICAL ERROR ======');
-      console.error('[AI Service] Critical error in makeRequest:', error);
-      console.error('[AI Service] Error details:', {
-        message: error.message,
-        stack: error.stack,
-        code: error.code,
-        timestamp: new Date().toISOString(),
-        requestId: requestId
-      });
 
-      // Return a user-friendly error response
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`[AI Service] ❌ Critical error after ${duration}ms:`, error);
+      console.error(`[AI Service] Error stack:`, error.stack);
+      
       return {
-        text: "I'm experiencing technical difficulties right now. Please try again in a moment, or contact support if the problem persists.",
-        data: null,
+        text: "An unexpected error occurred. Please try again or contact support.",
+        data: { error: error.message },
         error: true,
-        errorMessage: error.message || "Unknown error occurred",
+        errorMessage: error.message,
         source: 'critical_error',
         requestId: requestId,
         timestamp: new Date().toISOString()

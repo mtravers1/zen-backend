@@ -1,275 +1,173 @@
 import { LimitedMap } from "../lib/limitedMap.js";
 import aiService from "../services/ai/service.js";
 
-// Cache to control active requests and prevent duplicates
-const activeRequests = new LimitedMap(1000); // Limit of 1000 simultaneous requests
-const requestTimeouts = new LimitedMap(1000); // Timeouts for each request
-
 const makeRequest = async (req, res) => {
-  console.log('\n🎯 [AI Controller] ====== REQUEST RECEIVED ======');
-  console.log("[AI Controller] 🚀 ENDPOINT HIT - makeRequest called");
-  console.log("[AI Controller] Request method:", req.method);
-  console.log("[AI Controller] Request URL:", req.url);
-  console.log("[AI Controller] Request path:", req.path);
-  console.log("[AI Controller] Headers:", Object.keys(req.headers));
-  console.log("[AI Controller] Timestamp:", new Date().toISOString());
+  const startTime = Date.now();
+  const requestId = req.body.requestId;
   
   try {
-    const { uid } = req.user || {};
-    const { prompt, profileId, messages, screen, dataScreen, context, requestId } = req.body || {};
+    console.log('\n🚀 [AI Controller] ====== STARTING AI REQUEST ======');
+    console.log(`[AI Controller] Request ID: ${requestId || 'not_provided'}`);
+    console.log(`[AI Controller] Timestamp: ${new Date().toISOString()}`);
+    console.log(`[AI Controller] Request body:`, JSON.stringify(req.body, null, 2));
     
-    console.log('\n🔍 [AI Controller] ====== DETAILED INPUT ANALYSIS ======');
-    console.log("[AI Controller] RAW REQUEST BODY:", JSON.stringify(req.body, null, 2));
-    console.log("[AI Controller] RAW USER OBJECT:", JSON.stringify(req.user, null, 2));
-    console.log("[AI Controller] EXTRACTED VALUES:");
-    console.log("  - prompt:", `"${prompt}"`);
-    console.log("  - prompt type:", typeof prompt);
-    console.log("  - prompt length:", prompt ? prompt.length : 0);
-    console.log("  - uid:", `"${uid}"`);
-    console.log("  - profileId:", `"${profileId}"`);
-    console.log("  - requestId:", requestId || 'NOT_PROVIDED');
-    console.log("  - messages:", messages);
-    console.log("  - screen:", `"${screen}"`);
-    console.log("  - dataScreen:", `"${dataScreen}"`);
-    console.log("  - context:", JSON.stringify(context, null, 2));
+    // Extract parameters from request body
+    const { prompt, profileId, messages, screen, dataScreen, context } = req.body;
     
-    // Generate unique request ID if not provided
-    const uniqueRequestId = requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Get UID from authenticated user
+    const uid = req.user?.uid;
     
-    console.log('\n🆔 [AI Controller] ====== REQUEST ID VALIDATION ======');
-    console.log("[AI Controller] Request ID:", uniqueRequestId);
-    
-    // Check if there's already an active request for this user
-    const userRequestKey = `${uid}_${uniqueRequestId}`;
-    const existingRequest = activeRequests.get(userRequestKey);
-    
-    if (existingRequest) {
-      console.log("[AI Controller] ⚠️ Duplicate request detected:", {
-        requestId: uniqueRequestId,
-        uid,
-        existingRequestStatus: existingRequest.status,
-        existingRequestTimestamp: existingRequest.timestamp
-      });
-      
-      // If request is still processing, return status
-      if (existingRequest.status === 'processing') {
-        return res.status(200).json({
-          text: "Your request is already being processed. Please wait for the response.",
-          data: {
-            status: 'processing',
-            requestId: uniqueRequestId,
-            message: 'Request in progress'
-          },
-          error: false,
-          errorMessage: undefined,
-          isDuplicate: true
-        });
-      }
-      
-      // If request was completed, return the result
-      if (existingRequest.status === 'completed') {
-        console.log("[AI Controller] ✅ Returning cached result for duplicate request");
-        return res.status(200).json(existingRequest.result);
-      }
-    }
-    
-    console.log('\n📋 [AI Controller] ====== REQUEST VALIDATION ======');
-    console.log("[AI Controller] Received request:", { 
-      uid, 
-      profileId, 
-      hasPrompt: !!prompt, 
-      hasMessages: !!messages, 
-      promptPreview: prompt ? prompt.substring(0, 100) + '...' : 'NO_PROMPT',
-      messagesCount: messages ? messages.length : 0,
+    console.log(`[AI Controller] Extracted parameters:`, {
+      hasPrompt: !!prompt,
+      promptLength: prompt?.length,
+      hasProfileId: !!profileId,
+      profileId,
+      hasUid: !!uid,
+      uid,
+      hasMessages: !!messages,
+      messagesCount: messages?.length || 0,
+      hasScreen: !!screen,
       screen,
+      hasDataScreen: !!dataScreen,
       dataScreen,
       hasContext: !!context,
-      contextKeys: context ? Object.keys(context) : [],
-      contextDetails: context ? {
-        screen: context.screen,
-        device: context.device,
-        time: context.time,
-        user: context.user,
-        chat: context.chat
-      } : 'NO_CONTEXT',
-      bodyKeys: req.body ? Object.keys(req.body) : [],
-      bodySize: req.body ? JSON.stringify(req.body).length : 0,
-      userKeys: req.user ? Object.keys(req.user) : [],
-      hasUser: !!req.user,
-      requestId: uniqueRequestId
+      contextKeys: context ? Object.keys(context) : []
     });
-    
-    if (!uid) {
-      console.error("[AI Controller] No UID found in req.user. User keys:", req.user ? Object.keys(req.user) : 'no user object');
-      return res.status(401).json({ 
-        text: "Authentication error. Please sign in again.",
-        data: null,
-        error: true,
-        errorMessage: "User ID not found in token"
-      });
-    }
-    
-    if (!profileId) {
-      console.error("[AI Controller] No profileId in request body. Body keys:", req.body ? Object.keys(req.body) : 'no body');
-      return res.status(400).json({ 
-        text: "Profile ID is required to process your request.",
-        data: null,
-        error: true,
-        errorMessage: "Profile ID is required"
-      });
-    }
-    
+
+    // Validate required parameters
     if (!prompt) {
-      console.error("[AI Controller] No prompt in request body");
-      return res.status(400).json({ 
-        text: "Please provide a question or request for the AI to process.",
-        data: null,
+      console.error(`[AI Controller] ❌ Missing prompt`);
+      return res.status(400).json({
+        text: "Prompt is required",
+        data: { error: "Missing prompt" },
         error: true,
         errorMessage: "Prompt is required"
       });
     }
-    
+
+    if (!uid) {
+      console.error(`[AI Controller] ❌ Missing UID from req.user`);
+      console.log(`[AI Controller] req.user object:`, req.user);
+      return res.status(401).json({
+        text: "Authentication required",
+        data: { error: "Missing UID" },
+        error: true,
+        errorMessage: "Authentication required"
+      });
+    }
+
+    if (!profileId) {
+      console.error(`[AI Controller] ❌ Missing profileId`);
+      return res.status(400).json({
+        text: "Profile ID is required",
+        data: { error: "Missing profileId" },
+        error: true,
+        errorMessage: "Profile ID is required"
+      });
+    }
+
+    console.log(`[AI Controller] ✅ All required parameters validated successfully`);
+
+    // Cache to control active requests and prevent duplicates
+    const activeRequests = new LimitedMap(1000); // Limit of 1000 simultaneous requests
+    const requestTimeouts = new LimitedMap(1000); // Timeouts for each request
+
+    const uniqueRequestId = requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const userRequestKey = `${uid}_${uniqueRequestId}`;
+    const existingRequest = activeRequests.get(userRequestKey);
+
+    console.log(`[AI Controller] Request control:`, {
+      uniqueRequestId,
+      userRequestKey,
+      hasExistingRequest: !!existingRequest,
+      existingRequestStatus: existingRequest?.status
+    });
+
+    if (existingRequest) {
+      if (existingRequest.status === 'processing') {
+        console.log(`[AI Controller] ⚠️ Duplicate request detected - already processing`);
+        return res.status(200).json({
+          text: "Your request is already being processed. Please wait for the response.",
+          data: { status: 'processing', requestId: uniqueRequestId, message: 'Request in progress' },
+          error: false, errorMessage: undefined, isDuplicate: true
+        });
+      }
+      if (existingRequest.status === 'completed') {
+        console.log(`[AI Controller] ✅ Returning cached result for duplicate request`);
+        return res.status(200).json(existingRequest.result);
+      }
+    }
+
     // Register request as processing
-    const requestInfo = {
-      status: 'processing',
-      timestamp: new Date().toISOString(),
-      prompt,
-      uid,
-      profileId,
-      screen,
-      dataScreen
-    };
-    
+    const requestInfo = { status: 'processing', timestamp: new Date().toISOString(), prompt, uid, profileId, screen, dataScreen };
     activeRequests.set(userRequestKey, requestInfo);
-    
+
+    console.log(`[AI Controller] 📝 Registered request as processing:`, requestInfo);
+
     // Set timeout for request (5 minutes)
     const requestTimeout = setTimeout(() => {
-      console.log("[AI Controller] ⏰ Request timeout reached:", userRequestKey);
+      console.log(`[AI Controller] ⏰ Request timeout reached for: ${userRequestKey}`);
       activeRequests.delete(userRequestKey);
       requestTimeouts.delete(userRequestKey);
     }, 5 * 60 * 1000);
-    
     requestTimeouts.set(userRequestKey, requestTimeout);
-    
-    console.log('\n🚀 [AI Controller] ====== CALLING AI SERVICE ======');
-    console.log("[AI Controller] Calling AI service with params:", {
+
+    console.log(`[AI Controller] 🚀 Calling AI Service with parameters:`, {
       prompt,
       uid,
       profileId,
-      messages: messages || [],
+      messagesCount: messages?.length || 0,
       screen,
       dataScreen,
+      contextKeys: context ? Object.keys(context) : [],
       requestId: uniqueRequestId
     });
-    console.log("[AI Controller] AI Service call timestamp:", new Date().toISOString());
-    
-    // Call AI service
+
     const result = await aiService.makeRequest(
-      prompt,
-      uid,
-      profileId,
-      messages || [],
-      screen,
-      null, // Don't pass res object to avoid circular references
-      dataScreen,
-      context || {}, // Pass context to AI service
-      uniqueRequestId // Pass request ID for tracking
+      prompt, uid, profileId, messages || [], screen, null, dataScreen, context || {}, uniqueRequestId
     );
-    
-    // Clear timeout
+
+    console.log(`[AI Controller] ✅ AI Service returned result:`, {
+      hasResult: !!result,
+      resultType: typeof result,
+      hasText: !!result?.text,
+      textLength: result?.text?.length,
+      hasData: !!result?.data,
+      hasError: result?.error,
+      errorMessage: result?.errorMessage,
+      requestId: uniqueRequestId
+    });
+
+    // Clear timeout and update status
     if (requestTimeouts.has(userRequestKey)) {
       clearTimeout(requestTimeouts.get(userRequestKey));
       requestTimeouts.delete(userRequestKey);
     }
-    
-    // Update request status to completed
-    const completedRequestInfo = {
-      ...requestInfo,
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-      result: result
-    };
-    
-    activeRequests.set(userRequestKey, completedRequestInfo);
-    
-    console.log('\n📥 [AI Controller] ====== AI SERVICE RESPONSE ======');
-    console.log("[AI Controller] AI service returned:", {
-      resultType: typeof result,
-      resultKeys: result ? Object.keys(result) : [],
-      hasText: result ? !!result.text : false,
-      textValue: result ? result.text || 'NO_TEXT' : 'NO_RESULT',
-      hasResponse: result ? !!result.response : false,
-      responseValue: result ? result.response || 'NO_RESPONSE' : 'NO_RESULT',
-      hasData: result ? !!result.data : false,
-      dataKeys: result && result.data ? Object.keys(result.data) : [],
-      hasError: result ? !!result.error : false,
-      errorMessage: result ? result.errorMessage || 'NO_ERROR' : 'NO_RESULT',
-      requestId: uniqueRequestId
-    });
-    
-    if (result && result.text) {
-      console.log("[AI Controller] Response text length:", result.text.length);
-      console.log("[AI Controller] Response text preview:", result.text.substring(0, 200) + '...');
-    }
-    
-    // Ensure we return a proper response structure
-    const response = {
-      text: result.text || result.response || "No response received",
-      data: result.data || null,
-      error: result.error || false,
-      errorMessage: result.errorMessage || undefined,
+    activeRequests.set(userRequestKey, { ...requestInfo, status: 'completed', completedAt: new Date().toISOString(), result: result });
+
+    const duration = Date.now() - startTime;
+    console.log(`[AI Controller] 🏁 Request completed in ${duration}ms`);
+
+    // Send response
+    return res.status(200).json({
+      ...result,
       requestId: uniqueRequestId,
-      status: 'completed'
-    };
-    
-    console.log('\n🎉 [AI Controller] ====== FINAL RESPONSE ======');
-    console.log("[AI Controller] Final response being sent to client:", {
-      text: response.text,
-      textLength: response.text ? response.text.length : 0,
-      hasData: !!response.data,
-      dataKeys: response.data ? Object.keys(response.data) : [],
-      error: response.error,
-      errorMessage: response.errorMessage,
-      requestId: uniqueRequestId
+      processingTime: duration
     });
-    
-    if (response.text && response.text.length > 200) {
-      console.log("[AI Controller] Full response text:", response.text);
-    }
-    
-    return res.status(200).json(response);
-    
+
   } catch (error) {
-    console.error("[AI Controller] Error:", error);
+    const duration = Date.now() - startTime;
+    console.error(`[AI Controller] ❌ Error in makeRequest after ${duration}ms:`, error);
+    console.error(`[AI Controller] Error stack:`, error.stack);
     
-    // If there's an error, clean up active request
-    if (req.user && req.body) {
-      const { uid } = req.user;
-      const { requestId } = req.body;
-      const userRequestKey = `${uid}_${requestId || 'unknown'}`;
-      
-      if (activeRequests.has(userRequestKey)) {
-        console.log("[AI Controller] 🧹 Cleaning up failed request:", userRequestKey);
-        activeRequests.delete(userRequestKey);
-        
-        if (requestTimeouts.has(userRequestKey)) {
-          clearTimeout(requestTimeouts.get(userRequestKey));
-          requestTimeouts.delete(userRequestKey);
-        }
-      }
-    }
-    
-    // Return a proper error response with clear message
-    const errorResponse = {
-      text: "Sorry, there was an error processing your request. Please try again or contact support if the problem persists.",
-      data: null,
+    return res.status(500).json({
+      text: "An error occurred while processing your request",
+      data: { error: error.message },
       error: true,
-      errorMessage: error.message || "Unknown error occurred",
-      status: 'error'
-    };
-    
-    console.log("[AI Controller] Sending error response to client:", errorResponse);
-    return res.status(500).json(errorResponse);
+      errorMessage: error.message,
+      requestId: requestId || 'unknown',
+      processingTime: duration
+    });
   }
 };
 
