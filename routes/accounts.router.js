@@ -3,6 +3,7 @@ import accountsController from "../controllers/accounts.controller.js";
 
 const router = Router();
 
+router.get("/debug/:profileId", accountsController.debugProfile);
 router.post("/add-account", accountsController.addAccount);
 router.post("/", accountsController.getAccounts);
 router.post("/cash-flows", accountsController.getCashFlows);

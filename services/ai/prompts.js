@@ -63,14 +63,6 @@ export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zent
 - Asset information → MUST call getAssets()
 - Business metrics → MUST call getBusinessMetrics()
 
-**NEVER use tools for:**
-- General advice ("How to save money?")
-- App navigation ("How do I...?")
-- Form instructions ("How to add account?")
-- Investment education ("What are safe investments?")
-- Business strategy advice ("How to grow my business?")
-- Casual conversation
-
 **DETECTION RULE:**
 If user asks "What's my [specific financial data]?" → USE TOOLS
 If user asks "How to [do something]?" → NO TOOLS, provide guidance

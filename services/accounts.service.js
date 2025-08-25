@@ -1519,6 +1519,8 @@ const getCashFlows = async (profile, uid) => {
     advice,
     averageDailyNet,
     weeklyCashFlow,
+    totalAssets: balanceDebit + allInvestmentsCurrentBalance + totalAssets,
+    totalLiabilities: balanceCredit + balanceLoan,
   };
 };
 
@@ -1527,14 +1529,32 @@ const getTransactions = async (
   uid,
   pagination = { paginate: false }
 ) => {
+  console.log('\n🔍 [getTransactions] ====== DEBUG ======');
+  console.log("[getTransactions] Parameters:", {
+    accountsCount: accounts?.length || 0,
+    uid: uid,
+    pagination: pagination
+  });
+  
   const allTransactions = [];
 
   for (const plaidAccount of accounts) {
+    console.log("[getTransactions] Processing account:", {
+      accountId: plaidAccount._id,
+      plaidAccountId: plaidAccount.plaid_account_id,
+      accountType: plaidAccount.account_type
+    });
+    
     const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
     })
       .sort({ transactionDate: -1 })
       .lean();
+
+    console.log("[getTransactions] Transactions found for account:", {
+      accountId: plaidAccount._id,
+      count: transactionsResponse.length
+    });
 
     const dek = await getUserDek(uid);
 
@@ -1606,6 +1626,8 @@ const getTransactions = async (
     allTransactions.push(...transactions);
   }
 
+  console.log("[getTransactions] Total transactions collected:", allTransactions.length);
+
   const sortedTransactions = allTransactions.sort(
     (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
   );
@@ -1626,9 +1648,16 @@ const getTransactions = async (
       },
     };
 
+    console.log("[getTransactions] Returning paginated results:", {
+      total: paginatedResults.pagination.total,
+      page: paginatedResults.pagination.page,
+      returned: paginatedResults.data.length
+    });
+
     return paginatedResults;
   }
 
+  console.log("[getTransactions] Returning all transactions:", sortedTransactions.length);
   return sortedTransactions;
 };
 
@@ -1690,60 +1719,94 @@ const getProfileTransactions = async (
     profileIdString: String(profileId)
   });
   
-  const profiles = await businessService.getUserProfiles(email, uid);
-  console.log("[getProfileTransactions] Profiles found:", {
-    count: profiles.length,
-    profileIds: profiles.map(p => ({ id: p.id, idType: typeof p.id, idString: String(p.id), name: p.name }))
-  });
-  
-  const profile = profiles.find((p) => String(p.id) === profileId);
-  console.log("[getProfileTransactions] Profile lookup result:", {
-    found: !!profile,
-    profileId: profile?.id,
-    profileName: profile?.name,
-    comparison: `String(${profile?.id}) === ${profileId} = ${String(profile?.id) === profileId}`
-  });
-  
-  if (!profile) {
-    console.warn("[getProfileTransactions] Profile not found - returning empty result instead of error");
-    return [];
-  }
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccountsResponse = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  }).lean();
-
-  let plaidAccounts = [];
-  const dek = await getUserDek(uid);
-
-  for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await safeDecryptValue(
-      plaidAccount.currentBalance,
-      dek
-    );
-    const decryptedAvailableBalance = await safeDecryptValue(
-      plaidAccount.availableBalance,
-      dek
-    );
-    const decryptedAccountType = await safeDecryptValue(
-      plaidAccount.account_type,
-      dek
-    );
-    const decryptedAccountSubtype = await safeDecryptValue(
-      plaidAccount.account_subtype,
-      dek
-    );
-
-    plaidAccounts.push({
-      ...plaidAccount,
-      currentBalance: decryptedCurrentBalance,
-      availableBalance: decryptedAvailableBalance,
-      account_type: decryptedAccountType,
-      account_subtype: decryptedAccountSubtype,
+  try {
+    const profiles = await businessService.getUserProfiles(email, uid);
+    console.log("[getProfileTransactions] Profiles found:", {
+      count: profiles.length,
+      profileIds: profiles.map(p => ({ id: p.id, idType: typeof p.id, idString: String(p.id), name: p.name }))
     });
-  }
+    
+    const profile = profiles.find((p) => String(p.id) === profileId);
+    console.log("[getProfileTransactions] Profile lookup result:", {
+      found: !!profile,
+      profileId: profile?.id,
+      profileName: profile?.name,
+      comparison: `String(${profile?.id}) === ${profileId} = ${String(profile?.id) === profileId}`
+    });
+    
+    if (!profile) {
+      console.warn("[getProfileTransactions] Profile not found - returning empty result instead of error");
+      return [];
+    }
+    
+    const plaidIds = profile.plaidAccounts;
+    console.log("[getProfileTransactions] Plaid account IDs:", {
+      count: plaidIds?.length || 0,
+      plaidIds: plaidIds
+    });
+    
+    if (!plaidIds || plaidIds.length === 0) {
+      console.warn("[getProfileTransactions] No plaid accounts found for profile");
+      return [];
+    }
+    
+    const plaidAccountsResponse = await PlaidAccount.find({
+      _id: { $in: plaidIds },
+    }).lean();
 
-  return await getTransactions(plaidAccounts, uid, pagination);
+    console.log("[getProfileTransactions] Plaid accounts found:", {
+      count: plaidAccountsResponse.length,
+      accountIds: plaidAccountsResponse.map(acc => acc._id)
+    });
+
+    let plaidAccounts = [];
+    const dek = await getUserDek(uid);
+
+    for (const plaidAccount of plaidAccountsResponse) {
+      const decryptedCurrentBalance = await safeDecryptValue(
+        plaidAccount.currentBalance,
+        dek
+      );
+      const decryptedAvailableBalance = await safeDecryptValue(
+        plaidAccount.availableBalance,
+        dek
+      );
+      const decryptedAccountType = await safeDecryptValue(
+        plaidAccount.account_type,
+        dek
+      );
+      const decryptedAccountSubtype = await safeDecryptValue(
+        plaidAccount.account_subtype,
+        dek
+      );
+
+      plaidAccounts.push({
+        ...plaidAccount,
+        currentBalance: decryptedCurrentBalance,
+        availableBalance: decryptedAvailableBalance,
+        account_type: decryptedAccountType,
+        account_subtype: decryptedAccountSubtype,
+      });
+    }
+
+    console.log("[getProfileTransactions] Calling getTransactions with:", {
+      plaidAccountsCount: plaidAccounts.length,
+      pagination
+    });
+
+    const result = await getTransactions(plaidAccounts, uid, pagination);
+    console.log("[getProfileTransactions] Final result:", {
+      resultType: typeof result,
+      isArray: Array.isArray(result),
+      count: Array.isArray(result) ? result.length : 'not array',
+      hasData: result && result.data ? result.data.length : 'no data property'
+    });
+    
+    return result;
+  } catch (error) {
+    console.error("[getProfileTransactions] Error occurred:", error);
+    throw error;
+  }
 };
 
 const getTransactionsByAccount = async (

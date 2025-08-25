@@ -1,5 +1,99 @@
 import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
+import businessService from "../services/business.service.js";
+
+const debugProfile = async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    const uid = req.user.uid;
+    
+    console.log('\n🔍 [DEBUG] Profile Debug Request:', {
+      profileId,
+      uid,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Get profile details
+    const profiles = await businessService.getUserProfiles(req.user.email, uid);
+    const profile = profiles.find((p) => String(p.id) === profileId);
+    
+    if (!profile) {
+      return res.status(404).send({ 
+        error: 'Profile not found',
+        profileId,
+        availableProfiles: profiles.map(p => ({ id: p.id, name: p.name }))
+      });
+    }
+    
+    console.log('[DEBUG] Profile found:', {
+      profileId: profile.id,
+      profileName: profile.name,
+      plaidAccountsCount: profile.plaidAccounts?.length || 0,
+      plaidAccounts: profile.plaidAccounts
+    });
+    
+    // Check if plaid accounts exist
+    const PlaidAccount = (await import('../database/models/PlaidAccount.js')).default;
+    const plaidAccounts = await PlaidAccount.find({
+      _id: { $in: profile.plaidAccounts }
+    }).lean();
+    
+    console.log('[DEBUG] Plaid accounts found:', {
+      count: plaidAccounts.length,
+      accounts: plaidAccounts.map(acc => ({
+        _id: acc._id,
+        plaid_account_id: acc.plaid_account_id,
+        account_type: acc.account_type,
+        hasBalance: !!acc.currentBalance
+      }))
+    });
+    
+    // Check if transactions exist
+    const Transaction = (await import('../database/models/Transaction.js')).default;
+    const transactions = await Transaction.find({
+      plaidAccountId: { $in: plaidAccounts.map(acc => acc.plaid_account_id) }
+    }).lean();
+    
+    console.log('[DEBUG] Transactions found:', {
+      count: transactions.length,
+      accountIds: [...new Set(transactions.map(t => t.plaidAccountId))]
+    });
+    
+    // Return debug info
+    res.status(200).send({
+      profile: {
+        id: profile.id,
+        name: profile.name,
+        plaidAccountsCount: profile.plaidAccounts?.length || 0
+      },
+      plaidAccounts: {
+        count: plaidAccounts.length,
+        accounts: plaidAccounts.map(acc => ({
+          _id: acc._id,
+          plaid_account_id: acc.plaid_account_id,
+          account_type: acc.account_type,
+          hasBalance: !!acc.currentBalance
+        }))
+      },
+      transactions: {
+        count: transactions.length,
+        accountIds: [...new Set(transactions.map(t => t.plaidAccountId))]
+      },
+      debug: {
+        timestamp: new Date().toISOString(),
+        uid,
+        profileId
+      }
+    });
+    
+  } catch (error) {
+    console.error('[DEBUG] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+};
 
 const addAccount = async (req, res) => {
   let email, uid, token;
@@ -253,6 +347,7 @@ const accountsController = {
   deleteAccount,
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
+  debugProfile,
 };
 
 export default accountsController;
