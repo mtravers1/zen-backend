@@ -781,8 +781,19 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     uid, 
     error: 'All decryption attempts failed',
     inputLength: cipherTextBase64.length,
-    failedAttempts: Array.from(attempt.failures)
+    failedAttempts: Array.from(attempt.failures),
+    recommendations: [
+      'Check if user keys are corrupted',
+      'Verify key rotation history',
+      'Consider regenerating user keys',
+      'Check if data was encrypted with different keys'
+    ]
   });
+  
+  // If this is a user with persistent decryption failures, suggest key regeneration
+  if (uid && attempt.count >= MAX_ATTEMPTS) {
+    console.error(`[ENCRYPTION] ⚠️ User ${uid} has persistent decryption failures. Consider running checkEncryptionKeyHealth(${uid})`);
+  }
   
   return null;
 }
@@ -924,6 +935,11 @@ async function getPreviousDek(uid) {
       .file(`keys/${environment}/${uid}.key.previous`);
     
     if (!(await file.exists())[0]) {
+      logEncryptionOperation('getPreviousDek', false, { 
+        uid, 
+        error: 'Previous key file not found',
+        details: { filePath: `keys/${environment}/${uid}.key.previous` }
+      });
       return null;
     }
     
@@ -937,9 +953,23 @@ async function getPreviousDek(uid) {
       ciphertext: encryptedDEK,
     });
 
+    logEncryptionOperation('getPreviousDek', true, { 
+      uid, 
+      keyVersion: keyData.version,
+      rotatedAt: keyData.rotatedAt
+    });
+
     return decryptResponse.plaintext;
   } catch (error) {
-    logEncryptionOperation('getPreviousDek', false, { uid, error: error.message });
+    logEncryptionOperation('getPreviousDek', false, { 
+      uid, 
+      error: error.message,
+      details: { 
+        errorType: error.constructor.name,
+        errorCode: error.code,
+        stack: error.stack
+      }
+    });
     return null;
   }
 }
@@ -1003,6 +1033,229 @@ function hashValue(value) {
     .digest("hex");
 }
 
+// Check encryption key health for a user
+async function checkEncryptionKeyHealth(uid) {
+  try {
+    logEncryptionOperation('checkEncryptionKeyHealth', true, { uid, operation: 'start' });
+    
+    // Get current key
+    const currentDek = await getUserDek(uid);
+    if (!currentDek) {
+      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
+        uid, 
+        error: 'No current key found',
+        recommendation: 'Generate new key'
+      });
+      return { healthy: false, issue: 'no_current_key', recommendation: 'generate_new_key' };
+    }
+    
+    // Get previous key
+    const previousDek = await getPreviousDek(uid);
+    if (!previousDek) {
+      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
+        uid, 
+        error: 'No previous key found',
+        recommendation: 'Backup current key before rotation'
+      });
+      return { healthy: false, issue: 'no_previous_key', recommendation: 'backup_and_rotate' };
+    }
+    
+    // Test current key with a simple encryption/decryption
+    try {
+      const testValue = { test: 'encryption_health_check', timestamp: Date.now() };
+      const encrypted = await encryptValue(testValue, currentDek, uid);
+      const decrypted = await decryptValue(encrypted, currentDek, uid);
+      
+      if (JSON.stringify(decrypted) === JSON.stringify(testValue)) {
+        logEncryptionOperation('checkEncryptionKeyHealth', true, { 
+          uid, 
+          result: 'Current key working correctly'
+        });
+        return { healthy: true, currentKeyWorking: true };
+      } else {
+        logEncryptionOperation('checkEncryptionKeyHealth', false, { 
+          uid, 
+          error: 'Current key decryption mismatch',
+          recommendation: 'Regenerate key'
+        });
+        return { healthy: false, issue: 'decryption_mismatch', recommendation: 'regenerate_key' };
+      }
+    } catch (error) {
+      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
+        uid, 
+        error: 'Key test failed',
+        details: { errorMessage: error.message, errorCode: error.code },
+        recommendation: 'Regenerate key'
+      });
+      return { healthy: false, issue: 'key_test_failed', recommendation: 'regenerate_key' };
+    }
+    
+  } catch (error) {
+    logEncryptionOperation('checkEncryptionKeyHealth', false, { 
+      uid, 
+      error: 'Health check failed',
+      details: { errorMessage: error.message, errorCode: error.code }
+    });
+    return { healthy: false, issue: 'health_check_failed', error: error.message };
+  }
+}
+
+// Regenerate encryption keys for a user (use with caution)
+async function regenerateUserKeys(uid, force = false) {
+  try {
+    logEncryptionOperation('regenerateUserKeys', true, { uid, force, operation: 'start' });
+    
+    // Check if regeneration is needed
+    if (!force) {
+      const health = await checkEncryptionKeyHealth(uid);
+      if (health.healthy) {
+        logEncryptionOperation('regenerateUserKeys', false, { 
+          uid, 
+          error: 'Keys are healthy, regeneration not needed',
+          recommendation: 'Use force=true to override'
+        });
+        return { success: false, reason: 'keys_healthy' };
+      }
+    }
+    
+    // Backup current key before regeneration
+    const currentDek = await getUserDek(uid);
+    if (currentDek) {
+      try {
+        const file = storage
+          .bucket(BUCKET_NAME)
+          .file(`keys/${environment}/${uid}.key.backup.${Date.now()}`);
+        
+        const [encryptResponse] = await kmsClient.encrypt({
+          name: KEY_PATH,
+          plaintext: currentDek,
+        });
+        
+        const backupData = {
+          encryptedDEK: encryptResponse.ciphertext.toString('base64'),
+          version: await getUserDekVersion(uid),
+          backedUpAt: new Date().toISOString(),
+          reason: 'regeneration'
+        };
+        
+        await file.save(JSON.stringify(backupData));
+        logEncryptionOperation('regenerateUserKeys', true, { 
+          uid, 
+          note: 'Current key backed up before regeneration'
+        });
+      } catch (backupError) {
+        logEncryptionOperation('regenerateUserKeys', false, { 
+          uid, 
+          error: 'Failed to backup current key',
+          details: { backupError: backupError.message }
+        });
+        // Continue with regeneration even if backup fails
+      }
+    }
+    
+    // Generate new keys
+    const newKeyData = await generateAndStoreEncryptedDEK(uid);
+    
+    logEncryptionOperation('regenerateUserKeys', true, { 
+      uid, 
+      result: 'Keys regenerated successfully',
+      newVersion: newKeyData.version
+    });
+    
+    return { success: true, newVersion: newKeyData.version };
+    
+  } catch (error) {
+    logEncryptionOperation('regenerateUserKeys', false, { 
+      uid, 
+      error: 'Key regeneration failed',
+      details: { errorMessage: error.message, errorCode: error.code }
+    });
+    throw error;
+  }
+}
+
+// Analyze decryption failures and provide recovery recommendations
+async function analyzeDecryptionFailures(uid, limit = 100) {
+  try {
+    logEncryptionOperation('analyzeDecryptionFailures', true, { uid, operation: 'start' });
+    
+    // Get user's current key status
+    const currentDek = await getUserDek(uid);
+    const previousDek = await getPreviousDek(uid);
+    const keyVersion = currentDek ? await getUserDekVersion(uid) : null;
+    
+    // Check key health
+    const health = await checkEncryptionKeyHealth(uid);
+    
+    // Analyze recent decryption attempts for this user
+    const userAttempts = [];
+    for (const [key, attempt] of decryptionAttempts.entries()) {
+      if (key.includes(uid) && (Date.now() - attempt.timestamp) < 300000) { // Last 5 minutes
+        userAttempts.push({
+          timestamp: attempt.timestamp,
+          count: attempt.count,
+          failures: Array.from(attempt.failures),
+          timeSinceFirst: Date.now() - attempt.timestamp
+        });
+      }
+    }
+    
+    const analysis = {
+      uid,
+      timestamp: new Date().toISOString(),
+      keyStatus: {
+        hasCurrentKey: !!currentDek,
+        hasPreviousKey: !!previousDek,
+        currentKeyVersion: keyVersion,
+        keyHealth: health
+      },
+      recentFailures: userAttempts,
+      recommendations: []
+    };
+    
+    // Generate recommendations based on analysis
+    if (!currentDek) {
+      analysis.recommendations.push('Generate new encryption keys for user');
+    } else if (!previousDek) {
+      analysis.recommendations.push('Backup current key and create fallback key');
+    } else if (health.healthy === false) {
+      analysis.recommendations.push(`Key health issue: ${health.issue}. Recommendation: ${health.recommendation}`);
+    }
+    
+    if (userAttempts.length > 0) {
+      const totalFailures = userAttempts.reduce((sum, attempt) => sum + attempt.count, 0);
+      if (totalFailures > 10) {
+        analysis.recommendations.push('High failure rate detected - consider immediate key regeneration');
+      }
+    }
+    
+    if (analysis.recommendations.length === 0) {
+      analysis.recommendations.push('No immediate action required - keys appear healthy');
+    }
+    
+    logEncryptionOperation('analyzeDecryptionFailures', true, { 
+      uid, 
+      result: 'Analysis completed',
+      recommendations: analysis.recommendations.length
+    });
+    
+    return analysis;
+    
+  } catch (error) {
+    logEncryptionOperation('analyzeDecryptionFailures', false, { 
+      uid, 
+      error: 'Analysis failed',
+      details: { errorMessage: error.message, errorCode: error.code }
+    });
+    return { 
+      uid, 
+      error: 'Analysis failed', 
+      message: error.message,
+      recommendations: ['Check system logs for detailed error information']
+    };
+  }
+}
+
 export {
   encryptValue,
   decryptValue,
@@ -1020,5 +1273,8 @@ export {
   getDecryptionKeyFromCache,
   setDecryptionKeyInCache,
   clearDecryptionKeyCache,
-  getDecryptionKeyCacheStats
+  getDecryptionKeyCacheStats,
+  checkEncryptionKeyHealth,
+  regenerateUserKeys,
+  analyzeDecryptionFailures
 };

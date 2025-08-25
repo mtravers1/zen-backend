@@ -191,7 +191,8 @@ const getUserProfiles = async (email, uid) => {
     if (business.businessOwners) {
       decryptedBusinessOwners = await decryptValue(
         business.businessOwners,
-        dek
+        dek,
+        uid
       );
     }
 
@@ -199,7 +200,8 @@ const getUserProfiles = async (email, uid) => {
     if (business.businessLocations) {
       decryptdBusinessAddresses = await decryptValue(
         business.businessLocations,
-        dek
+        dek,
+        uid
       );
     }
 
@@ -207,7 +209,8 @@ const getUserProfiles = async (email, uid) => {
     if (business.phoneNumbers) {
       decryptdBusinessPhoneNumbers = await decryptValue(
         business.phoneNumbers,
-        dek
+        dek,
+        uid
       );
     }
     let descyptEntityType = null;
