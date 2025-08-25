@@ -2512,6 +2512,10 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   }
   
   const dek = await getCachedDek(uid);
+  
+  // Get user profile for assets calculation
+  const profiles = await businessService.getUserProfiles(plaidAccount.owner_email || 'default@example.com', uid);
+  const profile = profiles[0]; // Use first profile or create default logic
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -2520,6 +2524,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   let balanceDebit = 0;
   let balanceCurrentInvestment = 0;
   let balanceAvailableInvestment = 0;
+  let allInvestmentsCurrentBalance = 0;
   let balanceLoan = 0;
   const depositoryTransactions = [];
   const creditTransactions = [];
