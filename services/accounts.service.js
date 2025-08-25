@@ -14,6 +14,8 @@ import {
   encryptValue,
   getUserDek,
   hashValue,
+  getDecryptedCacheStats,
+  clearDecryptedCache
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
@@ -35,20 +37,20 @@ const getCachedDek = async (uid) => {
   }
   
   console.log(`[getCachedDek] Fetching fresh DEK for uid: ${uid}`);
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
   
-  if (!dek) {
+  if (!keyData || !keyData.dek) {
     throw new Error(`Failed to get DEK for uid: ${uid}`);
   }
   
   // Cache the DEK
   dekCache.set(cacheKey, {
-    dek,
+    dek: keyData.dek,
     timestamp: Date.now()
   });
   
   console.log(`[getCachedDek] DEK cached successfully for uid: ${uid}`);
-  return dek;
+  return keyData.dek;
 };
 
 // Função para limpar cache do DEK em caso de erro
@@ -84,6 +86,24 @@ const getDekCacheStats = () => {
   return stats;
 };
 
+// Função para obter estatísticas do cache de descriptografia
+const getDecryptionCacheStats = () => {
+  return getDecryptedCacheStats();
+};
+
+// Função para limpar cache de descriptografia
+const clearDecryptionCache = (uid = null) => {
+  clearDecryptedCache(uid);
+  console.log(`[clearDecryptionCache] Decryption cache cleared for ${uid ? `uid: ${uid}` : 'all users'}`);
+};
+
+// Função para limpar todos os caches
+const clearAllCaches = (uid = null) => {
+  clearDekCache(uid);
+  clearDecryptionCache(uid);
+  console.log(`[clearAllCaches] All caches cleared for ${uid ? `uid: ${uid}` : 'all users'}`);
+};
+
 const safeDecryptValue = async (value, dek, uid) => {
   console.log(`[safeDecryptValue] Input:`, {
     value: value ? `${typeof value} (${value.length || 0} chars)` : 'null/undefined',
@@ -115,21 +135,28 @@ const safeDecryptValue = async (value, dek, uid) => {
     throw new Error(`DEK is required for decryption. UID: ${uid}`);
   }
   
+  // Validate UID
+  if (!uid) {
+    console.error(`[safeDecryptValue] UID is missing for decryption`);
+    throw new Error(`UID is required for decryption`);
+  }
+  
   try {
     console.log(`[safeDecryptValue] Attempting decryption for value:`, {
       valueLength: value.length,
       valueStart: value.substring(0, 20) + '...',
       hasDek: !!dek,
-      uid: uid || 'MISSING'
+      uid: uid
     });
     
-    const decrypted = await decryptValue(value, dek);
+    // Use the new decryptValue function with UID for caching
+    const decrypted = await decryptValue(value, dek, uid);
     
     console.log(`[safeDecryptValue] Decryption result:`, {
       success: true,
       decryptedType: typeof decrypted,
       decryptedValue: decrypted ? `${decrypted}`.substring(0, 50) + '...' : 'null',
-      uid: uid || 'MISSING'
+      uid: uid
     });
     
     if (decrypted === null) {
@@ -143,7 +170,7 @@ const safeDecryptValue = async (value, dek, uid) => {
       stack: error.stack,
       valueLength: value.length,
       hasDek: !!dek,
-      uid: uid || 'MISSING'
+      uid: uid
     });
     
     // Se o erro for relacionado ao DEK, limpar o cache
@@ -152,6 +179,8 @@ const safeDecryptValue = async (value, dek, uid) => {
         error.message.includes('Invalid key')) {
       console.warn(`[safeDecryptValue] Clearing DEK cache for uid: ${uid} due to decryption error`);
       clearDekCache(uid);
+      // Also clear decrypted cache for this user
+      clearDecryptedCache(uid);
     }
     
     return null; // Return null instead of the encrypted value to avoid data corruption

@@ -489,6 +489,85 @@ const deleteAccount = async (req, res) => {
   }
 };
 
+// Cache management methods
+const getCacheStats = async (req, res) => {
+  try {
+    const { getDekCacheStats, getDecryptionCacheStats } = await import('../services/accounts.service.js');
+    
+    const dekStats = getDekCacheStats();
+    const decryptionStats = getDecryptionCacheStats();
+    
+    res.json({
+      success: true,
+      data: {
+        dek: dekStats,
+        decryption: decryptionStats,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[Cache Stats] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get cache statistics'
+    });
+  }
+};
+
+const clearAllCaches = async (req, res) => {
+  try {
+    const { uid } = req.body;
+    const { clearAllCaches: clearCaches } = await import('../services/accounts.service.js');
+    
+    if (uid) {
+      clearCaches(uid);
+      res.json({
+        success: true,
+        message: `All caches cleared for user: ${uid}`
+      });
+    } else {
+      clearCaches();
+      res.json({
+        success: true,
+        message: 'All caches cleared for all users'
+      });
+    }
+  } catch (error) {
+    console.error('[Cache Clear] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear caches'
+    });
+  }
+};
+
+const clearDecryptionCache = async (req, res) => {
+  try {
+    const { uid } = req.body;
+    const { clearDecryptionCache: clearDecryptCache } = await import('../services/accounts.service.js');
+    
+    if (uid) {
+      clearDecryptCache(uid);
+      res.json({
+        success: true,
+        message: `Decryption cache cleared for user: ${uid}`
+      });
+    } else {
+      clearDecryptCache();
+      res.json({
+        success: true,
+        message: 'Decryption cache cleared for all users'
+      });
+    }
+  } catch (error) {
+    console.error('[Decryption Cache Clear] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear decryption cache'
+    });
+  }
+};
+
 const accountsController = {
   addAccount,
   getAccounts,
@@ -527,4 +606,7 @@ export default {
   debugProfile,
   debugDecryption,
   debugCache,
+  getCacheStats,
+  clearAllCaches,
+  clearDecryptionCache,
 };

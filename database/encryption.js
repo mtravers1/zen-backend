@@ -66,6 +66,10 @@ console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
 const dekVersionCache = new LimitedMap(1000); // Track key versions
 
+// Cache for successfully decrypted data to avoid reprocessing
+const decryptedDataCache = new LimitedMap(2000); // Limit to 2000 decrypted items
+const DECRYPTED_CACHE_TTL = 10 * 60 * 1000; // 10 minutes TTL
+
 // Structured logging for encryption operations
 const logEncryptionOperation = (operation, success, details = {}) => {
   const logEntry = {
@@ -204,31 +208,53 @@ async function getUserDek(uid) {
   try {
     console.log(`[ENCRYPTION] getUserDek called for user: ${uid} at ${new Date().toISOString()}`);
     
+    if (!uid) {
+      throw new Error('UID is required to get DEK');
+    }
+    
     // Check in-memory cache first
     if (dekCache.has(uid)) {
+      const cachedDek = dekCache.get(uid);
       const version = dekVersionCache.get(uid);
-      const duration = Date.now() - startTime;
-      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}, version: ${version}, duration: ${duration}ms`);
-      logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version, duration });
-      return dekCache.get(uid);
+      
+      // Validate cached DEK
+      if (cachedDek && Buffer.isBuffer(cachedDek) && cachedDek.length === 32) {
+        const duration = Date.now() - startTime;
+        console.log(`[ENCRYPTION] Found valid DEK in cache for user: ${uid}, version: ${version}, duration: ${duration}ms`);
+        logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version, duration });
+        return { dek: cachedDek, version };
+      } else {
+        console.warn(`[ENCRYPTION] Invalid cached DEK for user: ${uid}, clearing cache`);
+        dekCache.delete(uid);
+        dekVersionCache.delete(uid);
+      }
     }
 
-    console.log(`[ENCRYPTION] DEK not in cache, checking bucket for user: ${uid}`);
+    console.log(`[ENCRYPTION] DEK not in cache or invalid, checking bucket for user: ${uid}`);
     let keyData = await getDEKFromBucket(uid);
 
-    if (!keyData) {
-      console.log(`[ENCRYPTION] No key found in bucket, generating new keys for user: ${uid}`);
+    if (!keyData || !keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
+      console.log(`[ENCRYPTION] No valid key found in bucket, generating new keys for user: ${uid}`);
       keyData = await generateAndStoreEncryptedDEK(uid);
       console.log(`[ENCRYPTION] Successfully generated new keys for user: ${uid}`);
     } else {
-      console.log(`[ENCRYPTION] Found existing keys in bucket for user: ${uid}`);
+      console.log(`[ENCRYPTION] Found existing valid keys in bucket for user: ${uid}`);
     }
+
+    // Validate the key before caching
+    if (!keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
+      throw new Error(`Invalid DEK generated for user: ${uid}`);
+    }
+
+    // Cache the DEK and version
+    dekCache.set(uid, keyData.dek);
+    dekVersionCache.set(uid, keyData.version);
 
     const duration = Date.now() - startTime;
     console.log(`[ENCRYPTION] getUserDek completed successfully for user: ${uid} in ${duration}ms`);
     logEncryptionOperation('getUserDek', true, { uid, source: 'bucket', version: keyData.version, duration });
     
-    return keyData.dek;
+    return { dek: keyData.dek, version: keyData.version };
   } catch (e) {
     const duration = Date.now() - startTime;
     console.error(`[ENCRYPTION] getUserDek failed for user ${uid} after ${duration}ms:`, e);
@@ -239,6 +265,12 @@ async function getUserDek(uid) {
       status: e.status,
       duration
     });
+    
+    // Clear cache on error
+    if (uid) {
+      dekCache.delete(uid);
+      dekVersionCache.delete(uid);
+    }
     
     logEncryptionOperation('getUserDek', false, { uid, error: e.message, duration });
     throw e;
@@ -260,6 +292,78 @@ async function getUserDekVersion(uid) {
     logEncryptionOperation('getUserDekVersion', false, { uid, error: error.message });
     return null;
   }
+}
+
+// Cache management functions for decrypted data
+function getDecryptedFromCache(cipherTextBase64, uid) {
+  if (!cipherTextBase64 || !uid) return null;
+  
+  const cacheKey = `${cipherTextBase64}:${uid}`;
+  const cached = decryptedDataCache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < DECRYPTED_CACHE_TTL) {
+    logEncryptionOperation('getDecryptedFromCache', true, { 
+      uid, 
+      source: 'cache',
+      dataType: typeof cached.data
+    });
+    return cached.data;
+  }
+  
+  return null;
+}
+
+function setDecryptedInCache(cipherTextBase64, uid, decryptedData) {
+  if (!cipherTextBase64 || !uid || decryptedData === null || decryptedData === undefined) return;
+  
+  const cacheKey = `${cipherTextBase64}:${uid}`;
+  decryptedDataCache.set(cacheKey, {
+    data: decryptedData,
+    timestamp: Date.now()
+  });
+  
+  logEncryptionOperation('setDecryptedInCache', true, { 
+    uid, 
+    dataType: typeof decryptedData,
+    cacheSize: decryptedDataCache.size
+  });
+}
+
+function clearDecryptedCache(uid = null) {
+  if (uid) {
+    // Clear cache for specific user
+    for (const [key] of decryptedDataCache.entries()) {
+      if (key.includes(`:${uid}`)) {
+        decryptedDataCache.delete(key);
+      }
+    }
+    logEncryptionOperation('clearDecryptedCache', true, { uid, scope: 'user' });
+  } else {
+    // Clear entire cache
+    decryptedDataCache.clear();
+    logEncryptionOperation('clearDecryptedCache', true, { scope: 'all' });
+  }
+}
+
+function getDecryptedCacheStats() {
+  const now = Date.now();
+  const stats = {
+    totalEntries: decryptedDataCache.size,
+    validEntries: 0,
+    expiredEntries: 0,
+    cacheSize: 0
+  };
+  
+  for (const [key, value] of decryptedDataCache.entries()) {
+    if ((now - value.timestamp) < DECRYPTED_CACHE_TTL) {
+      stats.validEntries++;
+    } else {
+      stats.expiredEntries++;
+    }
+    stats.cacheSize += JSON.stringify(value.data).length;
+  }
+  
+  return stats;
 }
 
 // Encrypts a value using AES-256-GCM with version tracking
@@ -313,13 +417,13 @@ async function encryptValue(value, dek, uid = null) {
 // Track decryption attempts to prevent infinite loops
 const decryptionAttempts = new Map();
 const MAX_ATTEMPTS = 3;
-const ATTEMPT_EXPIRY = 120000; // 120 seconds
+const ATTEMPT_EXPIRY = 30000; // 30 seconds - reduced from 120 seconds
 
 function trackDecryptionAttempt(cipherTextBase64, uid) {
   const key = `${cipherTextBase64}:${uid || 'no-uid'}`;
   const now = Date.now();
   
-  // Clean up expired attempts
+  // Clean up expired attempts more aggressively
   for (const [attemptKey, attempt] of decryptionAttempts.entries()) {
     if (now - attempt.timestamp > ATTEMPT_EXPIRY) {
       decryptionAttempts.delete(attemptKey);
@@ -327,14 +431,26 @@ function trackDecryptionAttempt(cipherTextBase64, uid) {
   }
   
   // Get or create attempt tracking
-  const attempt = decryptionAttempts.get(key) || {
-    count: 0,
-    timestamp: now,
-    failures: new Set()
-  };
+  let attempt = decryptionAttempts.get(key);
   
-  // Update attempt count
-  attempt.count++;
+  if (!attempt) {
+    attempt = {
+      count: 0,
+      timestamp: now,
+      failures: new Set(),
+      lastAttempt: now
+    };
+  } else {
+    // Reset count if enough time has passed since last attempt
+    if (now - attempt.lastAttempt > 10000) { // 10 seconds
+      attempt.count = 0;
+      attempt.failures.clear();
+      attempt.timestamp = now;
+    }
+    attempt.count++;
+    attempt.lastAttempt = now;
+  }
+  
   decryptionAttempts.set(key, attempt);
   
   return attempt;
@@ -348,6 +464,19 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     cipherTextBase64 === ""
   )
     return cipherTextBase64;
+    
+  // Check cache first for already decrypted data
+  if (uid) {
+    const cachedData = getDecryptedFromCache(cipherTextBase64, uid);
+    if (cachedData !== null) {
+      logEncryptionOperation('decryptValue', true, { 
+        uid, 
+        source: 'cache',
+        note: 'Returning cached decrypted data'
+      });
+      return cachedData;
+    }
+  }
     
   // Track decryption attempts
   const attempt = trackDecryptionAttempt(cipherTextBase64, uid);
@@ -396,6 +525,10 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     try {
       const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
       if (result.success) {
+        // Cache successful decryption
+        if (uid) {
+          setDecryptedInCache(cipherTextBase64, uid, result.value);
+        }
         return result.value;
       }
       // Track failed attempt
@@ -410,26 +543,17 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
         errorCode: error.code
       });
     }
-  } else {
-    logEncryptionOperation('decryptValue', false, {
-      uid,
-      attempt: 'current',
-      error: 'Skipping previously failed attempt',
-      details: {
-        failedAttempts: Array.from(attempt.failures)
-      }
-    });
   }
 
-  // Track decryption attempts to prevent infinite loops
-  const attempts = new Set();
-
   // Try with fallback DEK if provided
-  if (fallbackDek && !attempts.has('fallback')) {
-    attempts.add('fallback');
+  if (fallbackDek && !attempt.failures.has('fallback')) {
     try {
       const result = await attemptDecryption(cipherTextBase64, fallbackDek, uid, 'fallback');
       if (result.success) {
+        // Cache successful decryption
+        if (uid) {
+          setDecryptedInCache(cipherTextBase64, uid, result.value);
+        }
         logEncryptionOperation('decryptValue', true, { 
           uid, 
           attempt: 'fallback', 
@@ -437,7 +561,11 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
         });
         return result.value;
       }
+      // Track failed attempt
+      attempt.failures.add('fallback');
     } catch (error) {
+      // Track failed attempt
+      attempt.failures.add('fallback');
       logEncryptionOperation('decryptValue', false, { 
         uid, 
         attempt: 'fallback', 
@@ -454,6 +582,8 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
       if (previousDek) {
         const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
         if (result.success) {
+          // Cache successful decryption
+          setDecryptedInCache(cipherTextBase64, uid, result.value);
           logEncryptionOperation('decryptValue', true, { 
             uid, 
             attempt: 'previous', 
@@ -494,22 +624,14 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
         inputLength: cipherTextBase64.length
       }
     });
-  } else {
-    logEncryptionOperation('decryptValue', false, {
-      uid,
-      attempt: 'previous',
-      error: 'Skipping previously failed attempt',
-      details: {
-        failedAttempts: Array.from(attempt.failures)
-      }
-    });
   }
 
   // If all attempts fail, log the failure and return null
   logEncryptionOperation('decryptValue', false, { 
     uid, 
     error: 'All decryption attempts failed',
-    inputLength: cipherTextBase64.length
+    inputLength: cipherTextBase64.length,
+    failedAttempts: Array.from(attempt.failures)
   });
   
   return null;
@@ -740,5 +862,9 @@ export {
   rotateUserKey,
   hashEmail,
   hashValue,
-  logEncryptionOperation
+  logEncryptionOperation,
+  getDecryptedFromCache,
+  setDecryptedInCache,
+  clearDecryptedCache,
+  getDecryptedCacheStats
 };

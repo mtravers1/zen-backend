@@ -27,4 +27,9 @@ router.post("/get-photo", accountsController.getAccountPhoto);
 router.get("/photo/:fileName", accountsController.serveAccountPhoto);
 router.delete("/:accountId", accountsController.deleteAccount);
 
+// Cache management endpoints
+router.get('/cache/stats', accountsController.getCacheStats);
+router.post('/cache/clear', accountsController.clearAllCaches);
+router.post('/cache/clear-decryption', accountsController.clearDecryptionCache);
+
 export default router;
