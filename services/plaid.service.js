@@ -559,14 +559,47 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
       return null;
     }
 
+    console.log(`[PLAID] Looking for access token with itemId: ${itemId}`);
+    
     const accessTokenDoc = await AccessToken.findOne({ itemId });
     if (!accessTokenDoc) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
         error: 'Access token document not found'
       });
+      
+      // Log additional debugging information
+      console.log(`[PLAID] Debug: No AccessToken found for itemId: ${itemId}`);
+      console.log(`[PLAID] Debug: Checking if AccessToken collection exists...`);
+      
+      try {
+        const totalTokens = await AccessToken.countDocuments();
+        console.log(`[PLAID] Debug: Total AccessToken documents in collection: ${totalTokens}`);
+        
+        // Check if there are any tokens with similar itemIds
+        const similarTokens = await AccessToken.find({
+          itemId: { $regex: itemId.substring(0, 8), $options: 'i' }
+        }).limit(5);
+        
+        if (similarTokens.length > 0) {
+          console.log(`[PLAID] Debug: Found similar itemIds:`, similarTokens.map(t => ({ itemId: t.itemId, userId: t.userId })));
+        }
+      } catch (debugError) {
+        console.error(`[PLAID] Debug: Error checking collection:`, debugError.message);
+      }
+      
       return null;
     }
+
+    console.log(`[PLAID] Found AccessToken document:`, {
+      itemId: accessTokenDoc.itemId,
+      hasUserId: !!accessTokenDoc.userId,
+      userId: accessTokenDoc.userId,
+      hasAccessToken: !!accessTokenDoc.accessToken,
+      accessTokenLength: accessTokenDoc.accessToken ? accessTokenDoc.accessToken.length : 0,
+      createdAt: accessTokenDoc.createdAt,
+      updatedAt: accessTokenDoc.updatedAt
+    });
 
     // Check if token is marked as corrupted
     if (accessTokenDoc.status === 'corrupted') {
@@ -577,6 +610,9 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
         lastError: accessTokenDoc.lastError,
         lastErrorAt: accessTokenDoc.lastErrorAt
       });
+      
+      // Clean up corrupted token
+      await cleanUpCorruptedToken(itemId);
       return null;
     }
 
@@ -600,8 +636,25 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
             userIdValue: accessTokenDoc.userId
           }
         });
+        
+        // Mark token as corrupted and clean it up
+        await markTokenAsCorrupted(itemId, 'Missing userId in AccessToken document');
         return null;
       }
+    }
+
+    // Validate that the UID matches the token's userId
+    if (accessTokenDoc.userId && accessTokenDoc.userId.toString() !== targetUid) {
+      logPlaidOperation('getAccessTokenFromItemId', false, {
+        itemId,
+        providedUid: targetUid,
+        tokenUserId: accessTokenDoc.userId.toString(),
+        error: 'UID mismatch between request and token document'
+      });
+      
+      // Mark token as corrupted and clean it up
+      await markTokenAsCorrupted(itemId, `UID mismatch: provided ${targetUid}, token has ${accessTokenDoc.userId}`);
+      return null;
     }
 
     const keyData = await getUserDek(targetUid);
@@ -673,6 +726,169 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
     }
     
     return null;
+  }
+};
+
+// Function to clean up corrupted tokens
+const cleanUpCorruptedToken = async (itemId) => {
+  try {
+    console.log(`[PLAID] Cleaning up corrupted token for itemId: ${itemId}`);
+    
+    // Remove the corrupted token
+    const result = await AccessToken.deleteOne({ itemId });
+    
+    if (result.deletedCount > 0) {
+      console.log(`[PLAID] Successfully removed corrupted token for itemId: ${itemId}`);
+      
+      // Also clean up related PlaidAccount documents
+      const PlaidAccount = (await import("../database/models/PlaidAccount.js")).default;
+      const accountResult = await PlaidAccount.deleteMany({ itemId });
+      
+      if (accountResult.deletedCount > 0) {
+        console.log(`[PLAID] Also removed ${accountResult.deletedCount} related PlaidAccount documents for itemId: ${itemId}`);
+      }
+      
+      // Clean up related Transaction documents
+      const Transaction = (await import("../database/models/Transaction.js")).default;
+      const transactionResult = await Transaction.deleteMany({ itemId });
+      
+      if (transactionResult.deletedCount > 0) {
+        console.log(`[PLAID] Also removed ${transactionResult.deletedCount} related Transaction documents for itemId: ${itemId}`);
+      }
+      
+    } else {
+      console.log(`[PLAID] No token found to remove for itemId: ${itemId}`);
+    }
+    
+  } catch (error) {
+    console.error(`[PLAID] Error cleaning up corrupted token for itemId ${itemId}:`, error);
+  }
+};
+
+// Function to mark token as corrupted
+const markTokenAsCorrupted = async (itemId, reason) => {
+  try {
+    console.log(`[PLAID] Marking token as corrupted for itemId: ${itemId}, reason: ${reason}`);
+    
+    await AccessToken.updateOne(
+      { itemId },
+      { 
+        status: 'corrupted',
+        lastError: reason,
+        lastErrorAt: new Date()
+      }
+    );
+    
+    console.log(`[PLAID] Successfully marked token as corrupted for itemId: ${itemId}`);
+    
+  } catch (error) {
+    console.error(`[PLAID] Error marking token as corrupted for itemId ${itemId}:`, error);
+  }
+};
+
+// Function to clean up all corrupted tokens
+const cleanUpAllCorruptedTokens = async () => {
+  try {
+    console.log(`[PLAID] Starting cleanup of all corrupted tokens...`);
+    
+    // Find all corrupted tokens
+    const corruptedTokens = await AccessToken.find({ status: 'corrupted' });
+    console.log(`[PLAID] Found ${corruptedTokens.length} corrupted tokens`);
+    
+    let cleanedCount = 0;
+    for (const token of corruptedTokens) {
+      try {
+        await cleanUpCorruptedToken(token.itemId);
+        cleanedCount++;
+      } catch (error) {
+        console.error(`[PLAID] Error cleaning up token ${token.itemId}:`, error);
+      }
+    }
+    
+    console.log(`[PLAID] Successfully cleaned up ${cleanedCount} corrupted tokens`);
+    return { success: true, cleanedCount, totalFound: corruptedTokens.length };
+    
+  } catch (error) {
+    console.error(`[PLAID] Error in cleanUpAllCorruptedTokens:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Function to get diagnostic information about access tokens
+const getAccessTokenDiagnostics = async () => {
+  try {
+    console.log(`[PLAID] Getting access token diagnostics...`);
+    
+    const totalTokens = await AccessToken.countDocuments();
+    const activeTokens = await AccessToken.countDocuments({ status: 'active' });
+    const corruptedTokens = await AccessToken.countDocuments({ status: 'corrupted' });
+    const expiredTokens = await AccessToken.countDocuments({ status: 'expired' });
+    
+    // Get sample of corrupted tokens for analysis
+    const sampleCorrupted = await AccessToken.find({ status: 'corrupted' })
+      .limit(10)
+      .select('itemId userId lastError lastErrorAt createdAt');
+    
+    // Get sample of active tokens
+    const sampleActive = await AccessToken.find({ status: 'active' })
+      .limit(10)
+      .select('itemId userId createdAt');
+    
+    const diagnostics = {
+      totalTokens,
+      activeTokens,
+      corruptedTokens,
+      expiredTokens,
+      sampleCorrupted: sampleCorrupted.map(t => ({
+        itemId: t.itemId,
+        userId: t.userId,
+        lastError: t.lastError,
+        lastErrorAt: t.lastErrorAt,
+        createdAt: t.createdAt
+      })),
+      sampleActive: sampleActive.map(t => ({
+        itemId: t.itemId,
+        userId: t.userId,
+        createdAt: t.createdAt
+      })),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`[PLAID] Diagnostics completed:`, diagnostics);
+    return diagnostics;
+    
+  } catch (error) {
+    console.error(`[PLAID] Error getting diagnostics:`, error);
+    return { error: error.message };
+  }
+};
+
+// Function to validate and repair access tokens
+const validateAndRepairAccessTokens = async () => {
+  try {
+    console.log(`[PLAID] Starting validation and repair of access tokens...`);
+    
+    const diagnostics = await getAccessTokenDiagnostics();
+    console.log(`[PLAID] Initial diagnostics:`, diagnostics);
+    
+    // Clean up corrupted tokens
+    const cleanupResult = await cleanUpAllCorruptedTokens();
+    console.log(`[PLAID] Cleanup result:`, cleanupResult);
+    
+    // Get final diagnostics
+    const finalDiagnostics = await getAccessTokenDiagnostics();
+    console.log(`[PLAID] Final diagnostics:`, finalDiagnostics);
+    
+    return {
+      success: true,
+      initialDiagnostics: diagnostics,
+      cleanupResult,
+      finalDiagnostics
+    };
+    
+  } catch (error) {
+    console.error(`[PLAID] Error in validateAndRepairAccessTokens:`, error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -2481,6 +2697,12 @@ const plaidService = {
   diagnoseAndFixEncryptionIssues,
   identifyUsersWithEncryptionIssues,
   identifyFailingPlaidItems,
+  // New token management functions
+  cleanUpCorruptedToken,
+  cleanUpAllCorruptedTokens,
+  getAccessTokenDiagnostics,
+  validateAndRepairAccessTokens,
+  markTokenAsCorrupted,
 };
 
 export default plaidService;

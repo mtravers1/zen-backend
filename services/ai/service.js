@@ -100,6 +100,11 @@ class AIService {
     context = {},
     requestId = null
   ) {
+    console.log('\n🚀 [AI Service] ====== STARTING AI CHAT PROCESS ======');
+    console.log('[AI Service] Request ID:', requestId || 'NOT_PROVIDED');
+    console.log('[AI Service] User prompt:', prompt);
+    console.log('[AI Service] UI Context:', JSON.stringify(context, null, 2));
+
     // Validate request parameters
     const validation = this.validateRequestParams({
       prompt,
@@ -148,33 +153,20 @@ class AIService {
         throw new Error("Profile ID is required");
       }
 
-      console.log('\n🎯 [AI Service] ====== DETAILED REQUEST LOGGING ======');
+      console.log('\n🎯 [AI Service] ====== STEP 1: PREPARING USER CONTEXT ======');
       console.log("[AI Service] Starting request with:", { 
         requestId: requestId || 'NOT_PROVIDED',
         uid, 
         profileId, 
         hasPrompt: !!prompt, 
-        prompt: prompt, // Log the actual prompt
+        prompt: prompt,
         promptLength: prompt ? prompt.length : 0,
         screen, 
         dataScreen, 
         hasContext: !!context, 
         contextKeys: context ? Object.keys(context) : [],
-        fullContext: context // Log the complete context
+        fullContext: context
       });
-
-      // Log context details if available
-      if (context) {
-        console.log("🔍 [AI Service] Context received:", {
-          requestId: requestId || 'NOT_PROVIDED',
-          screen: context.screen,
-          device: context.device,
-          time: context.time,
-          user: context.user,
-          chat: context.chat,
-          contextSize: JSON.stringify(context).length
-        });
-      }
 
       // Check if environment variables are set
       if (!this.GROQ_API_KEY) {
@@ -189,14 +181,15 @@ class AIService {
 
       console.log("[AI Service] Environment variables check passed");
 
-      // Retrieve user and profile context for tool calls
+      // STEP 1: Retrieve user and profile context for tool calls
+      console.log('\n🔑 [AI Service] ====== STEP 2: GETTING USER DATA ======');
       console.log("[AI Service] Getting user DEK for uid:", uid);
       const keyData = await getUserDek(uid);
       if (!keyData || !keyData.dek) {
         console.error("[AI Service] Failed to get DEK for user:", uid);
         throw new Error("Failed to retrieve user encryption keys");
       }
-      const dek = keyData.dek;
+  const dek = keyData.dek;
       
       console.log("[AI Service] Getting user data for uid:", uid);
       const user = await User.findOne({ authUid: uid }).lean();
@@ -256,12 +249,15 @@ class AIService {
         throw new Error(`Profile with ID ${profileId} not found. Make sure the profile ID is correct.`);
       }
 
-      console.log("[AI Service]  Profile found successfully:", { 
+      console.log("[AI Service] Profile found successfully:", { 
         id: profile.id, 
         name: profile.name, 
         isPersonal: profile.isPersonal,
         hasPlaidAccounts: profile.plaidAccounts ? profile.plaidAccounts.length : 0
       });
+
+      // STEP 2: Build system prompt and prepare LLM call
+      console.log('\n🧠 [AI Service] ====== STEP 3: PREPARING LLM CALL ======');
 
       // Parse screen context for prompt construction
       const baseScreen = (screen || "").split("/")[0] || "";
@@ -302,7 +298,7 @@ class AIService {
       console.log('[AI Service] Total prompt length:', totalPromptLength, 'characters');
       
       if (totalPromptLength > 25000) {
-        console.warn('[AI Service]  Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
+        console.warn('[AI Service] Total prompt length is very long, using simplified system prompt to prevent LLM confusion');
         
         // Use simplified prompt for very long requests
         const simplifiedSystemPrompt = getSimplifiedSystemPrompt(currentScreen);
@@ -355,7 +351,6 @@ class AIService {
       console.log('\n✅ [AI Service] ====== TOOLS ENABLED WITH FALLBACK PROTECTION ======');
       console.log('[AI Service] Using validated tools with intelligent fallback system');
       console.log('[AI Service] Available tools:', finalTools.length);
-      const temporaryFinalTools = finalTools;
 
       // Prepare the context for tool functions (injects user/profile info)
       const toolContext = {
@@ -366,7 +361,8 @@ class AIService {
       };
       const toolsImpl = toolFunctions(toolContext);
 
-      console.log('\n🚀 [AI Service] ====== CALLING LLM ======');
+      // STEP 3: Call LLM to evaluate what functions are needed
+      console.log('\n🚀 [AI Service] ====== STEP 4: CALLING LLM TO EVALUATE FUNCTIONS ======');
       console.log("[AI Service] User question:", prompt);
       console.log("[AI Service] Screen context:", screen, dataScreen);
       console.log("[AI Service] Messages being sent to LLM:");
@@ -393,14 +389,14 @@ class AIService {
       
       // Initialize request context with safe defaults
       const requestContext = {
-        id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
         userId: uid || 'anonymous',
         profileId: profileId || 'unknown',
         screen: screen || 'unknown',
         dataScreen: dataScreen || 'none',
-        messageCount: Array.isArray(messages) ? messages.length : 0,
-        toolCount: Array.isArray(temporaryFinalTools) ? temporaryFinalTools.length : 0,
+        messageCount: Array.isArray(incomingMessages) ? incomingMessages.length : 0,
+        toolCount: Array.isArray(finalTools) ? finalTools.length : 0,
         promptLength: typeof prompt === 'string' ? prompt.length : 0,
         requestType: 'ai_chat',
         environment: process.env.NODE_ENV || 'development',
@@ -408,8 +404,8 @@ class AIService {
           hasUid: !!uid,
           hasProfile: !!profileId,
           hasScreen: !!screen,
-          hasMessages: Array.isArray(messages) && messages.length > 0,
-          hasTools: Array.isArray(temporaryFinalTools) && temporaryFinalTools.length > 0,
+          hasMessages: Array.isArray(incomingMessages) && incomingMessages.length > 0,
+          hasTools: Array.isArray(finalTools) && finalTools.length > 0,
           hasPrompt: typeof prompt === 'string' && prompt.length > 0
         }
       };
@@ -422,7 +418,7 @@ class AIService {
           hasScreen: !!screen,
           hasDataScreen: !!dataScreen,
           hasProfile: !!profileId,
-          hasMessages: messages.length > 0
+          hasMessages: incomingMessages.length > 0
         }
       });
 
@@ -431,11 +427,14 @@ class AIService {
       let usedFallbackMode = false;
       
       try {
+        console.log('\n🧠 [AI Service] ====== LLM PROCESSING ======');
+        console.log('[AI Service] Calling LLM to evaluate functions needed...');
+        
         completeResponse = await callLLM({
           apiKey: this.GROQ_API_KEY,
           model: this.GROQ_AI_MODEL,
           messages,
-          tools: temporaryFinalTools, // Now using actual validated tools
+          tools: finalTools, // Using validated tools
           toolFunctions: toolsImpl, // Using proper tool implementations
           uid,
           aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
@@ -448,6 +447,9 @@ class AIService {
           responseLength: completeResponse?.length || 0,
           responseType: typeof completeResponse
         });
+        
+        console.log('[AI Service] LLM response:', completeResponse);
+        
       } catch (error) {
         // Log error with validation status
         console.error('\n❌ [AI Service] ====== LLM ERROR ======', {
@@ -499,249 +501,144 @@ class AIService {
 Question type detected: ${questionClassification.category} (${questionClassification.subcategory})
 Confidence: ${Math.round(questionClassification.confidence * 100)}%
 
-Provide a helpful response based on the question type. Always be specific and actionable.
-
-Respond in JSON format: {"response": "your answer", "data": null, "source": "general_response", "error": false, "fallbackMode": true}` 
+Please provide a helpful response based on the question type. If this is a financial question that requires data, explain what information would be needed and suggest how the user might access it.` 
               }
             ];
             
-            console.log('[AI Service] Fallback messages prepared:');
-            simplifiedMessages.forEach((msg, index) => {
-              console.log(`  [${index}] Role: ${msg.role}`);
-              console.log(`  [${index}] Content: ${msg.content}`);
+            console.log('[AI Service] Fallback messages prepared:', {
+              systemPrompt: simplifiedMessages[0].content.substring(0, 200) + '...',
+              userPrompt: simplifiedMessages[1].content.substring(0, 200) + '...'
             });
             
+            // Call LLM without tools for fallback response
             completeResponse = await callLLM({
               apiKey: this.GROQ_API_KEY,
               model: this.GROQ_AI_MODEL,
               messages: simplifiedMessages,
-              tools: [], // No tools in fallback mode
-              toolFunctions: {},
+              tools: [], // No tools for fallback
+              toolFunctions: {}, // No tool functions
               uid,
-              aiController: res ? (await import("../../controllers/ai.controller.js")).default : null,
+              aiController: null, // No controller for fallback
             });
             
             usedFallbackMode = true;
-            console.log('\n✅ [AI Service] ====== FALLBACK SUCCESSFUL ======');
+            console.log('[AI Service] Fallback response received:', completeResponse);
             
           } catch (fallbackError) {
-            console.error('\n❌ [AI Service] ====== FALLBACK FAILED ======', {
-              fallbackError: fallbackError.message,
-              originalError: error.message
-            });
+            console.error('[AI Service] Fallback mode also failed:', fallbackError);
             
-            // Return a user-friendly error response if even fallback fails
-            return {
-              text: "I'm experiencing technical difficulties right now. Please try again in a few moments or rephrase your question.",
+            // Return a generic helpful response
+            completeResponse = {
+              text: `I understand you're asking about "${prompt}". I'm experiencing some technical difficulties right now, but I'd be happy to help you with this question. Could you try rephrasing your question or ask me again in a moment?`,
               data: null,
-              error: true,
-              errorMessage: `Original: ${error.message}, Fallback: ${fallbackError.message}`,
-              source: 'complete_failure'
+              error: false,
+              source: 'fallback_generic'
             };
+            
+            usedFallbackMode = true;
           }
         } else {
-          // Return a user-friendly error response for non-function errors
-          return {
-            text: "I encountered an issue processing your request. Please try asking your question again.",
+          // Non-function call error, return helpful message
+          completeResponse = {
+            text: `I'm sorry, but I'm having trouble processing your request right now. The error was: ${error.message}. Please try again in a moment, or if the problem persists, contact support.`,
             data: null,
             error: true,
-            errorMessage: error.message
+            errorMessage: error.message,
+            source: 'llm_error'
           };
         }
       }
 
-      // Check for malformed responses that might contain tool-use markers
-      if (typeof completeResponse === 'string' && (completeResponse.includes('<tool-use>') || completeResponse.includes('</tool-use>'))) {
-        console.error('[AI Service] 🚨 MALFORMED RESPONSE DETECTED - contains tool-use markers');
-        console.error('[AI Service] This suggests the LLM is fundamentally confused about the response format');
-        
-        // Return a helpful error response
-        return {
-          text: "I encountered an issue processing your request. The AI model got confused about how to respond. Please try rephrasing your question or contact support if the problem persists.",
+      // STEP 4: Process and format the response
+      console.log('\n📝 [AI Service] ====== STEP 5: PROCESSING RESPONSE ======');
+      
+      // Validate the response structure
+      if (!completeResponse) {
+        console.error('[AI Service] No response received from LLM');
+        completeResponse = {
+          text: "I'm sorry, but I didn't receive a response from the AI system. Please try again.",
           data: null,
           error: true,
-          errorMessage: "LLM response format confusion detected",
-          source: 'malformed_response'
+          errorMessage: "No response received",
+          source: 'no_response'
         };
       }
 
-      // Simple JSON parsing
-      let parsedResponse;
-      try {
-        if (completeResponse.trim().startsWith('{')) {
-          parsedResponse = JSON.parse(completeResponse);
-        } else {
-          // If not JSON, create a simple response
-          parsedResponse = {
-            response: completeResponse,
-            data: null,
-            source: "general_response",
-            error: false
-          };
-        }
-      } catch (parseError) {
-        console.error("[AI Service] JSON parsing failed:", parseError.message);
-        
-        // Create fallback response
-        parsedResponse = {
-          response: "I encountered an issue processing your request. Please try again.",
-          data: null,
-          source: "error_fallback",
-          error: true,
-          errorMessage: parseError.message
-        };
+      // Ensure we have a text field
+      if (!completeResponse.text && completeResponse.response) {
+        completeResponse.text = completeResponse.response;
       }
 
-      // Basic response validation
-      console.log('\n🔍 [AI Service] ====== RESPONSE READY ======');
-      
-      // Ensure basic structure
-      if (!parsedResponse.response && !parsedResponse.text) {
-        parsedResponse.response = "I couldn't generate a proper response. Please try again.";
-        parsedResponse.error = true;
-      }
-      
-      // Set source if missing
-      if (!parsedResponse.source) {
-        parsedResponse.source = parsedResponse.data ? 'tool_result' : 'general_response';
+      if (!completeResponse.text) {
+        console.error('[AI Service] No text in response:', completeResponse);
+        completeResponse.text = "I received a response but it doesn't contain the expected text. Please try again.";
       }
 
-      // Enhanced response processing with LLM self-evaluation
-      const processedResponse = await this.processLLMResponse(parsedResponse, prompt, profileId, context);
-      
-      // Add fallback mode indicator if used
-      if (usedFallbackMode && processedResponse) {
-        processedResponse.fallbackMode = true;
-        processedResponse.warning = 'Temporarily unable to access your real financial data due to technical issues. For specific financial information, please check your dashboard directly.';
-        
-        // Intelligent question classification for comprehensive responses
-        const questionType = this.classifyUserQuestion(prompt);
-        
-        // Provide contextual suggestions and guidance based on question type
-        switch (questionType.category) {
-          case 'financial_data':
-            processedResponse.suggestedQuestions = [
-              "Check the Dashboard for your current financial overview",
-              "Visit the Accounts section for balance details",
-              "Go to Transactions for recent activity",
-              "Navigate to Net Worth section for wealth tracking"
-            ];
-            
-            // Add specific navigation guidance
-            if (questionType.subcategory === 'net_worth') {
-              processedResponse.response += "\n\nTo view your current net worth, navigate to the 'Net Worth' section on your dashboard.";
-            } else if (questionType.subcategory === 'balance') {
-              processedResponse.response += "\n\nTo check your account balances, go to the 'Accounts' section in your app.";
-            } else if (questionType.subcategory === 'transactions') {
-              processedResponse.response += "\n\nTo view your transactions, visit the 'Transactions' section for detailed activity.";
-            }
-            break;
-            
-          case 'financial_forms':
-            processedResponse.suggestedQuestions = [
-              "How do I add a new account?",
-              "Where can I upload financial documents?",
-              "How to categorize my expenses?",
-              "How to set up budget goals?"
-            ];
-            processedResponse.response += "\n\nFor forms and data entry, check the relevant sections in your dashboard or use the '+' button to add new information.";
-            break;
-            
-          case 'business_advice':
-            processedResponse.suggestedQuestions = [
-              "How to improve cash flow?",
-              "What are key business metrics to track?",
-              "How to reduce business expenses?",
-              "Tips for business growth strategies"
-            ];
-            processedResponse.response += "\n\nFor detailed business insights, check your Business Profile section and cash flow analytics.";
-            break;
-            
-          case 'investment_advice':
-            processedResponse.suggestedQuestions = [
-              "What are safe investment options?",
-              "How to diversify my portfolio?",
-              "When should I start investing?",
-              "How to track investment performance?"
-            ];
-            processedResponse.response += "\n\nTrack your investments in the Assets section and consult with financial advisors for personalized advice.";
-            break;
-            
-          case 'platform_navigation':
-            processedResponse.suggestedQuestions = [
-              "How to navigate the dashboard?",
-              "Where to find account settings?",
-              "How to export financial reports?",
-              "How to connect bank accounts?"
-            ];
-            processedResponse.response += "\n\nUse the main navigation menu to access different sections, or check the Help section for detailed guides.";
-            break;
-            
-          default: // general_advice
-            processedResponse.suggestedQuestions = [
-              "How can I improve my savings?",
-              "What's the best budgeting strategy?",
-              "How to plan for retirement?",
-              "Tips for debt management?"
-            ];
-            break;
+      // Format financial response if data is present
+      if (completeResponse.data && Object.keys(completeResponse.data).length > 0) {
+        console.log('[AI Service] Formatting financial response with data');
+        try {
+          const formattedResponse = formatFinancialResponse(completeResponse.text, completeResponse.data, currentScreen);
+          completeResponse.text = formattedResponse.text;
+          completeResponse.data = formattedResponse.data;
+        } catch (formatError) {
+          console.warn('[AI Service] Financial response formatting failed:', formatError);
+          // Keep original response if formatting fails
         }
       }
 
-      // Handle streaming responses if res is provided
-      if (res && processedResponse) {
-        const { default: aiController } = await import("../../controllers/ai.controller.js");
-        if (aiController) {
-          aiController.sendToUser(uid, processedResponse);
-          aiController.sendToUser(uid, "[DONE]");
-        }
-      }
+      // STEP 5: Prepare final response
+      console.log('\n🎯 [AI Service] ====== STEP 6: PREPARING FINAL RESPONSE ======');
+      
+      const finalResponse = {
+        text: completeResponse.text || "I'm sorry, but I couldn't generate a proper response. Please try again.",
+        data: completeResponse.data || null,
+        error: completeResponse.error || false,
+        errorMessage: completeResponse.errorMessage || undefined,
+        source: completeResponse.source || 'ai_response',
+        usedFallback: usedFallbackMode,
+        requestId: requestId,
+        timestamp: new Date().toISOString()
+      };
 
-      console.log('\n🎯 [AI Service] ====== NORMALIZING RESPONSE ======');
-      
-      // Ensure consistent response structure for mobile compatibility
-      const normalizedResponse = this.normalizeResponse(processedResponse, completeResponse);
-      
-      // Validate and fix response structure before returning
-      const finalResponse = this.ensureConsistentResponseStructure(normalizedResponse);
-      
-      console.log('\n🎉 [AI Service] ====== FINAL NORMALIZED RESPONSE ======');
-      console.log("[AI Service] Final response structure:", {
+      console.log('\n✅ [AI Service] ====== RESPONSE READY ======');
+      console.log('[AI Service] Final response prepared:', {
         hasText: !!finalResponse.text,
-        textLength: finalResponse.text?.length || 0,
-        hasResponse: !!finalResponse.response,
-        responseLength: finalResponse.response?.length || 0,
+        textLength: finalResponse.text ? finalResponse.text.length : 0,
         hasData: !!finalResponse.data,
         dataKeys: finalResponse.data ? Object.keys(finalResponse.data) : [],
-        source: finalResponse.source,
-        hasWarning: !!finalResponse.warning,
-        hasError: !!finalResponse.error,
-        errorMessage: finalResponse.errorMessage
+        error: finalResponse.error,
+        usedFallback: finalResponse.usedFallback,
+        source: finalResponse.source
       });
-      console.log("[AI Service] Final normalized response:", finalResponse);
+
+      if (finalResponse.text && finalResponse.text.length > 200) {
+        console.log('[AI Service] Full response text:', finalResponse.text);
+      }
+
       return finalResponse;
       
     } catch (error) {
-      console.error("[AI Service] Error in makeRequest:", error);
-      
-      // Create user-friendly error message
-      const userFriendlyError = this.createUserFriendlyError(error, { uid, screen, dataScreen });
-      
-      // Send error to user if possible
-      if (uid && res) {
-        try {
-          const { default: aiController } = await import("../../controllers/ai.controller.js");
-          if (aiController) {
-            aiController.sendToUser(uid, userFriendlyError);
-            aiController.sendToUser(uid, "[DONE]");
-          }
-        } catch (sendError) {
-          console.error("[AI Service] Failed to send error to user:", sendError);
-        }
-      }
-      
-      // Return the user-friendly error instead of throwing
-      return userFriendlyError;
+      console.error('\n💥 [AI Service] ====== CRITICAL ERROR ======');
+      console.error('[AI Service] Critical error in makeRequest:', error);
+      console.error('[AI Service] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code,
+        timestamp: new Date().toISOString(),
+        requestId: requestId
+      });
+
+      // Return a user-friendly error response
+      return {
+        text: "I'm experiencing technical difficulties right now. Please try again in a moment, or contact support if the problem persists.",
+        data: null,
+        error: true,
+        errorMessage: error.message || "Unknown error occurred",
+        source: 'critical_error',
+        requestId: requestId,
+        timestamp: new Date().toISOString()
+      };
     }
   }
 

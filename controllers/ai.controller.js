@@ -648,7 +648,7 @@ const cancelRequest = async (req, res) => {
   } catch (error) {
     console.error("[AI Controller] Error cancelling request:", error);
     
-    return res.status(500).json({
+    return res.status(500).json({ 
       status: "error",
       message: "Failed to cancel request",
       error: error.message,
