@@ -97,7 +97,8 @@ class AIService {
     screen,
     res = null,
     dataScreen,
-    context = {}
+    context = {},
+    requestId = null
   ) {
     // Validate request parameters
     const validation = this.validateRequestParams({
@@ -112,6 +113,7 @@ class AIService {
     // Log validation results
     console.log('\n🔍 [AI Service] ====== REQUEST VALIDATION ======', {
       timestamp: new Date().toISOString(),
+      requestId: requestId || 'NOT_PROVIDED',
       validation,
       requestParams: {
         hasPrompt: !!prompt,
@@ -125,20 +127,30 @@ class AIService {
 
     // Return early if validation fails
     if (!validation.isValid) {
+      console.error('[AI Service] Validation failed:', validation.errors);
       return {
         text: "I cannot process your request due to missing or invalid parameters.",
         data: null,
         error: true,
-        errorMessage: validation.errors.join('. ')
+        errorMessage: validation.errors.join('. '),
+        requestId: requestId
       };
     }
+
     try {
-      // Validate required parameters
-      if (!uid) throw new Error("User ID (uid) is required");
-      if (!profileId) throw new Error("Profile ID is required");
+      // Validate required parameters again for safety
+      if (!uid) {
+        console.error('[AI Service] UID is missing after validation');
+        throw new Error("User ID (uid) is required");
+      }
+      if (!profileId) {
+        console.error('[AI Service] Profile ID is missing after validation');
+        throw new Error("Profile ID is required");
+      }
 
       console.log('\n🎯 [AI Service] ====== DETAILED REQUEST LOGGING ======');
       console.log("[AI Service] Starting request with:", { 
+        requestId: requestId || 'NOT_PROVIDED',
         uid, 
         profileId, 
         hasPrompt: !!prompt, 
@@ -154,6 +166,7 @@ class AIService {
       // Log context details if available
       if (context) {
         console.log("🔍 [AI Service] Context received:", {
+          requestId: requestId || 'NOT_PROVIDED',
           screen: context.screen,
           device: context.device,
           time: context.time,
@@ -177,13 +190,32 @@ class AIService {
       console.log("[AI Service] Environment variables check passed");
 
       // Retrieve user and profile context for tool calls
+      console.log("[AI Service] Getting user DEK for uid:", uid);
       const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+      if (!keyData || !keyData.dek) {
+        console.error("[AI Service] Failed to get DEK for user:", uid);
+        throw new Error("Failed to retrieve user encryption keys");
+      }
+      const dek = keyData.dek;
+      
+      console.log("[AI Service] Getting user data for uid:", uid);
       const user = await User.findOne({ authUid: uid }).lean();
-      if (!user?.email?.[0]?.email) throw new Error("User email not found");
+      if (!user) {
+        console.error("[AI Service] User not found for uid:", uid);
+        throw new Error("User not found");
+      }
+      if (!user?.email?.[0]?.email) {
+        console.error("[AI Service] User email not found for uid:", uid);
+        throw new Error("User email not found");
+      }
+      
       const email = user.email[0].email;
+      console.log("[AI Service] Getting user profiles for email:", email);
       const profiles = await businessService.getUserProfiles(email, uid);
-      if (!profiles?.length) throw new Error("No profiles found for user");
+      if (!profiles?.length) {
+        console.error("[AI Service] No profiles found for user:", uid);
+        throw new Error("No profiles found for user");
+      }
 
       console.log("[AI Service] Found profiles:", profiles.length);
 
