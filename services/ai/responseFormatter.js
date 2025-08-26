@@ -35,12 +35,26 @@ export function formatFinancialResponse(toolResult, userQuestion = '') {
   if (toolResult.netWorth !== undefined) {
     let response = `Your current net worth is $${toolResult.netWorth.toLocaleString()}`;
 
-    if (toolResult.totalCashBalance !== undefined) {
-      response += `, with $${toolResult.totalCashBalance.toLocaleString()} in cash`;
+    // Check if the data makes mathematical sense
+    const cashBalance = toolResult.totalCashBalance || 0;
+    const otherAssets = toolResult.totalAssets || 0;
+    
+    // If cash balance equals net worth, all money is in cash
+    if (cashBalance === toolResult.netWorth) {
+      response += `, all in cash`;
+    } 
+    // If cash balance is less than net worth, show the breakdown
+    else if (cashBalance < toolResult.netWorth && cashBalance > 0) {
+      const remainingAssets = toolResult.netWorth - cashBalance;
+      response += `, with $${cashBalance.toLocaleString()} in cash`;
+      
+      if (remainingAssets > 0) {
+        response += ` and $${remainingAssets.toLocaleString()} in other assets`;
+      }
     }
-
-    if (toolResult.totalAssets !== undefined && toolResult.totalAssets > 0) {
-      response += ` and $${toolResult.totalAssets.toLocaleString()} in other assets`;
+    // If cash balance is greater than net worth (shouldn't happen but handle gracefully)
+    else if (cashBalance > toolResult.netWorth) {
+      response += `, with $${toolResult.netWorth.toLocaleString()} in cash`;
     }
 
     if (toolResult.totalLiabilities !== undefined && toolResult.totalLiabilities > 0) {

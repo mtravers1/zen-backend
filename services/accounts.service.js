@@ -1796,7 +1796,7 @@ const getCashFlows = async (profile, uid) => {
     advice,
     averageDailyNet,
     weeklyCashFlow,
-    totalAssets: balanceDebit + allInvestmentsCurrentBalance + totalAssets,
+    totalAssets: allInvestmentsCurrentBalance + totalAssets, // Removed balanceDebit to avoid duplication
     totalLiabilities: balanceCredit + balanceLoan,
   };
 };
