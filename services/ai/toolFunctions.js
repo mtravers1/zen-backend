@@ -760,6 +760,4 @@ function getDisplayName(account) {
   }
   
   return 'Unnamed Account';
-}
-
-export { toolFunctions }; 
+} 
