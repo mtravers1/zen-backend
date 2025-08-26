@@ -263,6 +263,31 @@ export function formatDataForDisplay(data, userQuestion = '') {
       return null;
     }
 
+    // Check if user is asking about specific account types
+    const question = userQuestion.toLowerCase();
+    let filteredData = data;
+
+    if (question.includes('saving') || question.includes('poupança')) {
+      // Filter to show only savings accounts
+      filteredData = data.filter(item => 
+        String(item.type || item.subtype || '').toLowerCase().includes('saving') ||
+        String(item.name || '').toLowerCase().includes('saving') ||
+        String(item.name || '').toLowerCase().includes('poupança')
+      );
+      
+      if (filteredData.length === 0) {
+        // No savings accounts found
+        return {
+          type: 'text',
+          data: `No savings accounts found. You have ${data.length} other account${data.length > 1 ? 's' : ''} (checking, investment, etc.).`,
+          summary: 'No savings accounts available'
+        };
+      }
+      
+      // Update data to filtered version
+      data = filteredData;
+    }
+
     // Check if this is actually tabular data or just a list
     if (isArrayTabularData(data)) {
       // Process each item to create better table structure
@@ -890,7 +915,7 @@ function generateTableSummary(data, userQuestion) {
   const question = userQuestion.toLowerCase();
   
   // Generate context-aware summary
-  if (question.includes('balance') || question.includes('saldo')) {
+  if (question.includes('balance')) {
     const totalBalance = data.reduce((sum, item) => {
       const balance = parseFloat(String(item.balance || item.amount || item.value || 0).replace(/[$,]/g, ''));
       return sum + (isNaN(balance) ? 0 : balance);
@@ -899,11 +924,10 @@ function generateTableSummary(data, userQuestion) {
     return `Total balance across ${data.length} account${data.length > 1 ? 's' : ''}: $${totalBalance.toLocaleString()}`;
   }
   
-  if (question.includes('savings') || question.includes('poupança')) {
+  if (question.includes('saving')) {
     const savingsAccounts = data.filter(item => 
-      String(item.type || item.subtype || '').toLowerCase().includes('savings') ||
-      String(item.name || '').toLowerCase().includes('savings') ||
-      String(item.name || '').toLowerCase().includes('poupança')
+      String(item.type || item.subtype || '').toLowerCase().includes('saving') ||
+      String(item.name || '').toLowerCase().includes('saving')
     );
     
     if (savingsAccounts.length > 0) {
@@ -913,16 +937,12 @@ function generateTableSummary(data, userQuestion) {
       }, 0);
       
       return `Found ${savingsAccounts.length} savings account${savingsAccounts.length > 1 ? 's' : ''} with total balance: $${totalSavings.toLocaleString()}`;
+    } else {
+      return `No savings accounts found. You have ${data.length} other account${data.length > 1 ? 's' : ''} (checking, investment, etc.).`;
     }
   }
   
-  if (question.includes('account') || question.includes('conta')) {
-    return `Showing ${data.length} account${data.length > 1 ? 's' : ''} with detailed information.`;
-  }
-  
-  if (question.includes('transaction') || question.includes('transação')) {
-    return `Showing ${data.length} recent transaction${data.length > 1 ? 's' : ''}.`;
-  }
+
 
   // Default summary
   return `Displaying ${data.length} item${data.length > 1 ? 's' : ''} of financial data.`;
