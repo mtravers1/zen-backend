@@ -162,7 +162,7 @@ User: "What's my net worth?"
 2. Receive: {"netWorth": 50000, "totalCashBalance": 20000}
 3. Return: {
    "response": "Your net worth is $50,000, with $20,000 in cash",
-   "data": {"netWorth": 50000, "totalCashBalance": 20000},
+   "data": null,
    "source": "tool_result"
 }
 
@@ -215,7 +215,7 @@ export const getSimplifiedSystemPrompt = (screen = 'dashboard') => `You are Zent
 **Analyze and respond appropriately:**
 
 1. **FINANCIAL DATA** → MUST use tools
-   - Net worth → Call getNetWorth()
+   - Net worth → Call getNetWorth() → Return simple text response
    - Balance → Call getAccountsByProfile()
    - Transactions → Call getProfileTransactions()
    - Response: Include real data

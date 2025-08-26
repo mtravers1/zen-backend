@@ -652,8 +652,12 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
           } else {
             // Fallback to original formatter
             const formattedResult = formatFinancialResponse(parsedResponse.data);
-            // Only use formatted result if it's not null (null means keep original data)
-            if (formattedResult !== null) {
+            // Check if this is a simple text response
+            if (formattedResult && typeof formattedResult === 'object' && formattedResult.type === 'simple_text') {
+              // For simple text responses, don't include structured data
+              formattedData = null;
+              console.log(`[AI Service] ✅ Simple text response - no structured data needed`);
+            } else if (formattedResult !== null) {
               formattedData = formattedResult;
               console.log(`[AI Service] ✅ Financial data formatted successfully (fallback)`);
             } else {

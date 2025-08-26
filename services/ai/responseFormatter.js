@@ -48,7 +48,12 @@ export function formatFinancialResponse(toolResult, userQuestion = '') {
     }
 
     response += '.';
-    return response;
+    
+    return {
+      text: response,
+      type: 'simple_text',
+      shouldShowData: false
+    };
   }
 
   // Handle cash balance data

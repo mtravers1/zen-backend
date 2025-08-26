@@ -983,11 +983,21 @@ export async function callLLM({
       if (lastToolResult && parsed && typeof parsed === 'object') {
         console.log('[AI][callLLM] Using real tool data with LLM response');
         
-        const responseText = parsed.response || parsed.text || formatFinancialResponse(lastToolResult);
+        const formattedResponse = formatFinancialResponse(lastToolResult);
+        let responseText;
+        let shouldShowData = true;
+        
+        // Check if this is a simple text response
+        if (formattedResponse && typeof formattedResponse === 'object' && formattedResponse.type === 'simple_text') {
+          responseText = formattedResponse.text;
+          shouldShowData = formattedResponse.shouldShowData || false;
+        } else {
+          responseText = parsed.response || parsed.text || formatFinancialResponse(lastToolResult);
+        }
         
         return JSON.stringify({
           text: responseText,
-          data: lastToolResult,
+          data: shouldShowData ? lastToolResult : null,
           source: 'tool_result',
           error: false
         });
@@ -995,9 +1005,21 @@ export async function callLLM({
       } else if (lastToolResult) {
         console.log('[AI][callLLM] Using tool results only (no valid LLM response)');
         
+        const formattedResponse = formatFinancialResponse(lastToolResult);
+        let responseText;
+        let shouldShowData = true;
+        
+        // Check if this is a simple text response
+        if (formattedResponse && typeof formattedResponse === 'object' && formattedResponse.type === 'simple_text') {
+          responseText = formattedResponse.text;
+          shouldShowData = formattedResponse.shouldShowData || false;
+        } else {
+          responseText = formatFinancialResponse(lastToolResult);
+        }
+        
         return JSON.stringify({
-          text: formatFinancialResponse(lastToolResult),
-          data: lastToolResult,
+          text: responseText,
+          data: shouldShowData ? lastToolResult : null,
           source: 'tool_result',
           error: false
         });
@@ -1040,10 +1062,21 @@ export async function callLLM({
     if (lastToolResult) {
       console.log('[AI][callLLM] Error occurred but tool results available - returning real data');
       
-      const responseText = formatFinancialResponse(lastToolResult);
+      const formattedResponse = formatFinancialResponse(lastToolResult);
+      let responseText;
+      let shouldShowData = true;
+      
+      // Check if this is a simple text response
+      if (formattedResponse && typeof formattedResponse === 'object' && formattedResponse.type === 'simple_text') {
+        responseText = formattedResponse.text;
+        shouldShowData = formattedResponse.shouldShowData || false;
+      } else {
+        responseText = formatFinancialResponse(lastToolResult);
+      }
+      
       return JSON.stringify({
         text: responseText,
-        data: lastToolResult,
+        data: shouldShowData ? lastToolResult : null,
         source: 'tool_result_error_fallback',
         error: true,
         errorMessage: e.message,
