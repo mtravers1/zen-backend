@@ -9,16 +9,7 @@
  * @returns {string} The generated prompt for the LLM.
  */
 export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
-  console.error(`[SCREEN DEBUG] ====== BUILD SCREEN PROMPT FUNCTION ======`);
-  console.error(`[SCREEN DEBUG] Input parameters:`, {
-    currentScreen: currentScreen,
-    dataScreen: dataScreen,
-    richContextKeys: Object.keys(richContext),
-    richContextScreen: richContext.screen ? Object.keys(richContext.screen) : 'NO_SCREEN'
-  });
-  
   const baseScreen = currentScreen || 'dashboard';
-  console.error(`[SCREEN DEBUG] Base screen determined: "${baseScreen}"`);
   
   // Build minimal context information
   const contextInfo = [];
@@ -26,15 +17,10 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   // Use the currentScreen parameter first (this comes directly from the mobile app)
   if (currentScreen && currentScreen !== 'unknown' && currentScreen !== 'dashboard') {
     contextInfo.push(`Current screen: ${currentScreen}`);
-    console.error(`[SCREEN DEBUG] ✅ Using currentScreen parameter: "${currentScreen}"`);
   }
   // Fallback to rich context if available
   else if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
     contextInfo.push(`Current screen: ${richContext.screen.currentScreen}`);
-    console.error(`[SCREEN DEBUG] 🔄 Fallback to richContext.screen.currentScreen: "${richContext.screen.currentScreen}"`);
-  }
-  else {
-    console.error(`[SCREEN DEBUG] ❌ No valid screen context found, using baseScreen: "${baseScreen}"`);
   }
   
   if (richContext.user?.profileName && richContext.user.profileName !== 'Unknown') {
@@ -44,12 +30,6 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   if (dataScreen && dataScreen !== 'unknown' && dataScreen !== 'overview') {
     contextInfo.push(`Viewing: ${dataScreen}`);
   }
-  
-  console.error(`[SCREEN DEBUG] Final context info:`, {
-    contextInfo: contextInfo,
-    contextInfoLength: contextInfo.length,
-    finalContext: contextInfo.length > 0 ? contextInfo.join(' | ') : baseScreen
-  });
   
   const baseContext = `
     ## CONTEXT
@@ -70,13 +50,6 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
     - Items: **Title** • Details
     - Text: Simple text response
   `;
-  
-  console.error(`[SCREEN DEBUG] Final system prompt generated:`, {
-    hasPrompt: !!baseContext,
-    promptLength: baseContext?.length || 0,
-    promptPreview: baseContext ? baseContext.substring(0, 200) + '...' : 'NO_PROMPT'
-  });
-  console.error(`[SCREEN DEBUG] ==========================================`);
   
   return baseContext;
 }

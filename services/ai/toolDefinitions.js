@@ -312,4 +312,34 @@ export const toolDefinitions = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "getFiles",
+      description: "Get all files for the user profile with details like type, folder, and metadata. Use this when users ask about their files, documents, or file count.",
+      parameters: {
+        type: "object",
+        properties: {
+          uid: { type: "string", description: "User ID" },
+          profileId: { type: "string", description: "Profile ID to get files for" }
+        },
+        required: ["uid", "profileId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getFileSummary",
+      description: "Get a summary of files including count, types, folders, and recent files. Use this when users ask about file statistics or overview.",
+      parameters: {
+        type: "object",
+        properties: {
+          uid: { type: "string", description: "User ID" },
+          profileId: { type: "string", description: "Profile ID to get file summary for" }
+        },
+        required: ["uid", "profileId"],
+      },
+    },
+  },
 ]; 

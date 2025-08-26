@@ -6,6 +6,7 @@ import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
+import filesService from "../files.service.js";
 import { filterAccounts, filterTransactions } from "./filters.js";
 
 /**
@@ -717,6 +718,71 @@ export const toolFunctions = (context) => ({
         error: error.message,
         fallback: "I can help you with general financial education, tax guidance, and investment basics. What specific topic would you like to learn about?"
       };
+    }
+  },
+
+  /**
+   * Retrieves all files for the user profile
+   */
+  getFiles: async ({ uid, profileId }) => {
+    try {
+      const files = await filesService.getFiles(profileId, uid);
+      
+      if (!files || files.length === 0) {
+        return { message: "No files found", data: [], count: 0 };
+      }
+      
+      return {
+        message: "Files retrieved successfully",
+        data: files,
+        count: files.length,
+        fileTypes: [...new Set(files.map(f => f.type))],
+        folders: [...new Set(files.map(f => f.folder).filter(Boolean))]
+      };
+    } catch (error) {
+      console.error("[AI][getFiles] Error:", error);
+      return { message: "Failed to retrieve files", error: error.message };
+    }
+  },
+
+  /**
+   * Gets file count and summary information
+   */
+  getFileSummary: async ({ uid, profileId }) => {
+    try {
+      const files = await filesService.getFiles(profileId, uid);
+      
+      if (!files || files.length === 0) {
+        return { message: "No files found", count: 0, summary: {} };
+      }
+      
+      // Group files by type and folder
+      const summary = {
+        totalFiles: files.length,
+        byType: {},
+        byFolder: {},
+        recentFiles: files
+          .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+          .slice(0, 5)
+      };
+      
+      files.forEach(file => {
+        // Count by type
+        const type = file.type || 'unknown';
+        summary.byType[type] = (summary.byType[type] || 0) + 1;
+        
+        // Count by folder
+        const folder = file.folder || 'root';
+        summary.byFolder[folder] = (summary.byFolder[folder] || 0) + 1;
+      });
+      
+      return {
+        message: "File summary generated",
+        data: summary
+      };
+    } catch (error) {
+      console.error("[AI][getFileSummary] Error:", error);
+      return { message: "Failed to generate file summary", error: error.message };
     }
   },
 }); 
