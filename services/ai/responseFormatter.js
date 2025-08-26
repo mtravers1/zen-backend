@@ -268,12 +268,38 @@ export function formatDataForDisplay(data, userQuestion = '') {
     let filteredData = data;
 
     if (question.includes('saving') || question.includes('poupança')) {
+      console.log(`[responseFormatter] 🔍 Filtering for savings accounts. Question: "${question}"`);
+      console.log(`[responseFormatter] 📊 Original data length: ${data.length}`);
+      console.log(`[responseFormatter] 📋 Sample data item:`, JSON.stringify(data[0], null, 2));
+      
       // Filter to show only savings accounts
-      filteredData = data.filter(item => 
-        String(item.type || item.subtype || '').toLowerCase().includes('saving') ||
-        String(item.name || '').toLowerCase().includes('saving') ||
-        String(item.name || '').toLowerCase().includes('poupança')
-      );
+      filteredData = data.filter(item => {
+        const accountType = String(item.account_type || item.type || '').toLowerCase();
+        const accountSubtype = String(item.account_subtype || item.subtype || '').toLowerCase();
+        const accountName = String(item.account_name || item.name || '').toLowerCase();
+        const accountOfficialName = String(item.account_official_name || '').toLowerCase();
+        const accountCategory = String(item.account_category || '').toLowerCase();
+        
+        const isSavings = accountType.includes('depository') ||
+                         accountSubtype.includes('saving') ||
+                         accountName.includes('saving') ||
+                         accountOfficialName.includes('saving') ||
+                         accountCategory.includes('saving') ||
+                         String(item.name || '').toLowerCase().includes('poupança');
+        
+        console.log(`[responseFormatter] 🔍 Item "${item.account_name || item.name}":`, {
+          accountType,
+          accountSubtype,
+          accountName,
+          accountOfficialName,
+          accountCategory,
+          isSavings
+        });
+        
+        return isSavings;
+      });
+      
+      console.log(`[responseFormatter] ✅ Filtered data length: ${filteredData.length}`);
       
       if (filteredData.length === 0) {
         // No savings accounts found
@@ -290,6 +316,8 @@ export function formatDataForDisplay(data, userQuestion = '') {
 
     // Check if this is actually tabular data or just a list
     if (isArrayTabularData(data)) {
+      console.log(`[responseFormatter] 📊 Data is tabular, processing for table display`);
+      
       // Process each item to create better table structure
       const processedData = data.map(item => {
         if (typeof item === 'object' && item !== null) {
@@ -298,19 +326,38 @@ export function formatDataForDisplay(data, userQuestion = '') {
         return item;
       });
 
-      return {
+      const result = {
         type: 'table',
         data: processedData,
         headers: generateTableHeaders(processedData),
-        summary: generateTableSummary(processedData, userQuestion)
+        summary: generateTextSummary(data, userQuestion)
       };
+      
+      console.log(`[responseFormatter] ✅ Returning table result:`, {
+        type: result.type,
+        dataLength: result.data.length,
+        headersCount: result.headers.length,
+        summary: result.summary
+      });
+      
+      return result;
     } else {
+      console.log(`[responseFormatter] 📋 Data is not tabular, treating as list`);
+      
       // This is a list, not a table
-      return {
+      const result = {
         type: 'list',
         data: data,
         summary: generateListSummary(data, userQuestion)
       };
+      
+      console.log(`[responseFormatter] ✅ Returning list result:`, {
+        type: result.type,
+        dataLength: result.data.length,
+        summary: result.summary
+      });
+      
+      return result;
     }
   }
 
@@ -323,7 +370,7 @@ export function formatDataForDisplay(data, userQuestion = '') {
         type: 'table',
         data: [processedData],
         headers: generateTableHeaders([processedData]),
-        summary: generateTableSummary([processedData], userQuestion)
+        summary: generateTextSummary(data, userQuestion)
       };
     } else {
       // This is a single item, not a table
@@ -633,7 +680,7 @@ function parseTableContent(content, userQuestion) {
     type: 'table',
     data: dataRows,
     headers: headers,
-    summary: `Table with ${dataRows.length} rows showing ${headers.join(', ')}`,
+    summary: `${dataRows.length} rows of data`,
     originalContent: content
   };
 }
@@ -705,7 +752,7 @@ function parseStepsContent(content, userQuestion) {
     return {
       type: 'steps',
       data: validSteps,
-      summary: `${validSteps.length} step${validSteps.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
+      summary: `${validSteps.length} step${validSteps.length > 1 ? 's' : ''}`,
       originalContent: content
     };
   }
@@ -755,7 +802,7 @@ function parseListContent(content, userQuestion) {
     return {
       type: 'list',
       data: listItems,
-      summary: `${listItems.length} item${listItems.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
+      summary: `${listItems.length} item${listItems.length > 1 ? 's' : ''}`,
       originalContent: content
     };
   }
@@ -827,7 +874,7 @@ function parseSectionsContent(content, userQuestion) {
     return {
       type: 'sections',
       data: validSections,
-      summary: `${validSections.length} section${validSections.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
+      summary: `${validSections.length} section${validSections.length > 1 ? 's' : ''}`,
       originalContent: content
     };
   }
@@ -902,53 +949,6 @@ function generateTableHeaders(data) {
 }
 
 /**
- * Generate summary text for table data
- * @param {Array} data - The data array
- * @param {string} userQuestion - The original user question
- * @returns {string} Summary text
- */
-function generateTableSummary(data, userQuestion) {
-  if (!Array.isArray(data) || data.length === 0) {
-    return 'No data available.';
-  }
-
-  const question = userQuestion.toLowerCase();
-  
-  // Generate context-aware summary
-  if (question.includes('balance')) {
-    const totalBalance = data.reduce((sum, item) => {
-      const balance = parseFloat(String(item.balance || item.amount || item.value || 0).replace(/[$,]/g, ''));
-      return sum + (isNaN(balance) ? 0 : balance);
-    }, 0);
-    
-    return `Total balance across ${data.length} account${data.length > 1 ? 's' : ''}: $${totalBalance.toLocaleString()}`;
-  }
-  
-  if (question.includes('saving')) {
-    const savingsAccounts = data.filter(item => 
-      String(item.type || item.subtype || '').toLowerCase().includes('saving') ||
-      String(item.name || '').toLowerCase().includes('saving')
-    );
-    
-    if (savingsAccounts.length > 0) {
-      const totalSavings = savingsAccounts.reduce((sum, item) => {
-        const balance = parseFloat(String(item.balance || item.amount || 0).replace(/[$,]/g, ''));
-        return sum + (isNaN(balance) ? 0 : balance);
-      }, 0);
-      
-      return `Found ${savingsAccounts.length} savings account${savingsAccounts.length > 1 ? 's' : ''} with total balance: $${totalSavings.toLocaleString()}`;
-    } else {
-      return `No savings accounts found. You have ${data.length} other account${data.length > 1 ? 's' : ''} (checking, investment, etc.).`;
-    }
-  }
-  
-
-
-  // Default summary
-  return `Displaying ${data.length} item${data.length > 1 ? 's' : ''} of financial data.`;
-}
-
-/**
  * Generate summary for text data
  * @param {any} data - The text data
  * @param {string} userQuestion - The original user question
@@ -959,7 +959,7 @@ function generateTextSummary(data, userQuestion) {
     return data.length > 100 ? data.substring(0, 100) + '...' : data;
   }
   
-  return String(data);
+  return 'Text content';
 } 
 
 /**
@@ -973,26 +973,8 @@ function generateListSummary(data, userQuestion) {
     return 'No items available.';
   }
 
-  const question = userQuestion.toLowerCase();
-  
-  if (question.includes('account') || question.includes('conta')) {
-    return `Found ${data.length} account${data.length > 1 ? 's' : ''} for your request.`;
-  }
-  
-  if (question.includes('transaction') || question.includes('transação')) {
-    return `Found ${data.length} transaction${data.length > 1 ? 's' : ''} for your request.`;
-  }
-  
-  if (question.includes('step') || question.includes('passo')) {
-    return `${data.length} step${data.length > 1 ? 's' : ''} to complete your request.`;
-  }
-  
-  if (question.includes('tip') || question.includes('dica')) {
-    return `${data.length} helpful tip${data.length > 1 ? 's' : ''} for you.`;
-  }
-
-  // Default summary
-  return `${data.length} item${data.length > 1 ? 's' : ''} found.`;
+  // Default summary - simple and direct
+  return `${data.length} item${data.length > 1 ? 's' : ''}`;
 }
 
 /**
@@ -1003,29 +985,9 @@ function generateListSummary(data, userQuestion) {
  */
 function generateItemSummary(data, userQuestion) {
   if (!data || typeof data !== 'object') {
-    return 'Item information available.';
+    return 'Item details';
   }
 
-  const question = userQuestion.toLowerCase();
-  
-  if (question.includes('balance') || question.includes('saldo')) {
-    if (data.balance !== undefined) {
-      return `Current balance: $${data.balance.toLocaleString()}`;
-    }
-  }
-  
-  if (question.includes('net worth') || question.includes('patrimônio')) {
-    if (data.netWorth !== undefined) {
-      return `Your net worth: $${data.netWorth.toLocaleString()}`;
-    }
-  }
-  
-  if (question.includes('account') || question.includes('conta')) {
-    if (data.account_name || data.name) {
-      return `Account: ${data.account_name || data.name}`;
-    }
-  }
-
-  // Default summary
-  return 'Item details available.';
+  // Default summary - simple and direct
+  return 'Item details';
 } 
