@@ -747,7 +747,7 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       console.error(`[AI Service] Error stack:`, error.stack);
       
       return {
-        text: "An unexpected error occurred. Please try again or contact support.",
+        text: "I'm having trouble processing your request right now. This usually happens due to a temporary connection issue or high server load. Please try again in a moment.",
         data: { error: error.message },
         error: true,
         errorMessage: error.message,

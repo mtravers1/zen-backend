@@ -330,7 +330,7 @@ export function formatDataForDisplay(data, userQuestion = '') {
         type: 'table',
         data: processedData,
         headers: generateTableHeaders(processedData),
-        summary: generateTextSummary(data, userQuestion)
+        summary: null // Remove summary to avoid "Text content" wrapper
       };
       
       console.log(`[responseFormatter] ✅ Returning table result:`, {
@@ -370,7 +370,7 @@ export function formatDataForDisplay(data, userQuestion = '') {
         type: 'table',
         data: [processedData],
         headers: generateTableHeaders([processedData]),
-        summary: generateTextSummary(data, userQuestion)
+        summary: null // Remove summary to avoid "Text content" wrapper
       };
     } else {
       // This is a single item, not a table
@@ -680,7 +680,7 @@ function parseTableContent(content, userQuestion) {
     type: 'table',
     data: dataRows,
     headers: headers,
-    summary: `${dataRows.length} rows of data`,
+    summary: null, // Remove summary to avoid "Text content" wrapper
     originalContent: content
   };
 }
@@ -958,8 +958,6 @@ function generateTextSummary(data, userQuestion) {
   if (typeof data === 'string') {
     return data.length > 100 ? data.substring(0, 100) + '...' : data;
   }
-  
-  return 'Text content';
 } 
 
 /**
