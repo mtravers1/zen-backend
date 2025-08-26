@@ -602,8 +602,16 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       let formattedData = parsedResponse.data;
       if (parsedResponse.data && typeof parsedResponse.data === 'object') {
         try {
-          formattedData = formatFinancialResponse(parsedResponse.data);
-          console.log(`[AI Service] ✅ Financial data formatted successfully`);
+          const formattedResult = formatFinancialResponse(parsedResponse.data);
+          // Only use formatted result if it's not null (null means keep original data)
+          if (formattedResult !== null) {
+            formattedData = formattedResult;
+            console.log(`[AI Service] ✅ Financial data formatted successfully`);
+          } else {
+            // Keep original data when formatter returns null
+            formattedData = parsedResponse.data;
+            console.log(`[AI Service] ✅ Keeping original data (formatter returned null)`);
+          }
         } catch (formatError) {
           console.warn(`[AI Service] ⚠️ Financial data formatting failed:`, formatError);
           // Continue with unformatted data

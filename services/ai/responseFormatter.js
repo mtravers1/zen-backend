@@ -80,7 +80,8 @@ export function formatFinancialResponse(toolResult, userQuestion = '') {
     if (toolResult.length === 0) {
       return 'No transactions found for the requested period.';
     } else {
-      return `Found ${toolResult.length} item${toolResult.length > 1 ? 's' : ''} for your request.`;
+      // Don't return a string here - let the caller handle the data
+      return null; // This will keep the original data intact
     }
   }
 
