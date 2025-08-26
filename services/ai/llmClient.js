@@ -986,7 +986,7 @@ export async function callLLM({
         const responseText = parsed.response || parsed.text || formatFinancialResponse(lastToolResult);
         
         return JSON.stringify({
-          response: responseText,
+          text: responseText,
           data: lastToolResult,
           source: 'tool_result',
           error: false
@@ -996,7 +996,7 @@ export async function callLLM({
         console.log('[AI][callLLM] Using tool results only (no valid LLM response)');
         
         return JSON.stringify({
-          response: formatFinancialResponse(lastToolResult),
+          text: formatFinancialResponse(lastToolResult),
           data: lastToolResult,
           source: 'tool_result',
           error: false
@@ -1006,7 +1006,7 @@ export async function callLLM({
       // No tool results - return LLM response
       if (parsed && (parsed.response || parsed.text)) {
         return JSON.stringify({
-          response: parsed.response || parsed.text,
+          text: parsed.response || parsed.text,
           data: parsed.data || null,
           source: 'general_response',
           error: false
@@ -1015,7 +1015,7 @@ export async function callLLM({
       
       // Fallback
       return JSON.stringify({
-        response: 'I encountered an issue processing your request. Please try again.',
+        text: 'I encountered an issue processing your request. Please try again.',
         data: null,
         error: true,
         source: 'fallback'
@@ -1026,7 +1026,7 @@ export async function callLLM({
       
       // Return as plain text response
       return JSON.stringify({
-        response: completeResponse,
+        text: completeResponse,
         data: lastToolResult || null,
         source: lastToolResult ? 'tool_result_text' : 'general_response',
         error: false
