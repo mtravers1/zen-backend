@@ -100,19 +100,43 @@ export const toolFunctions = (context) => ({
           return [key, value];
         })
       );
-      
-      if (!cleaned) {
-        return [];
+
+      // Apply filters if provided
+      let filteredAccounts = [];
+      if (filters.accountType) {
+        // Filter by account type (e.g., 'savings', 'checking')
+        Object.entries(cleaned).forEach(([type, accounts]) => {
+          if (type.toLowerCase().includes(filters.accountType.toLowerCase())) {
+            filteredAccounts.push(...accounts);
+          }
+        });
+      } else if (filters.accountSubtype) {
+        // Filter by account subtype (e.g., 'savings', 'checking')
+        Object.entries(cleaned).forEach(([type, accounts]) => {
+          const matchingAccounts = accounts.filter(account => 
+            account.account_subtype?.toLowerCase().includes(filters.accountSubtype.toLowerCase()) ||
+            account.account_name?.toLowerCase().includes(filters.accountSubtype.toLowerCase())
+          );
+          filteredAccounts.push(...matchingAccounts);
+        });
+      } else {
+        // Return all accounts if no specific filter
+        Object.values(cleaned).forEach(accounts => {
+          filteredAccounts.push(...accounts);
+        });
       }
-      
-      const allAccounts = Object.values(cleaned).flat();
-      const filteredAccounts = filterAccounts(allAccounts, filters);
-      const formattedAccounts = accountsService.formatAccountsBalances(filteredAccounts);
-      
-      return formattedAccounts;
+
+      // Add account type information for better categorization
+      filteredAccounts = filteredAccounts.map(account => ({
+        ...account,
+        account_category: getAccountCategory(account),
+        display_name: getDisplayName(account)
+      }));
+
+      return filteredAccounts;
     } catch (error) {
       console.error("[AI][getAccountsByProfile] Error:", error);
-      return { message: "Failed to retrieve profile accounts", error: error.message };
+      return { message: "Failed to retrieve accounts", error: error.message };
     }
   },
 
@@ -696,3 +720,46 @@ export const toolFunctions = (context) => ({
     }
   },
 }); 
+
+// Helper functions for account categorization
+function getAccountCategory(account) {
+  const type = account.account_type?.toLowerCase() || '';
+  const subtype = account.account_subtype?.toLowerCase() || '';
+  const name = account.account_name?.toLowerCase() || '';
+  
+  if (type.includes('depository')) {
+    if (subtype.includes('savings') || name.includes('savings') || name.includes('poupança')) {
+      return 'savings';
+    } else if (subtype.includes('checking') || name.includes('checking') || name.includes('corrente')) {
+      return 'checking';
+    }
+    return 'depository';
+  } else if (type.includes('credit')) {
+    return 'credit';
+  } else if (type.includes('investment')) {
+    return 'investment';
+  } else if (type.includes('loan')) {
+    return 'loan';
+  }
+  
+  return 'other';
+}
+
+function getDisplayName(account) {
+  // Try to get the most meaningful name
+  if (account.account_official_name && account.account_official_name.trim()) {
+    return account.account_official_name.trim();
+  }
+  
+  if (account.account_name && account.account_name.trim()) {
+    return account.account_name.trim();
+  }
+  
+  if (account.institution_name && account.institution_name.trim()) {
+    return `${account.institution_name.trim()} Account`;
+  }
+  
+  return 'Unnamed Account';
+}
+
+export { toolFunctions }; 

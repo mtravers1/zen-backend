@@ -5,7 +5,7 @@ import { buildScreenPrompt, getProductionSystemPrompt, getSimplifiedSystemPrompt
 import { toolFunctions } from "./toolFunctions.js";
 import { callLLM } from "./llmClient.js";
 import { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
-import { formatFinancialResponse } from "./responseFormatter.js";
+import { formatFinancialResponse, formatDataForDisplay, formatStructuredContent } from "./responseFormatter.js";
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
@@ -301,6 +301,13 @@ When a user asks for specific financial data, you MUST use the available tools:
 - "What's my balance?" → CALL getAccountsByProfile()
 - "Show my transactions" → CALL getProfileTransactions()
 - "What's my cash flow?" → CALL getCashFlows()
+
+**QUESTION INTERPRETATION:**
+- "balance" = total account balances across all accounts
+- "savings" = filter accounts to show only savings accounts
+- "checking" = filter accounts to show only checking accounts
+- "accounts" = show all accounts with details
+- "money" = show total cash balance across accounts
 
 **RESPONSE FORMAT:**
 Always return JSON in this exact format:
@@ -602,19 +609,50 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       let formattedData = parsedResponse.data;
       if (parsedResponse.data && typeof parsedResponse.data === 'object') {
         try {
-          const formattedResult = formatFinancialResponse(parsedResponse.data);
-          // Only use formatted result if it's not null (null means keep original data)
-          if (formattedResult !== null) {
-            formattedData = formattedResult;
-            console.log(`[AI Service] ✅ Financial data formatted successfully`);
+          // First try the enhanced data formatter
+          const enhancedFormattedData = formatDataForDisplay(parsedResponse.data, prompt);
+          
+          if (enhancedFormattedData) {
+            formattedData = enhancedFormattedData;
+            console.log(`[AI Service] ✅ Enhanced data formatting applied:`, {
+              type: enhancedFormattedData.type,
+              hasHeaders: !!enhancedFormattedData.headers,
+              hasSummary: !!enhancedFormattedData.summary,
+              dataLength: Array.isArray(enhancedFormattedData.data) ? enhancedFormattedData.data.length : 'not array'
+            });
           } else {
-            // Keep original data when formatter returns null
-            formattedData = parsedResponse.data;
-            console.log(`[AI Service] ✅ Keeping original data (formatter returned null)`);
+            // Fallback to original formatter
+            const formattedResult = formatFinancialResponse(parsedResponse.data);
+            // Only use formatted result if it's not null (null means keep original data)
+            if (formattedResult !== null) {
+              formattedData = formattedResult;
+              console.log(`[AI Service] ✅ Financial data formatted successfully (fallback)`);
+            } else {
+              // Keep original data when formatter returns null
+              formattedData = parsedResponse.data;
+              console.log(`[AI Service] ✅ Keeping original data (formatter returned null)`);
+            }
           }
         } catch (formatError) {
-          console.warn(`[AI Service] ⚠️ Financial data formatting failed:`, formatError);
+          console.warn(`[AI Service] ⚠️ Data formatting failed:`, formatError);
           // Continue with unformatted data
+        }
+      }
+
+      // Also check if the response text contains structured content
+      let structuredContent = null;
+      if (responseText && typeof responseText === 'string') {
+        try {
+          structuredContent = formatStructuredContent(responseText, prompt);
+          if (structuredContent && structuredContent.type !== 'text') {
+            console.log(`[AI Service] ✅ Structured content formatting applied:`, {
+              type: structuredContent.type,
+              hasData: !!structuredContent.data,
+              summary: structuredContent.summary
+            });
+          }
+        } catch (structError) {
+          console.warn(`[AI Service] ⚠️ Structured content formatting failed:`, structError);
         }
       }
 
@@ -624,6 +662,7 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       const finalResponse = {
         text: responseText || "I'm sorry, but I couldn't generate a proper response. Please try again.",
         data: formattedData || null,
+        structuredContent: structuredContent || null,
         error: parsedResponse.error || false,
         errorMessage: parsedResponse.errorMessage || undefined,
         source: parsedResponse.source || 'ai_response',

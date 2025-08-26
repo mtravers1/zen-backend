@@ -116,7 +116,7 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountsByProfile",
-      description: "Get all accounts for the current profile with balances and account details",
+      description: "Get accounts for the current profile, optionally filtered by type (savings, checking, credit, investment) or other criteria",
       parameters: {
         type: "object",
         properties: {
@@ -125,10 +125,23 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine account results",
             properties: {
-              institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
-              accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
-              nameIncludes: { type: "string", description: "Partial account name to search for" },
+              accountType: { 
+                type: "string", 
+                description: "Filter by account type (e.g., 'savings', 'checking', 'credit', 'investment')",
+                enum: ["savings", "checking", "credit", "investment", "loan", "depository"]
+              },
+              accountSubtype: { 
+                type: "string", 
+                description: "Filter by account subtype (e.g., 'savings', 'checking')" 
+              },
+              institutionName: { 
+                type: "string", 
+                description: "Filter by institution name" 
+              },
+              nameIncludes: { 
+                type: "string", 
+                description: "Filter accounts whose name contains this text" 
+              },
             },
           },
         },
