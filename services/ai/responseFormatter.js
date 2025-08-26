@@ -289,12 +289,37 @@ export function formatDataForDisplay(data, userQuestion = '') {
     }
   }
 
-  // Handle primitive data
+  // Handle primitive data - return as simple text, not table
   return {
     type: 'text',
     data: String(data),
     summary: generateTextSummary(data, userQuestion)
   };
+}
+
+/**
+ * Check if object data is tabular (has multiple properties that could be columns)
+ * @param {object} data - The object to check
+ * @returns {boolean} True if data is tabular
+ */
+function isObjectTabularData(data) {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+
+  const keys = Object.keys(data);
+  
+  // Must have multiple properties to be considered tabular
+  if (keys.length < 2) {
+    return false;
+  }
+
+  // Check if properties have different types (indicating different kinds of data)
+  const valueTypes = keys.map(key => typeof data[key]);
+  const uniqueTypes = [...new Set(valueTypes)];
+  
+  // If we have different types of data, it's more likely to be tabular
+  return uniqueTypes.length > 1;
 }
 
 /**
@@ -330,31 +355,6 @@ function isArrayTabularData(data) {
   }).length;
 
   return similarStructureCount >= data.length * 0.8;
-}
-
-/**
- * Check if object data is tabular (has multiple properties that could be columns)
- * @param {object} data - The object to check
- * @returns {boolean} True if data is tabular
- */
-function isObjectTabularData(data) {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const keys = Object.keys(data);
-  
-  // Must have multiple properties to be considered tabular
-  if (keys.length < 2) {
-    return false;
-  }
-
-  // Check if properties have different types (indicating different kinds of data)
-  const valueTypes = keys.map(key => typeof data[key]);
-  const uniqueTypes = [...new Set(valueTypes)];
-  
-  // If we have different types of data, it's more likely to be tabular
-  return uniqueTypes.length > 1;
 }
 
 /**
