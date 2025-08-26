@@ -282,7 +282,21 @@ class AIService {
       console.log('\n🔧 [AI Service] ====== STEP 2: BUILDING PROMPTS AND TOOLS ======');
       
       // Build system prompt based on screen context
+      console.error(`[SCREEN DEBUG] ====== AI SERVICE SCREEN PROCESSING ======`);
+      console.error(`[SCREEN DEBUG] Building system prompt with:`, {
+        screen: screen,
+        dataScreen: dataScreen,
+        screenType: typeof screen,
+        dataScreenType: typeof dataScreen
+      });
+      
       const systemPrompt = buildScreenPrompt(screen, dataScreen);
+      console.error(`[SCREEN DEBUG] System prompt result:`, {
+        hasPrompt: !!systemPrompt,
+        promptLength: systemPrompt?.length || 0,
+        promptPreview: systemPrompt ? systemPrompt.substring(0, 300) + '...' : 'NO_PROMPT'
+      });
+      
       console.log(`[AI Service] System prompt built:`, {
         hasSystemPrompt: !!systemPrompt,
         systemPromptLength: systemPrompt?.length || 0,
@@ -290,6 +304,11 @@ class AIService {
       });
 
       // Enhanced system prompt with tool instructions
+      console.error(`[SCREEN DEBUG] Enhanced system prompt:`, {
+        basePromptLength: systemPrompt?.length || 0,
+        enhancedPromptLength: 0 // Will be calculated after enhancement
+      });
+      
       const enhancedSystemPrompt = `${systemPrompt}
 
 ## CRITICAL INSTRUCTIONS FOR FINANCIAL DATA REQUESTS
@@ -358,6 +377,13 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
         hasEnhancedPrompt: !!enhancedSystemPrompt,
         enhancedPromptLength: enhancedSystemPrompt?.length || 0,
         enhancedPromptPreview: enhancedSystemPrompt ? enhancedSystemPrompt.substring(0, 200) + '...' : 'NO_ENHANCED_PROMPT'
+      });
+      
+      console.error(`[SCREEN DEBUG] Final LLM prompt:`, {
+        hasEnhancedPrompt: !!enhancedSystemPrompt,
+        enhancedPromptLength: enhancedSystemPrompt?.length || 0,
+        enhancedPromptPreview: enhancedSystemPrompt ? enhancedSystemPrompt.substring(0, 300) + '...' : 'NO_ENHANCED_PROMPT',
+        screenContextIncluded: enhancedSystemPrompt?.includes('Current screen:') || false
       });
 
       // Get tool definitions and implementations

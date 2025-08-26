@@ -34,6 +34,19 @@ const makeRequest = async (req, res) => {
       contextKeys: context ? Object.keys(context) : []
     });
 
+    // 🔍 SCREEN IDENTIFICATION DEBUG LOGS
+    console.error(`[SCREEN DEBUG] ====== SCREEN IDENTIFICATION FLOW ======`);
+    console.error(`[SCREEN DEBUG] Raw screen parameter received: "${screen}"`);
+    console.error(`[SCREEN DEBUG] Raw dataScreen parameter received: "${dataScreen}"`);
+    console.error(`[SCREEN DEBUG] Context object received:`, JSON.stringify(context, null, 2));
+    console.error(`[SCREEN DEBUG] Context screen info:`, context?.screen ? {
+      currentScreen: context.screen.currentScreen,
+      dataScreen: context.screen.dataScreen,
+      isMainScreen: context.screen.isMainScreen,
+      isFinancialScreen: context.screen.isFinancialScreen
+    } : 'NO SCREEN CONTEXT');
+    console.error(`[SCREEN DEBUG] ==========================================`);
+
     // Log detailed message structure for debug
     if (messages && messages.length > 0) {
       console.log(`[AI Controller] 📝 Detailed message structure:`, {
