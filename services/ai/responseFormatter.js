@@ -242,31 +242,51 @@ export function formatDataForDisplay(data, userQuestion = '') {
       return null;
     }
 
-    // Process each item to create better table structure
-    const processedData = data.map(item => {
-      if (typeof item === 'object' && item !== null) {
-        return processObjectForTable(item);
-      }
-      return item;
-    });
+    // Check if this is actually tabular data or just a list
+    if (isArrayTabularData(data)) {
+      // Process each item to create better table structure
+      const processedData = data.map(item => {
+        if (typeof item === 'object' && item !== null) {
+          return processObjectForTable(item);
+        }
+        return item;
+      });
 
-    return {
-      type: 'table',
-      data: processedData,
-      headers: generateTableHeaders(processedData),
-      summary: generateTableSummary(processedData, userQuestion)
-    };
+      return {
+        type: 'table',
+        data: processedData,
+        headers: generateTableHeaders(processedData),
+        summary: generateTableSummary(processedData, userQuestion)
+      };
+    } else {
+      // This is a list, not a table
+      return {
+        type: 'list',
+        data: data,
+        summary: generateListSummary(data, userQuestion)
+      };
+    }
   }
 
   // Handle single object data
   if (typeof data === 'object' && data !== null) {
-    const processedData = processObjectForTable(data);
-    return {
-      type: 'table',
-      data: [processedData],
-      headers: generateTableHeaders([processedData]),
-      summary: generateTableSummary([processedData], userQuestion)
-    };
+    // Check if this object is tabular or just a single item
+    if (isObjectTabularData(data)) {
+      const processedData = processObjectForTable(data);
+      return {
+        type: 'table',
+        data: [processedData],
+        headers: generateTableHeaders([processedData]),
+        summary: generateTableSummary([processedData], userQuestion)
+      };
+    } else {
+      // This is a single item, not a table
+      return {
+        type: 'item',
+        data: data,
+        summary: generateItemSummary(data, userQuestion)
+      };
+    }
   }
 
   // Handle primitive data
@@ -275,6 +295,66 @@ export function formatDataForDisplay(data, userQuestion = '') {
     data: String(data),
     summary: generateTextSummary(data, userQuestion)
   };
+}
+
+/**
+ * Check if array data is actually tabular (has consistent object structure)
+ * @param {Array} data - The array to check
+ * @returns {boolean} True if data is tabular
+ */
+function isArrayTabularData(data) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return false;
+  }
+
+  // Check if all items are objects with similar structure
+  const firstItem = data[0];
+  if (typeof firstItem !== 'object' || firstItem === null) {
+    return false;
+  }
+
+  const firstItemKeys = Object.keys(firstItem);
+  if (firstItemKeys.length === 0) {
+    return false;
+  }
+
+  // Check if at least 80% of items have the same key structure
+  const similarStructureCount = data.filter(item => {
+    if (typeof item !== 'object' || item === null) {
+      return false;
+    }
+    
+    const itemKeys = Object.keys(item);
+    const commonKeys = firstItemKeys.filter(key => itemKeys.includes(key));
+    return commonKeys.length >= firstItemKeys.length * 0.8; // At least 80% similarity
+  }).length;
+
+  return similarStructureCount >= data.length * 0.8;
+}
+
+/**
+ * Check if object data is tabular (has multiple properties that could be columns)
+ * @param {object} data - The object to check
+ * @returns {boolean} True if data is tabular
+ */
+function isObjectTabularData(data) {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+
+  const keys = Object.keys(data);
+  
+  // Must have multiple properties to be considered tabular
+  if (keys.length < 2) {
+    return false;
+  }
+
+  // Check if properties have different types (indicating different kinds of data)
+  const valueTypes = keys.map(key => typeof data[key]);
+  const uniqueTypes = [...new Set(valueTypes)];
+  
+  // If we have different types of data, it's more likely to be tabular
+  return uniqueTypes.length > 1;
 }
 
 /**
@@ -328,14 +408,48 @@ function isStructuredContent(content) {
 }
 
 /**
+ * Check if content is actually tabular data (not just structured text)
+ * @param {string} content - The content to analyze
+ * @returns {boolean} True if content is truly tabular
+ */
+function isTabularData(content) {
+  // Must have pipe separators and multiple rows
+  if (!content.includes('|')) {
+    return false;
+  }
+  
+  const lines = content.split('\n').filter(line => line.trim());
+  const tableLines = lines.filter(line => line.includes('|'));
+  
+  // Need at least 2 lines with pipes to be a real table
+  if (tableLines.length < 2) {
+    return false;
+  }
+  
+  // Check if the first line looks like headers (not just data)
+  const firstLine = tableLines[0];
+  const headerCells = firstLine.split('|').map(cell => cell.trim()).filter(cell => cell.length > 0);
+  
+  // Headers should be descriptive, not just data values
+  const hasDescriptiveHeaders = headerCells.some(header => 
+    header.length > 3 && 
+    !/\d+/.test(header) && // Not just numbers
+    !/^\$[\d,]+$/.test(header) && // Not just currency amounts
+    !/^[A-Z][a-z]+$/.test(header) // Not just single words
+  );
+  
+  return hasDescriptiveHeaders;
+}
+
+/**
  * Format content as structured data
  * @param {string} content - The content to format
  * @param {string} userQuestion - The original user question
  * @returns {object} Formatted structured data
  */
 function formatAsStructuredData(content, userQuestion) {
-  // Try to parse as table first
-  if (content.includes('|')) {
+  // Try to parse as table first, but only if it's truly tabular
+  if (content.includes('|') && isTabularData(content)) {
     return parseTableContent(content, userQuestion);
   }
 
@@ -669,4 +783,72 @@ function generateTextSummary(data, userQuestion) {
   }
   
   return String(data);
+} 
+
+/**
+ * Generate summary for list data
+ * @param {Array} data - The list data
+ * @param {string} userQuestion - The original user question
+ * @returns {string} Summary text
+ */
+function generateListSummary(data, userQuestion) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return 'No items available.';
+  }
+
+  const question = userQuestion.toLowerCase();
+  
+  if (question.includes('account') || question.includes('conta')) {
+    return `Found ${data.length} account${data.length > 1 ? 's' : ''} for your request.`;
+  }
+  
+  if (question.includes('transaction') || question.includes('transação')) {
+    return `Found ${data.length} transaction${data.length > 1 ? 's' : ''} for your request.`;
+  }
+  
+  if (question.includes('step') || question.includes('passo')) {
+    return `${data.length} step${data.length > 1 ? 's' : ''} to complete your request.`;
+  }
+  
+  if (question.includes('tip') || question.includes('dica')) {
+    return `${data.length} helpful tip${data.length > 1 ? 's' : ''} for you.`;
+  }
+
+  // Default summary
+  return `${data.length} item${data.length > 1 ? 's' : ''} found.`;
+}
+
+/**
+ * Generate summary for single item data
+ * @param {object} data - The item data
+ * @param {string} userQuestion - The original user question
+ * @returns {string} Summary text
+ */
+function generateItemSummary(data, userQuestion) {
+  if (!data || typeof data !== 'object') {
+    return 'Item information available.';
+  }
+
+  const question = userQuestion.toLowerCase();
+  
+  if (question.includes('balance') || question.includes('saldo')) {
+    if (data.balance !== undefined) {
+      return `Current balance: $${data.balance.toLocaleString()}`;
+    }
+  }
+  
+  if (question.includes('net worth') || question.includes('patrimônio')) {
+    if (data.netWorth !== undefined) {
+      return `Your net worth: $${data.netWorth.toLocaleString()}`;
+    }
+  }
+  
+  if (question.includes('account') || question.includes('conta')) {
+    if (data.account_name || data.name) {
+      return `Account: ${data.account_name || data.name}`;
+    }
+  }
+
+  // Default summary
+  return 'Item details available.';
 } 
