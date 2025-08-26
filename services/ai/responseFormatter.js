@@ -469,21 +469,31 @@ export function validateStructuredContent(content) {
 
 /**
  * Check if content contains structured information
- * @param {string} content - The content to analyze
+ * @param {string} content - The content to check
  * @returns {boolean} True if content is structured
  */
 function isStructuredContent(content) {
-  const structuredPatterns = [
-    /\|\s*[^|]+\s*\|/g, // Table format with pipes
-    /^\d+\.\s+\*\*[^*]+\*\*/gm, // Numbered steps with bold headers
-    /^\*\s+[^*\n]+/gm, // Bullet points
-    /^[A-Z][^:]*:\s*\n/gm, // Section headers with colons
-    /^\*\*[^*]+\*\*/gm, // Bold headers
-    /^Step\s+\d+/gmi, // Step headers
-    /^[A-Z][^.]*\.\s*\n/gm // Numbered items
-  ];
+  if (!content || typeof content !== 'string') {
+    return false;
+  }
 
-  return structuredPatterns.some(pattern => pattern.test(content));
+  const lines = content.split('\n').filter(line => line.trim());
+  
+  // Check for various structured patterns
+  const hasSteps = /\d+\.\s+\*\*/.test(content) || /Step\s+\d+/i.test(content);
+  const hasList = /\*\s+/.test(content) || /•\s+/.test(content);
+  const hasSections = /\*\*[^*]+\*\*/.test(content);
+  const hasTable = /\|\s*[^|]+\s*\|/.test(content);
+  
+  // Check if content has multiple lines with consistent structure
+  const hasConsistentStructure = lines.length > 2 && (
+    hasSteps || hasList || hasSections || hasTable ||
+    lines.some(line => line.trim().startsWith('•')) ||
+    lines.some(line => line.trim().startsWith('*')) ||
+    lines.some(line => /^\d+\./.test(line.trim()))
+  );
+
+  return hasConsistentStructure;
 }
 
 /**
@@ -610,13 +620,26 @@ function parseTableContent(content, userQuestion) {
  * @returns {object} Formatted steps data
  */
 function parseStepsContent(content, userQuestion) {
+  if (!content || typeof content !== 'string') {
+    return {
+      type: 'text',
+      content: content,
+      summary: 'Invalid steps content'
+    };
+  }
+
   const lines = content.split('\n').filter(line => line.trim());
   const steps = [];
   let currentStep = null;
 
-  lines.forEach(line => {
-    // Check for step headers (e.g., "1. **Step Name**")
-    const stepMatch = line.match(/^(\d+)\.\s+\*\*([^*]+)\*\*/);
+  lines.forEach((line, lineIndex) => {
+    const trimmedLine = line.trim();
+    
+    // Check for step headers (e.g., "1. **Step Name**", "Step 1: Name", "1. Name")
+    const stepMatch = trimmedLine.match(/^(\d+)\.\s+\*\*([^*]+)\*\*/) || 
+                     trimmedLine.match(/^Step\s+(\d+):?\s*(.+)/i) ||
+                     trimmedLine.match(/^(\d+)\.\s+(.+)/);
+    
     if (stepMatch) {
       if (currentStep) {
         steps.push(currentStep);
@@ -626,15 +649,17 @@ function parseStepsContent(content, userQuestion) {
         title: stepMatch[2].trim(),
         details: []
       };
-    } else if (currentStep && line.trim().startsWith('•')) {
+    } else if (currentStep && (trimmedLine.startsWith('•') || trimmedLine.startsWith('*') || trimmedLine.startsWith('-') || trimmedLine.startsWith('◦'))) {
       // Add bullet points to current step
-      currentStep.details.push(line.trim().substring(1).trim());
-    } else if (currentStep && line.trim().startsWith('*')) {
-      // Add bullet points to current step
-      currentStep.details.push(line.trim().substring(1).trim());
-    } else if (currentStep && line.trim() && !line.startsWith('|')) {
-      // Add regular text to current step
-      currentStep.details.push(line.trim());
+      const detail = trimmedLine.substring(1).trim();
+      if (detail) {
+        currentStep.details.push(detail);
+      }
+    } else if (currentStep && trimmedLine && !trimmedLine.startsWith('|') && !trimmedLine.startsWith('---')) {
+      // Add regular text to current step (but not table separators)
+      if (trimmedLine.length > 3) { // Only add meaningful content
+        currentStep.details.push(trimmedLine);
+      }
     }
   });
 
@@ -643,11 +668,19 @@ function parseStepsContent(content, userQuestion) {
     steps.push(currentStep);
   }
 
-  if (steps.length > 0) {
+  // Validate and clean steps
+  const validSteps = steps.filter(step => 
+    step && 
+    step.title && 
+    step.title.trim().length > 0 &&
+    (step.details.length > 0 || step.title.length > 10) // Step must have content or a meaningful title
+  );
+
+  if (validSteps.length > 0) {
     return {
       type: 'steps',
-      data: steps,
-      summary: `${steps.length} steps for ${userQuestion.toLowerCase()}`,
+      data: validSteps,
+      summary: `${validSteps.length} step${validSteps.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
       originalContent: content
     };
   }
@@ -666,16 +699,38 @@ function parseStepsContent(content, userQuestion) {
  * @returns {object} Formatted list data
  */
 function parseListContent(content, userQuestion) {
+  if (!content || typeof content !== 'string') {
+    return {
+      type: 'text',
+      content: content,
+      summary: 'Invalid list content'
+    };
+  }
+
   const lines = content.split('\n').filter(line => line.trim());
   const listItems = lines
-    .filter(line => line.trim().startsWith('*') || line.trim().startsWith('•'))
-    .map(line => line.trim().substring(1).trim());
+    .filter(line => {
+      const trimmed = line.trim();
+      return trimmed.startsWith('*') || 
+             trimmed.startsWith('•') || 
+             trimmed.startsWith('-') || 
+             trimmed.startsWith('◦') ||
+             trimmed.startsWith('✓') ||
+             trimmed.startsWith('☐');
+    })
+    .map(line => {
+      const trimmed = line.trim();
+      // Remove bullet point and clean up
+      const cleanItem = trimmed.substring(1).trim();
+      return cleanItem.length > 0 ? cleanItem : null;
+    })
+    .filter(item => item !== null && item.length > 2); // Filter out empty or very short items
 
   if (listItems.length > 0) {
     return {
       type: 'list',
       data: listItems,
-      summary: `${listItems.length} items for ${userQuestion.toLowerCase()}`,
+      summary: `${listItems.length} item${listItems.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
       originalContent: content
     };
   }
@@ -694,13 +749,26 @@ function parseListContent(content, userQuestion) {
  * @returns {object} Formatted sections data
  */
 function parseSectionsContent(content, userQuestion) {
+  if (!content || typeof content !== 'string') {
+    return {
+      type: 'text',
+      content: content,
+      summary: 'Invalid sections content'
+    };
+  }
+
   const lines = content.split('\n').filter(line => line.trim());
   const sections = [];
   let currentSection = null;
 
-  lines.forEach(line => {
-    // Check for section headers (e.g., "**Section Name**")
-    const sectionMatch = line.match(/^\*\*([^*]+)\*\*/);
+  lines.forEach((line, lineIndex) => {
+    const trimmedLine = line.trim();
+    
+    // Check for section headers (e.g., "**Section Name**", "Section Name:", "SECTION NAME")
+    const sectionMatch = trimmedLine.match(/^\*\*([^*]+)\*\*/) ||
+                        trimmedLine.match(/^([A-Z][^:]*):\s*$/) ||
+                        trimmedLine.match(/^([A-Z][A-Z\s]+)$/);
+    
     if (sectionMatch) {
       if (currentSection) {
         sections.push(currentSection);
@@ -709,9 +777,11 @@ function parseSectionsContent(content, userQuestion) {
         title: sectionMatch[1].trim(),
         content: []
       };
-    } else if (currentSection && line.trim()) {
-      // Add content to current section
-      currentSection.content.push(line.trim());
+    } else if (currentSection && trimmedLine && !trimmedLine.startsWith('|') && !trimmedLine.startsWith('---')) {
+      // Add content to current section (but not table separators)
+      if (trimmedLine.length > 3) { // Only add meaningful content
+        currentSection.content.push(trimmedLine);
+      }
     }
   });
 
@@ -720,11 +790,19 @@ function parseSectionsContent(content, userQuestion) {
     sections.push(currentSection);
   }
 
-  if (sections.length > 0) {
+  // Validate and clean sections
+  const validSections = sections.filter(section => 
+    section && 
+    section.title && 
+    section.title.trim().length > 0 &&
+    (section.content.length > 0 || section.title.length > 5) // Section must have content or a meaningful title
+  );
+
+  if (validSections.length > 0) {
     return {
       type: 'sections',
-      data: sections,
-      summary: `${sections.length} sections for ${userQuestion.toLowerCase()}`,
+      data: validSections,
+      summary: `${validSections.length} section${validSections.length > 1 ? 's' : ''} for ${userQuestion.toLowerCase()}`,
       originalContent: content
     };
   }

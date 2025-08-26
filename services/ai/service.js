@@ -676,19 +676,30 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       let structuredContent = null;
       if (responseText && typeof responseText === 'string') {
         try {
+          // Always try to format structured content for better mobile display
           structuredContent = formatStructuredContent(responseText, prompt);
+          
           if (structuredContent && structuredContent.type !== 'text') {
             console.log(`[AI Service] ✅ Structured content formatting applied:`, {
               type: structuredContent.type,
               hasData: !!structuredContent.data,
-              summary: structuredContent.summary
+              summary: structuredContent.summary,
+              dataLength: Array.isArray(structuredContent.data) ? structuredContent.data.length : 'not array'
             });
+            
+            // If we have structured content, ensure the response text is clean
+            if (structuredContent.originalContent && structuredContent.originalContent !== responseText) {
+              console.log(`[AI Service] 🔄 Cleaning response text for structured display`);
+              // Use the original content but keep the structured version for display
+            }
+          } else {
+            console.log(`[AI Service] ℹ️ No structured content detected, using plain text`);
           }
 
           // Validate if LLM followed structured content guidelines
           const validation = validateStructuredContent(responseText);
           if (!validation.isValid) {
-            console.warn(`[AI Service] ⚠️ LLM response could benefit from structured formatting:`, {
+            console.log(`[AI Service] ℹ️ LLM response could benefit from structured formatting:`, {
               suggestions: validation.suggestions,
               detectedTypes: validation.detectedTypes
             });
@@ -699,6 +710,7 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
           }
         } catch (structError) {
           console.warn(`[AI Service] ⚠️ Structured content formatting failed:`, structError);
+          // Continue without structured content
         }
       }
 
