@@ -3,6 +3,8 @@
  * Helps create user-friendly responses from tool results
  */
 
+import { AI_CONFIG } from './aiConfig.js';
+
 /**
  * Creates a natural language response from financial data
  * @param {object} toolResult - The result from tool execution
@@ -386,6 +388,64 @@ export function formatStructuredContent(content, userQuestion = '') {
     content: cleanContent,
     summary: generateTextSummary(cleanContent, userQuestion)
   };
+}
+
+/**
+ * Validate if LLM response follows structured content guidelines
+ * @param {string} content - The LLM response content
+ * @returns {object} Validation result with suggestions
+ */
+export function validateStructuredContent(content) {
+  if (!content || typeof content !== 'string') {
+    return { isValid: false, suggestions: ['Content must be a string'] };
+  }
+
+  const validation = {
+    isValid: true,
+    suggestions: [],
+    detectedTypes: [],
+    missingFormats: []
+  };
+
+  // Check for each structured type
+  const types = AI_CONFIG.STRUCTURED_CONTENT.TYPES;
+  const patterns = AI_CONFIG.STRUCTURED_CONTENT.FORMAT_PATTERNS;
+
+  for (const type of types) {
+    if (type === 'text') continue; // Skip text type as it's the fallback
+    
+    if (patterns[type] && patterns[type].test(content)) {
+      validation.detectedTypes.push(type);
+    } else {
+      validation.missingFormats.push(type);
+    }
+  }
+
+  // Generate suggestions for missing formats
+  if (validation.missingFormats.length > 0) {
+    validation.suggestions.push('Consider using structured formats for better mobile display:');
+    
+    if (validation.missingFormats.includes('steps')) {
+      validation.suggestions.push('- Use numbered steps: 1. **Step Title** • Detail point');
+    }
+    if (validation.missingFormats.includes('list')) {
+      validation.suggestions.push('- Use bullet points: • Item 1 • Item 2 • Item 3');
+    }
+    if (validation.missingFormats.includes('sections')) {
+      validation.suggestions.push('- Use section headers: **Section Title** Content here');
+    }
+    if (validation.missingFormats.includes('table')) {
+      validation.suggestions.push('- Use table format: | Header | Header | | Data | Data |');
+    }
+    if (validation.missingFormats.includes('item')) {
+      validation.suggestions.push('- Use item format: **Item Title** • Detail 1 • Detail 2');
+    }
+  }
+
+  // Consider it valid if at least one structured type is detected
+  validation.isValid = validation.detectedTypes.length > 0 || content.length < 100;
+
+  return validation;
 }
 
 /**

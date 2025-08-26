@@ -36,6 +36,15 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
     - Use tools only for financial data requests
     - Mention screen context only if specifically asked
     - Be concise and helpful
+    
+    ## RESPONSE FORMATTING
+    - Use structured formats for better mobile display
+    - Steps: 1. **Title** • Details
+    - Lists: • Item 1 • Item 2
+    - Sections: **Header** Content
+    - Tables: | Header | Data |
+    - Items: **Title** • Details
+    - Text: Simple text response
   `;
   
   return baseContext;
@@ -113,6 +122,37 @@ Always return this JSON structure:
   "errorMessage": null,
   "suggestedQuestions": ["Question 1", "Question 2"]
 }
+
+## STRUCTURED CONTENT FORMATTING
+**IMPORTANT: Always format your responses using these structured types for better mobile display:**
+
+**For STEP-BY-STEP instructions:**
+Use this format in your response text:
+1. **Step Title**
+• Detail point 1
+• Detail point 2
+
+**For LISTS of items:**
+Use this format in your response text:
+• First item
+• Second item
+• Third item
+
+**For SECTIONS with headers:**
+Use this format in your response text:
+**Section Title**
+Content for this section
+
+**For TABLES of data:**
+Use this format in your response text:
+| Header 1 | Header 2 | Header 3 |
+| Data 1   | Data 2   | Data 3   |
+
+**For SINGLE ITEMS with details:**
+Use this format in your response text:
+**Item Title**
+• Detail 1
+• Detail 2
 
 ## EXAMPLES
 
@@ -202,6 +242,15 @@ Return ONLY this JSON structure:
   "errorCode": null,
   "citations": null
 }
+
+## STRUCTURED CONTENT FORMATTING
+**Always format responses using these structured types:**
+
+**Steps:** 1. **Step Title** • Detail point
+**Lists:** • Item 1 • Item 2 • Item 3
+**Sections:** **Section Title** Content here
+**Tables:** | Header | Header | | Data | Data |
+**Items:** **Item Title** • Detail 1 • Detail 2
 
 ## TOOL USAGE
 **For financial data:**

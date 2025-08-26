@@ -32,6 +32,20 @@ export const AI_CONFIG = {
     FALLBACK_MESSAGE: "I encountered an issue processing your request. Please try again."
   },
 
+  // Structured content settings
+  STRUCTURED_CONTENT: {
+    ENABLED: true,
+    TYPES: ['steps', 'list', 'sections', 'table', 'item', 'text'],
+    FORMAT_PATTERNS: {
+      steps: /^\d+\.\s+\*\*[^*]+\*\*/gm,
+      list: /^\*\s+[^*\n]+/gm,
+      sections: /^\*\*[^*]+\*\*/gm,
+      table: /\|\s*[^|]+\s*\|/g,
+      item: /^\*\*[^*]+\*\*\s*\n\s*\*/gm
+    },
+    PRIORITY: ['table', 'steps', 'sections', 'list', 'item', 'text']
+  },
+
   // Validation settings
   VALIDATION: {
     STRICT_MODE: false,          // Simplified validation

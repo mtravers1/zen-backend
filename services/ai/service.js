@@ -5,7 +5,7 @@ import { buildScreenPrompt, getProductionSystemPrompt, getSimplifiedSystemPrompt
 import { toolFunctions } from "./toolFunctions.js";
 import { callLLM } from "./llmClient.js";
 import { isValidJSON, getCorrectedJsonResponse } from "./responseUtils.js";
-import { formatFinancialResponse, formatDataForDisplay, formatStructuredContent } from "./responseFormatter.js";
+import { formatFinancialResponse, formatDataForDisplay, formatStructuredContent, validateStructuredContent } from "./responseFormatter.js";
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
@@ -317,6 +317,35 @@ Always return JSON in this exact format:
   "source": "tool_result",
   "error": false
 }
+
+**STRUCTURED CONTENT FORMATTING:**
+**IMPORTANT: Format your response text using these structured types for better mobile display:**
+
+**For STEP-BY-STEP instructions:**
+1. **Step Title**
+• Detail point 1
+• Detail point 2
+
+**For LISTS of items:**
+• First item
+• Second item
+• Third item
+
+**For SECTIONS with headers:**
+**Section Title**
+Content for this section
+
+**For TABLES of data:**
+| Header 1 | Header 2 | Header 3 |
+| Data 1   | Data 2   | Data 3   |
+
+**For SINGLE ITEMS with details:**
+**Item Title**
+• Detail 1
+• Detail 2
+
+**For TEXT:**
+Simple text response
 
 **EXAMPLE:**
 User: "What's my net worth?"
@@ -649,6 +678,19 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
               type: structuredContent.type,
               hasData: !!structuredContent.data,
               summary: structuredContent.summary
+            });
+          }
+
+          // Validate if LLM followed structured content guidelines
+          const validation = validateStructuredContent(responseText);
+          if (!validation.isValid) {
+            console.warn(`[AI Service] ⚠️ LLM response could benefit from structured formatting:`, {
+              suggestions: validation.suggestions,
+              detectedTypes: validation.detectedTypes
+            });
+          } else {
+            console.log(`[AI Service] ✅ LLM response follows structured content guidelines:`, {
+              detectedTypes: validation.detectedTypes
             });
           }
         } catch (structError) {
