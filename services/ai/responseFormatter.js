@@ -257,6 +257,25 @@ export function formatDataForDisplay(data, userQuestion = '') {
     return null;
   }
 
+  // Special handling for file data
+  if (Array.isArray(data) && data.length > 0 && data[0].type && data[0].info) {
+    console.log(`[responseFormatter] 📁 Detected file data, formatting for file display`);
+    
+    const formattedFiles = data.map(file => ({
+      'File Name': file.info?.nameOfDocument || file.info?.name || 'Unnamed',
+      'Type': file.type || 'Unknown',
+      'Folder': file.folder || 'Root',
+      'Updated': file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown'
+    }));
+    
+    return {
+      type: 'table',
+      data: formattedFiles,
+      headers: ['File Name', 'Type', 'Folder', 'Updated'],
+      summary: `${data.length} file${data.length > 1 ? 's' : ''} found`
+    };
+  }
+
   // Handle array data (most common case for tables)
   if (Array.isArray(data)) {
     if (data.length === 0) {
@@ -920,6 +939,15 @@ function processObjectForTable(obj) {
         .trim();
     } else if (value === null || value === undefined) {
       formattedValue = '';
+    } else if (typeof value === 'object' && value !== null) {
+      // Handle nested objects (like file.info)
+      if (value.nameOfDocument) {
+        formattedValue = value.nameOfDocument;
+      } else if (value.name) {
+        formattedValue = value.name;
+      } else {
+        formattedValue = JSON.stringify(value);
+      }
     }
 
     processed[cleanKey] = formattedValue;

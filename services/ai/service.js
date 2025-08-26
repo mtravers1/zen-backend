@@ -403,30 +403,41 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
           return null;
         }
         
-        // Ensure message has required properties
-        if (!msg.role || !msg.content) {
-          console.warn(`[AI Service] ⚠️ Message at index ${index} missing required properties:`, {
-            hasRole: !!msg.role,
-            hasContent: !!msg.content,
-            message: msg
-          });
-          
-          // Try to infer role from message structure
+        // Mobile app uses 'message' and 'response' instead of 'role' and 'content'
+        // Convert to standard format for LLM
+        if (msg.message || msg.response) {
           let inferredRole = 'user';
+          let content = '';
+          
           if (msg.message && !msg.response) {
+            // User message
             inferredRole = 'user';
+            content = msg.message;
           } else if (msg.response && !msg.message) {
+            // Assistant response
             inferredRole = 'assistant';
+            content = msg.response;
           } else if (msg.message && msg.response) {
-            inferredRole = 'user'; // Default to user for mixed messages
+            // Mixed message - treat as user input
+            inferredRole = 'user';
+            content = msg.message;
           }
           
-          console.log(`[AI Service] 🔧 Inferred role '${inferredRole}' for message at index ${index}`);
+          console.log(`[AI Service] 🔧 Converted mobile app message to LLM format:`, {
+            original: { message: msg.message, response: msg.response },
+            converted: { role: inferredRole, content: content.substring(0, 100) + '...' }
+          });
           
           return {
             role: inferredRole,
-            content: msg.message || msg.response || 'Message content not available'
+            content: content
           };
+        }
+        
+        // Fallback for standard format
+        if (!msg.role || !msg.content) {
+          console.warn(`[AI Service] ⚠️ Message at index ${index} has unknown format:`, msg);
+          return null;
         }
         
         // Ensure role is valid
