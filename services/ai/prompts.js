@@ -14,8 +14,12 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   // Build minimal context information
   const contextInfo = [];
   
-  // Only include meaningful context
-  if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
+  // Use the currentScreen parameter first (this comes directly from the mobile app)
+  if (currentScreen && currentScreen !== 'unknown' && currentScreen !== 'dashboard') {
+    contextInfo.push(`Current screen: ${currentScreen}`);
+  }
+  // Fallback to rich context if available
+  else if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
     contextInfo.push(`Current screen: ${richContext.screen.currentScreen}`);
   }
   
@@ -29,7 +33,7 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
   
   const baseContext = `
     ## CONTEXT
-    ${contextInfo.length > 0 ? contextInfo.join(' | ') : 'Dashboard'}
+    ${contextInfo.length > 0 ? contextInfo.join(' | ') : baseScreen}
     
     ## GUIDELINES
     - Answer the user's specific question directly
