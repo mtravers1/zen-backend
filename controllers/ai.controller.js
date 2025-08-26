@@ -34,6 +34,27 @@ const makeRequest = async (req, res) => {
       contextKeys: context ? Object.keys(context) : []
     });
 
+    // Log detailed message structure for debug
+    if (messages && messages.length > 0) {
+      console.log(`[AI Controller] 📝 Detailed message structure:`, {
+        messagesCount: messages.length,
+        messageDetails: messages.map((msg, index) => ({
+          index,
+          hasRole: !!msg?.role,
+          hasContent: !!msg?.content,
+          hasMessage: !!msg?.message,
+          hasResponse: !!msg?.response,
+          role: msg?.role,
+          contentLength: msg?.content?.length || 0,
+          messageLength: msg?.message?.length || 0,
+          responseLength: msg?.response?.length || 0,
+          messagePreview: msg?.message?.substring(0, 100) + '...',
+          responsePreview: msg?.response?.substring(0, 100) + '...',
+          fullMessage: msg
+        }))
+      });
+    }
+
     // Validate required parameters
     if (!prompt) {
       console.error(`[AI Controller] ❌ Missing prompt`);

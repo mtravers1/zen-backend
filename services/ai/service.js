@@ -171,6 +171,25 @@ class AIService {
 
     console.log(`[AI Service] ✅ Parameter validation passed`);
 
+    // Log incoming messages for debug
+    console.log(`[AI Service] 📝 Incoming messages analysis:`, {
+      hasMessages: !!incomingMessages,
+      messagesCount: incomingMessages?.length || 0,
+      messagesStructure: incomingMessages?.map((msg, index) => ({
+        index,
+        hasRole: !!msg?.role,
+        hasContent: !!msg?.content,
+        hasMessage: !!msg?.message,
+        hasResponse: !!msg?.response,
+        role: msg?.role,
+        contentLength: msg?.content?.length || 0,
+        messageLength: msg?.message?.length || 0,
+        responseLength: msg?.response?.length || 0,
+        messagePreview: msg?.message?.substring(0, 100) + '...',
+        responsePreview: msg?.response?.substring(0, 100) + '...'
+      }))
+    });
+
     try {
       // Get user DEK for encryption/decryption
       console.log(`[AI Service] 🔐 Getting user DEK for UID: ${uid}`);
@@ -338,18 +357,102 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
         }))
       });
 
+      // Validate and sanitize incoming messages
+      const validatedMessages = (incomingMessages || []).map((msg, index) => {
+        if (!msg || typeof msg !== 'object') {
+          console.warn(`[AI Service] ⚠️ Invalid message at index ${index}:`, msg);
+          return null;
+        }
+        
+        // Ensure message has required properties
+        if (!msg.role || !msg.content) {
+          console.warn(`[AI Service] ⚠️ Message at index ${index} missing required properties:`, {
+            hasRole: !!msg.role,
+            hasContent: !!msg.content,
+            message: msg
+          });
+          
+          // Try to infer role from message structure
+          let inferredRole = 'user';
+          if (msg.message && !msg.response) {
+            inferredRole = 'user';
+          } else if (msg.response && !msg.message) {
+            inferredRole = 'assistant';
+          } else if (msg.message && msg.response) {
+            inferredRole = 'user'; // Default to user for mixed messages
+          }
+          
+          console.log(`[AI Service] 🔧 Inferred role '${inferredRole}' for message at index ${index}`);
+          
+          return {
+            role: inferredRole,
+            content: msg.message || msg.response || 'Message content not available'
+          };
+        }
+        
+        // Ensure role is valid
+        const validRoles = ['system', 'user', 'assistant', 'tool'];
+        if (!validRoles.includes(msg.role)) {
+          console.warn(`[AI Service] ⚠️ Invalid role '${msg.role}' at index ${index}, defaulting to 'user'`);
+          return {
+            role: 'user',
+            content: msg.content
+          };
+        }
+        
+        return msg;
+      }).filter(Boolean); // Remove null messages
+
+      console.log(`[AI Service] Message validation result:`, {
+        originalCount: incomingMessages?.length || 0,
+        validatedCount: validatedMessages.length,
+        validationDetails: validatedMessages.map((msg, index) => ({
+          index,
+          role: msg.role,
+          contentLength: msg.content?.length || 0,
+          contentPreview: msg.content?.substring(0, 100) + '...'
+        }))
+      });
+
       // Prepare messages for LLM
       const messages = [
         { role: 'system', content: enhancedSystemPrompt },
-        ...(incomingMessages || []),
+        ...validatedMessages,
         { role: 'user', content: prompt }
       ];
+
+      // Final validation of message structure
+      const finalMessageValidation = messages.every((msg, index) => {
+        if (!msg.role || !msg.content) {
+          console.error(`[AI Service] ❌ CRITICAL: Message at index ${index} still missing required properties after validation:`, {
+            hasRole: !!msg.role,
+            hasContent: !!msg.content,
+            message: msg
+          });
+          return false;
+        }
+        return true;
+      });
+
+      if (!finalMessageValidation) {
+        console.error(`[AI Service] ❌ CRITICAL: Message validation failed, cannot proceed with LLM call`);
+        return {
+          text: "Failed to prepare messages for AI processing. Please try again.",
+          data: { error: "Message validation failed" },
+          error: true,
+          errorMessage: "Message structure validation failed",
+          source: 'message_validation_error',
+          requestId: requestId,
+          timestamp: new Date().toISOString()
+        };
+      }
 
       console.log(`[AI Service] Messages prepared for LLM:`, {
         totalMessages: messages.length,
         systemMessage: !!messages[0]?.content,
         userMessages: messages.filter(m => m.role === 'user').length,
-        lastUserMessage: messages[messages.length - 1]?.content?.substring(0, 100) + '...'
+        lastUserMessage: messages[messages.length - 1]?.content?.substring(0, 100) + '...',
+        validationPassed: finalMessageValidation
       });
 
       // STEP 3: Call LLM to evaluate what functions are needed
@@ -407,6 +510,23 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
             { role: 'system', content: getSimplifiedSystemPrompt() },
             { role: 'user', content: prompt }
           ];
+
+          // Validate fallback messages
+          const fallbackMessageValidation = fallbackMessages.every((msg, index) => {
+            if (!msg.role || !msg.content) {
+              console.error(`[AI Service] ❌ CRITICAL: Fallback message at index ${index} missing required properties:`, {
+                hasRole: !!msg.role,
+                hasContent: !!msg.content,
+                message: msg
+              });
+              return false;
+            }
+            return true;
+          });
+
+          if (!fallbackMessageValidation) {
+            throw new Error('Fallback message validation failed');
+          }
 
           completeResponse = await callLLM({
             apiKey: this.GROQ_API_KEY,

@@ -364,7 +364,7 @@ export async function callLLM({
         text: "I'm having trouble with a technical function call. Let me try to help you in a different way. What would you like to know about your finances?",
         data: {},
         error: true,
-        errorDetails: failureDetails,
+        errorMessage: failureDetails,
         source: 'groq_function_error',
         suggestedQuestions: [
           "What's my current balance?",
@@ -383,7 +383,7 @@ export async function callLLM({
       text: "I encountered a technical issue while processing your request. Please try again in a moment or contact support if the problem persists.",
       data: {},
       error: true,
-      errorDetails: errorMessage,
+      errorMessage: errorMessage,
       source: 'groq_api_error'
     });
   }
@@ -1046,7 +1046,7 @@ export async function callLLM({
         data: lastToolResult,
         source: 'tool_result_error_fallback',
         error: true,
-        errorDetails: e.message,
+        errorMessage: e.message,
         llm_interpretation: null
       });
     }
@@ -1063,8 +1063,8 @@ export async function callLLM({
       text: 'I encountered an issue processing your request. Please try again.',
       data: {},
       error: true,
-      source: 'error_fallback',
-      errorDetails: e.message
+      errorMessage: e.message,
+      source: 'error_fallback'
     });
   }
 } 
