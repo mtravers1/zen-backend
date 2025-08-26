@@ -258,22 +258,43 @@ export function formatDataForDisplay(data, userQuestion = '') {
   }
 
   // Special handling for file data
-  if (Array.isArray(data) && data.length > 0 && data[0].type && data[0].info) {
+  if (Array.isArray(data) && data.length > 0 && (data[0].type || data[0].name)) {
     console.log(`[responseFormatter] 📁 Detected file data, formatting for file display`);
+    console.log(`[responseFormatter] 📁 Sample file data:`, JSON.stringify(data[0], null, 2));
     
-    const formattedFiles = data.map(file => ({
-      'File Name': file.info?.nameOfDocument || file.info?.name || 'Unnamed',
-      'Type': file.type || 'Unknown',
-      'Folder': file.folder || 'Root',
-      'Updated': file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown'
-    }));
+    // Check if this is already formatted file data
+    if (data[0].name && data[0].type) {
+      const formattedFiles = data.map(file => ({
+        'File Name': file.name || 'Unnamed',
+        'Type': file.type || 'Unknown',
+        'Folder': file.folder || 'Root',
+        'Updated': file.updatedAt || 'Unknown'
+      }));
+      
+      return {
+        type: 'table',
+        data: formattedFiles,
+        headers: ['File Name', 'Type', 'Folder', 'Updated'],
+        summary: `${data.length} file${data.length > 1 ? 's' : ''} found`
+      };
+    }
     
-    return {
-      type: 'table',
-      data: formattedFiles,
-      headers: ['File Name', 'Type', 'Folder', 'Updated'],
-      summary: `${data.length} file${data.length > 1 ? 's' : ''} found`
-    };
+    // Handle legacy file format with info object
+    if (data[0].info) {
+      const formattedFiles = data.map(file => ({
+        'File Name': file.info?.nameOfDocument || file.info?.name || 'Unnamed',
+        'Type': file.type || 'Unknown',
+        'Folder': file.folder || 'Root',
+        'Updated': file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown'
+      }));
+      
+      return {
+        type: 'table',
+        data: formattedFiles,
+        headers: ['File Name', 'Type', 'Folder', 'Updated'],
+        summary: `${data.length} file${data.length > 1 ? 's' : ''} found`
+      };
+    }
   }
 
   // Handle array data (most common case for tables)

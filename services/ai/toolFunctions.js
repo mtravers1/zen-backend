@@ -732,9 +732,19 @@ export const toolFunctions = (context) => ({
         return { message: "No files found", data: [], count: 0 };
       }
       
+      // Format files for better display
+      const formattedFiles = files.map(file => ({
+        id: file.id,
+        name: file.info?.nameOfDocument || file.info?.name || 'Unnamed',
+        type: file.type || 'Unknown',
+        folder: file.folder || 'Root',
+        updatedAt: file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown',
+        url: file.fileurl || 'No URL'
+      }));
+      
       return {
         message: "Files retrieved successfully",
-        data: files,
+        data: formattedFiles,
         count: files.length,
         fileTypes: [...new Set(files.map(f => f.type))],
         folders: [...new Set(files.map(f => f.folder).filter(Boolean))]

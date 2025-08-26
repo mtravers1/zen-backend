@@ -619,6 +619,8 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
           .replace(/\*\*Text\*\*\s*/gi, '') // Remove "**Text**" prefix
           .replace(/\*\*text\*\*\s*/gi, '') // Remove "**text**" prefix
           .replace(/^\*\*[^*]+\*\*\s*/gm, '') // Remove any **bold** prefixes at start of lines
+          .replace(/\|.*\|.*\|.*\|.*\|.*\|/g, '') // Remove markdown table formatting
+          .replace(/\|-+\|/g, '') // Remove table separators
           .trim();
         
         try {
@@ -658,6 +660,14 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
       // Format financial data if present
       let formattedData = parsedResponse.data;
       if (parsedResponse.data && typeof parsedResponse.data === 'object') {
+        console.log(`[AI Service] 🔍 Data formatting - Input data:`, {
+          dataType: typeof parsedResponse.data,
+          isArray: Array.isArray(parsedResponse.data),
+          dataLength: Array.isArray(parsedResponse.data) ? parsedResponse.data.length : 'not array',
+          sampleData: parsedResponse.data && typeof parsedResponse.data === 'object' ? 
+            (Array.isArray(parsedResponse.data) ? parsedResponse.data[0] : parsedResponse.data) : 'not object'
+        });
+        
         try {
           // First try the enhanced data formatter
           const enhancedFormattedData = formatDataForDisplay(parsedResponse.data, prompt);
