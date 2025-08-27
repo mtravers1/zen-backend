@@ -35,11 +35,20 @@ export default {
     }),
     new CopyWebpackPlugin({
       patterns: [
-        { from: "lib/mailer/templates/", to: "./lib/mailer/templates/" },
+        { from: "lib/mailer/templates/", to: "./lib/mailer/templates/", noErrorOnMissing: true },
         { from: "ecosystem.config.js", to: "./ecosystem.config.js" },
-        { from: "scripts/", to: "./scripts/" },
         { from: "package.json", to: "." },
-        { from: ".env.sample", to: "." },
+        { from: ".env.sample", to: ".", noErrorOnMissing: true },
+        { from: "scripts/", to: "./scripts/", noErrorOnMissing: true },
+        { from: "config/", to: "./config/", noErrorOnMissing: true },
+        { from: "constants/", to: "./constants/", noErrorOnMissing: true },
+        { from: "database/", to: "./database/", noErrorOnMissing: true },
+        { from: "middlewares/", to: "./middlewares/", noErrorOnMissing: true },
+        { from: "routes/", to: "./routes/", noErrorOnMissing: true },
+        { from: "controllers/", to: "./controllers/", noErrorOnMissing: true },
+        { from: "services/", to: "./services/", noErrorOnMissing: true },
+        { from: "lib/", to: "./lib/", noErrorOnMissing: true },
+        { from: "bin/", to: "./bin/", noErrorOnMissing: true },
       ],
     }),
     new webpack.WatchIgnorePlugin({
@@ -47,15 +56,7 @@ export default {
     }),
   ],
   resolve: {
-    extensions: [".ts", ".tsx", ".js", ".mjs"],
-  },
-  module: {
-    rules: [
-      {
-        test: /\.tsx?$/,
-        loader: "ts-loader",
-      },
-    ],
+    extensions: [".js", ".mjs"],
   },
   externals: nodeModules,
 };

@@ -3,6 +3,9 @@ import accountsController from "../controllers/accounts.controller.js";
 
 const router = Router();
 
+router.get("/debug/:profileId", accountsController.debugProfile);
+router.get("/debug-decrypt/:profileId", accountsController.debugDecryption);
+router.get("/debug-cache", accountsController.debugCache);
 router.post("/add-account", accountsController.addAccount);
 router.post("/", accountsController.getAccounts);
 router.post("/cash-flows", accountsController.getCashFlows);
@@ -21,5 +24,12 @@ router.get("/details/:accountId/:profileId", accountsController.getAccountDetail
 router.get("/", accountsController.getAllUserAccounts);
 router.post("/add-photo", accountsController.addAccountPhoto);
 router.post("/get-photo", accountsController.getAccountPhoto);
+router.get("/photo/:fileName", accountsController.serveAccountPhoto);
+router.delete("/:accountId", accountsController.deleteAccount);
+
+// Cache management endpoints
+router.get('/cache/stats', accountsController.getCacheStats);
+router.post('/cache/clear', accountsController.clearAllCaches);
+router.post('/cache/clear-decryption', accountsController.clearDecryptionCache);
 
 export default router;

@@ -87,19 +87,20 @@ const getUserProfiles = async (email, uid) => {
   }
 
   const profiles = [];
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
 
-  const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+  const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
 
-  const decryptedLastName = await decryptValue(user.name.lastName, dek);
+  const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
 
-  const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+  const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
 
-  const decryptedSuffix = await decryptValue(user.name.suffix, dek);
+  const decryptedSuffix = await decryptValue(user.name.suffix, dek, uid);
 
-  const decryptedPrefix = await decryptValue(user.name.prefix, dek);
+  const decryptedPrefix = await decryptValue(user.name.prefix, dek, uid);
 
-  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
 
   let name;
   if (!decryptedFirstName && !decryptedLastName) {
@@ -111,7 +112,7 @@ const getUserProfiles = async (email, uid) => {
   const decryptedEmail = await Promise.all(
     user.email.map((emailData) =>
       Promise.all([
-        decryptValue(emailData.email, dek),
+        decryptValue(emailData.email, dek, uid),
         emailData.emailType,
         emailData.isPrimary,
       ]).then(([email, emailType, isPrimary]) => ({
@@ -125,7 +126,7 @@ const getUserProfiles = async (email, uid) => {
   const decryptedPhones = await Promise.all(
     user.phones.map((phoneData) =>
       Promise.all([
-        decryptValue(phoneData.phone, dek),
+        decryptValue(phoneData.phone, dek, uid),
         phoneData.phoneType,
       ]).then(([phone, phoneType]) => ({
         phoneNumber: phone,
@@ -162,13 +163,14 @@ const getUserProfiles = async (email, uid) => {
   }
 
   for (const business of businesses) {
-    const decryptedName = await decryptValue(business.name, dek);
+    const decryptedName = await decryptValue(business.name, dek, uid);
 
-    const decryptedIndustry = await decryptValue(business.industryDesc, dek);
+    const decryptedIndustry = await decryptValue(business.industryDesc, dek, uid);
 
     const decryptedBusinessLogo = await decryptValue(
       business.businessLogo,
-      dek
+      dek,
+      uid
     );
 
     let decryptedBusinessOwnersDetails = [];
@@ -177,7 +179,7 @@ const getUserProfiles = async (email, uid) => {
         business.businessOwnersDetails.map(async (owner) => {
           return {
             name: owner.name,
-            email: await decryptValue(owner.email, dek),
+            email: await decryptValue(owner.email, dek, uid),
             percentOwned: owner.percentOwned,
             position: owner.position,
           };
@@ -189,7 +191,8 @@ const getUserProfiles = async (email, uid) => {
     if (business.businessOwners) {
       decryptedBusinessOwners = await decryptValue(
         business.businessOwners,
-        dek
+        dek,
+        uid
       );
     }
 
@@ -197,7 +200,8 @@ const getUserProfiles = async (email, uid) => {
     if (business.businessLocations) {
       decryptdBusinessAddresses = await decryptValue(
         business.businessLocations,
-        dek
+        dek,
+        uid
       );
     }
 
@@ -205,55 +209,57 @@ const getUserProfiles = async (email, uid) => {
     if (business.phoneNumbers) {
       decryptdBusinessPhoneNumbers = await decryptValue(
         business.phoneNumbers,
-        dek
+        dek,
+        uid
       );
     }
     let descyptEntityType = null;
     if (business.entityType) {
-      descyptEntityType = await decryptValue(business.entityType, dek);
+      descyptEntityType = await decryptValue(business.entityType, dek, uid);
     }
     let descryptsubsidiaries = [];
     if (business.subsidiaries) {
-      descryptsubsidiaries = await decryptValue(business.subsidiaries, dek);
+      descryptsubsidiaries = await decryptValue(business.subsidiaries, dek, uid);
     }
     let decryptedBusinessDesc = null;
     if (business.businessDescription) {
       decryptedBusinessDesc = await decryptValue(
         business.businessDescription,
-        dek
+        dek,
+        uid
       );
     }
     let decryptedWebsite = null;
     if (business.website) {
-      decryptedWebsite = await decryptValue(business.website, dek);
+      decryptedWebsite = await decryptValue(business.website, dek, uid);
     }
     let formationDate = null;
     if (business.formationDate) {
-      formationDate = await decryptValue(business.formationDate, dek);
+      formationDate = await decryptValue(business.formationDate, dek, uid);
     }
     let taxInformation = null;
     if (business.taxInformation) {
-      taxInformation = await decryptValue(business.taxInformation, dek);
+      taxInformation = await decryptValue(business.taxInformation, dek, uid);
     }
     let legalName = null;
     if (business.legalName) {
-      legalName = await decryptValue(business.legalName, dek);
+      legalName = await decryptValue(business.legalName, dek, uid);
     }
     let ownership = null;
     if (business.ownership) {
-      ownership = await decryptValue(business.ownership, dek);
+      ownership = await decryptValue(business.ownership, dek, uid);
     }
     let entityType = null;
     if (business.industryDesc) {
-      entityType = await decryptValue(business.industryDesc, dek);
+      entityType = await decryptValue(business.industryDesc, dek, uid);
     }
     let businessType = null;
     if (business.businessType) {
-      businessType = await decryptValue(business.businessType, dek);
+      businessType = await decryptValue(business.businessType, dek, uid);
     }
     let entityTaxType = null;
     if (business.entityType) {
-      entityTaxType = await decryptValue(business.entityType, dek);
+      entityTaxType = await decryptValue(business.entityType, dek, uid);
     }
 
     const businessProfile = {
@@ -273,7 +279,7 @@ const getUserProfiles = async (email, uid) => {
       formationDate: formationDate,
       taxInformation: taxInformation,
       legalBusinessName: legalName,
-      ownership: ownership.percentage,
+      ownership: ownership?.percentage || null,
       entityType: entityType,
       businessType: businessType,
       businessTaxCode: entityTaxType,
@@ -339,8 +345,32 @@ const assignsAccountsToProfiles = async (data, email, uid) => {
       business.plaidAccountIds = [];
     }
 
-    if (!business.plaidAccountIds.includes(key)) {
-      business.plaidAccountIds.push(key);
+    // Check if key is a valid ObjectId (24 character hex string)
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(key);
+
+    let accountObjectId;
+
+    if (isValidObjectId) {
+      // If it's a valid ObjectId, use it directly
+      accountObjectId = key;
+    } else {
+      // If it's not a valid ObjectId, assume it's a Plaid account ID and find the document
+      try {
+        const plaidAccount = await PlaidAccount.findOne({
+          plaid_account_id: key,
+        });
+        if (!plaidAccount) {
+          throw new Error(`Plaid account not found for ID: ${key}`);
+        }
+        accountObjectId = plaidAccount._id;
+      } catch (error) {
+        console.error(`Error finding Plaid account for ID: ${key}`, error);
+        throw new Error(`Invalid Plaid account ID: ${key}`);
+      }
+    }
+
+    if (!business.plaidAccountIds.includes(accountObjectId)) {
+      business.plaidAccountIds.push(accountObjectId);
     }
 
     await business.save();
@@ -419,7 +449,8 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 };
 
 const updateBusinessProfile = async (profileId, formData, email, uid) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   try {
     if (!profileId) {
       throw new Error("No profile selected to update.");
@@ -493,7 +524,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         ),
         businessOwners: formData.businessOwners,
         businessOwnersDetails: businessOwnersDetails,
-        ownership: { percentage: formData.ownership.percentage },
+        ownership: { percentage: formData.ownership?.percentage || 0 },
         //taxInformation: encryptedTaxInformation, //TODO: not implemented yet
         website: formData.website,
         businessLogo: encryptedBusinessLogo,
@@ -517,7 +548,8 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
 };
 
 const deleteProfile = async (profileId, uid) => {
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   try {
     if (!profileId) {
       throw new Error("No profile selected to delete.");

@@ -6,26 +6,45 @@ dotenv.config();
 
 const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
 
-mongoose.connect(mongoDB, {
-  user: process.env.MONGODB_USER,
-  pass: process.env.MONGODB_PASS,
-  dbName: process.env.MONGODB_DB,
-});
+let mongoDBConnection = null;
 
-const mongoDBConnection = mongoose.connection;
+// Only connect automatically if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  const requiredEnvVars = ['MONGODB_USER', 'MONGODB_PASS', 'MONGODB_DB'];
+  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
 
-mongoDBConnection.on(
-  "error",
-  console.error.bind(console, "MongoDB connection error:")
-);
-mongoDBConnection.once("open", async function () {
-  console.log("Connected to MongoDB!");
+  mongoose.connect(mongoDB, {
+    user: process.env.MONGODB_USER,
+    pass: process.env.MONGODB_PASS,
+    dbName: process.env.MONGODB_DB,
+  });
 
-  // await initialize();
-});
+  mongoDBConnection = mongoose.connection;
 
-mongoDBConnection.on("disconnected", function () {
-  console.log("MongoDB disconnected!");
-});
+  mongoDBConnection.on(
+    "error",
+    console.error.bind(console, "MongoDB connection error:")
+  );
+  mongoDBConnection.once("open", async function () {
+    console.log("Connected to MongoDB!");
 
-export { mongoDBConnection };
+    // await initialize();
+  });
+
+  mongoDBConnection.on("disconnected", function () {
+    console.log("MongoDB disconnected!");
+  });
+} else {
+  // For test environment, use mongoose without connecting
+  mongoDBConnection = {
+    readyState: 1, // Mock connected state
+    on: () => {},
+    once: () => {},
+    // Add other connection methods as needed for tests
+  };
+}
+
+export { mongoDBConnection, mongoose };

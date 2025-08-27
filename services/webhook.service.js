@@ -2,93 +2,287 @@ import plaidClient from "../config/plaid.js";
 import plaidService from "./plaid.service.js";
 import webTokenDecoder from "../lib/webTokenDecoder.js";
 import sha256 from "crypto-js/sha256.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
-const webhookHandler = async (event) => {
-  console.log(event);
+const webhookHandler = async (event, signature = null, body = null) => {
+  const startTime = Date.now();
+  
+  try {
+    structuredLogger.logOperationStart('webhookHandler', {
+      webhook_type: event.webhook_type,
+      webhook_code: event.webhook_code,
+      item_id: event.item_id,
+      error_code: event.error?.error_code,
+      has_signature: !!signature
+    });
 
-  switch (event.webhook_type) {
-    case "TRANSACTIONS":
-      if (event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
-        await plaidService.updateTransactions(event.item_id);
+    if (!event.webhook_type) {
+      throw new Error('Missing webhook_type');
+    }
+
+    // Validate webhook signature if provided
+    if (signature && body) {
+      if (typeof body !== 'string') {
+        throw new Error('Body must be a string when signature is provided');
       }
-      break;
-
-    case "INVESTMENTS_TRANSACTIONS":
-      if (
-        event.webhook_code === "DEFAULT_UPDATE" ||
-        event.webhook_code === "HISTORICAL_UPDATE"
-      ) {
-        await plaidService.updateInvestmentTransactions(event.item_id);
+      const webhookSecret = process.env.PLAID_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const isValid = await structuredLogger.withContext('webhookSignatureValidation', {
+          item_id: event.item_id,
+          has_signature: !!signature,
+          has_secret: !!webhookSecret
+        }, async () => {
+          return plaidService.validateWebhookSignature(body, signature, webhookSecret);
+        });
+        
+        if (!isValid) {
+          throw new Error('Invalid webhook signature');
+        }
       }
-      break;
+    }
 
-    case "LIABILITIES":
-      if (event.webhook_code === "DEFAULT_UPDATE") {
-        await plaidService.updateLiabilities(event.item_id);
+    let isChase = false;
+    if (event.item_id) {
+      try {
+        const accessToken = await structuredLogger.withContext('checkChaseBank', {
+          item_id: event.item_id
+        }, async () => {
+          return await plaidService.getAccessTokenFromItemId(event.item_id);
+        });
+        
+        if (accessToken) {
+          isChase = await structuredLogger.withContext('checkIfChaseBank', {
+            item_id: event.item_id,
+            has_access_token: !!accessToken
+          }, async () => {
+            return await plaidService.checkIfChaseBank(event.item_id, accessToken);
+          });
+        }
+      } catch (error) {
+        structuredLogger.logErrorBlock(error, {
+          operation: 'checkChaseBank',
+          item_id: event.item_id,
+          error_classification: 'non_fatal_error'
+        });
+        // Continue processing even if Chase check fails
       }
-      break;
+    }
 
-    case "ITEM":
-      switch (event.webhook_code) {
-        case "ERROR":
-          if (event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
-            await plaidService.updateInvadlidAccessToken(event.item_id);
+    const CHASE_DELAY_MS = parseInt(process.env.CHASE_WEBHOOK_DELAY_MS || '2000', 10);
+
+    if (isChase) {
+      structuredLogger.logSuccess('chaseDelay', {
+        item_id: event.item_id,
+        delay_ms: CHASE_DELAY_MS
+      });
+      await new Promise(resolve => setTimeout(resolve, CHASE_DELAY_MS));
+    }
+
+    let result;
+    switch (event.webhook_type) {
+      case "TRANSACTIONS":
+        if (event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
+          if (!event.item_id) {
+            throw new Error('Missing item_id for TRANSACTIONS webhook');
           }
-          break;
-        case "LOGIN_REPAIRED":
-          await plaidService.repairAccessTokenWebhook(event.item_id);
-          break;
-      }
-      break;
-  }
+          
+          result = await structuredLogger.withContext('processTransactionSync', {
+            item_id: event.item_id,
+            webhook_type: event.webhook_type,
+            webhook_code: event.webhook_code
+          }, async () => {
+            const syncResult = await plaidService.updateTransactions(event.item_id);
+            
+            // Reset webhook failure count on successful processing
+            plaidService.resetWebhookFailures(event.item_id);
+            
+            return syncResult;
+          });
+        } else {
+          result = `Unhandled TRANSACTIONS webhook code: ${event.webhook_code}`;
+        }
+        break;
 
-  return "Webhook received";
+      case "ITEM":
+        if (event.webhook_code === "ERROR") {
+          result = await structuredLogger.withContext('handleItemError', {
+            item_id: event.item_id,
+            error_code: event.error?.error_code,
+            error_message: event.error?.error_message
+          }, async () => {
+            return await plaidService.handleItemError(event);
+          });
+        } else {
+          result = `Unhandled ITEM webhook code: ${event.webhook_code}`;
+        }
+        break;
+
+      case "ACCOUNTS":
+        if (event.webhook_code === "DEFAULT_UPDATE") {
+          result = await structuredLogger.withContext('handleAccountsUpdate', {
+            item_id: event.item_id,
+            account_ids: event.account_ids
+          }, async () => {
+            return await plaidService.handleAccountsUpdate(event);
+          });
+        } else {
+          result = `Unhandled ACCOUNTS webhook code: ${event.webhook_code}`;
+        }
+        break;
+
+      default:
+        result = `Unhandled webhook type: ${event.webhook_type}`;
+    }
+
+    const durationMs = Date.now() - startTime;
+    
+    structuredLogger.logSuccess('webhookHandler', {
+      webhook_type: event.webhook_type,
+      webhook_code: event.webhook_code,
+      item_id: event.item_id,
+      durationMs,
+      result: typeof result === 'string' ? result : 'success'
+    });
+
+    return result;
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    
+    structuredLogger.logErrorBlock(error, {
+      operation: 'webhookHandler',
+      item_id: event.item_id,
+      webhook_type: event.webhook_type,
+      webhook_code: event.webhook_code,
+      durationMs,
+      error_classification: 'webhook_processing_error'
+    });
+    
+    throw error;
+  }
 };
 
 const testWebhook = async (itemId, uid) => {
-  const accessToken = await plaidService.getAccessTokenFromItemId(itemId, uid);
+  try {
+    structuredLogger.logOperationStart('testWebhook', {
+      item_id: itemId,
+      uid
+    });
 
-  const response = await plaidClient.sandboxItemFireWebhook({
-    access_token: accessToken,
-    webhook_code: "DEFAULT_UPDATE",
-    webhook_type: "INVESTMENTS_TRANSACTIONS",
-  });
-  console.log(response.data);
-  return accessToken;
+    const result = await plaidService.updateTransactions(itemId);
+    
+    structuredLogger.logSuccess('testWebhook', {
+      item_id: itemId,
+      uid,
+      result: 'Test webhook completed successfully'
+    });
+    
+    return result;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      item_id: itemId,
+      uid,
+      error: error.message
+    });
+    throw error;
+  }
 };
 
 const testResetLogin = async (accessToken) => {
-  const response = await plaidClient.sandboxItemResetLogin({
-    access_token: accessToken,
-  });
-  console.log(response.data);
-  return response.data;
+  try {
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('Valid access token is required');
+    }
+    
+    structuredLogger.logOperationStart('testResetLogin', {
+      note: 'Testing reset login'
+    });
+
+    const response = await plaidClient.itemResetLogin({
+      access_token: accessToken,
+    });
+    
+    structuredLogger.logSuccess('testResetLogin', {
+      result: 'Reset login test completed'
+    });
+    
+    return response.data;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      error: error.message
+    });
+    throw error;
+  }
 };
 
 const verifyPlaidToken = (token, body) => {
-  const decoded = webTokenDecoder(token);
-  if (!decoded) {
-    throw new Error("Invalid token");
+  try {
+    structuredLogger.logOperationStart('verifyPlaidToken', {
+      token_provided: !!token,
+      body_provided: !!body
+    });
+    
+    if (!token || !body || !process.env.PLAID_WEBHOOK_SECRET) {
+      return false;
+    }
+    
+    const expectedToken = sha256(process.env.PLAID_WEBHOOK_SECRET + body).toString();
+    const isValid = token === expectedToken;
+    
+    return isValid;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      error: error.message
+    });
+    return false;
   }
-  const timestamp = decoded.iat;
-  const now = Math.floor(Date.now() / 1000);
-  if (now - timestamp > 300) {
-    throw new Error("Token expired or invalid");
-  }
-  const bodyString = JSON.stringify(body);
-  const bodyHash = sha256(bodyString).toString();
-
-  //Deberian ser iguales
-  // console.log(bodyHash);
-
-  return decoded;
 };
 
+// Health check for webhook processing
+const getWebhookHealth = () => {
+  const health = {
+    timestamp: new Date().toISOString(),
+    failureTracker: {
+      totalItems: plaidService.webhookFailureTracker ? plaidService.webhookFailureTracker.size : 0,
+      itemsWithFailures: []
+    }
+  };
+
+  if (plaidService.webhookFailureTracker) {
+    // Ensure it's a Map before iterating
+    if (!(plaidService.webhookFailureTracker instanceof Map)) {
+      structuredLogger.logErrorBlock(new Error('webhookFailureTracker is not a Map'), {
+        operation: 'getWebhookHealth'
+      });
+      return health;
+    }
+    for (const [itemId, failures] of plaidService.webhookFailureTracker.entries()) {
+      health.failureTracker.itemsWithFailures.push({
+        itemId,
+        failureCount: failures
+      });
+    }
+  }
+
+  structuredLogger.logOperationStart('getWebhookHealth');
+
+  return health;
+};
+
+export {
+  webhookHandler,
+  testWebhook,
+  testResetLogin,
+  verifyPlaidToken,
+  getWebhookHealth
+};
+
+// Create default export object
 const webhookService = {
   webhookHandler,
   testWebhook,
-  verifyPlaidToken,
   testResetLogin,
+  verifyPlaidToken,
+  getWebhookHealth
 };
 
 export default webhookService;

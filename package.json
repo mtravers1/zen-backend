@@ -1,6 +1,6 @@
 {
   "name": "zentavos-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "app.js",
   "type": "module",
   "scripts": {
@@ -37,7 +37,7 @@
     "morgan": "^1.10.0",
     "nodemailer": "^6.9.16",
     "ollama": "^0.5.15",
-    "plaid": "^30.0.0"
+    "plaid": "^37.0.0"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^12.0.2",

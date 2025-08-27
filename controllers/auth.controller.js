@@ -1,12 +1,20 @@
 import authService from "../services/auth.service.js";
 import { emailValidation } from "../lib/mailer/mailer.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const own = async (req, res) => {
   const { uid } = req.user;
   try {
+    structuredLogger.logOperationStart('auth_own', { user_id: uid });
     const user = await authService.own(uid);
+    structuredLogger.logSuccess('auth_own', { user_id: uid });
     res.status(200).send(user);
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_own',
+      user_id: uid,
+      error_classification: 'authentication_error'
+    });
     res.status(500).send(error.message);
   }
 };
@@ -14,22 +22,71 @@ const own = async (req, res) => {
 const signUp = async (req, res) => {
   const { data } = req.body;
   try {
+    structuredLogger.logOperationStart('auth_signup', { 
+      email: data.email,
+      has_phone: !!data.phone 
+    });
     await authService.signUp(data);
+    structuredLogger.logSuccess('auth_signup', { email: data.email });
     res.status(201).send({
       email: data.email,
       phone: data.phone,
     });
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_signup',
+      email: data.email,
+      error_classification: 'registration_error'
+    });
     res.status(500).send(error.message);
   }
 };
 
 const signIn = async (req, res) => {
-  const uid = req.user.uid;
   try {
-    const user = await authService.signIn(uid);
+    // Extract uid from Firebase token in Authorization header
+    const idToken = req.headers.authorization?.split("Bearer ")[1];
+    if (!idToken) {
+      return res.status(401).send("Authorization token required");
+    }
+
+    // Verify the token to get the uid
+    const admin = (await import("../lib/firebaseAdmin.js")).default;
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+
+    structuredLogger.logOperationStart('auth_signin', { user_id: uid });
+    
+    // Extract user data from request body
+    const { email, method, password } = req.body;
+    
+    // Log received data for debugging
+    console.log("Received signin request:", { email, method, hasPassword: !!password });
+    
+    // Validate required fields
+    if (!email) {
+      return res.status(400).send("Email is required");
+    }
+    
+    // Create minimal user data for new users
+    const userData = {
+      email: email,
+      method: method,
+      password: password
+    };
+    
+    // Use signInOrCreate to handle both existing and new users
+    const user = await authService.signInOrCreate(uid, userData);
+    structuredLogger.logSuccess('auth_signin', { user_id: uid });
     res.status(200).send(user);
   } catch (error) {
+    const errorClassification = error.message === "User not found" ? 'user_not_found' : 'authentication_error';
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_signin',
+      user_id: 'unknown',
+      error_classification: errorClassification
+    });
+    
     if (error.message === "User not found") {
       return res.status(404).send(error.message);
     }
@@ -41,9 +98,22 @@ const checkEmail = async (req, res) => {
   const { email, method } = req.body;
 
   try {
+    structuredLogger.logOperationStart('auth_check_email', { 
+      email: email,
+      method: method 
+    });
     const user = await authService.checkEmail(email);
+    structuredLogger.logSuccess('auth_check_email', { email: email });
     res.status(200).send(user);
   } catch (error) {
+    const errorClassification = error.message === "User not found" ? 'user_not_found' : 'validation_error';
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_check_email',
+      email: email,
+      method: method,
+      error_classification: errorClassification
+    });
+    
     if (error.message === "User not found") {
       return res.status(404).send(error.message);
     }
@@ -57,9 +127,18 @@ const checkEmail = async (req, res) => {
 const checkEmailFirebase = async (req, res) => {
   const { email } = req.body;
   try {
+    structuredLogger.logOperationStart('auth_check_email_firebase', { email: email });
     const user = await authService.checkEmailFirebase(email);
+    structuredLogger.logSuccess('auth_check_email_firebase', { email: email });
     res.status(200).send(user);
   } catch (error) {
+    const errorClassification = error.message === "User not found" ? 'user_not_found' : 'firebase_error';
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_check_email_firebase',
+      email: email,
+      error_classification: errorClassification
+    });
+    
     if (error.message === "User not found") {
       return res.status(404).send(error.message);
     }
@@ -71,9 +150,16 @@ const sendCode = async (req, res) => {
   const { email } = req.body;
   const code = Math.floor(100000 + Math.random() * 900000);
   try {
+    structuredLogger.logOperationStart('auth_send_code', { email: email });
     await emailValidation(code, email);
+    structuredLogger.logSuccess('auth_send_code', { email: email });
     res.status(200).send({ code });
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_send_code',
+      email: email,
+      error_classification: 'email_error'
+    });
     res.status(500).send(error.message);
   }
 };
@@ -81,9 +167,16 @@ const sendCode = async (req, res) => {
 const resetPassword = async (req, res) => {
   const { email, password } = req.body;
   try {
+    structuredLogger.logOperationStart('auth_reset_password', { email: email });
     await authService.changeUserPassword(email, password);
+    structuredLogger.logSuccess('auth_reset_password', { email: email });
     res.status(200).send({ message: "Password reset email sent successfully" });
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_reset_password',
+      email: email,
+      error_classification: 'password_reset_error'
+    });
     res.status(500).send(error.message);
   }
 };
@@ -91,12 +184,29 @@ const resetPassword = async (req, res) => {
 const deleteUser = async (req, res) => {
   try {
     const userId = req.user.uid;
-    //TODO: check if user is admin
-
     const { uid } = req.params;
+    
+    structuredLogger.logOperationStart('auth_delete_user', { 
+      requesting_user_id: userId,
+      target_user_id: uid 
+    });
+    
+    //TODO: check if user is admin
     await authService.deleteUser(uid);
+    
+    structuredLogger.logSuccess('auth_delete_user', { 
+      requesting_user_id: userId,
+      target_user_id: uid 
+    });
+    
     res.status(200).send({ message: "User deleted successfully" });
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_delete_user',
+      requesting_user_id: req.user.uid,
+      target_user_id: req.params.uid,
+      error_classification: 'user_deletion_error'
+    });
     res.status(500).send(error.message);
   }
 };
