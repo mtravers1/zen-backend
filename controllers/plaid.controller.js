@@ -222,6 +222,87 @@ const getConnectedInstitutions = async (req, res) => {
   }
 };
 
+const getUpfrontInstitutionStatus = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    
+    console.log(`[CONTROLLER] getUpfrontInstitutionStatus request - uid: ${uid}`);
+    
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      return res.status(404).send({ error: "User not found" });
+    }
+    
+    const userId = user._id.toString();
+    
+    // Get user's current plan and permissions
+    const checkUserRole = permissionsService.checkUserRole || (() => user.account_type || "Free");
+    const rolePermission = await checkUserRole(user);
+    
+    // Import permissions config
+    const permissionsConfig = await import("../config/permissions.js").then(m => m.default);
+    const rolePermissions = permissionsConfig[rolePermission];
+    
+    if (!rolePermissions) {
+      return res.status(500).send({ error: "Plan configuration not found" });
+    }
+    
+    // Count current institutions
+    const institutionsCount = await permissionsService.countUserInstitutions(userId);
+    const maxInstitutions = rolePermissions.accounts_max;
+    
+    // Determine if user can add new institutions
+    const canAddNewInstitution = maxInstitutions === -1 || institutionsCount < maxInstitutions;
+    
+    // Get connected institutions (reuse existing logic)
+    const accounts = await PlaidAccount.find({ owner_id: user._id });
+    const connected_institutions = [];
+    
+    if (accounts.length > 0) {
+      const dek = await getUserDek(uid);
+      const institutionsMap = new Map();
+      
+      for (const account of accounts) {
+        const institutionId = account.institution_id;
+        
+        const decryptedInstitutionName = await decryptValue(account.institution_name, dek);
+        const decryptedAccessToken = await decryptValue(account.accessToken, dek);
+        
+        if (!institutionsMap.has(institutionId)) {
+          const accountsCount = accounts.filter(acc => acc.institution_id === institutionId).length;
+          institutionsMap.set(institutionId, {
+            institution_id: institutionId,
+            institution_name: decryptedInstitutionName,
+            access_token: decryptedAccessToken,
+            item_id: account.itemId,
+            accounts_count: accountsCount
+          });
+        }
+      }
+      
+      connected_institutions.push(...Array.from(institutionsMap.values()));
+    }
+    
+    const response = {
+      connected_institutions,
+      user_status: {
+        current_plan: rolePermission,
+        institutions_current: institutionsCount,
+        institutions_max: maxInstitutions,
+        can_add_new_institution: canAddNewInstitution,
+        upgrade_required: !canAddNewInstitution
+      }
+    };
+    
+    console.log(`[CONTROLLER] getUpfrontInstitutionStatus success - uid: ${uid}, plan: ${rolePermission}, institutions: ${institutionsCount}/${maxInstitutions}, can_add: ${canAddNewInstitution}`);
+    res.status(200).send(response);
+    
+  } catch (error) {
+    console.error(`[CONTROLLER] getUpfrontInstitutionStatus error - uid: ${req.user?.uid}:`, error.message);
+    res.status(500).send({ error: "Internal server error" });
+  }
+};
+
 const resumeInstitution = async (req, res) => {
   try {
     const { institutionId, isAndroid } = req.body;
@@ -266,6 +347,7 @@ const plaidController = {
   repairAccessToken,
   checkInstitutionLimit,
   getConnectedInstitutions,
+  getUpfrontInstitutionStatus,
   resumeInstitution,
 };
 

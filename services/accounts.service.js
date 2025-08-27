@@ -38,9 +38,24 @@ const addAccount = async (accessToken, email, uid) => {
   }
   const userId = user._id.toString();
   const userType = user.role;
-  const accountsResponse = await plaidService.getAccountsWithAccessToken(
-    accessToken
-  );
+  
+  let accountsResponse;
+  try {
+    accountsResponse = await plaidService.getAccountsWithAccessToken(
+      accessToken
+    );
+  } catch (error) {
+    // Handle Plaid NO_ACCOUNTS error (common in sandbox for some institutions)
+    if (error.response?.data?.error_code === 'NO_ACCOUNTS') {
+      console.log(`[PLAID] NO_ACCOUNTS error for user ${uid} - Institution may not have valid accounts in sandbox`);
+      return {
+        message: "No valid accounts found at this financial institution. This may be a sandbox limitation or the institution may not have active accounts.",
+        error_code: "NO_ACCOUNTS",
+        success: false
+      };
+    }
+    throw error; // Re-throw other errors
+  }
 
   const accounts = accountsResponse.accounts;
   const institutionId = accountsResponse.item.institution_id;
@@ -216,6 +231,8 @@ const addAccount = async (accessToken, email, uid) => {
     }
     const account = savedAccounts.find(
       (account) => account.plaid_account_id === transaction.account_id
+    ) || existingAccounts.find(
+      (account) => account.plaid_account_id === transaction.account_id
     );
 
     if (!account) {
@@ -287,6 +304,8 @@ const addAccount = async (accessToken, email, uid) => {
     const accountType = accountTypes[transaction.account_id];
     const account = savedAccounts.find(
       (account) => account.plaid_account_id === transaction.account_id
+    ) || existingAccounts.find(
+      (account) => account.plaid_account_id === transaction.account_id
     );
 
     const encryptedAmount = await encryptValue(transaction.amount, dek);
@@ -337,9 +356,11 @@ const addAccount = async (accessToken, email, uid) => {
     Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
       if (Array.isArray(value)) {
         value.forEach(async (item) => {
-          //if accountid is not in savedaccounts, then skip
+          //if accountid is not in savedaccounts or existingaccounts, then skip
           if (
             !savedAccounts.find(
+              (account) => account.plaid_account_id === item.account_id
+            ) && !existingAccounts.find(
               (account) => account.plaid_account_id === item.account_id
             )
           )

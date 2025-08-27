@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
 import router from "./routes/index.js";
+import devRouter from "./routes/dev.router.js";
 
 dotenv.config();
 
@@ -61,11 +62,21 @@ app.use(
 			"/api/payments/webhook/android",
 			"/api/payments/webhook/apple",
 		],
+		custom: function(req) {
+			// Skip auth for all /dev routes in development
+			if (process.env.NODE_ENV === 'development' && req.path.startsWith('/dev')) {
+				return true;
+			}
+			return false;
+		}
 	})
 );
 
 // Load routes
 app.use("/api", router);
+
+// Development routes (only in development environment)
+app.use("/dev", devRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
