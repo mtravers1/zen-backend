@@ -107,8 +107,8 @@ jobs:
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
       - name: Restart API service
         run: |
-          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ secrets.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
-            cd ${{ secrets.DEPLOYMENT_PATH }}
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+            cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
           EOF
