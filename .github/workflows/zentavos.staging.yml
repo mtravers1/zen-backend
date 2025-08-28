@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  DEPLOYMENT_NAME: stg
+  DEPLOYMENT_NAME: staging
   BUNDLE_ID: com.zentavos.zentavosuat
   APP_PORT: 3002
 
@@ -43,35 +43,35 @@ jobs:
       - name: Replace environment variables
         run: |
           cd dist
-          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
-          sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_STG }}\'|g" .env.sample
-          sed -i -e "s|MONGODB_USER\=.*|MONGODB_USER\=\'${{ secrets.MONGODB_USER_STG }}\'|g" .env.sample
-          sed -i -e "s|MONGODB_PASS\=.*|MONGODB_PASS\=\'${{ secrets.MONGODB_PASS_STG }}\'|g" .env.sample
-          sed -i -e "s|MONGODB_DB\=.*|MONGODB_DB\=\'${{ secrets.MONGODB_DB_STG }}\'|g" .env.sample
-          sed -i -e "s|APP_PORT\=.*|APP_PORT\=$APP_PORT|g" .env.sample
-          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=./ServiceAccountKey.json|g" .env.sample
-          sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_STG }}|g" .env.sample
-          sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_STG }}|g" .env.sample
-          sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_STG }}|g" .env.sample
-          sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ secrets.GCP_PROJECT_ID }}|g" .env.sample
-          sed -i -e "s|GCP_EMAIL\=.*|GCP_EMAIL\=${{ secrets.GCP_EMAIL }}|g" .env.sample
-          sed -i -e "s|GCP_PRIVATE_KEY\=.*|GCP_PRIVATE_KEY\=\"${{ secrets.GCP_PRIVATE_KEY }}\"|g" .env.sample
-          sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env.sample
-          sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env.sample
-          sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env.sample
-          sed -i -e "s|AI_URL\=.*|AI_URL\=${{ secrets.AI_URL }}|g" .env.sample
-          sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=${{ vars.AI_MODEL }}|g" .env.sample
-          sed -i -e "s|PLAID_REDIRECT_URI\=.*|PLAID_REDIRECT_URI\=${{ secrets.PLAID_REDIRECT_URI_STG }}|g" .env.sample
-          sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_STG }}|g" .env.sample
-          sed -i -e "s|GROQ_AI_MODEL\=.*|GROQ_AI_MODEL\=${{ vars.GROQ_AI_MODEL }}|g" .env.sample
-          sed -i -e "s|GROQ_API_KEY\=.*|GROQ_API_KEY\=${{ secrets.GROQ_API_KEY }}|g" .env.sample
-          sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT }}|g" .env.sample
-          sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT }}|g" .env.sample
-          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env.sample
-          sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env.sample
-          sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env.sample
-          sed -i -e "/\"type\"\:.*/d" package.json
           cp .env.sample .env
+          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
+          sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_USER\=.*|MONGODB_USER\=\'${{ secrets.MONGODB_USER_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_PASS\=.*|MONGODB_PASS\=\'${{ secrets.MONGODB_PASS_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_DB\=.*|MONGODB_DB\=\'${{ secrets.MONGODB_DB_STG }}\'|g" .env
+          sed -i -e "s|APP_PORT\=.*|APP_PORT\=$APP_PORT|g" .env
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=./ServiceAccountKey.json|g" .env
+          sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_STG }}|g" .env
+          sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_STG }}|g" .env
+          sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_STG }}|g" .env
+          sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ secrets.GCP_PROJECT_ID }}|g" .env
+          sed -i -e "s|GCP_EMAIL\=.*|GCP_EMAIL\=${{ secrets.GCP_EMAIL }}|g" .env
+          sed -i -e "s|GCP_PRIVATE_KEY\=.*|GCP_PRIVATE_KEY\=\"${{ secrets.GCP_PRIVATE_KEY }}\"|g" .env
+          sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ secrets.GCP_KEY_LOCATION }}|g" .env
+          sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ secrets.GCP_KEY_RING }}|g" .env
+          sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ secrets.GCP_KEY_NAME }}|g" .env
+          sed -i -e "s|AI_URL\=.*|AI_URL\=${{ secrets.AI_URL }}|g" .env
+          sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=${{ vars.AI_MODEL }}|g" .env
+          sed -i -e "s|PLAID_REDIRECT_URI\=.*|PLAID_REDIRECT_URI\=${{ secrets.PLAID_REDIRECT_URI_STG }}|g" .env
+          sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_STG }}|g" .env
+          sed -i -e "s|GROQ_AI_MODEL\=.*|GROQ_AI_MODEL\=${{ vars.GROQ_AI_MODEL }}|g" .env
+          sed -i -e "s|GROQ_API_KEY\=.*|GROQ_API_KEY\=${{ secrets.GROQ_API_KEY }}|g" .env
+          sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT }}|g" .env
+          sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT }}|g" .env
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
+          sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
+          sed -i -e "/\"type\"\:.*/d" package.json
           cd ..
       - name: VPN config
         env:
