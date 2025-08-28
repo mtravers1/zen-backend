@@ -92,7 +92,8 @@ jobs:
       - name: rsync deployment
         uses: burnett01/rsync-deployments@7.0.2
         with:
-          switches: -avzr --delete
+          switches: -avzr --delete --no-times --omit-dir-times --no-perms --no-owner --no-group --chmod=D755,F644
+          rsh: ssh -o StrictHostKeyChecking=no -p ${{ secrets.DEPLOYMENT_PORT }}
           path: ./dist/
           remote_path: ${{ vars.DEPLOYMENT_PATH }}
           remote_host: ${{ vars.DEPLOYMENT_HOST_PROD }}
