@@ -96,7 +96,7 @@ jobs:
           switches: -avzr --delete
           path: ./dist/
           remote_path: ${{ vars.DEPLOYMENT_PATH }}
-          remote_host: ${{ vars.DEPLOYMENT_HOST_STG }}
+          remote_host: ${{ vars.DEPLOYMENT_HOST_DEV }}
           remote_user: ${{ secrets.DEPLOYMENT_USER_DEV }}
           remote_key: ${{ secrets.DEPLOYMENT_KEY_DEV }}
           remote_port: ${{ secrets.DEPLOYMENT_PORT }}
