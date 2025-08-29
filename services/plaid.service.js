@@ -47,9 +47,12 @@ const checkInstitutionProductSupport = async (institutionId, product) => {
     const cached = institutionProductCache.get(cacheKey);
     
     if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log(`[checkInstitutionProductSupport] Using cached result for ${institutionId}_${product}: ${cached.supported}`);
       return cached.supported;
     }
 
+    console.log(`[checkInstitutionProductSupport] Checking support for ${institutionId}_${product}`);
+    
     const response = await plaidClient.institutionsGetById({
       institution_id: institutionId,
       country_codes: ["US"],
@@ -61,6 +64,9 @@ const checkInstitutionProductSupport = async (institutionId, product) => {
     const institution = response.data.institution;
     const supported = institution.products && institution.products.includes(product);
     
+    console.log(`[checkInstitutionProductSupport] Institution ${institution.name} (${institutionId}) supports ${product}: ${supported}`);
+    console.log(`[checkInstitutionProductSupport] Available products:`, institution.products);
+    
     institutionProductCache.set(cacheKey, {
       supported,
       timestamp: Date.now()
@@ -69,16 +75,23 @@ const checkInstitutionProductSupport = async (institutionId, product) => {
     logPlaidOperation('checkInstitutionProductSupport', true, {
       institutionId,
       product,
-      supported
+      supported,
+      institutionName: institution.name,
+      availableProducts: institution.products
     });
 
     return supported;
   } catch (error) {
+    console.error(`[checkInstitutionProductSupport] Error checking ${institutionId}_${product}:`, error);
+    
     logPlaidOperation('checkInstitutionProductSupport', false, {
       institutionId,
       product,
-      error: error.message
+      error: error.message,
+      errorCode: error.response?.data?.error_code,
+      errorResponse: error.response?.data
     });
+    
     // Return null to indicate unknown support status
     // Let the caller decide whether to proceed
     return null;

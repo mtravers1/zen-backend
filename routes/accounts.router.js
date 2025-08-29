@@ -6,6 +6,7 @@ const router = Router();
 router.get("/debug/:profileId", accountsController.debugProfile);
 router.get("/debug-decrypt/:profileId", accountsController.debugDecryption);
 router.get("/debug-cache", accountsController.debugCache);
+router.get("/debug-encryption/:uid", accountsController.debugEncryption);
 router.post("/add-account", accountsController.addAccount);
 router.post("/", accountsController.getAccounts);
 router.post("/cash-flows", accountsController.getCashFlows);
