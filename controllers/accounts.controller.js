@@ -633,6 +633,11 @@ const accountsController = {
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
   debugProfile,
+  debugDecryption,
+  debugCache,
+  getCacheStats,
+  clearAllCaches,
+  clearDecryptionCache,
 };
 
 export default {
