@@ -213,6 +213,21 @@ const safeDecryptValue = async (value, dek, uid) => {
     
     if (decrypted === null) {
       console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, this might indicate data corruption`);
+      
+      // Log additional context for debugging
+      console.log(`[safeDecryptValue ${requestId}] 🔍 Decryption failure context:`, {
+        uid: uid,
+        valueLength: value.length,
+        valueStart: value.substring(0, 20),
+        hasDek: !!dek,
+        dekLength: dek ? dek.length : 0,
+        timestamp: new Date().toISOString(),
+        recommendation: 'Consider running encryption key recovery'
+      });
+      
+      // Clear DEK cache to force fresh key retrieval
+      clearDekCache(uid);
+      
       return null;
     }
     return decrypted;

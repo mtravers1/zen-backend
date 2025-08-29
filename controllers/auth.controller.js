@@ -211,6 +211,60 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// Add encryption key recovery endpoint
+const recoverEncryptionKeys = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    
+    if (!uid) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+    
+    // Check if user is admin or the request is for their own account
+    if (req.user.role !== 'admin' && req.user.authUid !== uid) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to recover encryption keys'
+      });
+    }
+    
+    // Import the recovery function
+    const { recoverUserEncryptionKeys, checkEncryptionKeyHealth } = await import('../database/encryption.js');
+    
+    // Check current key health first
+    const health = await checkEncryptionKeyHealth(uid);
+    
+    if (health.healthy) {
+      return res.json({
+        success: true,
+        message: 'Encryption keys are healthy',
+        health: health
+      });
+    }
+    
+    // Attempt recovery
+    const recoveryResult = await recoverUserEncryptionKeys(uid);
+    
+    res.json({
+      success: true,
+      message: 'Encryption key recovery completed',
+      recovery: recoveryResult,
+      health: await checkEncryptionKeyHealth(uid)
+    });
+    
+  } catch (error) {
+    console.error('Error recovering encryption keys:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to recover encryption keys',
+      error: error.message
+    });
+  }
+};
+
 const authController = {
   own,
   signUp,
@@ -220,6 +274,7 @@ const authController = {
   resetPassword,
   checkEmailFirebase,
   deleteUser,
+  recoverEncryptionKeys,
 };
 
 export default authController;

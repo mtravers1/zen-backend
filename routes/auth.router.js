@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authController from "../controllers/auth.controller.js";
 import dotenv from "dotenv";
+import firebaseAuth from "../middlewares/firebaseAuth.js";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
 router.post("/resetPassword", authController.resetPassword);
 router.delete("/:uid", authController.deleteUser);
+router.post('/recover-encryption-keys/:uid', firebaseAuth, authController.recoverEncryptionKeys);
 router.get("/test", (req, res) => {
   const aiurl = process.env.AI_URL;
   const aimodel = process.env.AI_MODEL;
