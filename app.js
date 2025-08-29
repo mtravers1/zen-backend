@@ -55,6 +55,7 @@ app.use(
 			"/api/webhook/test",
 			"/api/plaid/institutions",
 			"/api/auth/sendCode",
+			"/api/auth/verifyCode",
 			"/api/auth/resetPassword",
 			"/api/plaid/accounts",
 			"/api/account/add-photo",
