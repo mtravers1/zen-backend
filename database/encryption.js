@@ -150,30 +150,60 @@ async function generateAndStoreEncryptedDEK(uid) {
 async function getDEKFromBucket(uid) {
   const startTime = Date.now();
   try {
-    console.log(`[ENCRYPTION] getDEKFromBucket starting for user: ${uid} at ${new Date().toISOString()}`);
+    console.log(`\n📦 [ENCRYPTION] getDEKFromBucket starting for user: ${uid} at ${new Date().toISOString()}`);
+    console.log(`[ENCRYPTION] Environment: ${environment}`);
+    console.log(`[ENCRYPTION] Bucket: ${BUCKET_NAME}`);
     
+    const filePath = `keys/${environment}/${uid}.key`;
     const file = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${environment}/${uid}.key`);
+      .file(filePath);
     
-    console.log(`[ENCRYPTION] Checking if key file exists: keys/${environment}/${uid}.key`);
+    console.log(`[ENCRYPTION] Checking if key file exists: ${filePath}`);
+    console.log(`[ENCRYPTION] Full file path: gs://${BUCKET_NAME}/${filePath}`);
     
-    if (!(await file.exists())[0]) {
+    const [exists] = await file.exists();
+    console.log(`[ENCRYPTION] File exists check result: ${exists}`);
+    
+    if (!exists) {
       const duration = Date.now() - startTime;
       console.log(`[ENCRYPTION] Key file not found for user: ${uid} after ${duration}ms`);
+      console.log(`[ENCRYPTION] File path checked: ${filePath}`);
+      console.log(`[ENCRYPTION] This means the user doesn't have encryption keys yet`);
+      
       logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found', duration });
       return null;
     }
     
     console.log(`[ENCRYPTION] Key file found, downloading for user: ${uid}`);
+    console.log(`[ENCRYPTION] File size: ${(await file.getMetadata())[0].size} bytes`);
+    
     const [keyDataString] = await file.download();
+    console.log(`[ENCRYPTION] Key data downloaded successfully, length: ${keyDataString.length} bytes`);
+    
     const keyData = JSON.parse(keyDataString.toString());
-    console.log(`[ENCRYPTION] Key data downloaded and parsed for user: ${uid}`);
+    console.log(`[ENCRYPTION] Key data parsed successfully for user: ${uid}`);
+    console.log(`[ENCRYPTION] Key data structure:`, {
+      hasEncryptedDEK: !!keyData.encryptedDEK,
+      encryptedDEKLength: keyData.encryptedDEK ? keyData.encryptedDEK.length : 0,
+      hasVersion: !!keyData.version,
+      version: keyData.version,
+      hasCreatedAt: !!keyData.createdAt,
+      createdAt: keyData.createdAt
+    });
     
     const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
     const keyVersion = keyData.version;
+    
+    console.log(`[ENCRYPTION] Encrypted DEK converted to buffer:`, {
+      originalLength: keyData.encryptedDEK.length,
+      bufferLength: encryptedDEK.length,
+      isBuffer: Buffer.isBuffer(encryptedDEK)
+    });
+    
     console.log(`[ENCRYPTION] Calling KMS decrypt for user: ${uid}, version: ${keyVersion}`);
-
+    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
+    
     const [decryptResponse] = await kmsClient.decrypt({
       name: KEY_PATH,
       ciphertext: encryptedDEK,
@@ -181,11 +211,18 @@ async function getDEKFromBucket(uid) {
 
     const dek = decryptResponse.plaintext;
     console.log(`[ENCRYPTION] KMS decrypt successful for user: ${uid}`);
+    console.log(`[ENCRYPTION] Decrypted DEK details:`, {
+      isBuffer: Buffer.isBuffer(dek),
+      length: dek.length,
+      expectedLength: 32,
+      isValid: Buffer.isBuffer(dek) && dek.length === 32
+    });
     
     // Cache the DEK and version
     dekCache.set(uid, dek);
     dekVersionCache.set(uid, keyVersion);
     console.log(`[ENCRYPTION] DEK cached for user: ${uid}`);
+    console.log(`[ENCRYPTION] Cache size after caching: ${dekCache.size}`);
 
     const duration = Date.now() - startTime;
     console.log(`[ENCRYPTION] getDEKFromBucket completed successfully for user: ${uid} in ${duration}ms`);
@@ -199,7 +236,11 @@ async function getDEKFromBucket(uid) {
       stack: error.stack,
       code: error.code,
       status: error.status,
-      duration
+      duration,
+      environment,
+      bucket: BUCKET_NAME,
+      filePath: `keys/${environment}/${uid}.key`,
+      kmsKeyPath: KEY_PATH
     });
     
     logEncryptionOperation('getDEKFromBucket', false, { uid, error: error.message, duration });
@@ -210,7 +251,10 @@ async function getDEKFromBucket(uid) {
 async function getUserDek(uid) {
   const startTime = Date.now();
   try {
-    console.log(`[ENCRYPTION] getUserDek called for user: ${uid} at ${new Date().toISOString()}`);
+    console.log(`\n🔑 [ENCRYPTION] getUserDek called for user: ${uid} at ${new Date().toISOString()}`);
+    console.log(`[ENCRYPTION] Environment: ${environment}`);
+    console.log(`[ENCRYPTION] Bucket: ${BUCKET_NAME}`);
+    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
     
     if (!uid) {
       throw new Error('UID is required to get DEK');
@@ -221,6 +265,10 @@ async function getUserDek(uid) {
       const cachedDek = dekCache.get(uid);
       const version = dekVersionCache.get(uid);
       
+      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}`);
+      console.log(`[ENCRYPTION] Cached DEK type: ${typeof cachedDek}, length: ${cachedDek ? cachedDek.length : 0}`);
+      console.log(`[ENCRYPTION] Cached version: ${version}`);
+      
       // Validate cached DEK
       if (cachedDek && Buffer.isBuffer(cachedDek) && cachedDek.length === 32) {
         const duration = Date.now() - startTime;
@@ -229,30 +277,55 @@ async function getUserDek(uid) {
         return { dek: cachedDek, version };
       } else {
         console.warn(`[ENCRYPTION] Invalid cached DEK for user: ${uid}, clearing cache`);
+        console.warn(`[ENCRYPTION] DEK type: ${typeof cachedDek}, isBuffer: ${Buffer.isBuffer(cachedDek)}, length: ${cachedDek ? cachedDek.length : 0}`);
         dekCache.delete(uid);
         dekVersionCache.delete(uid);
       }
+    } else {
+      console.log(`[ENCRYPTION] No DEK found in cache for user: ${uid}`);
     }
 
     console.log(`[ENCRYPTION] DEK not in cache or invalid, checking bucket for user: ${uid}`);
+    console.log(`[ENCRYPTION] Expected file path: keys/${environment}/${uid}.key`);
+    
     let keyData = await getDEKFromBucket(uid);
 
     if (!keyData || !keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
       console.log(`[ENCRYPTION] No valid key found in bucket, generating new keys for user: ${uid}`);
+      console.log(`[ENCRYPTION] Key data validation:`, {
+        hasKeyData: !!keyData,
+        hasDek: !!keyData?.dek,
+        dekType: keyData?.dek ? typeof keyData.dek : 'undefined',
+        isBuffer: keyData?.dek ? Buffer.isBuffer(keyData.dek) : false,
+        dekLength: keyData?.dek ? keyData.dek.length : 0
+      });
+      
       keyData = await generateAndStoreEncryptedDEK(uid);
       console.log(`[ENCRYPTION] Successfully generated new keys for user: ${uid}`);
     } else {
       console.log(`[ENCRYPTION] Found existing valid keys in bucket for user: ${uid}`);
+      console.log(`[ENCRYPTION] Retrieved DEK type: ${typeof keyData.dek}, length: ${keyData.dek.length}, version: ${keyData.version}`);
     }
 
     // Validate the key before caching
     if (!keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
+      console.error(`[ENCRYPTION] Invalid DEK generated for user: ${uid}`);
+      console.error(`[ENCRYPTION] DEK validation failed:`, {
+        hasDek: !!keyData.dek,
+        dekType: typeof keyData.dek,
+        isBuffer: Buffer.isBuffer(keyData.dek),
+        dekLength: keyData.dek ? keyData.dek.length : 0,
+        expectedLength: 32
+      });
       throw new Error(`Invalid DEK generated for user: ${uid}`);
     }
 
     // Cache the DEK and version
     dekCache.set(uid, keyData.dek);
     dekVersionCache.set(uid, keyData.version);
+    
+    console.log(`[ENCRYPTION] DEK cached successfully for user: ${uid}`);
+    console.log(`[ENCRYPTION] Cache size: ${dekCache.size}, Version cache size: ${dekVersionCache.size}`);
 
     const duration = Date.now() - startTime;
     console.log(`[ENCRYPTION] getUserDek completed successfully for user: ${uid} in ${duration}ms`);
@@ -267,13 +340,17 @@ async function getUserDek(uid) {
       stack: e.stack,
       code: e.code,
       status: e.status,
-      duration
+      duration,
+      environment,
+      bucket: BUCKET_NAME,
+      kmsKeyPath: KEY_PATH
     });
     
     // Clear cache on error
     if (uid) {
       dekCache.delete(uid);
       dekVersionCache.delete(uid);
+      console.log(`[ENCRYPTION] Cleared cache for user: ${uid} due to error`);
     }
     
     logEncryptionOperation('getUserDek', false, { uid, error: e.message, duration });

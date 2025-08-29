@@ -78,250 +78,330 @@ const addBusinesses = async (businessList, email, uid) => {
 };
 
 const getUserProfiles = async (email, uid) => {
-  const user = await User.findOne({
-    authUid: uid,
-  }).lean();
+  console.log(`[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`);
+  
+  try {
+    const user = await User.findOne({
+      authUid: uid,
+    }).lean();
 
-  if (!user) {
-    throw new Error("User not found");
-  }
+    if (!user) {
+      console.error(`[getUserProfiles] User not found for uid: ${uid}`);
+      throw new Error("User not found");
+    }
 
-  const profiles = [];
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+    console.log(`[getUserProfiles] User found: ${user._id}`);
 
-  const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+    const profiles = [];
+    const keyData = await getUserDek(uid);
+    const dek = keyData.dek;
+    
+    console.log(`[getUserProfiles] DEK obtained:`, {
+      hasDek: !!dek,
+      dekType: typeof dek,
+      dekLength: dek ? dek.length : 0
+    });
 
-  const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+    // Decrypt user name fields with error handling
+    let decryptedFirstName, decryptedLastName, decryptedMiddleName, decryptedSuffix, decryptedPrefix;
+    
+    try {
+      decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+      console.log(`[getUserProfiles] First name decrypted: ${decryptedFirstName ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting first name:`, error);
+      decryptedFirstName = null;
+    }
 
-  const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
+    try {
+      decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+      console.log(`[getUserProfiles] Last name decrypted: ${decryptedLastName ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting last name:`, error);
+      decryptedLastName = null;
+    }
 
-  const decryptedSuffix = await decryptValue(user.name.suffix, dek, uid);
+    try {
+      decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
+      console.log(`[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting middle name:`, error);
+      decryptedMiddleName = null;
+    }
 
-  const decryptedPrefix = await decryptValue(user.name.prefix, dek, uid);
+    try {
+      decryptedSuffix = await decryptValue(user.name.suffix, dek, uid);
+      console.log(`[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting suffix:`, error);
+      decryptedSuffix = null;
+    }
 
-  const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
+    try {
+      decryptedPrefix = await decryptValue(user.name.prefix, dek, uid);
+      console.log(`[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting prefix:`, error);
+      decryptedPrefix = null;
+    }
 
-  let name;
-  if (!decryptedFirstName && !decryptedLastName) {
-    name = email;
-  } else {
-    name = decryptedFirstName + " " + decryptedLastName;
-  }
+    let decryptedPhotoUrl;
+    try {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
+      console.log(`[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? 'success' : 'failed'}`);
+    } catch (error) {
+      console.error(`[getUserProfiles] Error decrypting photo URL:`, error);
+      decryptedPhotoUrl = null;
+    }
 
-  const decryptedEmail = await Promise.all(
-    user.email.map((emailData) =>
-      Promise.all([
-        decryptValue(emailData.email, dek, uid),
-        emailData.emailType,
-        emailData.isPrimary,
-      ]).then(([email, emailType, isPrimary]) => ({
-        email,
-        emailType,
-        isPrimary,
-      }))
-    )
-  );
+    let name;
+    if (!decryptedFirstName && !decryptedLastName) {
+      name = email;
+      console.log(`[getUserProfiles] Using email as name: ${name}`);
+    } else {
+      name = decryptedFirstName + " " + decryptedLastName;
+      console.log(`[getUserProfiles] Using decrypted name: ${name}`);
+    }
 
-  const decryptedPhones = await Promise.all(
-    user.phones.map((phoneData) =>
-      Promise.all([
-        decryptValue(phoneData.phone, dek, uid),
-        phoneData.phoneType,
-      ]).then(([phone, phoneType]) => ({
-        phoneNumber: phone,
-        phoneType,
-      }))
-    )
-  );
-
-  const personalProfile = {
-    id: user._id,
-    name,
-    nameParts: {
-      firstName: decryptedFirstName,
-      lastName: decryptedLastName,
-      middleName: decryptedMiddleName,
-      prefix: decryptedPrefix,
-      suffix: decryptedSuffix,
-    },
-    photo: decryptedPhotoUrl,
-    plaidAccounts: user.plaidAccounts,
-    isPersonal: true,
-    color: null,
-    personal_emails: decryptedEmail, //<- No need to encrypt
-    personal_phones: decryptedPhones, //<- No need to encrypt
-  };
-
-  profiles.push(personalProfile);
-  const userId = user._id.toString();
-
-  const businesses = await Business.find({ userId }).lean();
-
-  if (!businesses.length) {
-    return profiles;
-  }
-
-  for (const business of businesses) {
-    const decryptedName = await decryptValue(business.name, dek, uid);
-
-    const decryptedIndustry = await decryptValue(business.industryDesc, dek, uid);
-
-    const decryptedBusinessLogo = await decryptValue(
-      business.businessLogo,
-      dek,
-      uid
+    const decryptedEmail = await Promise.all(
+      user.email.map((emailData) =>
+        Promise.all([
+          decryptValue(emailData.email, dek, uid),
+          emailData.emailType,
+          emailData.isPrimary,
+        ]).then(([email, emailType, isPrimary]) => ({
+          email,
+          emailType,
+          isPrimary,
+        }))
+      )
     );
 
-    let decryptedBusinessOwnersDetails = [];
-    if (business.businessOwnersDetails) {
-      decryptedBusinessOwnersDetails = await Promise.all(
-        business.businessOwnersDetails.map(async (owner) => {
-          return {
-            name: owner.name,
-            email: await decryptValue(owner.email, dek, uid),
-            percentOwned: owner.percentOwned,
-            position: owner.position,
-          };
-        })
-      );
-    }
+    const decryptedPhones = await Promise.all(
+      user.phones.map((phoneData) =>
+        Promise.all([
+          decryptValue(phoneData.phone, dek, uid),
+          phoneData.phoneType,
+        ]).then(([phone, phoneType]) => ({
+          phoneNumber: phone,
+          phoneType,
+        }))
+      )
+    );
 
-    let decryptedBusinessOwners = [];
-    if (business.businessOwners) {
-      decryptedBusinessOwners = await decryptValue(
-        business.businessOwners,
-        dek,
-        uid
-      );
-    }
-
-    let decryptdBusinessAddresses = [];
-    if (business.businessLocations) {
-      decryptdBusinessAddresses = await decryptValue(
-        business.businessLocations,
-        dek,
-        uid
-      );
-    }
-
-    let decryptdBusinessPhoneNumbers = [];
-    if (business.phoneNumbers) {
-      decryptdBusinessPhoneNumbers = await decryptValue(
-        business.phoneNumbers,
-        dek,
-        uid
-      );
-    }
-    let descyptEntityType = null;
-    if (business.entityType) {
-      descyptEntityType = await decryptValue(business.entityType, dek, uid);
-    }
-    let descryptsubsidiaries = [];
-    if (business.subsidiaries) {
-      descryptsubsidiaries = await decryptValue(business.subsidiaries, dek, uid);
-    }
-    let decryptedBusinessDesc = null;
-    if (business.businessDescription) {
-      decryptedBusinessDesc = await decryptValue(
-        business.businessDescription,
-        dek,
-        uid
-      );
-    }
-    let decryptedWebsite = null;
-    if (business.website) {
-      decryptedWebsite = await decryptValue(business.website, dek, uid);
-    }
-    let formationDate = null;
-    if (business.formationDate) {
-      formationDate = await decryptValue(business.formationDate, dek, uid);
-    }
-    let taxInformation = null;
-    if (business.taxInformation) {
-      taxInformation = await decryptValue(business.taxInformation, dek, uid);
-    }
-    let legalName = null;
-    if (business.legalName) {
-      legalName = await decryptValue(business.legalName, dek, uid);
-    }
-    let ownership = null;
-    if (business.ownership) {
-      ownership = await decryptValue(business.ownership, dek, uid);
-    }
-    let entityType = null;
-    if (business.industryDesc) {
-      entityType = await decryptValue(business.industryDesc, dek, uid);
-    }
-    let businessType = null;
-    if (business.businessType) {
-      businessType = await decryptValue(business.businessType, dek, uid);
-    }
-    let entityTaxType = null;
-    if (business.entityType) {
-      entityTaxType = await decryptValue(business.entityType, dek, uid);
-    }
-
-    const businessProfile = {
-      id: business._id,
-      name: decryptedName,
-      photo: decryptedBusinessLogo,
-      plaidAccounts: business.plaidAccountIds,
-      isPersonal: false,
-      color: business.color,
-      businessOwnersDetails: decryptedBusinessOwnersDetails,
-      businessOwners: decryptedBusinessOwners,
-      businessAddresses: decryptdBusinessAddresses,
-      businessPhoneNumbers: decryptdBusinessPhoneNumbers,
-      subsidiaries: descryptsubsidiaries,
-      businessDescription: decryptedBusinessDesc,
-      website: decryptedWebsite,
-      formationDate: formationDate,
-      taxInformation: taxInformation,
-      legalBusinessName: legalName,
-      ownership: ownership?.percentage || null,
-      entityType: entityType,
-      businessType: businessType,
-      businessTaxCode: entityTaxType,
-      businessEntityType: entityType,
+    const personalProfile = {
+      id: user._id,
+      name,
+      nameParts: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+        prefix: decryptedPrefix,
+        suffix: decryptedSuffix,
+      },
+      photo: decryptedPhotoUrl,
+      plaidAccounts: user.plaidAccounts,
+      isPersonal: true,
+      color: null,
+      personal_emails: decryptedEmail, //<- No need to encrypt
+      personal_phones: decryptedPhones, //<- No need to encrypt
     };
-    profiles.push(businessProfile);
-  }
 
-  const businessAccounts = businesses.flatMap((b) => b.plaidAccountIds || []);
-  const uniqueBusinessAccountIds = new Set(
-    businessAccounts.map((id) => id.toString())
-  );
+    profiles.push(personalProfile);
+    const userId = user._id.toString();
 
-  personalProfile.plaidAccounts = (user.plaidAccounts || []).filter(
-    (acc) => !uniqueBusinessAccountIds.has(acc.toString())
-  );
+    const businesses = await Business.find({ userId }).lean();
 
-  for (const profile of profiles) {
-    const photoPath = profile.isPersonal
-      ? `profilePhotos/${email}.jpg`
-      : `profilePhotos/${profile.name}.jpg`;
-
-    let photo;
-    if (!profile.photo) {
-      photo = await accountsService.generateSignedUrl(photoPath);
+    if (!businesses.length) {
+      return profiles;
     }
-    profile.photo = photo ? photo : profile.photo;
-  }
 
-  for (const profile of profiles) {
-    const photoPath = profile.isPersonal
-      ? `profilePhotos/${email}.jpg`
-      : `profilePhotos/${profile.name}.jpg`;
+    for (const business of businesses) {
+      console.log(`[getUserProfiles] Processing business: ${business._id}`);
+      
+      let decryptedName, decryptedIndustry, decryptedBusinessLogo;
+      
+      try {
+        decryptedName = await decryptValue(business.name, dek, uid);
+        console.log(`[getUserProfiles] Business name decrypted: ${decryptedName ? 'success' : 'failed'}`);
+      } catch (error) {
+        console.error(`[getUserProfiles] Error decrypting business name:`, error);
+        decryptedName = 'Unknown Business';
+      }
 
-    let photo;
-    if (!profile.photo) {
-      photo = await accountsService.generateSignedUrl(photoPath);
+      try {
+        decryptedIndustry = await decryptValue(business.industryDesc, dek, uid);
+        console.log(`[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? 'success' : 'failed'}`);
+      } catch (error) {
+        console.error(`[getUserProfiles] Error decrypting business industry:`, error);
+        decryptedIndustry = null;
+      }
+
+      try {
+        decryptedBusinessLogo = await decryptValue(
+          business.businessLogo,
+          dek,
+          uid
+        );
+        console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
+      } catch (error) {
+        console.error(`[getUserProfiles] Error decrypting business logo:`, error);
+        decryptedBusinessLogo = null;
+      }
+
+      let decryptedBusinessOwnersDetails = [];
+      if (business.businessOwnersDetails) {
+        decryptedBusinessOwnersDetails = await Promise.all(
+          business.businessOwnersDetails.map(async (owner) => {
+            return {
+              name: owner.name,
+              email: await decryptValue(owner.email, dek, uid),
+              percentOwned: owner.percentOwned,
+              position: owner.position,
+            };
+          })
+        );
+      }
+
+      let decryptedBusinessOwners = [];
+      if (business.businessOwners) {
+        decryptedBusinessOwners = await decryptValue(
+          business.businessOwners,
+          dek,
+          uid
+        );
+      }
+
+      let decryptdBusinessAddresses = [];
+      if (business.businessLocations) {
+        decryptdBusinessAddresses = await decryptValue(
+          business.businessLocations,
+          dek,
+          uid
+        );
+      }
+
+      let decryptdBusinessPhoneNumbers = [];
+      if (business.phoneNumbers) {
+        decryptdBusinessPhoneNumbers = await decryptValue(
+          business.phoneNumbers,
+          dek,
+          uid
+        );
+      }
+      let descyptEntityType = null;
+      if (business.entityType) {
+        descyptEntityType = await decryptValue(business.entityType, dek, uid);
+      }
+      let descryptsubsidiaries = [];
+      if (business.subsidiaries) {
+        descryptsubsidiaries = await decryptValue(business.subsidiaries, dek, uid);
+      }
+      let decryptedBusinessDesc = null;
+      if (business.businessDescription) {
+        decryptedBusinessDesc = await decryptValue(
+          business.businessDescription,
+          dek,
+          uid
+        );
+      }
+      let decryptedWebsite = null;
+      if (business.website) {
+        decryptedWebsite = await decryptValue(business.website, dek, uid);
+      }
+      let formationDate = null;
+      if (business.formationDate) {
+        formationDate = await decryptValue(business.formationDate, dek, uid);
+      }
+      let taxInformation = null;
+      if (business.taxInformation) {
+        taxInformation = await decryptValue(business.taxInformation, dek, uid);
+      }
+      let legalName = null;
+      if (business.legalName) {
+        legalName = await decryptValue(business.legalName, dek, uid);
+      }
+      let ownership = null;
+      if (business.ownership) {
+        ownership = await decryptValue(business.ownership, dek, uid);
+      }
+      let entityType = null;
+      if (business.industryDesc) {
+        entityType = await decryptValue(business.industryDesc, dek, uid);
+      }
+      let businessType = null;
+      if (business.businessType) {
+        businessType = await decryptValue(business.businessType, dek, uid);
+      }
+      let entityTaxType = null;
+      if (business.entityType) {
+        entityTaxType = await decryptValue(business.entityType, dek, uid);
+      }
+
+      const businessProfile = {
+        id: business._id,
+        name: decryptedName,
+        photo: decryptedBusinessLogo,
+        plaidAccounts: business.plaidAccountIds,
+        isPersonal: false,
+        color: business.color,
+        businessOwnersDetails: decryptedBusinessOwnersDetails,
+        businessOwners: decryptedBusinessOwners,
+        businessAddresses: decryptdBusinessAddresses,
+        businessPhoneNumbers: decryptdBusinessPhoneNumbers,
+        subsidiaries: descryptsubsidiaries,
+        businessDescription: decryptedBusinessDesc,
+        website: decryptedWebsite,
+        formationDate: formationDate,
+        taxInformation: taxInformation,
+        legalBusinessName: legalName,
+        ownership: ownership?.percentage || null,
+        entityType: entityType,
+        businessType: businessType,
+        businessTaxCode: entityTaxType,
+        businessEntityType: entityType,
+      };
+      profiles.push(businessProfile);
     }
-    profile.photo = photo ? photo : profile.photo;
-  }
 
-  return profiles;
+    const businessAccounts = businesses.flatMap((b) => b.plaidAccountIds || []);
+    const uniqueBusinessAccountIds = new Set(
+      businessAccounts.map((id) => id.toString())
+    );
+
+    personalProfile.plaidAccounts = (user.plaidAccounts || []).filter(
+      (acc) => !uniqueBusinessAccountIds.has(acc.toString())
+    );
+
+    for (const profile of profiles) {
+      const photoPath = profile.isPersonal
+        ? `profilePhotos/${email}.jpg`
+        : `profilePhotos/${profile.name}.jpg`;
+
+      let photo;
+      if (!profile.photo) {
+        photo = await accountsService.generateSignedUrl(photoPath);
+      }
+      profile.photo = photo ? photo : profile.photo;
+    }
+
+    for (const profile of profiles) {
+      const photoPath = profile.isPersonal
+        ? `profilePhotos/${email}.jpg`
+        : `profilePhotos/${profile.name}.jpg`;
+
+      let photo;
+      if (!profile.photo) {
+        photo = await accountsService.generateSignedUrl(photoPath);
+      }
+      profile.photo = photo ? photo : profile.photo;
+    }
+
+    return profiles;
+  } catch (error) {
+    console.error(`[getUserProfiles] Error during profile retrieval:`, error);
+    throw new Error(error.message || "Failed to retrieve user profiles");
+  }
 };
 
 const assignsAccountsToProfiles = async (data, email, uid) => {

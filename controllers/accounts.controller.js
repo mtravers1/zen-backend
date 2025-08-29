@@ -252,6 +252,112 @@ const debugProfile = async (req, res) => {
   }
 };
 
+const debugEncryption = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    
+    console.log('\n🔍 [DEBUG ENCRYPTION] Encryption Debug Request:', {
+      uid,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Get DEK using cache
+    const { getCachedDek } = await import('../services/accounts.service.js');
+    const dek = await getCachedDek(uid);
+    
+    console.log('[DEBUG ENCRYPTION] DEK obtained:', {
+      hasDek: !!dek,
+      dekType: typeof dek,
+      dekLength: dek ? dek.length : 0,
+      uid
+    });
+    
+    // Check if plaid accounts exist for this user
+    const PlaidAccount = (await import('../database/models/PlaidAccount.js')).default;
+    const plaidAccounts = await PlaidAccount.find({
+      uid: uid
+    }).lean();
+    
+    console.log('[DEBUG ENCRYPTION] Plaid accounts found:', {
+      count: plaidAccounts.length,
+      accounts: plaidAccounts.map(acc => ({
+        _id: acc._id,
+        plaid_account_id: acc.plaid_account_id,
+        account_type: acc.account_type,
+        hasBalance: !!acc.currentBalance,
+        hasName: !!acc.account_name
+      }))
+    });
+    
+    // Test encryption for first account
+    if (plaidAccounts.length > 0) {
+      const testAccount = plaidAccounts[0];
+      console.log('[DEBUG ENCRYPTION] Testing encryption for account:', {
+        _id: testAccount._id,
+        plaid_account_id: testAccount.plaid_account_id
+      });
+      
+      // Test each field that should be encrypted
+      const fieldsToTest = ['account_name', 'institution_name'];
+      
+      for (const field of fieldsToTest) {
+        if (testAccount[field]) {
+          console.log(`[DEBUG ENCRYPTION] Testing field: ${field}`);
+          try {
+            const { encryptValue } = await import('../database/encryption.js');
+            const encrypted = await encryptValue(testAccount[field], dek, uid);
+            console.log(`[DEBUG ENCRYPTION] ${field} encryption result:`, {
+              success: true,
+              originalValue: testAccount[field],
+              originalLength: testAccount[field].length,
+              encryptedLength: encrypted.length,
+              encryptedType: typeof encrypted
+            });
+          } catch (error) {
+            console.error(`[DEBUG ENCRYPTION] ${field} encryption failed:`, {
+              error: error.message,
+              stack: error.stack
+            });
+          }
+        } else {
+          console.log(`[DEBUG ENCRYPTION] Field ${field} is null/undefined`);
+        }
+      }
+    }
+    
+    // Return debug info
+    res.status(200).send({
+      dek: {
+        hasDek: !!dek,
+        dekType: typeof dek,
+        dekLength: dek ? dek.length : 0,
+        uid
+      },
+      plaidAccounts: {
+        count: plaidAccounts.length,
+        accounts: plaidAccounts.map(acc => ({
+          _id: acc._id,
+          plaid_account_id: acc.plaid_account_id,
+          account_type: acc.account_type,
+          hasBalance: !!acc.currentBalance,
+          hasName: !!acc.account_name
+        }))
+      },
+      debug: {
+        timestamp: new Date().toISOString(),
+        uid
+      }
+    });
+    
+  } catch (error) {
+    console.error('[DEBUG ENCRYPTION] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+};
+
 const addAccount = async (req, res) => {
   let email, uid, token;
   try {
@@ -633,6 +739,12 @@ const accountsController = {
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
   debugProfile,
+  debugDecryption,
+  debugEncryption,
+  debugCache,
+  getCacheStats,
+  clearAllCaches,
+  clearDecryptionCache,
 };
 
 export default {
@@ -652,6 +764,7 @@ export default {
   deleteAccount,
   debugProfile,
   debugDecryption,
+  debugEncryption,
   debugCache,
   getCacheStats,
   clearAllCaches,

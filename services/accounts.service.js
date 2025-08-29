@@ -269,644 +269,680 @@ const storage = new Storage({
 const bucketName = "zentavos-bucket";
 
 const addAccount = async (accessToken, email, uid) => {
-  const dek = await getCachedDek(uid);
-  const user = await User.findOne({
-    authUid: uid,
-  });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  const userId = user._id.toString();
-  const userType = user.role;
-  // Decrypt the access token before using it with Plaid API
-  const decryptedAccessToken = await safeDecryptValue(accessToken, dek, uid);
+  console.log(`[addAccount] Starting account creation for email: ${email}, uid: ${uid}`);
   
-  let accountsResponse;
   try {
-    accountsResponse = await plaidService.getAccountsWithAccessToken(
-      decryptedAccessToken
-    );
-  } catch (error) {
-    // Add detailed error context
-    error.details = {
-      ...error.details,
-      plaid_operation: 'getAccountsWithAccessToken',
-      error_type: 'plaid_api_error',
-      plaid_status: error.response?.status,
-      plaid_status_text: error.response?.statusText,
-      plaid_response_data: error.response?.data
-    };
-    throw error;
-  }
-
-  const accounts = accountsResponse.accounts;
-  
-  // Add defensive checks for response data
-  if (!accounts || !Array.isArray(accounts)) {
-    throw new Error('Invalid response from Plaid API: missing or invalid accounts data');
-  }
-  
-  if (!accountsResponse.item) {
-    throw new Error('Invalid response from Plaid API: missing item data');
-  }
-  
-  const institutionId = accountsResponse.item.institution_id;
-  const institutionName = accountsResponse.item.institution_name;
-
-  const userAccounts = user.plaidAccounts;
-  let savedAccounts = [];
-  const accountTypes = {};
-  const existingAccounts = [];
-
-  for (let account of accounts) {
-    const hashAccountName = hashValue(account.name);
-    const hashAccountInstitutionId = hashValue(
-      accountsResponse.item.institution_id
-    );
-    const hashAccountMask = hashValue(account.mask);
-
-    const existingAccount = await PlaidAccount.findOne({
-      hashAccountName,
-      hashAccountInstitutionId,
-      hashAccountMask,
-      owner_id: user._id,
+    const dek = await getCachedDek(uid);
+    console.log(`[addAccount] DEK obtained successfully for uid: ${uid}`);
+    
+    const user = await User.findOne({
+      authUid: uid,
     });
-
-    if (existingAccount) {
-      existingAccounts.push(existingAccount);
-      continue;
+    
+    if (!user) {
+      console.error(`[addAccount] User not found for uid: ${uid}`);
+      throw new Error("User not found");
     }
-
-    const encryptedMask = await encryptValue(account.mask, dek);
-
-    const encryptedToken = await encryptValue(accessToken, dek);
-
-    const encriptedName = await encryptValue(account.name, dek);
-
-    let encriptedOfficialName;
-
-    if (account.official_name) {
-      encriptedOfficialName = await encryptValue(account.official_name, dek);
-    }
-
-    const encriptedType = await encryptValue(account.type, dek);
-
-    const encriptedSubtype = await encryptValue(account.subtype, dek);
-
-    const encriptedInstitutionName = await encryptValue(institutionName, dek);
-
-    let encriptedCurrentBalance;
-    let encriptedAvailableBalance;
-
-    if (account.balances) {
-      if (account.balances.current) {
-        encriptedCurrentBalance = await encryptValue(
-          account.balances.current,
-          dek
-        );
-      }
-
-      if (account.balances.available) {
-        encriptedAvailableBalance = await encryptValue(
-          account.balances.available,
-          dek
-        );
-      }
-    }
-
-    const newAccount = new PlaidAccount({
-      owner_id: userId,
-      itemId: accountsResponse.item.item_id,
-      accessToken: encryptedToken,
-      owner_type: userType,
-      plaid_account_id: account.account_id,
-      account_name: encriptedName,
-      account_official_name: encriptedOfficialName,
-      account_type: encriptedType,
-      account_subtype: encriptedSubtype,
-      institution_name: encriptedInstitutionName,
-      institution_id: institutionId,
-      image_url: account.institution_name,
-      currentBalance: encriptedCurrentBalance,
-      availableBalance: encriptedAvailableBalance,
-      currency: account.balances.iso_currency_code,
-      transactions: [],
-      nextCursor: null,
-      mask: encryptedMask,
-      hashAccountName,
-      hashAccountInstitutionId,
-      hashAccountMask,
-    });
-
-    accountTypes[account.account_id] = account.type;
-
-    userAccounts.push(newAccount._id);
-
-    await user.save();
-    await newAccount.save();
-    savedAccounts.push(newAccount);
-  }
-
-  const responseExistingAccounts = await Promise.all(
-    existingAccounts.map(async (ec) => {
-      return { id: ec.id, name: await safeDecryptValue(ec.account_name, dek, uid) };
-    })
-  );
-
-  let transactionsResponse;
-  let investmentTransactionsResponse;
-  let liabilitiesResponse;
-  if (accountsResponse.item.products.includes("transactions")) {
+    
+    console.log(`[addAccount] User found: ${user._id}`);
+    
+    const userId = user._id.toString();
+    const userType = user.role;
+    
+    // Decrypt the access token before using it with Plaid API
+    const decryptedAccessToken = await safeDecryptValue(accessToken, dek, uid);
+    console.log(`[addAccount] Access token decrypted successfully`);
+    
+    let accountsResponse;
     try {
-      transactionsResponse = await plaidService.getTransactionsWithAccessToken(
+      console.log(`[addAccount] Fetching accounts from Plaid...`);
+      accountsResponse = await plaidService.getAccountsWithAccessToken(
         decryptedAccessToken
       );
+      console.log(`[addAccount] Plaid accounts response received:`, {
+        accountsCount: accountsResponse?.accounts?.length || 0,
+        hasItem: !!accountsResponse?.item,
+        products: accountsResponse?.item?.products || []
+      });
     } catch (error) {
-      // Add detailed error context but don't throw - this is optional
+      // Add detailed error context
       error.details = {
         ...error.details,
-        plaid_operation: 'getTransactionsWithAccessToken',
-        error_type: 'plaid_api_error_optional',
+        plaid_operation: 'getAccountsWithAccessToken',
+        error_type: 'plaid_api_error',
         plaid_status: error.response?.status,
         plaid_status_text: error.response?.statusText,
         plaid_response_data: error.response?.data
       };
-      // Log but continue - transactions are optional
+      console.error(`[addAccount] Plaid API error:`, error);
+      throw error;
     }
-  }
 
-  if (accountsResponse.item.products.includes("investments")) {
-    try {
-      investmentTransactionsResponse =
-        await plaidService.getInvestmentTransactionsWithAccessToken(
+    const accounts = accountsResponse.accounts;
+    
+    // Add defensive checks for response data
+    if (!accounts || !Array.isArray(accounts)) {
+      console.error(`[addAccount] Invalid Plaid response: missing or invalid accounts data`);
+      throw new Error('Invalid response from Plaid API: missing or invalid accounts data');
+    }
+    
+    if (!accountsResponse.item) {
+      console.error(`[addAccount] Invalid Plaid response: missing item data`);
+      throw new Error('Invalid response from Plaid API: missing item data');
+    }
+    
+    console.log(`[addAccount] Processing ${accounts.length} accounts`);
+    
+    const institutionId = accountsResponse.item.institution_id;
+    const institutionName = accountsResponse.item.institution_name;
+
+    const userAccounts = user.plaidAccounts;
+    let savedAccounts = [];
+    const accountTypes = {};
+    const existingAccounts = [];
+
+    for (let account of accounts) {
+      console.log(`[addAccount] Processing account: ${account.account_id}`);
+      
+      const hashAccountName = hashValue(account.name);
+      const hashAccountInstitutionId = hashValue(
+        accountsResponse.item.institution_id
+      );
+      const hashAccountMask = hashValue(account.mask);
+
+      const existingAccount = await PlaidAccount.findOne({
+        hashAccountName,
+        hashAccountInstitutionId,
+        hashAccountMask,
+        owner_id: user._id,
+      });
+
+      if (existingAccount) {
+        console.log(`[addAccount] Account already exists: ${account.account_id}`);
+        existingAccounts.push(existingAccount);
+        continue;
+      }
+
+      console.log(`[addAccount] Creating new account: ${account.account_id}`);
+
+      const encryptedMask = await encryptValue(account.mask, dek);
+
+      const encryptedToken = await encryptValue(accessToken, dek);
+
+      const encriptedName = await encryptValue(account.name, dek);
+
+      let encriptedOfficialName;
+
+      if (account.official_name) {
+        encriptedOfficialName = await encryptValue(account.official_name, dek);
+      }
+
+      const encriptedType = await encryptValue(account.type, dek);
+
+      const encriptedSubtype = await encryptValue(account.subtype, dek);
+
+      const encriptedInstitutionName = await encryptValue(institutionName, dek);
+
+      let encriptedCurrentBalance;
+      let encriptedAvailableBalance;
+
+      if (account.balances) {
+        if (account.balances.current) {
+          encriptedCurrentBalance = await encryptValue(
+            account.balances.current,
+            dek
+          );
+        }
+
+        if (account.balances.available) {
+          encriptedAvailableBalance = await encryptValue(
+            account.balances.available,
+            dek
+          );
+        }
+      }
+
+      const newAccount = new PlaidAccount({
+        owner_id: userId,
+        itemId: accountsResponse.item.item_id,
+        accessToken: encryptedToken,
+        owner_type: userType,
+        plaid_account_id: account.account_id,
+        account_name: encriptedName,
+        account_official_name: encriptedOfficialName,
+        account_type: encriptedType,
+        account_subtype: encriptedSubtype,
+        institution_name: encriptedInstitutionName,
+        institution_id: institutionId,
+        image_url: account.institution_name,
+        currentBalance: encriptedCurrentBalance,
+        availableBalance: encriptedAvailableBalance,
+        currency: account.balances.iso_currency_code,
+        transactions: [],
+        nextCursor: null,
+        mask: encryptedMask,
+        hashAccountName,
+        hashAccountInstitutionId,
+        hashAccountMask,
+      });
+
+      accountTypes[account.account_id] = account.type;
+
+      userAccounts.push(newAccount._id);
+
+      await user.save();
+      await newAccount.save();
+      savedAccounts.push(newAccount);
+      
+      console.log(`[addAccount] Account saved successfully: ${account.account_id}`);
+    }
+
+    console.log(`[addAccount] Account creation completed. Saved: ${savedAccounts.length}, Existing: ${existingAccounts.length}`);
+
+    const responseExistingAccounts = await Promise.all(
+      existingAccounts.map(async (ec) => {
+        return { id: ec.id, name: await safeDecryptValue(ec.account_name, dek, uid) };
+      })
+    );
+
+    let transactionsResponse;
+    let investmentTransactionsResponse;
+    let liabilitiesResponse;
+    if (accountsResponse.item.products.includes("transactions")) {
+      try {
+        transactionsResponse = await plaidService.getTransactionsWithAccessToken(
           decryptedAccessToken
         );
-    } catch (error) {
-      // Add detailed error context but don't throw - this is optional
-      error.details = {
-        ...error.details,
-        plaid_operation: 'getInvestmentTransactionsWithAccessToken',
-        error_type: 'plaid_api_error_optional',
-        plaid_status: error.response?.status,
-        plaid_status_text: error.response?.statusText,
-        plaid_response_data: error.response?.data
-      };
-      // Log but continue - investment transactions are optional
-    }
-  }
-
-  if (accountsResponse.item.products.includes("liabilities")) {
-    try {
-      liabilitiesResponse =
-        await plaidService.getLoanLiabilitiesWithAccessToken(decryptedAccessToken);
-    } catch (error) {
-      // Add detailed error context but don't throw - this is optional
-      error.details = {
-        ...error.details,
-        plaid_operation: 'getLoanLiabilitiesWithAccessToken',
-        error_type: 'plaid_api_error_optional',
-        plaid_status: error.response?.status,
-        plaid_status_text: error.response?.statusText,
-        plaid_response_data: error.response?.data
-      };
-      // Log but continue - liabilities are optional
-    }
-  }
-
-  const nextCursor = transactionsResponse
-    ? transactionsResponse.next_cursor
-    : null;
-  
-  // Add defensive checks for transactions data
-  let transactions = [];
-  if (transactionsResponse && transactionsResponse.added && Array.isArray(transactionsResponse.added)) {
-    transactions = transactionsResponse.added;
-  }
-  
-  let investmentTransactions = [];
-  if (investmentTransactionsResponse && investmentTransactionsResponse.investment_transactions && Array.isArray(investmentTransactionsResponse.investment_transactions)) {
-    investmentTransactions = investmentTransactionsResponse.investment_transactions;
-  }
-
-  const transactionsByAccount = {};
-
-  for (const transaction of transactions) {
-    const existingTransaction = await Transaction.findOne({
-      plaidTransactionId: transaction.transaction_id,
-    });
-
-    if (existingTransaction) continue;
-
-    const accountType = accountTypes[transaction.account_id];
-
-    const existingAccount = await PlaidAccount.findOne({
-      plaid_account_id: transaction.account_id,
-    });
-
-    if (!accountType || !existingAccount) {
-      continue;
-    }
-    const account = savedAccounts.find(
-      (account) => account.plaid_account_id === transaction.account_id
-    );
-
-    if (!account) {
-      continue;
-    }
-
-    let merchantName;
-    let name;
-
-    if (transaction.merchant_name) {
-      merchantName = await encryptValue(transaction.merchant_name, dek);
-    }
-
-    if (transaction.name) {
-      name = await encryptValue(transaction.name, dek);
-    }
-
-    const merchant = {
-      merchantName: merchantName,
-      name: name,
-      merchantCategory: transaction.category?.[0],
-      website: transaction.website,
-      logo: transaction.logo_url,
-    };
-
-    let transactionCode;
-
-    const encyptedAmount = await encryptValue(transaction.amount, dek);
-
-    if (transaction.transaction_code) {
-      transactionCode = await encryptValue(transaction.transaction_code, dek);
-    }
-    let encryptedAccountType;
-    if (accountType) {
-      encryptedAccountType = await encryptValue(accountType, dek);
-    }
-
-    const newTransaction = new Transaction({
-      accountId: account._id,
-      plaidTransactionId: transaction.transaction_id,
-      plaidAccountId: transaction.account_id,
-      transactionDate: transaction.date,
-      amount: encyptedAmount,
-      currency: transaction.iso_currency_code,
-      notes: null,
-      merchant: merchant,
-      description: null,
-      transactionCode: transactionCode,
-      tags: transaction.category,
-      accountType: encryptedAccountType,
-    });
-
-    await newTransaction.save();
-
-    if (!transactionsByAccount[transaction.account_id]) {
-      transactionsByAccount[transaction.account_id] = [];
-    }
-
-    transactionsByAccount[transaction.account_id].push(newTransaction._id);
-  }
-
-  for (const transaction of investmentTransactions) {
-    const existingTransaction = await Transaction.findOne({
-      plaidTransactionId: transaction.investment_transaction_id,
-    });
-
-    if (existingTransaction) continue;
-
-    const accountType = accountTypes[transaction.account_id];
-    const account = savedAccounts.find(
-      (account) => account.plaid_account_id === transaction.account_id
-    );
-
-    const encryptedAmount = await encryptValue(transaction.amount, dek);
-    const encryptedAccountType = await encryptValue(accountType, dek);
-
-    const name = await encryptValue(transaction.name, dek);
-
-    const fees = await encryptValue(transaction.fees, dek);
-
-    const price = await encryptValue(transaction.price, dek);
-
-    const quantity = await encryptValue(transaction.quantity, dek);
-
-    const securityId = await encryptValue(transaction.security_id, dek);
-
-    const type = await encryptValue(transaction.type, dek);
-
-    const subtype = await encryptValue(transaction.subtype, dek);
-
-    const newTransaction = new Transaction({
-      accountId: account._id,
-      plaidTransactionId: transaction.investment_transaction_id,
-      plaidAccountId: transaction.account_id,
-      transactionDate: transaction.date,
-      amount: encryptedAmount,
-      currency: transaction.iso_currency_code,
-      isInvestment: true,
-      name: name,
-      fees: fees,
-      price: price,
-      quantity: quantity,
-      securityId: securityId,
-      type: type,
-      subtype: subtype,
-      accountType: encryptedAccountType,
-    });
-
-    await newTransaction.save();
-
-    if (!transactionsByAccount[transaction.account_id]) {
-      transactionsByAccount[transaction.account_id] = [];
-    }
-
-    transactionsByAccount[transaction.account_id].push(newTransaction._id);
-  }
-
-  if (liabilitiesResponse) {
-    Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        value.forEach(async (item) => {
-
-          if (
-            !savedAccounts.find(
-              (account) => account.plaid_account_id === item.account_id
-            )
-          )
-            return;
-
-          const encryptedAccountNumber = await encryptValue(
-            item.account_number,
-            dek
-          );
-
-          const encryptedLastPaymentAmount = await encryptValue(
-            item.last_payment_amount,
-            dek
-          );
-
-          const encryptedLastPaymentDate = await encryptValue(
-            item.last_payment_date,
-            dek
-          );
-
-          const encryptedNextPaymentDueDate = await encryptValue(
-            item.next_payment_due_date,
-            dek
-          );
-
-          const encryptedMinimumPaymentAmount = await encryptValue(
-            item.minimum_payment_amount,
-            dek
-          );
-
-          const encryptedLastStatementBalance = await encryptValue(
-            item.last_statement_balance,
-            dek
-          );
-
-          const encryptedLastStatementIssueDate = await encryptValue(
-            item.last_statement_issue_date,
-            dek
-          );
-
-          const encryptedIsOverdue = await encryptValue(item.is_overdue, dek);
-
-          const encryptedAprs = item.aprs
-            ? await Promise.all(
-                item.aprs.map(async (apr) => ({
-                  aprPercentage: await encryptValue(apr.apr_percentage, dek),
-                  aprType: await encryptValue(apr.apr_type, dek),
-                  balanceSubjectToApr: await encryptValue(
-                    apr.balance_subject_to_apr,
-                    dek
-                  ),
-                  interestChargeAmount: await encryptValue(
-                    apr.interest_charge_amount,
-                    dek
-                  ),
-                }))
-              )
-            : undefined;
-
-          const encryptedLoanTypeDescription = await encryptValue(
-            item.loan_type_description,
-            dek
-          );
-
-          const encryptedLoanTerm = await encryptValue(item.loan_term, dek);
-
-          const encryptedMaturityDate = await encryptValue(
-            item.maturity_date,
-            dek
-          );
-
-          const encryptedNextMonthlyPayment = await encryptValue(
-            item.next_monthly_payment,
-            dek
-          );
-
-          const encryptedOriginationDate = await encryptValue(
-            item.origination_date,
-            dek
-          );
-
-          const encryptedOriginationPrincipalAmount = await encryptValue(
-            item.origination_principal_amount,
-            dek
-          );
-
-          const encryptedPastDueAmount = await encryptValue(
-            item.past_due_amount,
-            dek
-          );
-
-          const encryptedEscrowBalance = await encryptValue(
-            item.escrow_balance,
-            dek
-          );
-
-          const encryptedHasPmi = await encryptValue(item.has_pmi, dek);
-
-          const encryptedHasPrepaymentPenalty = await encryptValue(
-            item.has_prepayment_penalty,
-            dek
-          );
-          let encryptedPropertyAddress;
-          if (item.property_address) {
-            encryptedPropertyAddress = {
-              city: await encryptValue(item.property_address?.city, dek),
-              country: await encryptValue(item.property_address?.country, dek),
-              postalCode: await encryptValue(
-                item.property_address?.postal_code,
-                dek
-              ),
-              region: await encryptValue(item.property_address?.region, dek),
-              street: await encryptValue(item.property_address?.street, dek),
-            };
-          }
-
-          let encryptedInterestRate;
-          if (item.servicer_address) {
-            const encryptedInterestRate = {
-              percentage: await encryptValue(
-                item.interest_rate?.percentage,
-                dek
-              ),
-              type: await encryptValue(item.interest_rate?.type, dek),
-            };
-          }
-
-          const encryptedDisbursementDates = await encryptValue(
-            item.disbursement_dates,
-            dek
-          );
-
-          const encryptedExpectedPayoffDate = await encryptValue(
-            item.expected_payoff_date,
-            dek
-          );
-
-          const encryptedGuarantor = await encryptValue(item.guarantor, dek);
-
-          const encryptedInterestRatePercentage = await encryptValue(
-            item.interest_rate_percentage,
-            dek
-          );
-
-          const encryptedLoanName = await encryptValue(item.loan_name, dek);
-          let encryptedLoanStatus;
-          if (item.loan_status) {
-            encryptedLoanStatus = {
-              endDate: await encryptValue(item.loan_status?.end_date, dek),
-              type: await encryptValue(item.loan_status?.type, dek),
-            };
-          }
-          const encryptedOutstandingInterestAmount = await encryptValue(
-            item.outstanding_interest_amount,
-            dek
-          );
-          const encryptedPaymentReferenceNumber = await encryptValue(
-            item.payment_reference_number,
-            dek
-          );
-          const encryptedPslfStatus = await encryptValue(item.pslf_status, dek);
-          let encryptedRepaymentPlan;
-          if (item.repayment_plan) {
-            encryptedRepaymentPlan = {
-              type: await encryptValue(item.repayment_plan?.type, dek),
-              description: await encryptValue(
-                item.repayment_plan?.description,
-                dek
-              ),
-            };
-          }
-          const encryptedSequenceNumber = await encryptValue(
-            item.sequence_number,
-            dek
-          );
-          let encryptedServicerAddress;
-          if (item.servicer_address)
-            encryptedServicerAddress = {
-              city: await encryptValue(item.servicer_address?.city, dek),
-              country: await encryptValue(item.servicer_address?.country, dek),
-              postalCode: await encryptValue(
-                item.servicer_address?.postal_code,
-                dek
-              ),
-              region: await encryptValue(item.servicer_address?.region, dek),
-              street: await encryptValue(item.servicer_address?.street, dek),
-            };
-          const encryptedYtdInterestPaid = await encryptValue(
-            item.ytd_interest_paid,
-            dek
-          );
-          const encryptedYtdPrincipalPaid = await encryptValue(
-            item.ytd_principal_paid,
-            dek
-          );
-
-          const liability = new Liability({
-            liabilityType: key,
-            accountId: item.account_id,
-            accountNumber: encryptedAccountNumber,
-            lastPaymentAmount: encryptedLastPaymentAmount,
-            lastPaymentDate: encryptedLastPaymentDate,
-            nextPaymentDueDate: encryptedNextPaymentDueDate,
-            minimumPaymentAmount: encryptedMinimumPaymentAmount,
-            lastStatementBalance: encryptedLastStatementBalance,
-            lastStatementIssueDate: encryptedLastStatementIssueDate,
-            isOverdue: encryptedIsOverdue,
-
-            // Credit-specific fields
-            aprs: encryptedAprs,
-
-            // Mortgage-specific fields
-            loanTypeDescription: encryptedLoanTypeDescription,
-            loanTerm: encryptedLoanTerm,
-            maturityDate: encryptedMaturityDate,
-            nextMonthlyPayment: encryptedNextMonthlyPayment,
-            originationDate: encryptedOriginationDate,
-            originationPrincipalAmount: encryptedOriginationPrincipalAmount,
-            pastDueAmount: encryptedPastDueAmount,
-            escrowBalance: encryptedEscrowBalance,
-            hasPmi: encryptedHasPmi,
-            hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
-            propertyAddress: encryptedPropertyAddress,
-            interestRate: encryptedInterestRate,
-
-            // Student-specific fields
-            disbursementDates: encryptedDisbursementDates,
-            expectedPayoffDate: encryptedExpectedPayoffDate,
-            guarantor: encryptedGuarantor,
-            interestRatePercentage: encryptedInterestRatePercentage,
-            loanName: encryptedLoanName,
-
-            // Loan status
-            loanStatus: encryptedLoanStatus,
-            outstandingInterestAmount: encryptedOutstandingInterestAmount,
-            paymentReferenceNumber: encryptedPaymentReferenceNumber,
-            pslfStatus: encryptedPslfStatus,
-            repaymentPlan: encryptedRepaymentPlan,
-            sequenceNumber: encryptedSequenceNumber,
-            servicerAddress: encryptedServicerAddress,
-            ytdInterestPaid: encryptedYtdInterestPaid,
-            ytdPrincipalPaid: encryptedYtdPrincipalPaid,
-          });
-
-          await liability.save();
-        });
+      } catch (error) {
+        // Add detailed error context but don't throw - this is optional
+        error.details = {
+          ...error.details,
+          plaid_operation: 'getTransactionsWithAccessToken',
+          error_type: 'plaid_api_error_optional',
+          plaid_status: error.response?.status,
+          plaid_status_text: error.response?.statusText,
+          plaid_response_data: error.response?.data
+        };
+        // Log but continue - transactions are optional
       }
-    });
+    }
+
+    if (accountsResponse.item.products.includes("investments")) {
+      try {
+        investmentTransactionsResponse =
+          await plaidService.getInvestmentTransactionsWithAccessToken(
+            decryptedAccessToken
+          );
+      } catch (error) {
+        // Add detailed error context but don't throw - this is optional
+        error.details = {
+          ...error.details,
+          plaid_operation: 'getInvestmentTransactionsWithAccessToken',
+          error_type: 'plaid_api_error_optional',
+          plaid_status: error.response?.status,
+          plaid_status_text: error.response?.statusText,
+          plaid_response_data: error.response?.data
+        };
+        // Log but continue - investment transactions are optional
+      }
+    }
+
+    if (accountsResponse.item.products.includes("liabilities")) {
+      try {
+        liabilitiesResponse =
+          await plaidService.getLoanLiabilitiesWithAccessToken(decryptedAccessToken);
+      } catch (error) {
+        // Add detailed error context but don't throw - this is optional
+        error.details = {
+          ...error.details,
+          plaid_operation: 'getLoanLiabilitiesWithAccessToken',
+          error_type: 'plaid_api_error_optional',
+          plaid_status: error.response?.status,
+          plaid_status_text: error.response?.statusText,
+          plaid_response_data: error.response?.data
+        };
+        // Log but continue - liabilities are optional
+      }
+    }
+
+    const nextCursor = transactionsResponse
+      ? transactionsResponse.next_cursor
+      : null;
+    
+    // Add defensive checks for transactions data
+    let transactions = [];
+    if (transactionsResponse && transactionsResponse.added && Array.isArray(transactionsResponse.added)) {
+      transactions = transactionsResponse.added;
+    }
+    
+    let investmentTransactions = [];
+    if (investmentTransactionsResponse && investmentTransactionsResponse.investment_transactions && Array.isArray(investmentTransactionsResponse.investment_transactions)) {
+      investmentTransactions = investmentTransactionsResponse.investment_transactions;
+    }
+
+    const transactionsByAccount = {};
+
+    for (const transaction of transactions) {
+      const existingTransaction = await Transaction.findOne({
+        plaidTransactionId: transaction.transaction_id,
+      });
+
+      if (existingTransaction) continue;
+
+      const accountType = accountTypes[transaction.account_id];
+
+      const existingAccount = await PlaidAccount.findOne({
+        plaid_account_id: transaction.account_id,
+      });
+
+      if (!accountType || !existingAccount) {
+        continue;
+      }
+      const account = savedAccounts.find(
+        (account) => account.plaid_account_id === transaction.account_id
+      );
+
+      if (!account) {
+        continue;
+      }
+
+      let merchantName;
+      let name;
+
+      if (transaction.merchant_name) {
+        merchantName = await encryptValue(transaction.merchant_name, dek);
+      }
+
+      if (transaction.name) {
+        name = await encryptValue(transaction.name, dek);
+      }
+
+      const merchant = {
+        merchantName: merchantName,
+        name: name,
+        merchantCategory: transaction.category?.[0],
+        website: transaction.website,
+        logo: transaction.logo_url,
+      };
+
+      let transactionCode;
+
+      const encyptedAmount = await encryptValue(transaction.amount, dek);
+
+      if (transaction.transaction_code) {
+        transactionCode = await encryptValue(transaction.transaction_code, dek);
+      }
+      let encryptedAccountType;
+      if (accountType) {
+        encryptedAccountType = await encryptValue(accountType, dek);
+      }
+
+      const newTransaction = new Transaction({
+        accountId: account._id,
+        plaidTransactionId: transaction.transaction_id,
+        plaidAccountId: transaction.account_id,
+        transactionDate: transaction.date,
+        amount: encyptedAmount,
+        currency: transaction.iso_currency_code,
+        notes: null,
+        merchant: merchant,
+        description: null,
+        transactionCode: transactionCode,
+        tags: transaction.category,
+        accountType: encryptedAccountType,
+      });
+
+      await newTransaction.save();
+
+      if (!transactionsByAccount[transaction.account_id]) {
+        transactionsByAccount[transaction.account_id] = [];
+      }
+
+      transactionsByAccount[transaction.account_id].push(newTransaction._id);
+    }
+
+    for (const transaction of investmentTransactions) {
+      const existingTransaction = await Transaction.findOne({
+        plaidTransactionId: transaction.investment_transaction_id,
+      });
+
+      if (existingTransaction) continue;
+
+      const accountType = accountTypes[transaction.account_id];
+      const account = savedAccounts.find(
+        (account) => account.plaid_account_id === transaction.account_id
+      );
+
+      const encryptedAmount = await encryptValue(transaction.amount, dek);
+      const encryptedAccountType = await encryptValue(accountType, dek);
+
+      const name = await encryptValue(transaction.name, dek);
+
+      const fees = await encryptValue(transaction.fees, dek);
+
+      const price = await encryptValue(transaction.price, dek);
+
+      const quantity = await encryptValue(transaction.quantity, dek);
+
+      const securityId = await encryptValue(transaction.security_id, dek);
+
+      const type = await encryptValue(transaction.type, dek);
+
+      const subtype = await encryptValue(transaction.subtype, dek);
+
+      const newTransaction = new Transaction({
+        accountId: account._id,
+        plaidTransactionId: transaction.investment_transaction_id,
+        plaidAccountId: transaction.account_id,
+        transactionDate: transaction.date,
+        amount: encryptedAmount,
+        currency: transaction.iso_currency_code,
+        isInvestment: true,
+        name: name,
+        fees: fees,
+        price: price,
+        quantity: quantity,
+        securityId: securityId,
+        type: type,
+        subtype: subtype,
+        accountType: encryptedAccountType,
+      });
+
+      await newTransaction.save();
+
+      if (!transactionsByAccount[transaction.account_id]) {
+        transactionsByAccount[transaction.account_id] = [];
+      }
+
+      transactionsByAccount[transaction.account_id].push(newTransaction._id);
+    }
+
+    if (liabilitiesResponse) {
+      Object.entries(liabilitiesResponse.liabilities).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach(async (item) => {
+
+            if (
+              !savedAccounts.find(
+                (account) => account.plaid_account_id === item.account_id
+              )
+            )
+              return;
+
+            const encryptedAccountNumber = await encryptValue(
+              item.account_number,
+              dek
+            );
+
+            const encryptedLastPaymentAmount = await encryptValue(
+              item.last_payment_amount,
+              dek
+            );
+
+            const encryptedLastPaymentDate = await encryptValue(
+              item.last_payment_date,
+              dek
+            );
+
+            const encryptedNextPaymentDueDate = await encryptValue(
+              item.next_payment_due_date,
+              dek
+            );
+
+            const encryptedMinimumPaymentAmount = await encryptValue(
+              item.minimum_payment_amount,
+              dek
+            );
+
+            const encryptedLastStatementBalance = await encryptValue(
+              item.last_statement_balance,
+              dek
+            );
+
+            const encryptedLastStatementIssueDate = await encryptValue(
+              item.last_statement_issue_date,
+              dek
+            );
+
+            const encryptedIsOverdue = await encryptValue(item.is_overdue, dek);
+
+            const encryptedAprs = item.aprs
+              ? await Promise.all(
+                  item.aprs.map(async (apr) => ({
+                    aprPercentage: await encryptValue(apr.apr_percentage, dek),
+                    aprType: await encryptValue(apr.apr_type, dek),
+                    balanceSubjectToApr: await encryptValue(
+                      apr.balance_subject_to_apr,
+                      dek
+                    ),
+                    interestChargeAmount: await encryptValue(
+                      apr.interest_charge_amount,
+                      dek
+                    ),
+                  }))
+                )
+              : undefined;
+
+            const encryptedLoanTypeDescription = await encryptValue(
+              item.loan_type_description,
+              dek
+            );
+
+            const encryptedLoanTerm = await encryptValue(item.loan_term, dek);
+
+            const encryptedMaturityDate = await encryptValue(
+              item.maturity_date,
+              dek
+            );
+
+            const encryptedNextMonthlyPayment = await encryptValue(
+              item.next_monthly_payment,
+              dek
+            );
+
+            const encryptedOriginationDate = await encryptValue(
+              item.origination_date,
+              dek
+            );
+
+            const encryptedOriginationPrincipalAmount = await encryptValue(
+              item.origination_principal_amount,
+              dek
+            );
+
+            const encryptedPastDueAmount = await encryptValue(
+              item.past_due_amount,
+              dek
+            );
+
+            const encryptedEscrowBalance = await encryptValue(
+              item.escrow_balance,
+              dek
+            );
+
+            const encryptedHasPmi = await encryptValue(item.has_pmi, dek);
+
+            const encryptedHasPrepaymentPenalty = await encryptValue(
+              item.has_prepayment_penalty,
+              dek
+            );
+            let encryptedPropertyAddress;
+            if (item.property_address) {
+              encryptedPropertyAddress = {
+                city: await encryptValue(item.property_address?.city, dek),
+                country: await encryptValue(item.property_address?.country, dek),
+                postalCode: await encryptValue(
+                  item.property_address?.postal_code,
+                  dek
+                ),
+                region: await encryptValue(item.property_address?.region, dek),
+                street: await encryptValue(item.property_address?.street, dek),
+              };
+            }
+
+            let encryptedInterestRate;
+            if (item.servicer_address) {
+              const encryptedInterestRate = {
+                percentage: await encryptValue(
+                  item.interest_rate?.percentage,
+                  dek
+                ),
+                type: await encryptValue(item.interest_rate?.type, dek),
+              };
+            }
+
+            const encryptedDisbursementDates = await encryptValue(
+              item.disbursement_dates,
+              dek
+            );
+
+            const encryptedExpectedPayoffDate = await encryptValue(
+              item.expected_payoff_date,
+              dek
+            );
+
+            const encryptedGuarantor = await encryptValue(item.guarantor, dek);
+
+            const encryptedInterestRatePercentage = await encryptValue(
+              item.interest_rate_percentage,
+              dek
+            );
+
+            const encryptedLoanName = await encryptValue(item.loan_name, dek);
+            let encryptedLoanStatus;
+            if (item.loan_status) {
+              encryptedLoanStatus = {
+                endDate: await encryptValue(item.loan_status?.end_date, dek),
+                type: await encryptValue(item.loan_status?.type, dek),
+              };
+            }
+            const encryptedOutstandingInterestAmount = await encryptValue(
+              item.outstanding_interest_amount,
+              dek
+            );
+            const encryptedPaymentReferenceNumber = await encryptValue(
+              item.payment_reference_number,
+              dek
+            );
+            const encryptedPslfStatus = await encryptValue(item.pslf_status, dek);
+            let encryptedRepaymentPlan;
+            if (item.repayment_plan) {
+              encryptedRepaymentPlan = {
+                type: await encryptValue(item.repayment_plan?.type, dek),
+                description: await encryptValue(
+                  item.repayment_plan?.description,
+                  dek
+                ),
+              };
+            }
+            const encryptedSequenceNumber = await encryptValue(
+              item.sequence_number,
+              dek
+            );
+            let encryptedServicerAddress;
+            if (item.servicer_address)
+              encryptedServicerAddress = {
+                city: await encryptValue(item.servicer_address?.city, dek),
+                country: await encryptValue(item.servicer_address?.country, dek),
+                postalCode: await encryptValue(
+                  item.servicer_address?.postal_code,
+                  dek
+                ),
+                region: await encryptValue(item.servicer_address?.region, dek),
+                street: await encryptValue(item.servicer_address?.street, dek),
+              };
+            const encryptedYtdInterestPaid = await encryptValue(
+              item.ytd_interest_paid,
+              dek
+            );
+            const encryptedYtdPrincipalPaid = await encryptValue(
+              item.ytd_principal_paid,
+              dek
+            );
+
+            const liability = new Liability({
+              liabilityType: key,
+              accountId: item.account_id,
+              accountNumber: encryptedAccountNumber,
+              lastPaymentAmount: encryptedLastPaymentAmount,
+              lastPaymentDate: encryptedLastPaymentDate,
+              nextPaymentDueDate: encryptedNextPaymentDueDate,
+              minimumPaymentAmount: encryptedMinimumPaymentAmount,
+              lastStatementBalance: encryptedLastStatementBalance,
+              lastStatementIssueDate: encryptedLastStatementIssueDate,
+              isOverdue: encryptedIsOverdue,
+
+              // Credit-specific fields
+              aprs: encryptedAprs,
+
+              // Mortgage-specific fields
+              loanTypeDescription: encryptedLoanTypeDescription,
+              loanTerm: encryptedLoanTerm,
+              maturityDate: encryptedMaturityDate,
+              nextMonthlyPayment: encryptedNextMonthlyPayment,
+              originationDate: encryptedOriginationDate,
+              originationPrincipalAmount: encryptedOriginationPrincipalAmount,
+              pastDueAmount: encryptedPastDueAmount,
+              escrowBalance: encryptedEscrowBalance,
+              hasPmi: encryptedHasPmi,
+              hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+              propertyAddress: encryptedPropertyAddress,
+              interestRate: encryptedInterestRate,
+
+              // Student-specific fields
+              disbursementDates: encryptedDisbursementDates,
+              expectedPayoffDate: encryptedExpectedPayoffDate,
+              guarantor: encryptedGuarantor,
+              interestRatePercentage: encryptedInterestRatePercentage,
+              loanName: encryptedLoanName,
+
+              // Loan status
+              loanStatus: encryptedLoanStatus,
+              outstandingInterestAmount: encryptedOutstandingInterestAmount,
+              paymentReferenceNumber: encryptedPaymentReferenceNumber,
+              pslfStatus: encryptedPslfStatus,
+              repaymentPlan: encryptedRepaymentPlan,
+              sequenceNumber: encryptedSequenceNumber,
+              servicerAddress: encryptedServicerAddress,
+              ytdInterestPaid: encryptedYtdInterestPaid,
+              ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+            });
+
+            await liability.save();
+          });
+        }
+      });
+    }
+
+    const internalTransfers = await plaidService.detectInternalTransfers(
+      transactions
+    );
+
+    for (const internalTransaction of internalTransfers) {
+      const transactionId = internalTransaction.transactionId;
+      const transactionRef = internalTransaction.transactionRef;
+      const transaction = await Transaction.findOne({
+        plaidTransactionId: transactionId,
+      });
+      if (!transaction) continue;
+      transaction.isInternal = true;
+      transaction.internalReference = transactionRef;
+      await transaction.save();
+    }
+
+    for (const accountId in transactionsByAccount) {
+      const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+      if (!account) continue;
+      account.transactions.push(...transactionsByAccount[accountId]);
+      account.nextCursor = nextCursor;
+      await account.save();
+    }
+
+    return { savedAccounts, existingAccounts: responseExistingAccounts };
+  } catch (error) {
+    console.error(`[addAccount] Error creating account:`, error);
+    throw error;
   }
-
-  const internalTransfers = await plaidService.detectInternalTransfers(
-    transactions
-  );
-
-  for (const internalTransaction of internalTransfers) {
-    const transactionId = internalTransaction.transactionId;
-    const transactionRef = internalTransaction.transactionRef;
-    const transaction = await Transaction.findOne({
-      plaidTransactionId: transactionId,
-    });
-    if (!transaction) continue;
-    transaction.isInternal = true;
-    transaction.internalReference = transactionRef;
-    await transaction.save();
-  }
-
-  for (const accountId in transactionsByAccount) {
-    const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
-    if (!account) continue;
-    account.transactions.push(...transactionsByAccount[accountId]);
-    account.nextCursor = nextCursor;
-    await account.save();
-  }
-
-  return { savedAccounts, existingAccounts: responseExistingAccounts };
 };
 
 const removeAccount = async (accountId, email) => {
