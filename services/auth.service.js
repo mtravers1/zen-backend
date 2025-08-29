@@ -13,6 +13,7 @@ import Assets from "../database/models/Assets.js";
 import Business from "../database/models/Businesses.js";
 // import Trips from "../database/models/Trips.js";
 import AccessToken from "../database/models/AccessToken.js";
+import VerificationCode from "../database/models/VerificationCode.js";
 import plaidService from "./plaid.service.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
@@ -590,6 +591,66 @@ const deleteUser = async (uid) => {
   }
 };
 
+const createVerificationCode = async (email) => {
+  try {
+    // Generate a 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set expiration to 10 minutes from now
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    
+    // Delete any existing codes for this email
+    await VerificationCode.deleteMany({ email });
+    
+    // Create new verification code
+    const verificationCode = new VerificationCode({
+      email,
+      code,
+      expiresAt
+    });
+    
+    await verificationCode.save();
+    
+    return code;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'create_verification_code',
+      email: email,
+      error_classification: 'database_error'
+    });
+    throw new Error('Failed to create verification code');
+  }
+};
+
+const verifyCode = async (email, code) => {
+  try {
+    // Find the verification code
+    const verificationCode = await VerificationCode.findOne({
+      email,
+      code,
+      expiresAt: { $gt: new Date() },
+      used: false
+    });
+    
+    if (!verificationCode) {
+      return { valid: false, message: 'Invalid or expired verification code' };
+    }
+    
+    // Mark the code as used
+    verificationCode.used = true;
+    await verificationCode.save();
+    
+    return { valid: true, message: 'Verification code validated successfully' };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'verify_verification_code',
+      email: email,
+      error_classification: 'database_error'
+    });
+    throw new Error('Failed to verify code');
+  }
+};
+
 const authService = {
   signUp,
   signIn,
@@ -599,6 +660,8 @@ const authService = {
   changeUserPassword,
   checkEmailFirebase,
   deleteUser,
+  createVerificationCode,
+  verifyCode,
 };
 
 export default authService;

@@ -148,12 +148,17 @@ const checkEmailFirebase = async (req, res) => {
 
 const sendCode = async (req, res) => {
   const { email } = req.body;
-  const code = Math.floor(100000 + Math.random() * 900000);
   try {
     structuredLogger.logOperationStart('auth_send_code', { email: email });
+    
+    // Create verification code in database
+    const code = await authService.createVerificationCode(email);
+    
+    // Send code via email (don't return it in response)
     await emailValidation(code, email);
+    
     structuredLogger.logSuccess('auth_send_code', { email: email });
-    res.status(200).send({ code });
+    res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_send_code',
@@ -181,6 +186,33 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const verifyCode = async (req, res) => {
+  const { email, code } = req.body;
+  try {
+    structuredLogger.logOperationStart('auth_verify_code', { email: email });
+    const result = await authService.verifyCode(email, code);
+    
+    if (result.valid) {
+      structuredLogger.logSuccess('auth_verify_code', { email: email });
+      res.status(200).send({ message: result.message, valid: true });
+    } else {
+      structuredLogger.logErrorBlock(new Error(result.message), {
+        operation: 'auth_verify_code',
+        email: email,
+        error_classification: 'invalid_code'
+      });
+      res.status(400).send({ message: result.message, valid: false });
+    }
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_verify_code',
+      email: email,
+      error_classification: 'verification_error'
+    });
+    res.status(500).send(error.message);
+  }
+};
+
 const deleteUser = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -191,7 +223,18 @@ const deleteUser = async (req, res) => {
       target_user_id: uid 
     });
     
-    //TODO: check if user is admin
+    // Check if user is admin or the request is for their own account
+    // Firebase auth doesn't provide role by default, so check if it exists
+    const isAdmin = req.user.role === 'admin';
+    const isOwnAccount = req.user.uid === uid;
+    
+    if (!isAdmin && !isOwnAccount) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to delete user'
+      });
+    }
+    
     await authService.deleteUser(uid);
     
     structuredLogger.logSuccess('auth_delete_user', { 
@@ -224,7 +267,11 @@ const recoverEncryptionKeys = async (req, res) => {
     }
     
     // Check if user is admin or the request is for their own account
-    if (req.user.role !== 'admin' && req.user.authUid !== uid) {
+    // Firebase auth provides uid, not authUid or role, and doesn't provide role by default
+    const isAdmin = req.user.role === 'admin';
+    const isOwnAccount = req.user.uid === uid;
+    
+    if (!isAdmin && !isOwnAccount) {
       return res.status(403).json({
         success: false,
         message: 'Insufficient permissions to recover encryption keys'
@@ -271,6 +318,7 @@ const authController = {
   signIn,
   checkEmail,
   sendCode,
+  verifyCode,
   resetPassword,
   checkEmailFirebase,
   deleteUser,
