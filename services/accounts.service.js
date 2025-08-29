@@ -212,26 +212,8 @@ const safeDecryptValue = async (value, dek, uid) => {
     });
     
     if (decrypted === null) {
-      console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, attempting data recovery...`);
-      
-      // Attempt data recovery when normal decryption fails
-      try {
-        const { attemptDataRecovery } = await import('../database/encryption.js');
-        const recoveryResult = await attemptDataRecovery(uid, value);
-        
-        if (recoveryResult.success) {
-          console.log(`[safeDecryptValue ${requestId}] ✅ Data recovery successful using method: ${recoveryResult.method}`);
-          return recoveryResult.data;
-        } else {
-          console.error(`[safeDecryptValue ${requestId}] ❌ Data recovery failed:`, recoveryResult.error);
-          console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, this might indicate data corruption`);
-          return null;
-        }
-      } catch (recoveryError) {
-        console.error(`[safeDecryptValue ${requestId}] ❌ Data recovery system failed:`, recoveryError.message);
-        console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, this might indicate data corruption`);
-        return null;
-      }
+      console.warn(`[safeDecryptValue ${requestId}] ⚠️ Decryption returned null, this might indicate data corruption`);
+      return null;
     }
     return decrypted;
   } catch (error) {
@@ -244,22 +226,6 @@ const safeDecryptValue = async (value, dek, uid) => {
       requestId: requestId,
       timestamp: new Date().toISOString()
     });
-    
-    // Attempt data recovery when decryption throws an error
-    try {
-      console.log(`[safeDecryptValue ${requestId}] 🔄 Attempting data recovery after decryption error...`);
-      const { attemptDataRecovery } = await import('../database/encryption.js');
-      const recoveryResult = await attemptDataRecovery(uid, value);
-      
-      if (recoveryResult.success) {
-        console.log(`[safeDecryptValue ${requestId}] ✅ Data recovery successful using method: ${recoveryResult.method}`);
-        return recoveryResult.data;
-      } else {
-        console.error(`[safeDecryptValue ${requestId}] ❌ Data recovery failed:`, recoveryResult.error);
-      }
-    } catch (recoveryError) {
-      console.error(`[safeDecryptValue ${requestId}] ❌ Data recovery system failed:`, recoveryError.message);
-    }
     
     // Se o erro for relacionado ao DEK, limpar o cache
     if (error.message.includes('Max decryption attempts exceeded') || 

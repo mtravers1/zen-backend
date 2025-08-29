@@ -1,63 +1,110 @@
 import express from "express";
+import cookieParser from "cookie-parser";
+import logger from "morgan";
+import createError from "http-errors";
 import cors from "cors";
-import helmet from "helmet";
-import compression from "compression";
-import rateLimit from "express-rate-limit";
-import routes from "./routes/index.js";
-import { encryptionMonitoringMiddleware, encryptionErrorHandler } from "./middlewares/encryptionMonitoring.js";
+import firebaseAuth from "./middlewares/firebaseAuth.js";
+import { structuredLoggingMiddleware, errorHandlingMiddleware, cleanupMiddleware } from "./middlewares/structuredLogging.js";
+import dotenv from "dotenv";
+import "./lib/firebaseAdmin.js";
+import "./database/database.js";
+import router from "./routes/index.js";
+
+dotenv.config();
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// database initialization
+// require('./database/database');
+const additionalOrigins = process.env.CORS_URL
+          .split(',')
+          .map(origin => origin.trim())
+          .filter(origin => origin.length > 0);
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['*'],
-  credentials: true
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || additionalOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use(limiter);
+app.use(cors(corsOptions));
+app.use(logger("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
-// Compression
-app.use(compression());
+// Apply structured logging middleware BEFORE authentication
+app.use(structuredLoggingMiddleware);
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// authentication
+app.use(
+	firebaseAuth.unless({
+		path: [
+			"/api/auth/signup",
+			"/api/auth/signin",
+			"/api/auth/check-email",
+			"/api/auth/check-email-firebase",
+			"/api/auth/recoverypassword",
+			"/api/auth/_info/version",
+			"/api/webhook/plaid",
+			"/api/webhook/test",
+			"/api/plaid/institutions",
+			"/api/auth/sendCode",
+			"/api/auth/resetPassword",
+			"/api/plaid/accounts",
+			"/api/account/add-photo",
+			"/api/account/get-photo",
+			"/api/account/photo",
+			"/api/script/update-transactions",
+			"/api/payments/webhook/android",
+			"/api/payments/webhook/apple",
+			"/api/ai/ping",
+		],
+	})
+);
 
-// Encryption monitoring middleware (add before routes)
-app.use(encryptionMonitoringMiddleware);
+// Load routes
+app.use("/api", router);
 
-// Routes
-app.use("/api", routes);
-
-// Encryption error handler (add before general error handler)
-app.use(encryptionErrorHandler);
-
-// General error handler
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  
-  res.status(error.status || 500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message,
+// Add root route to avoid 401 errors
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "Zentavos API",
+    version: process.env.VERSION || "1.0.1",
+    status: "running",
     timestamp: new Date().toISOString()
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Endpoint not found',
-    path: req.originalUrl,
-    timestamp: new Date().toISOString()
-  });
+// Add favicon route to avoid 401 errors
+app.get("/favicon.ico", (req, res) => {
+  res.status(204).end(); // No content for favicon
+});
+
+// catch 404 and forward to error handler
+app.use(function (req, res, next) {
+	next(createError(404));
+});
+
+// Structured error handling middleware
+app.use(errorHandlingMiddleware);
+
+// Legacy error handler (fallback)
+app.use(function (err, req, res, next) {
+  const errorResponse = {
+    message: err.message,
+  };
+
+  if (req.app.get('env') !== 'production') {
+    errorResponse.error = err;
+  }
+
+  res.status(err.status || 500).json(errorResponse);
 });
 
 export default app;
