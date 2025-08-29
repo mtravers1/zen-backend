@@ -504,11 +504,6 @@ const decryptionAttempts = new Map();
 const MAX_ATTEMPTS = 3;
 const ATTEMPT_EXPIRY = 30000; // 30 seconds - reduced from 120 seconds
 
-// Add circuit breaker for persistent failures
-const decryptionCircuitBreaker = new Map();
-const CIRCUIT_BREAKER_THRESHOLD = 5; // Number of failures before circuit opens
-const CIRCUIT_BREAKER_TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
-
 function trackDecryptionAttempt(cipherTextBase64, uid) {
   const key = `${cipherTextBase64}:${uid || 'no-uid'}`;
   const now = Date.now();
@@ -517,19 +512,6 @@ function trackDecryptionAttempt(cipherTextBase64, uid) {
   for (const [attemptKey, attempt] of decryptionAttempts.entries()) {
     if (now - attempt.timestamp > ATTEMPT_EXPIRY) {
       decryptionAttempts.delete(attemptKey);
-    }
-  }
-  
-  // Check circuit breaker for this user
-  if (uid && decryptionCircuitBreaker.has(uid)) {
-    const circuit = decryptionCircuitBreaker.get(uid);
-    if (now - circuit.lastFailure < CIRCUIT_BREAKER_TIMEOUT) {
-      console.warn(`[ENCRYPTION] Circuit breaker open for user ${uid}, skipping decryption attempts`);
-      return { count: MAX_ATTEMPTS + 1, timestamp: now, failures: new Set(['circuit_breaker']) };
-    } else {
-      // Circuit breaker timeout expired, reset it
-      decryptionCircuitBreaker.delete(uid);
-      console.log(`[ENCRYPTION] Circuit breaker reset for user ${uid}`);
     }
   }
   
@@ -557,16 +539,6 @@ function trackDecryptionAttempt(cipherTextBase64, uid) {
   decryptionAttempts.set(key, attempt);
   
   return attempt;
-}
-
-// Function to open circuit breaker for a user
-function openCircuitBreaker(uid) {
-  const now = Date.now();
-  decryptionCircuitBreaker.set(uid, {
-    lastFailure: now,
-    failureCount: (decryptionCircuitBreaker.get(uid)?.failureCount || 0) + 1
-  });
-  console.error(`[ENCRYPTION] Circuit breaker opened for user ${uid} due to persistent decryption failures`);
 }
 
 // Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
@@ -818,47 +790,9 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     ]
   });
   
-  // Attempt data recovery as a last resort
-  if (uid) {
-    try {
-      console.log(`[ENCRYPTION] Attempting data recovery for user: ${uid}`);
-      const recoveryResult = await attemptDataRecovery(uid, cipherTextBase64);
-      
-      if (recoveryResult.success) {
-        logEncryptionOperation('decryptValue', true, { 
-          uid, 
-          attempt: 'recovery',
-          method: recoveryResult.method,
-          note: 'Data recovered successfully using recovery strategy'
-        });
-        
-        // Cache the successful recovery method for future use
-        if (recoveryResult.method === 'current_key' || recoveryResult.method === 'previous_key') {
-          setDecryptionKeyInCache(cipherTextBase64, uid, recoveryResult.data, recoveryResult.method);
-        }
-        
-        return recoveryResult.data;
-      } else {
-        console.log(`[ENCRYPTION] Data recovery failed for user ${uid}:`, recoveryResult.error);
-      }
-    } catch (recoveryError) {
-      console.error(`[ENCRYPTION] Data recovery attempt failed for user ${uid}:`, recoveryError);
-    }
-  }
-  
-  // If this is a user with persistent decryption failures, open circuit breaker
+  // If this is a user with persistent decryption failures, suggest key regeneration
   if (uid && attempt.count >= MAX_ATTEMPTS) {
-    console.error(`[ENCRYPTION] ⚠️ User ${uid} has persistent decryption failures. Opening circuit breaker.`);
-    openCircuitBreaker(uid);
-    
-    // Suggest key regeneration
-    console.error(`[ENCRYPTION] ⚠️ Consider running checkEncryptionKeyHealth(${uid}) or regenerateUserKeys(${uid})`);
-    
-    // Clear caches for this user to force fresh key retrieval
-    clearDecryptedCache(uid);
-    clearDecryptionKeyCache(uid);
-    dekCache.delete(uid);
-    dekVersionCache.delete(uid);
+    console.error(`[ENCRYPTION] ⚠️ User ${uid} has persistent decryption failures. Consider running checkEncryptionKeyHealth(${uid})`);
   }
   
   return null;
@@ -1001,14 +935,10 @@ async function getPreviousDek(uid) {
       .file(`keys/${environment}/${uid}.key.previous`);
     
     if (!(await file.exists())[0]) {
-      // Don't log this as an error since it's expected for new users or users without key rotation
       logEncryptionOperation('getPreviousDek', false, { 
         uid, 
         error: 'Previous key file not found',
-        details: { 
-          filePath: `keys/${environment}/${uid}.key.previous`,
-          note: 'This is normal for new users or users without key rotation history'
-        }
+        details: { filePath: `keys/${environment}/${uid}.key.previous` }
       });
       return null;
     }
@@ -1031,27 +961,15 @@ async function getPreviousDek(uid) {
 
     return decryptResponse.plaintext;
   } catch (error) {
-    // Only log as error if it's not a "file not found" error
-    if (error.code === 404 || error.message.includes('not found')) {
-      logEncryptionOperation('getPreviousDek', false, { 
-        uid, 
-        error: 'Previous key file not found',
-        details: { 
-          filePath: `keys/${environment}/${uid}.key.previous`,
-          note: 'This is normal for new users or users without key rotation history'
-        }
-      });
-    } else {
-      logEncryptionOperation('getPreviousDek', false, { 
-        uid, 
-        error: error.message,
-        details: { 
-          errorType: error.constructor.name,
-          errorCode: error.code,
-          stack: error.stack
-        }
-      });
-    }
+    logEncryptionOperation('getPreviousDek', false, { 
+      uid, 
+      error: error.message,
+      details: { 
+        errorType: error.constructor.name,
+        errorCode: error.code,
+        stack: error.stack
+      }
+    });
     return null;
   }
 }
@@ -1338,422 +1256,6 @@ async function analyzeDecryptionFailures(uid, limit = 100) {
   }
 }
 
-// Emergency key regeneration for users with persistent decryption failures
-async function emergencyKeyRegeneration(uid) {
-  try {
-    logEncryptionOperation('emergencyKeyRegeneration', true, { uid, operation: 'start' });
-    
-    console.log(`[ENCRYPTION] Starting emergency key regeneration for user: ${uid}`);
-    
-    // Clear all caches for this user
-    clearDecryptedCache(uid);
-    clearDecryptionKeyCache(uid);
-    dekCache.delete(uid);
-    dekVersionCache.delete(uid);
-    
-    // Remove from circuit breaker
-    decryptionCircuitBreaker.delete(uid);
-    
-    // Generate completely new keys
-    const newKeyData = await generateAndStoreEncryptedDEK(uid);
-    
-    // Clear any existing previous key files to avoid confusion
-    try {
-      const previousKeyFile = storage
-        .bucket(BUCKET_NAME)
-        .file(`keys/${environment}/${uid}.key.previous`);
-      
-      if ((await previousKeyFile.exists())[0]) {
-        await previousKeyFile.delete();
-        console.log(`[ENCRYPTION] Removed old previous key file for user: ${uid}`);
-      }
-    } catch (error) {
-      console.warn(`[ENCRYPTION] Could not remove old previous key file for user ${uid}:`, error.message);
-    }
-    
-    logEncryptionOperation('emergencyKeyRegeneration', true, { 
-      uid, 
-      newVersion: newKeyData.version,
-      note: 'All caches cleared and new keys generated'
-    });
-    
-    console.log(`[ENCRYPTION] Emergency key regeneration completed for user: ${uid}`);
-    return { success: true, newVersion: newKeyData.version };
-    
-  } catch (error) {
-    logEncryptionOperation('emergencyKeyRegeneration', false, { 
-      uid, 
-      error: error.message,
-      details: { errorType: error.constructor.name, errorCode: error.code }
-    });
-    
-    console.error(`[ENCRYPTION] Emergency key regeneration failed for user ${uid}:`, error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Data recovery system for corrupted encryption keys
-const dataRecoveryCache = new Map();
-const RECOVERY_ATTEMPTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-
-async function attemptDataRecovery(uid, encryptedData) {
-  try {
-    logEncryptionOperation('attemptDataRecovery', true, { uid, operation: 'start' });
-    
-    console.log(`[ENCRYPTION] Attempting data recovery for user: ${uid}`);
-    
-    // Check if we've already attempted recovery for this data
-    const recoveryKey = `${uid}:${JSON.stringify(encryptedData)}`;
-    const cachedRecovery = dataRecoveryCache.get(recoveryKey);
-    
-    if (cachedRecovery && (Date.now() - cachedRecovery.timestamp) < RECOVERY_ATTEMPTS_CACHE_TTL) {
-      console.log(`[ENCRYPTION] Recovery already attempted recently for user: ${uid}`);
-      return cachedRecovery.result;
-    }
-    
-    // Strategy 1: Try with current key (if different from the one that failed)
-    try {
-      const currentKeyData = await getUserDek(uid);
-      if (currentKeyData && currentKeyData.dek) {
-        const result = await attemptDecryption(encryptedData, currentKeyData.dek, uid, 'recovery_current');
-        if (result.success) {
-          const recoveryResult = { success: true, method: 'current_key', data: result.value };
-          dataRecoveryCache.set(recoveryKey, { result: recoveryResult, timestamp: Date.now() });
-          return recoveryResult;
-        }
-      }
-    } catch (error) {
-      console.log(`[ENCRYPTION] Current key recovery failed for user ${uid}:`, error.message);
-    }
-    
-    // Strategy 2: Try with previous key
-    try {
-      const previousDek = await getPreviousDek(uid);
-      if (previousDek) {
-        const result = await attemptDecryption(encryptedData, previousDek, uid, 'recovery_previous');
-        if (result.success) {
-          const recoveryResult = { success: true, method: 'previous_key', data: result.value };
-          dataRecoveryCache.set(recoveryKey, { result: recoveryResult, timestamp: Date.now() });
-          return recoveryResult;
-        }
-      }
-    } catch (error) {
-      console.log(`[ENCRYPTION] Previous key recovery failed for user ${uid}:`, error.message);
-    }
-    
-    // Strategy 3: Try with backup keys from different time periods
-    const backupKeyPaths = [
-      `keys/${environment}/${uid}.key.backup.${Date.now() - 24 * 60 * 60 * 1000}`, // 1 day ago
-      `keys/${environment}/${uid}.key.backup.${Date.now() - 7 * 24 * 60 * 60 * 1000}`, // 1 week ago
-      `keys/${environment}/${uid}.key.backup.${Date.now() - 30 * 24 * 60 * 60 * 1000}` // 1 month ago
-    ];
-    
-    for (const backupPath of backupKeyPaths) {
-      try {
-        const backupFile = storage.bucket(BUCKET_NAME).file(backupPath);
-        if ((await backupFile.exists())[0]) {
-          const [keyDataString] = await backupFile.download();
-          const keyData = JSON.parse(keyDataString.toString());
-          const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
-          
-          const [decryptResponse] = await kmsClient.decrypt({
-            name: KEY_PATH,
-            ciphertext: encryptedDEK,
-          });
-          
-          const backupDek = decryptResponse.plaintext;
-          const result = await attemptDecryption(encryptedData, backupDek, uid, 'recovery_backup');
-          
-          if (result.success) {
-            const recoveryResult = { success: true, method: 'backup_key', data: result.value, backupPath };
-            dataRecoveryCache.set(recoveryKey, { result: recoveryResult, timestamp: Date.now() });
-            return recoveryResult;
-          }
-        }
-      } catch (error) {
-        console.log(`[ENCRYPTION] Backup key recovery failed for path ${backupPath}:`, error.message);
-      }
-    }
-    
-    // Strategy 4: Try with system-wide fallback keys (if configured)
-    if (process.env.SYSTEM_FALLBACK_KEY) {
-      try {
-        const fallbackDek = Buffer.from(process.env.SYSTEM_FALLBACK_KEY, 'base64');
-        const result = await attemptDecryption(encryptedData, fallbackDek, uid, 'recovery_system_fallback');
-        if (result.success) {
-          const recoveryResult = { success: true, method: 'system_fallback', data: result.value };
-          dataRecoveryCache.set(recoveryKey, { result: recoveryResult, timestamp: Date.now() });
-          return recoveryResult;
-        }
-      } catch (error) {
-        console.log(`[ENCRYPTION] System fallback recovery failed for user ${uid}:`, error.message);
-      }
-    }
-    
-    // All recovery strategies failed
-    const recoveryResult = { success: false, method: 'none', error: 'All recovery strategies failed' };
-    dataRecoveryCache.set(recoveryKey, { result: recoveryResult, timestamp: Date.now() });
-    
-    logEncryptionOperation('attemptDataRecovery', false, { 
-      uid, 
-      error: 'All recovery strategies failed',
-      strategiesAttempted: ['current_key', 'previous_key', 'backup_keys', 'system_fallback']
-    });
-    
-    return recoveryResult;
-    
-  } catch (error) {
-    logEncryptionOperation('attemptDataRecovery', false, { 
-      uid, 
-      error: error.message,
-      details: { errorType: error.constructor.name, errorCode: error.code }
-    });
-    
-    return { success: false, method: 'error', error: error.message };
-  }
-}
-
-// Automatic key backup system
-const AUTOMATIC_BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
-const MAX_BACKUP_KEYS = 7; // Keep 7 days of backups
-
-async function createAutomaticKeyBackup(uid) {
-  try {
-    const currentDek = await getUserDek(uid);
-    if (!currentDek || !currentDek.dek) {
-      console.log(`[ENCRYPTION] No current key to backup for user: ${uid}`);
-      return false;
-    }
-    
-    const timestamp = Date.now();
-    const backupPath = `keys/${environment}/${uid}.key.backup.${timestamp}`;
-    
-    // Encrypt the current DEK with KMS before persisting
-    const [encryptResponse] = await kmsClient.encrypt({
-      name: KEY_PATH,
-      plaintext: currentDek.dek,
-    });
-    
-    const backupData = {
-      encryptedDEK: encryptResponse.ciphertext.toString('base64'),
-      version: currentDek.version,
-      backedUpAt: new Date().toISOString(),
-      originalCreatedAt: new Date().toISOString()
-    };
-    
-    const backupFile = storage.bucket(BUCKET_NAME).file(backupPath);
-    await backupFile.save(JSON.stringify(backupData));
-    
-    console.log(`[ENCRYPTION] Automatic key backup created for user: ${uid} at ${backupPath}`);
-    
-    // Clean up old backups to prevent storage bloat
-    await cleanupOldBackups(uid);
-    
-    return true;
-  } catch (error) {
-    console.error(`[ENCRYPTION] Automatic key backup failed for user ${uid}:`, error);
-    return false;
-  }
-}
-
-async function cleanupOldBackups(uid) {
-  try {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const [files] = await bucket.getFiles({
-      prefix: `keys/${environment}/${uid}.key.backup.`
-    });
-    
-    if (files.length > MAX_BACKUP_KEYS) {
-      // Sort by timestamp (newest first) and remove oldest
-      const sortedFiles = files.sort((a, b) => {
-        const timestampA = parseInt(a.name.split('.').pop());
-        const timestampB = parseInt(b.name.split('.').pop());
-        return timestampB - timestampA;
-      });
-      
-      const filesToDelete = sortedFiles.slice(MAX_BACKUP_KEYS);
-      
-      for (const file of filesToDelete) {
-        try {
-          await file.delete();
-          console.log(`[ENCRYPTION] Cleaned up old backup: ${file.name}`);
-        } catch (deleteError) {
-          console.warn(`[ENCRYPTION] Could not delete old backup ${file.name}:`, deleteError.message);
-        }
-      }
-    }
-  } catch (error) {
-    console.warn(`[ENCRYPTION] Backup cleanup failed for user ${uid}:`, error.message);
-  }
-}
-
-// Schedule automatic backups for all users
-async function scheduleAutomaticBackups() {
-  try {
-    console.log(`[ENCRYPTION] Scheduling automatic key backups every ${AUTOMATIC_BACKUP_INTERVAL / (60 * 60 * 1000)} hours`);
-    
-    setInterval(async () => {
-      try {
-        // Get all users with keys (this would need to be implemented based on your user management)
-        // For now, we'll just log that the backup system is running
-        console.log(`[ENCRYPTION] Automatic backup system running at ${new Date().toISOString()}`);
-        
-        // TODO: Implement user enumeration and backup creation
-        // const users = await getAllUsersWithKeys();
-        // for (const user of users) {
-        //   await createAutomaticKeyBackup(user.uid);
-        // }
-        
-      } catch (error) {
-        console.error(`[ENCRYPTION] Automatic backup cycle failed:`, error);
-      }
-    }, AUTOMATIC_BACKUP_INTERVAL);
-    
-  } catch (error) {
-    console.error(`[ENCRYPTION] Failed to schedule automatic backups:`, error);
-  }
-}
-
-// Fallback data system for when decryption completely fails
-const fallbackDataCache = new Map();
-const FALLBACK_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-// Default fallback values for common data types
-const DEFAULT_FALLBACK_VALUES = {
-  // Financial data
-  'net_worth': 0,
-  'balance': 0,
-  'income': 0,
-  'spending': 0,
-  'transactions': [],
-  
-  // Account data
-  'accounts': [],
-  'account_balance': 0,
-  'account_type': 'unknown',
-  
-  // Business data
-  'business_name': 'Business Account',
-  'business_logo': null,
-  'business_type': 'unknown',
-  
-  // User data
-  'user_name': 'User',
-  'user_email': 'user@example.com',
-  
-  // Generic data
-  'description': 'Data temporarily unavailable',
-  'amount': 0,
-  'date': new Date().toISOString(),
-  'status': 'pending'
-};
-
-function getFallbackData(dataType, uid) {
-  const cacheKey = `${uid}:${dataType}`;
-  const cached = fallbackDataCache.get(cacheKey);
-  
-  if (cached && (Date.now() - cached.timestamp) < FALLBACK_CACHE_TTL) {
-    return cached.data;
-  }
-  
-  // Generate appropriate fallback data based on type
-  let fallbackData;
-  
-  switch (dataType) {
-    case 'net_worth':
-    case 'balance':
-    case 'income':
-    case 'spending':
-    case 'amount':
-      fallbackData = 0;
-      break;
-      
-    case 'accounts':
-      fallbackData = [{
-        id: 'fallback_account',
-        name: 'Account',
-        type: 'unknown',
-        balance: 0,
-        status: 'active'
-      }];
-      break;
-      
-    case 'transactions':
-      fallbackData = [{
-        id: 'fallback_transaction',
-        description: 'Transaction',
-        amount: 0,
-        date: new Date().toISOString(),
-        type: 'unknown',
-        status: 'pending'
-      }];
-      break;
-      
-    case 'business_logo':
-      fallbackData = null;
-      break;
-      
-    case 'business_name':
-      fallbackData = 'Business Account';
-      break;
-      
-    default:
-      fallbackData = DEFAULT_FALLBACK_VALUES[dataType] || 'Data unavailable';
-  }
-  
-  // Cache the fallback data
-  fallbackDataCache.set(cacheKey, {
-    data: fallbackData,
-    timestamp: Date.now()
-  });
-  
-  return fallbackData;
-}
-
-// Enhanced safeDecryptValue function that provides fallback data
-async function safeDecryptValueWithFallback(value, dek, uid, dataType = 'generic') {
-  try {
-    // First try normal decryption
-    const decrypted = await decryptValue(value, dek, uid);
-    
-    if (decrypted !== null) {
-      return decrypted;
-    }
-    
-    // If decryption fails, try data recovery
-    if (uid) {
-      const recoveryResult = await attemptDataRecovery(uid, value);
-      if (recoveryResult.success) {
-        console.log(`[ENCRYPTION] Data recovered for user ${uid} using ${recoveryResult.method}`);
-        return recoveryResult.data;
-      }
-    }
-    
-    // If all else fails, provide fallback data
-    console.warn(`[ENCRYPTION] Providing fallback data for user ${uid}, type: ${dataType}`);
-    const fallbackData = getFallbackData(dataType, uid);
-    
-    // Log that we're using fallback data for monitoring
-    logEncryptionOperation('safeDecryptValueWithFallback', false, {
-      uid,
-      dataType,
-      note: 'Using fallback data due to decryption failure',
-      fallbackData: typeof fallbackData === 'object' ? 'object' : fallbackData
-    });
-    
-    return fallbackData;
-    
-  } catch (error) {
-    console.error(`[ENCRYPTION] Error in safeDecryptValueWithFallback for user ${uid}:`, error);
-    
-    // Even if everything fails, return fallback data
-    const fallbackData = getFallbackData(dataType, uid);
-    console.warn(`[ENCRYPTION] Critical failure, using emergency fallback for user ${uid}`);
-    
-    return fallbackData;
-  }
-}
-
 export {
   encryptValue,
   decryptValue,
@@ -1774,11 +1276,5 @@ export {
   getDecryptionKeyCacheStats,
   checkEncryptionKeyHealth,
   regenerateUserKeys,
-  analyzeDecryptionFailures,
-  emergencyKeyRegeneration,
-  attemptDataRecovery,
-  createAutomaticKeyBackup,
-  cleanupOldBackups,
-  scheduleAutomaticBackups,
-  safeDecryptValueWithFallback
+  analyzeDecryptionFailures
 };

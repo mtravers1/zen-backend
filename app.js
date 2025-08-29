@@ -5,7 +5,6 @@ import createError from "http-errors";
 import cors from "cors";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
 import { structuredLoggingMiddleware, errorHandlingMiddleware, cleanupMiddleware } from "./middlewares/structuredLogging.js";
-import encryptionRecoveryMiddleware from "./middlewares/encryptionRecovery.js";
 import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
@@ -68,10 +67,6 @@ app.use(
 		],
 	})
 );
-
-// Apply encryption recovery middleware AFTER authentication
-// This ensures we have user context for data recovery
-app.use(encryptionRecoveryMiddleware);
 
 // Load routes
 app.use("/api", router);
