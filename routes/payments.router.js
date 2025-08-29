@@ -7,5 +7,6 @@ router.post("/very-receipt", paymentsController.verifyReceipts);
 router.post("/webhook/android", paymentsController.weebhookAndroid);
 router.post("/webhook/apple", paymentsController.weebhookApple);
 router.post("/update-user-uuid", paymentsController.updateUserUUID);
+router.get("/available-plans", paymentsController.getAvailablePlans);
 
 export default router;

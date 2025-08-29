@@ -100,6 +100,24 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const updateUserRole = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { role } = req.body;
+    
+    // TODO: Add authorization check - only allow self or admin
+    // const requestingUserId = req.user.uid;
+    
+    const updatedUser = await authService.updateUserRole(userId, role);
+    res.status(200).send(updatedUser);
+  } catch (error) {
+    if (error.message === "User not found") {
+      return res.status(404).send(error.message);
+    }
+    res.status(500).send(error.message);
+  }
+};
+
 const deleteUser = async (req, res) => {
   try {
     const userId = req.user.uid;
@@ -120,6 +138,7 @@ const authController = {
   checkEmail,
   sendCode,
   resetPassword,
+  updateUserRole,
   checkEmailFirebase,
   deleteUser,
 };

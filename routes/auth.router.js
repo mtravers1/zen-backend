@@ -13,6 +13,7 @@ router.post("/check-email", authController.checkEmail);
 router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
 router.post("/resetPassword", authController.resetPassword);
+router.patch("/users/:userId/role", authController.updateUserRole);
 router.delete("/:uid", authController.deleteUser);
 router.get("/test", (req, res) => {
   const aiurl = process.env.AI_URL;

@@ -20,18 +20,18 @@ const app = express();
 // CORS configuration for development
 const corsOptions = {
   origin: [
-    'http://localhost:3000',
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'http://10.0.2.2:3000',
-    'http://10.0.2.2:8081',
-    'http://10.0.2.2:19006',
-    'exp://localhost:19000',
-    'exp://10.0.2.2:19000',
+    "http://localhost:3000",
+    "http://localhost:8081",
+    "http://localhost:19006",
+    "http://10.0.2.2:3000",
+    "http://10.0.2.2:8081",
+    "http://10.0.2.2:19006",
+    "exp://localhost:19000",
+    "exp://10.0.2.2:19000",
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
 
 app.use(cors(corsOptions));
@@ -42,34 +42,38 @@ app.use(cookieParser());
 
 // authentication
 app.use(
-	firebaseAuth.unless({
-		path: [
-			"/api/auth/signup",
-			// "/api/auth/signin",
-			"/api/auth/check-email",
-			"/api/auth/check-email-firebase",
-			"/api/auth/recoverypassword",
-			"/api/_info/version",
-			"/api/webhook/plaid",
-			"/api/webhook/test",
-			"/api/plaid/institutions",
-			"/api/auth/sendCode",
-			"/api/auth/resetPassword",
-			"/api/plaid/accounts",
-			"/api/account/add-photo",
-			"/api/account/get-photo",
-			"/api/script/update-transactions",
-			"/api/payments/webhook/android",
-			"/api/payments/webhook/apple",
-		],
-		custom: function(req) {
-			// Skip auth for all /dev routes in development
-			if (process.env.NODE_ENV === 'development' && req.path.startsWith('/dev')) {
-				return true;
-			}
-			return false;
-		}
-	})
+  firebaseAuth.unless({
+    path: [
+      "/api/auth/signup",
+      // "/api/auth/signin",
+      "/api/auth/check-email",
+      "/api/auth/check-email-firebase",
+      "/api/auth/recoverypassword",
+      "/api/_info/version",
+      "/api/webhook/plaid",
+      "/api/webhook/test",
+      "/api/plaid/institutions",
+      "/api/auth/sendCode",
+      "/api/auth/resetPassword",
+      "/api/plaid/accounts",
+      "/api/account/add-photo",
+      "/api/account/get-photo",
+      "/api/script/update-transactions",
+      "/api/payments/webhook/android",
+      "/api/payments/webhook/apple",
+      "/api/payments/available-plans",
+    ],
+    custom: function (req) {
+      // Skip auth for all /dev routes in development
+      if (
+        process.env.NODE_ENV === "development" &&
+        req.path.startsWith("/dev")
+      ) {
+        return true;
+      }
+      return false;
+    },
+  })
 );
 
 // Load routes
@@ -80,7 +84,7 @@ app.use("/dev", devRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
-	next(createError(404));
+  next(createError(404));
 });
 
 // error handler
@@ -89,7 +93,7 @@ app.use(function (err, req, res, next) {
     message: err.message,
   };
 
-  if (req.app.get('env') !== 'production') {
+  if (req.app.get("env") !== "production") {
     errorResponse.error = err;
   }
 

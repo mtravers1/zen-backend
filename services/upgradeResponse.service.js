@@ -39,7 +39,6 @@ const businessOwnerUpgradeRequired = (user) => {
       title: "Business Features Require Upgrade",
       message: "To add business profiles and features, you need to upgrade from Free plan",
       current_plan: user.account_type || "Free",
-      suggested_plans: ["Founder", "Entrepreneur", "Tycoon"],
       popup_type: "business_owner",
       action_blocked: "create_business_profile"
     }
@@ -61,7 +60,6 @@ const institutionLimitExceeded = (user, currentUsage, planLimit) => {
       title: "Institution Limit Reached",
       message: `You've reached your limit of ${planLimit} financial institutions`,
       current_plan: user.account_type || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       popup_type: "institution_limit",
       action_blocked: "add_institution"
     }
@@ -83,7 +81,6 @@ const storageLimitExceeded = (user, currentUsage, planLimit) => {
       title: "Storage Limit Reached",
       message: `You've reached your storage limit of ${planLimit}GB`,
       current_plan: user.account_type || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       popup_type: "storage_limit",
       action_blocked: "upload_file"
     }
@@ -103,7 +100,6 @@ const tripLimitExceeded = (user, currentUsage, planLimit) => {
       title: "Monthly Trip Limit Reached",
       message: `You've reached your limit of ${planLimit} trips this month`,
       current_plan: "Free",
-      suggested_plans: ["Personal", "Founder", "Entrepreneur", "Tycoon"],
       popup_type: "trip_limit",
       action_blocked: "create_trip"
     }
@@ -125,7 +121,6 @@ const businessLimitExceeded = (user, currentUsage, planLimit) => {
       title: "Business Limit Reached",
       message: `You've reached your limit of ${planLimit} businesses`,
       current_plan: user.account_type || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       popup_type: "business_limit",
       action_blocked: "create_business"
     }
@@ -147,7 +142,6 @@ const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) 
       title: "Upgrade Required",
       message: `You've reached your ${limitType} limit`,
       current_plan: user.account_type || "Free",
-      suggested_plans: nextPlan ? [nextPlan] : getAvailableUpgrades(user.account_type),
       action_blocked: actionBlocked
     }
   };

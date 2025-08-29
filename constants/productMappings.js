@@ -1,11 +1,11 @@
 /**
  * Product Mappings Configuration
  * Maps Apple Store & Google Play Store product IDs to internal plan names by environment
- * 
+ *
  * DUAL-PLATFORM SUPPORT:
  * - iOS: Apple Store product IDs (com.zentavos.*)
  * - Android: Google Play Store product IDs (com.zentavos.android.*)
- * 
+ *
  * NOTE: When adding new plans or add-ons:
  * 1. Add the product ID mapping for BOTH platforms
  * 2. Update PLAN_HIERARCHY if it's a new tier
@@ -21,11 +21,12 @@ export const PRODUCT_MAPPINGS = {
       "com.zentavos.entrepreneur": "Entrepreneur",
       "com.zentavos.tycoon": "Tycoon",
 
-      // Add-on plans +1 institution ($3 extra) - NEED to be created in Apple Store
-      "com.zentavos.personal.plus1": "Personal+1",
-      "com.zentavos.founder.plus1": "Founder+1",
-      "com.zentavos.entrepreneur.plus1": "Entrepreneur+1",
-      // Tycoon is unlimited, no add-ons needed
+      // Add-on plans (EXIST in Apple Store Connect)
+      "zentavos_dev_personal_1_institution": "Personal+1",
+      "zentavos_dev_founder_1_institution": "Founder+1", 
+      "zentavos_dev_entrepreneur_1_institution": "Entrepreneur+1",
+      "zentavos_dev_entrepreneur_2_institution": "Entrepreneur+2",
+      "zentavos_dev_tycoon_100gb": "Tycoon+100gb",
     },
     android: {
       // Base subscription plans - NEED to be created in Google Play Store
@@ -39,7 +40,7 @@ export const PRODUCT_MAPPINGS = {
       "com.zentavos.android.founder.plus1": "Founder+1",
       "com.zentavos.android.entrepreneur.plus1": "Entrepreneur+1",
       // Tycoon is unlimited, no add-ons needed
-    }
+    },
   },
   stg: {
     ios: {
@@ -65,7 +66,7 @@ export const PRODUCT_MAPPINGS = {
       "com.zentavos.stg.android.personal.plus1": "Personal+1",
       "com.zentavos.stg.android.founder.plus1": "Founder+1",
       "com.zentavos.stg.android.entrepreneur.plus1": "Entrepreneur+1",
-    }
+    },
   },
   prod: {
     ios: {
@@ -91,7 +92,7 @@ export const PRODUCT_MAPPINGS = {
       "com.zentavos.sub.android.personal.plus1": "Personal+1",
       "com.zentavos.sub.android.founder.plus1": "Founder+1",
       "com.zentavos.sub.android.entrepreneur.plus1": "Entrepreneur+1",
-    }
+    },
   },
 };
 
