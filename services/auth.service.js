@@ -593,34 +593,43 @@ const deleteUser = async (uid) => {
 
 const createVerificationCode = async (email) => {
   try {
-    console.error(`[DEBUG] Creating verification code for email: ${email}`);
+    console.log(`[DEBUG] Creating verification code for email: ${email}`);
+    
+    // Test database connection first
+    console.log(`[DEBUG] Testing database connection...`);
+    const testQuery = await VerificationCode.findOne({});
+    console.log(`[DEBUG] Database connection test result:`, testQuery ? 'Connected' : 'No data but connected');
     
     // Generate a 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    console.error(`[DEBUG] Generated code: ${code}`);
+    console.log(`[DEBUG] Generated code: ${code}`);
     
     // Set expiration to 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    console.error(`[DEBUG] Code expires at: ${expiresAt}`);
+    console.log(`[DEBUG] Code expires at: ${expiresAt}`);
     
     // Delete any existing codes for this email
+    console.log(`[DEBUG] Deleting existing codes...`);
     const deletedCount = await VerificationCode.deleteMany({ email });
-    console.error(`[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`);
+    console.log(`[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`);
     
     // Create new verification code
+    console.log(`[DEBUG] Creating VerificationCode model instance...`);
     const verificationCode = new VerificationCode({
       email,
       code,
       expiresAt
     });
+    console.log(`[DEBUG] Model instance created:`, verificationCode);
     
-    console.error(`[DEBUG] Saving verification code to database...`);
-    await verificationCode.save();
-    console.error(`[DEBUG] Verification code saved successfully with ID: ${verificationCode._id}`);
+    console.log(`[DEBUG] Saving verification code to database...`);
+    const savedCode = await verificationCode.save();
+    console.log(`[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`);
     
     return code;
   } catch (error) {
     console.error('[ERROR] Error in createVerificationCode:', error);
+    console.error('[ERROR] Error stack:', error.stack);
     structuredLogger.logErrorBlock(error, {
       operation: 'create_verification_code',
       email: email,
@@ -632,7 +641,7 @@ const createVerificationCode = async (email) => {
 
 const verifyCode = async (email, code) => {
   try {
-    console.error(`[DEBUG] Verifying code for email: ${email}, code: ${code}`);
+    console.log(`[DEBUG] Verifying code for email: ${email}, code: ${code}`);
     
     // Find the verification code
     const verificationCode = await VerificationCode.findOne({
@@ -642,7 +651,7 @@ const verifyCode = async (email, code) => {
       used: false
     });
     
-    console.error(`[DEBUG] Found verification code:`, verificationCode ? {
+    console.log(`[DEBUG] Found verification code:`, verificationCode ? {
       id: verificationCode._id,
       email: verificationCode.email,
       code: verificationCode.code,
@@ -652,11 +661,11 @@ const verifyCode = async (email, code) => {
     } : 'null');
     
     if (!verificationCode) {
-      console.error(`[DEBUG] No valid verification code found for email: ${email}, code: ${code}`);
+      console.log(`[DEBUG] No valid verification code found for email: ${email}, code: ${code}`);
       
       // Let's also check what codes exist for this email
       const allCodes = await VerificationCode.find({ email });
-      console.error(`[DEBUG] All codes for email ${email}:`, allCodes.map(c => ({
+      console.log(`[DEBUG] All codes for email ${email}:`, allCodes.map(c => ({
         code: c.code,
         expiresAt: c.expiresAt,
         used: c.used,
@@ -666,12 +675,12 @@ const verifyCode = async (email, code) => {
       return { valid: false, message: 'Invalid or expired verification code' };
     }
     
-    console.error(`[DEBUG] Marking code as used...`);
+    console.log(`[DEBUG] Marking code as used...`);
     // Mark the code as used
     verificationCode.used = true;
     await verificationCode.save();
     
-    console.error(`[DEBUG] Code verified successfully`);
+    console.log(`[DEBUG] Code verified successfully`);
     return { valid: true, message: 'Verification code validated successfully' };
   } catch (error) {
     console.error('[ERROR] Error in verifyCode:', error);

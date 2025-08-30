@@ -149,21 +149,29 @@ const checkEmailFirebase = async (req, res) => {
 const sendCode = async (req, res) => {
   const { email } = req.body;
   try {
-    console.error(`[DEBUG] sendCode called for email: ${email}`);
+    console.log(`[DEBUG] sendCode called for email: ${email}`);
     structuredLogger.logOperationStart('auth_send_code', { email: email });
     
     // Create verification code in database
-    console.error(`[DEBUG] Creating verification code...`);
+    console.log(`[DEBUG] About to call authService.createVerificationCode...`);
+    console.log(`[DEBUG] authService object:`, Object.keys(authService));
+    
+    if (typeof authService.createVerificationCode !== 'function') {
+      console.log(`[ERROR] createVerificationCode is not a function!`);
+      throw new Error('createVerificationCode function not found');
+    }
+    
+    console.log(`[DEBUG] Creating verification code...`);
     const code = await authService.createVerificationCode(email);
-    console.error(`[DEBUG] Verification code created: ${code}`);
+    console.log(`[DEBUG] Verification code created: ${code}`);
     
     // Send code via email (don't return it in response)
-    console.error(`[DEBUG] Sending email...`);
+    console.log(`[DEBUG] Sending email...`);
     await emailValidation(code, email);
-    console.error(`[DEBUG] Email sent successfully`);
+    console.log(`[DEBUG] Email sent successfully`);
     
     structuredLogger.logSuccess('auth_send_code', { email: email });
-    console.error(`[DEBUG] sendCode completed successfully for email: ${email}`);
+    console.log(`[DEBUG] sendCode completed successfully for email: ${email}`);
     res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
     console.error(`[ERROR] Error in sendCode for email ${email}:`, error);
