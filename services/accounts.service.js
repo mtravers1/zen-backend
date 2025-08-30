@@ -8,6 +8,7 @@ import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
 import assetsService from "./assets.service.js";
 import structuredLogger from "../lib/structuredLogger.js";
+import { getBaseConfig } from "../config/env.js";
 
 import {
   decryptValue,
@@ -280,7 +281,8 @@ console.log('🔍 [Storage] Storage instance created successfully:', {
   hasBucket: typeof storage.bucket === 'function'
 });
 
-const bucketName = "zentavos-bucket";
+const { BUCKET } = getBaseConfig();
+const bucketName = BUCKET;
 console.log('🔍 [Storage] Bucket name:', bucketName);
 
 const addAccount = async (accessToken, email, uid) => {

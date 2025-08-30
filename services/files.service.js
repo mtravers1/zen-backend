@@ -1,18 +1,20 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
 import { Storage } from "@google-cloud/storage";
+import { getBaseConfig } from "../config/env.js";
+import { getStorageSA } from "../config/serviceAccounts.js";
 
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const serviceAccountJsonString = Buffer.from(
-  serviceAccountBase64,
-  "base64"
-).toString("utf8");
-const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+const storageServiceAccount = getStorageSA();
+if (!storageServiceAccount) {
+  throw new Error("[FILES] Storage service account not available");
+}
 
 const storage = new Storage({
   credentials: storageServiceAccount,
 });
-const bucketName = "zentavos-bucket";
+
+const { BUCKET } = getBaseConfig();
+const bucketName = BUCKET;
 
 const addFile = async (data, uid) => {
   const user = await User.findOne({ authUid: uid });
