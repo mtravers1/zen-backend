@@ -1,3 +1,4 @@
+import express from "express";
 import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
 import businessService from "../services/businesses.service.js";
@@ -9,10 +10,7 @@ const debugCache = async (req, res) => {
       userAgent: req.get('User-Agent')
     });
     
-    // Import the cache functions
-    const { getDekCacheStats, clearDekCache } = await import('../services/accounts.service.js');
-    
-    const stats = getDekCacheStats();
+    const stats = accountsService.getDekCacheStats();
     
     res.status(200).send({
       cache: {
@@ -59,8 +57,7 @@ const debugDecryption = async (req, res) => {
     }
     
     // Get DEK using cache
-    const { getCachedDek } = await import('../services/accounts.service.js');
-    const dek = await getCachedDek(uid);
+    const dek = await accountsService.getCachedDek(uid);
     console.log('[DEBUG DECRYPT] DEK obtained:', {
       hasDek: !!dek,
       dekType: typeof dek,
@@ -262,8 +259,7 @@ const debugEncryption = async (req, res) => {
     });
     
     // Get DEK using cache
-    const { getCachedDek } = await import('../services/accounts.service.js');
-    const dek = await getCachedDek(uid);
+    const dek = await accountsService.getCachedDek(uid);
     
     console.log('[DEBUG ENCRYPTION] DEK obtained:', {
       hasDek: !!dek,
@@ -565,12 +561,19 @@ const getAccountDetails = async (req, res) => {
 const addAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.body;
-    console.log(fileName);
-    const { generateUploadUrl } = await import('../services/accounts.service.js');
-    const url = await generateUploadUrl(fileName);
+    console.log('🔍 [addAccountPhoto] Processing upload for fileName:', fileName);
+    
+    const url = await accountsService.generateUploadUrl(fileName);
+    console.log('🔍 [addAccountPhoto] Upload URL generated:', url);
+    
+    if (!url) {
+      console.error('❌ [addAccountPhoto] Failed to generate upload URL');
+      return res.status(500).send({ message: 'Failed to generate upload URL' });
+    }
+    
     res.status(200).send({ uploadUrl: url });
   } catch (error) {
-    console.log(error);
+    console.error('❌ [addAccountPhoto] Error:', error);
     res.status(500).send({ message: error.message });
   }
 };
@@ -578,12 +581,19 @@ const addAccountPhoto = async (req, res) => {
 const getAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.body;
-    console.log(fileName);
-    const { generateSignedUrl } = await import('../services/accounts.service.js');
-    const url = await generateSignedUrl(fileName);
+    console.log('🔍 [getAccountPhoto] Processing download for fileName:', fileName);
+    
+    const url = await accountsService.generateSignedUrl(fileName);
+    console.log('🔍 [getAccountPhoto] Download URL generated:', url);
+    
+    if (!url) {
+      console.error('❌ [getAccountPhoto] Failed to generate download URL');
+      return res.status(500).send({ message: 'Failed to generate download URL' });
+    }
+    
     res.status(200).send({ downloadUrl: url });
   } catch (error) {
-    console.log(error);
+    console.error('❌ [getAccountPhoto] Error:', error);
     res.status(500).send({ message: error.message });
   }
 };
@@ -591,27 +601,22 @@ const getAccountPhoto = async (req, res) => {
 const serveAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.params;
-    console.log('Serving photo:', fileName);
+    console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
     
-    // Generate signed URL for the photo
-    const { generateSignedUrl } = await import('../services/accounts.service.js');
-    const signedUrl = await generateSignedUrl(fileName);
+    // Generate signed URL for the photo first
+    const signedUrl = await accountsService.generateSignedUrl(fileName);
+    console.log('🔍 [serveAccountPhoto] Signed URL generated:', signedUrl);
     
     if (!signedUrl) {
-      const error = new Error('Photo not found');
-      error.details = {
-        operation: 'serveAccountPhoto',
-        fileName,
-        user_email: req.user?.email,
-        user_uid: req.user?.uid,
-        error_type: 'file_not_found'
-      };
-      return res.status(404).send({ message: 'Photo not found' });
+      console.error('❌ [serveAccountPhoto] Failed to generate signed URL for:', fileName);
+      return res.status(404).send({ message: 'Photo not found or access denied' });
     }
     
     // Redirect to the signed URL
+    console.log('🔍 [serveAccountPhoto] Redirecting to signed URL for:', fileName);
     res.redirect(signedUrl);
   } catch (error) {
+    console.error('❌ [serveAccountPhoto] Error:', error);
     error.details = {
       operation: 'serveAccountPhoto',
       fileName: req.params.fileName,
@@ -645,11 +650,9 @@ const deleteAccount = async (req, res) => {
 // Cache management methods
 const getCacheStats = async (req, res) => {
   try {
-    const { getDekCacheStats, getDecryptionCacheStats, getDecryptionKeyCacheStats } = await import('../services/accounts.service.js');
-    
-    const dekStats = getDekCacheStats();
-    const decryptionStats = getDecryptionCacheStats();
-    const keyCacheStats = getDecryptionKeyCacheStats();
+    const dekStats = accountsService.getDekCacheStats();
+    const decryptionStats = accountsService.getDecryptionCacheStats();
+    const keyCacheStats = accountsService.getDecryptionKeyCacheStats();
     
     res.json({
       success: true,
@@ -661,64 +664,64 @@ const getCacheStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[Cache Stats] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get cache statistics'
+    console.error('[getCacheStats] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
     });
   }
 };
 
 const clearAllCaches = async (req, res) => {
   try {
-    const { uid } = req.body;
-    const { clearAllCaches: clearCaches } = await import('../services/accounts.service.js');
+    const { uid } = req.params;
+    console.log(`[clearAllCaches] Clearing all caches for uid: ${uid}`);
     
     if (uid) {
-      clearCaches(uid);
-      res.json({
-        success: true,
-        message: `All caches cleared for user: ${uid}`
-      });
+      accountsService.clearAllCaches(uid);
+      console.log(`[clearAllCaches] All caches cleared for uid: ${uid}`);
     } else {
-      clearCaches();
-      res.json({
-        success: true,
-        message: 'All caches cleared for all users'
-      });
+      accountsService.clearAllCaches();
+      console.log('[clearAllCaches] All caches cleared for all users');
     }
+    
+    res.json({
+      success: true,
+      message: uid ? `All caches cleared for uid: ${uid}` : 'All caches cleared for all users',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
-    console.error('[Cache Clear] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to clear caches'
+    console.error('[clearAllCaches] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
     });
   }
 };
 
 const clearDecryptionCache = async (req, res) => {
   try {
-    const { uid } = req.body;
-    const { clearDecryptionCache: clearDecryptCache } = await import('../services/accounts.service.js');
+    const { uid } = req.params;
+    console.log(`[clearDecryptionCache] Clearing decryption cache for uid: ${uid}`);
     
     if (uid) {
-      clearDecryptCache(uid);
-      res.json({
-        success: true,
-        message: `Decryption cache cleared for user: ${uid}`
-      });
+      accountsService.clearDecryptionCache(uid);
+      console.log(`[clearDecryptionCache] Decryption cache cleared for uid: ${uid}`);
     } else {
-      clearDecryptCache();
-      res.json({
-        success: true,
-        message: 'Decryption cache cleared for all users'
-      });
+      accountsService.clearDecryptionCache();
+      console.log('[clearDecryptionCache] Decryption cache cleared for all users');
     }
+    
+    res.json({
+      success: true,
+      message: uid ? `Decryption cache cleared for uid: ${uid}` : 'Decryption cache cleared for all users',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
-    console.error('[Decryption Cache Clear] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to clear decryption cache'
+    console.error('[clearDecryptionCache] Error:', error);
+    res.status(500).send({ 
+      error: error.message,
+      stack: error.stack 
     });
   }
 };

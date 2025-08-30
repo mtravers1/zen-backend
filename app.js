@@ -42,32 +42,41 @@ app.use(cookieParser());
 app.use(structuredLoggingMiddleware);
 
 // authentication
-app.use(
-	firebaseAuth.unless({
-		path: [
-			"/api/auth/signup",
-			"/api/auth/signin",
-			"/api/auth/check-email",
-			"/api/auth/check-email-firebase",
-			"/api/auth/recoverypassword",
-			"/api/auth/_info/version",
-			"/api/webhook/plaid",
-			"/api/webhook/test",
-			"/api/plaid/institutions",
-			"/api/auth/sendCode",
-			"/api/auth/verifyCode",
-			"/api/auth/resetPassword",
-			"/api/plaid/accounts",
-			"/api/account/add-photo",
-			"/api/account/get-photo",
-			"/api/account/photo",
-			"/api/script/update-transactions",
-			"/api/payments/webhook/android",
-			"/api/payments/webhook/apple",
-			"/api/ai/ping",
-		],
-	})
-);
+app.use((req, res, next) => {
+	// Define paths that should be excluded from authentication
+	const excludedPaths = [
+		"/api/auth/signup",
+		"/api/auth/signin",
+		"/api/auth/check-email",
+		"/api/auth/check-email-firebase",
+		"/api/auth/recoverypassword",
+		"/api/auth/_info/version",
+		"/api/webhook/plaid",
+		"/api/webhook/test",
+		"/api/plaid/institutions",
+		"/api/auth/sendCode",
+		"/api/auth/verifyCode",
+		"/api/auth/resetPassword",
+		"/api/plaid/accounts",
+		"/api/account/add-photo",
+		"/api/account/get-photo",
+		"/api/script/update-transactions",
+		"/api/payments/webhook/android",
+		"/api/payments/webhook/apple",
+		"/api/ai/ping",
+	];
+	
+	// Check if the current path should be excluded
+	const shouldExclude = excludedPaths.includes(req.path) || req.path.startsWith("/api/account/photo/");
+	
+	if (shouldExclude) {
+		// Skip authentication for excluded paths
+		return next();
+	}
+	
+	// Apply authentication for all other paths
+	return firebaseAuth(req, res, next);
+});
 
 // Load routes
 app.use("/api", router);
