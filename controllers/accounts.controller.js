@@ -601,11 +601,14 @@ const getAccountPhoto = async (req, res) => {
 const serveAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.params;
-    console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
+    console.log('🔍 [serveAccountPhoto] Starting to serve photo:', fileName);
+    console.log('🔍 [serveAccountPhoto] Request params:', req.params);
+    console.log('🔍 [serveAccountPhoto] Request path:', req.path);
     
     // Generate signed URL for the photo first
+    console.log('🔍 [serveAccountPhoto] Calling generateSignedUrl...');
     const signedUrl = await accountsService.generateSignedUrl(fileName);
-    console.log('🔍 [serveAccountPhoto] Signed URL generated:', signedUrl);
+    console.log('🔍 [serveAccountPhoto] Signed URL result:', signedUrl);
     
     if (!signedUrl) {
       console.error('❌ [serveAccountPhoto] Failed to generate signed URL for:', fileName);
@@ -613,10 +616,12 @@ const serveAccountPhoto = async (req, res) => {
     }
     
     // Redirect to the signed URL
-    console.log('🔍 [serveAccountPhoto] Redirecting to signed URL for:', fileName);
+    console.log('🔍 [serveAccountPhoto] Successfully generated signed URL, redirecting to:', signedUrl);
     res.redirect(signedUrl);
   } catch (error) {
-    console.error('❌ [serveAccountPhoto] Error:', error);
+    console.error('❌ [serveAccountPhoto] Error occurred:', error);
+    console.error('❌ [serveAccountPhoto] Error stack:', error.stack);
+    console.error('❌ [serveAccountPhoto] Error message:', error.message);
     error.details = {
       operation: 'serveAccountPhoto',
       fileName: req.params.fileName,
