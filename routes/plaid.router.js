@@ -16,6 +16,7 @@ router.get(
   "/upfront-institution-status",
   plaidController.getUpfrontInstitutionStatus
 );
+router.post("/institution-update-token", plaidController.getInstitutionUpdateToken);
 router.post("/balance", plaidController.getBalance);
 router.get("/institutions", plaidController.getInstitutions);
 router.get("/transactions", plaidController.getTransactions);

@@ -217,14 +217,11 @@ const getConnectedInstitutions = async (req, res) => {
         account.institution_name,
         dek
       );
-      const decryptedAccessToken = await decryptValue(account.accessToken, dek);
 
       if (!institutionsMap.has(institutionId)) {
         institutionsMap.set(institutionId, {
           institution_id: institutionId,
           institution_name: decryptedInstitutionName,
-          access_token: decryptedAccessToken,
-          item_id: account.itemId,
           accounts: [],
         });
       }
@@ -346,6 +343,41 @@ const getUpfrontInstitutionStatus = async (req, res) => {
   }
 };
 
+const getInstitutionUpdateToken = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { institution_id } = req.body;
+
+    console.log(
+      `[CONTROLLER] getInstitutionUpdateToken request - uid: ${uid}, institution_id: ${institution_id}`
+    );
+
+    if (!institution_id) {
+      return res.status(400).send({ error: "institution_id is required" });
+    }
+
+    const result = await plaidService.getInstitutionUpdateToken(institution_id, uid);
+    
+    console.log(
+      `[CONTROLLER] getInstitutionUpdateToken success - uid: ${uid}, institution_id: ${institution_id}`
+    );
+    res.status(200).send(result);
+  } catch (error) {
+    console.error(
+      `[CONTROLLER] getInstitutionUpdateToken error - uid: ${req.user?.uid}, institution_id: ${req.body?.institution_id}:`,
+      error.message
+    );
+    
+    if (error.message === "User not found") {
+      return res.status(404).send({ error: "User not found" });
+    } else if (error.message === "Institution not found or user does not have access") {
+      return res.status(404).send({ error: "Institution not found or user does not have access" });
+    }
+    
+    res.status(500).send({ error: "Internal server error" });
+  }
+};
+
 const plaidController = {
   createLinkToken,
   getPublicToken,
@@ -360,6 +392,7 @@ const plaidController = {
   checkInstitutionLimit,
   getConnectedInstitutions,
   getUpfrontInstitutionStatus,
+  getInstitutionUpdateToken,
 };
 
 export default plaidController;

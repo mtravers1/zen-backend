@@ -870,6 +870,34 @@ const detectInternalTransfers = async (transactions) => {
   return transfers;
 };
 
+const getInstitutionUpdateToken = async (institutionId, uid) => {
+  try {
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Find account for this institution and user
+    const account = await PlaidAccount.findOne({ 
+      institution_id: institutionId, 
+      owner_id: user._id 
+    });
+    
+    if (!account) {
+      throw new Error("Institution not found or user does not have access");
+    }
+
+    // Decrypt access token
+    const dek = await getUserDek(uid);
+    const decryptedAccessToken = await decryptValue(account.accessToken, dek);
+    
+    return { access_token: decryptedAccessToken };
+  } catch (error) {
+    console.error("Error getting institution update token:", error);
+    throw error;
+  }
+};
+
 const invalidateAccessToken = async (accessToken) => {
   try {
     await plaidClient.itemRemove({
@@ -907,6 +935,7 @@ const plaidService = {
   repairAccessTokenWebhook,
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
+  getInstitutionUpdateToken,
   invalidateAccessToken,
 };
 
