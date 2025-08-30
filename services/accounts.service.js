@@ -3031,6 +3031,13 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
+  // Cache management functions
+  getCachedDek,
+  getDekCacheStats,
+  clearDekCache,
+  getDecryptionCacheStats,
+  clearDecryptionCache,
+  clearAllCaches,
 };
 
 export default accountsService;
