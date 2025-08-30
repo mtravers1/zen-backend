@@ -37,7 +37,7 @@ const countUserTrips = async (userId, month = null, year = null) => {
 
     if (month !== null && year !== null) {
       const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
       query.createdAt = { $gte: startDate, $lte: endDate };
     }
 
