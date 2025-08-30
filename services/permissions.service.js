@@ -55,11 +55,6 @@ const calculateStorageUsage = async (userId) => {
       return 999; // Always exceeds any plan limit in development
     }
 
-    // TESTING: Simulate 101MB (0.101 GB) for specific test user
-    // if (userId === "689f4d35a4fa21f01c6c68ff") {
-    //   return 0.101; // 101MB in GB - exceeds Free plan limit of 0.1 GB
-    // }
-
     // Note: Files schema doesn't have file size field
     // This is a placeholder - would need to implement file size tracking
     const fileCount = await Files.countDocuments({ userId: userId });

@@ -4,30 +4,44 @@
  * Used for subscription upgrade system with dual-platform support
  */
 
-import { PRODUCT_MAPPINGS, PLAN_HIERARCHY, PLAN_TYPES } from '../constants/productMappings.js';
+import {
+  PRODUCT_MAPPINGS,
+  PLAN_HIERARCHY,
+  PLAN_TYPES,
+} from "../constants/productMappings.js";
 
-const getProductMapping = (environment = 'dev', platform = 'ios') => {
+const getProductMapping = (environment = "dev", platform = "ios") => {
   if (!PRODUCT_MAPPINGS[environment]) {
     console.warn(`Unknown environment: ${environment}, defaulting to dev`);
-    environment = 'dev';
+    environment = "dev";
   }
-  
+
   if (!PRODUCT_MAPPINGS[environment][platform]) {
     console.warn(`Unknown platform: ${platform}, defaulting to ios`);
-    platform = 'ios';
+    platform = "ios";
   }
-  
+
   return PRODUCT_MAPPINGS[environment][platform];
 };
 
-const getPlanFromProductId = (productId, environment = 'dev', platform = 'ios') => {
+const getPlanFromProductId = (
+  productId,
+  environment = "dev",
+  platform = "ios"
+) => {
   const mapping = getProductMapping(environment, platform);
   return mapping[productId] || null;
 };
 
-const getProductIdFromPlan = (planName, environment = 'dev', platform = 'ios') => {
+const getProductIdFromPlan = (
+  planName,
+  environment = "dev",
+  platform = "ios"
+) => {
   const mapping = getProductMapping(environment, platform);
-  const productId = Object.keys(mapping).find(key => mapping[key] === planName);
+  const productId = Object.keys(mapping).find(
+    (key) => mapping[key] === planName
+  );
   return productId || null;
 };
 
@@ -57,12 +71,11 @@ const isUpgrade = (currentPlan, targetPlan) => {
   return targetIndex > currentIndex;
 };
 
-const getAvailableUpgrades = (currentPlan) => {
-  const currentIndex = getPlanHierarchyIndex(currentPlan);
-  return PLAN_HIERARCHY.slice(currentIndex + 1);
-};
-
-const validateProductId = (productId, environment = 'dev', platform = 'ios') => {
+const validateProductId = (
+  productId,
+  environment = "dev",
+  platform = "ios"
+) => {
   const mapping = getProductMapping(environment, platform);
   return productId in mapping;
 };
@@ -77,9 +90,7 @@ const productMappingService = {
   isPlanType,
   getPlanHierarchyIndex,
   isUpgrade,
-  getAvailableUpgrades,
   validateProductId,
-  PLAN_HIERARCHY
 };
 
 export default productMappingService;

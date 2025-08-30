@@ -276,41 +276,6 @@ const changeUserPassword = async (email, newPassword) => {
   }
 };
 
-const updateUserRole = async (userId, newRole) => {
-  console.log(
-    `[AUTH SERVICE] Updating user role for ID: ${userId} to role: ${newRole}`
-  );
-  try {
-    const user = await User.findById(userId);
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    // Update user role
-    user.role = newRole;
-    await user.save();
-
-    console.log(
-      `[AUTH SERVICE] User role updated successfully for ID: ${userId}`
-    );
-
-    // Return updated user without sensitive data
-    return {
-      _id: user._id,
-      role: user.role,
-      authUid: user.authUid,
-      account_type: user.account_type,
-    };
-  } catch (error) {
-    console.error(
-      `[AUTH SERVICE] Error updating user role for ID: ${userId}`,
-      error
-    );
-    throw error;
-  }
-};
-
 const deleteUser = async (uid) => {
   try {
     //get user
@@ -391,7 +356,6 @@ const authService = {
   checkEmail,
   own,
   changeUserPassword,
-  updateUserRole,
   checkEmailFirebase,
   deleteUser,
 };

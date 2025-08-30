@@ -1,32 +1,9 @@
 /**
  * Upgrade Response Service
- * 
+ *
  * Standardized responses for upgrade triggers that feed frontend popups
  * Based on features-workflow.md requirements
  */
-
-import { PLAN_HIERARCHY } from '../constants/productMappings.js';
-import permissions from '../config/permissions.js';
-
-const getNextPlan = (currentPlan) => {
-  const currentIndex = PLAN_HIERARCHY.indexOf(currentPlan);
-  if (currentIndex !== -1 && currentIndex < PLAN_HIERARCHY.length - 1) {
-    return PLAN_HIERARCHY[currentIndex + 1];
-  }
-  return null;
-};
-
-const getAvailableUpgrades = (currentPlan) => {
-  const currentIndex = PLAN_HIERARCHY.indexOf(currentPlan);
-  if (currentIndex !== -1) {
-    return PLAN_HIERARCHY.slice(currentIndex + 1);
-  }
-  return [];
-};
-
-const getPlanLimits = (planName) => {
-  return permissions[planName] || {};
-};
 
 // Upgrade Popup 1: Business Owner + Free Plan
 const businessOwnerUpgradeRequired = (user) => {
@@ -37,18 +14,17 @@ const businessOwnerUpgradeRequired = (user) => {
     upgrade_required: true,
     popup_data: {
       title: "Business Features Require Upgrade",
-      message: "To add business profiles and features, you need to upgrade from Free plan",
+      message:
+        "Looks like you've reached the limit of your current plan. To keep things running smoothly and unlock more features, consider upgrading your subscription.",
       current_plan: user.account_type || "Free",
       popup_type: "business_owner",
-      action_blocked: "create_business_profile"
-    }
+      action_blocked: "create_business_profile",
+    },
   };
 };
 
 // Upgrade Popup 2: Institution Limit Exceeded
 const institutionLimitExceeded = (user, currentUsage, planLimit) => {
-  const nextPlan = getNextPlan(user.account_type);
-  
   return {
     success: false,
     error: "LIMIT_EXCEEDED",
@@ -57,19 +33,17 @@ const institutionLimitExceeded = (user, currentUsage, planLimit) => {
     plan_limit: planLimit,
     upgrade_required: true,
     popup_data: {
-      title: "Institution Limit Reached",
-      message: `You've reached your limit of ${planLimit} financial institutions`,
+      title: "You reached your institution limit",
+      message: `Looks like you've reached the limit of your current plan. To keep things running smoothly and unlock more features, consider upgrading your subscription.`,
       current_plan: user.account_type || "Free",
       popup_type: "institution_limit",
-      action_blocked: "add_institution"
-    }
+      action_blocked: "add_institution",
+    },
   };
 };
 
 // Upgrade Popup 3: Storage Limit Exceeded
 const storageLimitExceeded = (user, currentUsage, planLimit) => {
-  const nextPlan = getNextPlan(user.account_type);
-  
   return {
     success: false,
     error: "LIMIT_EXCEEDED",
@@ -78,12 +52,12 @@ const storageLimitExceeded = (user, currentUsage, planLimit) => {
     plan_limit: planLimit,
     upgrade_required: true,
     popup_data: {
-      title: "Storage Limit Reached",
-      message: `You've reached your storage limit of ${planLimit}GB`,
+      title: "You reached your storage limit",
+      message: `Upgrade your Plan to add up to 5GB per profile.`,
       current_plan: user.account_type || "Free",
       popup_type: "storage_limit",
-      action_blocked: "upload_file"
-    }
+      action_blocked: "upload_file",
+    },
   };
 };
 
@@ -91,7 +65,7 @@ const storageLimitExceeded = (user, currentUsage, planLimit) => {
 const tripLimitExceeded = (user, currentUsage, planLimit) => {
   return {
     success: false,
-    error: "LIMIT_EXCEEDED", 
+    error: "LIMIT_EXCEEDED",
     limit_type: "trips",
     current_usage: currentUsage,
     plan_limit: planLimit,
@@ -101,15 +75,13 @@ const tripLimitExceeded = (user, currentUsage, planLimit) => {
       message: `You've reached your limit of ${planLimit} trips this month`,
       current_plan: "Free",
       popup_type: "trip_limit",
-      action_blocked: "create_trip"
-    }
+      action_blocked: "create_trip",
+    },
   };
 };
 
 // Upgrade Popup 5: Business Limit Exceeded
 const businessLimitExceeded = (user, currentUsage, planLimit) => {
-  const nextPlan = getNextPlan(user.account_type);
-  
   return {
     success: false,
     error: "LIMIT_EXCEEDED",
@@ -122,15 +94,19 @@ const businessLimitExceeded = (user, currentUsage, planLimit) => {
       message: `You've reached your limit of ${planLimit} businesses`,
       current_plan: user.account_type || "Free",
       popup_type: "business_limit",
-      action_blocked: "create_business"
-    }
+      action_blocked: "create_business",
+    },
   };
 };
 
 // Generic limit exceeded response
-const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) => {
-  const nextPlan = getNextPlan(user.account_type);
-  
+const limitExceeded = (
+  user,
+  limitType,
+  currentUsage,
+  planLimit,
+  actionBlocked
+) => {
   return {
     success: false,
     error: "LIMIT_EXCEEDED",
@@ -142,8 +118,8 @@ const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) 
       title: "Upgrade Required",
       message: `You've reached your ${limitType} limit`,
       current_plan: user.account_type || "Free",
-      action_blocked: actionBlocked
-    }
+      action_blocked: actionBlocked,
+    },
   };
 };
 
@@ -151,7 +127,7 @@ const limitExceeded = (user, limitType, currentUsage, planLimit, actionBlocked) 
 const actionAllowed = () => {
   return {
     success: true,
-    upgrade_required: false
+    upgrade_required: false,
   };
 };
 
@@ -160,26 +136,7 @@ const genericError = (message) => {
   return {
     success: false,
     error: "GENERIC_ERROR",
-    message: message
-  };
-};
-
-// Get upgrade information for a specific plan
-const getUpgradeInfo = (currentPlan, targetPlan) => {
-  const currentLimits = getPlanLimits(currentPlan);
-  const targetLimits = getPlanLimits(targetPlan);
-  
-  return {
-    current_plan: currentPlan,
-    target_plan: targetPlan,
-    current_limits: currentLimits,
-    target_limits: targetLimits,
-    upgrade_benefits: {
-      institutions: targetLimits.accounts_max === -1 ? "Unlimited" : targetLimits.accounts_max,
-      storage: targetLimits.storage_max_gb === -1 ? "Unlimited" : `${targetLimits.storage_max_gb}GB`,
-      trips: targetLimits.create_trips_max === -1 ? "Unlimited" : targetLimits.create_trips_max,
-      businesses: targetLimits.businesses_max === -1 ? "Unlimited" : targetLimits.businesses_max
-    }
+    message: message,
   };
 };
 
@@ -192,9 +149,6 @@ const upgradeResponseService = {
   limitExceeded,
   actionAllowed,
   genericError,
-  getUpgradeInfo,
-  getAvailableUpgrades,
-  getPlanLimits
 };
 
 export default upgradeResponseService;

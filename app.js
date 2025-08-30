@@ -62,6 +62,7 @@ app.use(
       "/api/payments/webhook/android",
       "/api/payments/webhook/apple",
       "/api/payments/available-plans",
+      "/api/subscriptions/plans",
     ],
     custom: function (req) {
       // Skip auth for all /dev routes in development
