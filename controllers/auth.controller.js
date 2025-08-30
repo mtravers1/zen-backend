@@ -187,7 +187,13 @@ const resetPassword = async (req, res) => {
 };
 
 const verifyCode = async (req, res) => {
-  const { email, code } = req.body;
+  const { code } = req.body;
+  const email = req.user.email; // Extract email from Firebase auth context
+  
+  if (!email) {
+    return res.status(400).send({ message: "User email not found in token", valid: false });
+  }
+  
   try {
     structuredLogger.logOperationStart('auth_verify_code', { email: email });
     const result = await authService.verifyCode(email, code);
