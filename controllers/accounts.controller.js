@@ -1,6 +1,8 @@
 import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
 import businessService from "../services/businesses.service.js";
+import { storage } from '../config/firebase.js';
+import { bucketName } from '../config/firebase.js';
 
 const debugCache = async (req, res) => {
   try {
@@ -602,23 +604,29 @@ const serveAccountPhoto = async (req, res) => {
     const { fileName } = req.params;
     console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
     
+    // Check if file exists in bucket first
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(fileName);
+    
+    const [exists] = await file.exists();
+    console.log('🔍 [serveAccountPhoto] File exists check:', { fileName, exists });
+    
+    if (!exists) {
+      console.error('❌ [serveAccountPhoto] File not found in bucket:', fileName);
+      return res.status(404).send({ message: 'Photo not found in storage' });
+    }
+    
     // Generate signed URL for the photo
     const signedUrl = await accountsService.generateSignedUrl(fileName);
     console.log('🔍 [serveAccountPhoto] Signed URL generated:', signedUrl);
     
     if (!signedUrl) {
-      const error = new Error('Photo not found');
-      error.details = {
-        operation: 'serveAccountPhoto',
-        fileName,
-        user_email: req.user?.email,
-        user_uid: req.user?.uid,
-        error_type: 'file_not_found'
-      };
-      return res.status(404).send({ message: 'Photo not found' });
+      console.error('❌ [serveAccountPhoto] Failed to generate signed URL for:', fileName);
+      return res.status(500).send({ message: 'Failed to generate access URL' });
     }
     
     // Redirect to the signed URL
+    console.log('🔍 [serveAccountPhoto] Redirecting to signed URL for:', fileName);
     res.redirect(signedUrl);
   } catch (error) {
     console.error('❌ [serveAccountPhoto] Error:', error);
