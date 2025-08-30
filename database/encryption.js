@@ -1,31 +1,63 @@
 import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
+import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
-import { resolveKmsResource, kmsClient } from "../config/kms.js";
-import { getBaseConfig } from "../config/env.js";
-import { getStorageSA } from "../config/serviceAccounts.js";
 
 dotenv.config();
 
-// Get configuration using the new system
-const { env: environment, BUCKET } = getBaseConfig();
-const storageServiceAccount = getStorageSA();
+// Validate required environment variables
+const requiredEnvVars = [
+  'STORAGE_SERVICE_ACCOUNT',
+  'KMS_SERVICE_ACCOUNT', 
+  'GCP_PROJECT_ID',
+  'GCP_KEY_LOCATION',
+  'GCP_KEY_RING',
+  'GCP_KEY_NAME'
+];
 
-if (!storageServiceAccount) {
-  throw new Error("[ENCRYPTION] Storage service account not available");
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`[ENCRYPTION] Missing required environment variable: ${envVar}`);
+    throw new Error(`Missing required environment variable: ${envVar}`);
+  }
 }
 
-console.log(`[ENCRYPTION] Environment validation passed. Environment: ${environment}`);
+console.log(`[ENCRYPTION] Environment validation passed. Environment: ${process.env.ENVIRONMENT || 'prod'}`);
 
+const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
+const environment = process.env.ENVIRONMENT || "prod";
+const serviceAccountJsonString = Buffer.from(
+  serviceAccountBase64,
+  "base64" 
+).toString("utf8");
+const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+
+const kmsServiceAccountBase64 = process.env.KMS_SERVICE_ACCOUNT;
+const kmsServiceAccountJsonString = Buffer.from(
+  kmsServiceAccountBase64,
+  "base64"
+).toString("utf8");
+const kmsServiceAccount = JSON.parse(kmsServiceAccountJsonString);
+
+console.log(`[ENCRYPTION] Service accounts parsed successfully`);
 console.log(`[ENCRYPTION] Storage project: ${storageServiceAccount.project_id}`);
+console.log(`[ENCRYPTION] KMS project: ${kmsServiceAccount.project_id}`);
+
+const kmsClient = new KeyManagementServiceClient({
+  credentials: kmsServiceAccount,
+});
 
 const storage = new Storage({
   credentials: storageServiceAccount,
 });
-
-const BUCKET_NAME = BUCKET;
-const KEY_PATH = resolveKmsResource();
+const BUCKET_NAME = "zentavos-bucket";
+const KEY_PATH = kmsClient.cryptoKeyPath(
+  process.env.GCP_PROJECT_ID,
+  process.env.GCP_KEY_LOCATION,
+  process.env.GCP_KEY_RING,
+  process.env.GCP_KEY_NAME
+);
 
 console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
 console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
