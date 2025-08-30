@@ -651,6 +651,8 @@ const verifyCode = async (email, code) => {
       used: false
     });
     
+    console.log(`[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`);
+    
     console.log(`[DEBUG] Found verification code:`, verificationCode ? {
       id: verificationCode._id,
       email: verificationCode.email,
