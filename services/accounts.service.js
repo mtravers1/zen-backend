@@ -3031,6 +3031,8 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
+  // Storage access
+  getBucket: () => storage.bucket(bucketName),
   // Cache management functions
   getCachedDek,
   getDekCacheStats,

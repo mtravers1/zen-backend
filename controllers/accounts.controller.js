@@ -1,8 +1,7 @@
+import express from "express";
 import accountsService from "../services/accounts.service.js";
 import plaidService from "../services/plaid.service.js";
 import businessService from "../services/businesses.service.js";
-import { storage } from '../config/firebase.js';
-import { bucketName } from '../config/firebase.js';
 
 const debugCache = async (req, res) => {
   try {
@@ -605,7 +604,7 @@ const serveAccountPhoto = async (req, res) => {
     console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
     
     // Check if file exists in bucket first
-    const bucket = storage.bucket(bucketName);
+    const bucket = accountsService.getBucket();
     const file = bucket.file(fileName);
     
     const [exists] = await file.exists();
