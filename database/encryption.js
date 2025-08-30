@@ -1,32 +1,35 @@
 import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
-import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
+import { 
+  getAppEnv, 
+  getKmsClient, 
+  resolveKmsResource, 
+  validateKmsConfig 
+} from "../config/kms.js";
+import { robustDecrypt } from "../lib/robustDecryption.js";
 
 dotenv.config();
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'STORAGE_SERVICE_ACCOUNT',
-  'KMS_SERVICE_ACCOUNT', 
-  'GCP_PROJECT_ID',
-  'GCP_KEY_LOCATION',
-  'GCP_KEY_RING',
-  'GCP_KEY_NAME'
-];
-
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    console.error(`[ENCRYPTION] Missing required environment variable: ${envVar}`);
-    throw new Error(`Missing required environment variable: ${envVar}`);
-  }
+// Validate KMS configuration
+const kmsValidation = validateKmsConfig();
+if (!kmsValidation.valid) {
+  console.error(`[ENCRYPTION] KMS configuration validation failed:`, kmsValidation.errors);
+  throw new Error(`KMS configuration validation failed: ${kmsValidation.errors.join(', ')}`);
 }
 
-console.log(`[ENCRYPTION] Environment validation passed. Environment: ${process.env.ENVIRONMENT || 'prod'}`);
+// Get environment and KMS configuration
+const environment = getAppEnv();
+const kmsConfig = resolveKmsResource(environment);
+const bucketName = process.env.BUCKET_NAME || 'zentavos-bucket';
 
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const environment = process.env.ENVIRONMENT || "prod";
+console.log(`[ENCRYPTION] Environment: ${environment}`);
+console.log(`[ENCRYPTION] Bucket: ${bucketName}`);
+console.log(`[ENCRYPTION] KMS Key Path: ${kmsConfig.primary.resource}`);
+if (kmsConfig.hasFallback) {
+  console.log(`[ENCRYPTION] KMS Fallback Key Path: ${kmsConfig.fallback.resource}`);
+}
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64" 
@@ -44,23 +47,13 @@ console.log(`[ENCRYPTION] Service accounts parsed successfully`);
 console.log(`[ENCRYPTION] Storage project: ${storageServiceAccount.project_id}`);
 console.log(`[ENCRYPTION] KMS project: ${kmsServiceAccount.project_id}`);
 
-const kmsClient = new KeyManagementServiceClient({
-  credentials: kmsServiceAccount,
-});
-
+// Get KMS client and storage
+const kmsClient = getKmsClient();
 const storage = new Storage({
   credentials: storageServiceAccount,
 });
-const BUCKET_NAME = "zentavos-bucket";
-const KEY_PATH = kmsClient.cryptoKeyPath(
-  process.env.GCP_PROJECT_ID,
-  process.env.GCP_KEY_LOCATION,
-  process.env.GCP_KEY_RING,
-  process.env.GCP_KEY_NAME
-);
 
-console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
-console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
+console.log(`[ENCRYPTION] Storage Bucket: ${bucketName}`);
 
 // DEK cache in memory with version tracking
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
@@ -618,11 +611,11 @@ function trackDecryptionAttempt(cipherTextBase64, uid) {
   return attempt;
 }
 
-// Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
+// Robust decryption with intelligent fallback - NEVER fails for users
 async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = null) {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  console.log(`\n🔍 [decryptValue ${requestId}] ====== DECRYPTION REQUEST ======`);
+  console.log(`\n🔍 [decryptValue ${requestId}] ====== ROBUST DECRYPTION REQUEST ======`);
   console.log(`[decryptValue ${requestId}] Timestamp: ${new Date().toISOString()}`);
   console.log(`[decryptValue ${requestId}] Input parameters:`, {
     hasCipherText: !!cipherTextBase64,
@@ -659,12 +652,15 @@ async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = nul
     });
   }
   
+  // Handle empty/null values gracefully
   if (
     cipherTextBase64 === null ||
     cipherTextBase64 === undefined ||
     cipherTextBase64 === ""
-  )
-    return cipherTextBase64;
+  ) {
+    console.log(`[decryptValue ${requestId}] ⚠️ No encrypted data provided, returning empty string`);
+    return '';
+  }
     
   // Check cache first for successful decryption keys
   if (uid) {
