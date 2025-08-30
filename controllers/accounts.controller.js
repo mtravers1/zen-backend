@@ -603,25 +603,13 @@ const serveAccountPhoto = async (req, res) => {
     const { fileName } = req.params;
     console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
     
-    // Check if file exists in bucket first
-    const bucket = accountsService.getBucket();
-    const file = bucket.file(fileName);
-    
-    const [exists] = await file.exists();
-    console.log('🔍 [serveAccountPhoto] File exists check:', { fileName, exists });
-    
-    if (!exists) {
-      console.error('❌ [serveAccountPhoto] File not found in bucket:', fileName);
-      return res.status(404).send({ message: 'Photo not found in storage' });
-    }
-    
-    // Generate signed URL for the photo
+    // Generate signed URL for the photo first
     const signedUrl = await accountsService.generateSignedUrl(fileName);
     console.log('🔍 [serveAccountPhoto] Signed URL generated:', signedUrl);
     
     if (!signedUrl) {
       console.error('❌ [serveAccountPhoto] Failed to generate signed URL for:', fileName);
-      return res.status(500).send({ message: 'Failed to generate access URL' });
+      return res.status(404).send({ message: 'Photo not found or access denied' });
     }
     
     // Redirect to the signed URL
