@@ -149,17 +149,24 @@ const checkEmailFirebase = async (req, res) => {
 const sendCode = async (req, res) => {
   const { email } = req.body;
   try {
+    console.error(`[DEBUG] sendCode called for email: ${email}`);
     structuredLogger.logOperationStart('auth_send_code', { email: email });
     
     // Create verification code in database
+    console.error(`[DEBUG] Creating verification code...`);
     const code = await authService.createVerificationCode(email);
+    console.error(`[DEBUG] Verification code created: ${code}`);
     
     // Send code via email (don't return it in response)
+    console.error(`[DEBUG] Sending email...`);
     await emailValidation(code, email);
+    console.error(`[DEBUG] Email sent successfully`);
     
     structuredLogger.logSuccess('auth_send_code', { email: email });
+    console.error(`[DEBUG] sendCode completed successfully for email: ${email}`);
     res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
+    console.error(`[ERROR] Error in sendCode for email ${email}:`, error);
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_send_code',
       email: email,
