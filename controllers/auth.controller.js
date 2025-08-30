@@ -149,17 +149,34 @@ const checkEmailFirebase = async (req, res) => {
 const sendCode = async (req, res) => {
   const { email } = req.body;
   try {
-    structuredLogger.logOperationStart('auth_send_code', { email: email });
+    // Normalize email to lowercase for consistency
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log(`[DEBUG] sendCode called for email: ${email} (normalized: ${normalizedEmail})`);
+    structuredLogger.logOperationStart('auth_send_code', { email: normalizedEmail });
     
     // Create verification code in database
-    const code = await authService.createVerificationCode(email);
+    console.log(`[DEBUG] About to call authService.createVerificationCode...`);
+    console.log(`[DEBUG] authService object:`, Object.keys(authService));
+    
+    if (typeof authService.createVerificationCode !== 'function') {
+      console.log(`[ERROR] createVerificationCode is not a function!`);
+      throw new Error('createVerificationCode function not found');
+    }
+    
+    console.log(`[DEBUG] Creating verification code...`);
+    const code = await authService.createVerificationCode(normalizedEmail);
+    console.log(`[DEBUG] Verification code created: ${code}`);
     
     // Send code via email (don't return it in response)
-    await emailValidation(code, email);
+    console.log(`[DEBUG] Sending email...`);
+    await emailValidation(code, email); // Use original email for display
+    console.log(`[DEBUG] Email sent successfully`);
     
-    structuredLogger.logSuccess('auth_send_code', { email: email });
+    structuredLogger.logSuccess('auth_send_code', { email: normalizedEmail });
+    console.log(`[DEBUG] sendCode completed successfully for email: ${normalizedEmail}`);
     res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
+    console.error(`[ERROR] Error in sendCode for email ${email}:`, error);
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_send_code',
       email: email,
@@ -187,18 +204,36 @@ const resetPassword = async (req, res) => {
 };
 
 const verifyCode = async (req, res) => {
-  const { email, code } = req.body;
+  const { code, email: bodyEmail } = req.body;
+  
+  // Try to get email from Firebase auth context first, fallback to request body
+  let email = req.user?.email;
+  
+  if (!email && bodyEmail) {
+    // If no email in auth context, use the one from request body
+    email = bodyEmail;
+    console.log(`[DEBUG] Using email from request body: ${email}`);
+  }
+  
+  if (!email) {
+    return res.status(400).send({ message: "User email not found in token or request body", valid: false });
+  }
+  
+  // Normalize email to lowercase for consistency with sendCode
+  const normalizedEmail = email.trim().toLowerCase();
+  console.log(`[DEBUG] Normalized email for verification: ${normalizedEmail}`);
+  
   try {
-    structuredLogger.logOperationStart('auth_verify_code', { email: email });
-    const result = await authService.verifyCode(email, code);
+    structuredLogger.logOperationStart('auth_verify_code', { email: normalizedEmail });
+    const result = await authService.verifyCode(normalizedEmail, code);
     
     if (result.valid) {
-      structuredLogger.logSuccess('auth_verify_code', { email: email });
+      structuredLogger.logSuccess('auth_verify_code', { email: normalizedEmail });
       res.status(200).send({ message: result.message, valid: true });
     } else {
       structuredLogger.logErrorBlock(new Error(result.message), {
         operation: 'auth_verify_code',
-        email: email,
+        email: normalizedEmail,
         error_classification: 'invalid_code'
       });
       res.status(400).send({ message: result.message, valid: false });
