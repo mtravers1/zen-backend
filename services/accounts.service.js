@@ -257,16 +257,31 @@ const safeDecryptValue = async (value, dek, uid) => {
 };
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
+console.log('🔍 [Storage] Service account base64 length:', serviceAccountBase64?.length || 0);
+
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64"
 ).toString("utf8");
+console.log('🔍 [Storage] Service account JSON string length:', serviceAccountJsonString?.length || 0);
+
 const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+console.log('🔍 [Storage] Service account parsed successfully:', {
+  type: storageServiceAccount.type,
+  project_id: storageServiceAccount.project_id,
+  client_email: storageServiceAccount.client_email
+});
 
 const storage = new Storage({
   credentials: storageServiceAccount,
 });
+console.log('🔍 [Storage] Storage instance created successfully:', {
+  storageType: typeof storage,
+  hasBucket: typeof storage.bucket === 'function'
+});
+
 const bucketName = "zentavos-bucket";
+console.log('🔍 [Storage] Bucket name:', bucketName);
 
 const addAccount = async (accessToken, email, uid) => {
   console.log(`[addAccount] Starting account creation for email: ${email}, uid: ${uid}`);
@@ -2521,17 +2536,42 @@ async function getDecryptedAccount(account, dek, uid) {
 
 const generateUploadUrl = async (fileName) => {
   try {
-    const [url] = await storage
-      .bucket(bucketName)
-      .file(fileName)
-      .getSignedUrl({
-        action: "write",
-        expires: Date.now() + 15 * 60 * 1000,
-        contentType: "image/jpeg",
-      });
+    console.log('🔍 [generateUploadUrl] Starting with fileName:', fileName);
+    console.log('🔍 [generateUploadUrl] Storage instance:', {
+      type: typeof storage,
+      hasBucket: typeof storage.bucket === 'function',
+      bucketType: typeof storage.bucket
+    });
+    console.log('🔍 [generateUploadUrl] Bucket name:', bucketName);
+    
+    const bucket = storage.bucket(bucketName);
+    console.log('🔍 [generateUploadUrl] Bucket obtained:', {
+      type: typeof bucket,
+      hasFile: typeof bucket.file === 'function'
+    });
+    
+    const file = bucket.file(fileName);
+    console.log('🔍 [generateUploadUrl] File object created:', {
+      type: typeof file,
+      hasGetSignedUrl: typeof file.getSignedUrl === 'function'
+    });
+    
+    const [url] = await file.getSignedUrl({
+      action: "write",
+      expires: Date.now() + 15 * 60 * 1000,
+      contentType: "image/jpeg",
+    });
+    
+    console.log('🔍 [generateUploadUrl] Signed URL generated successfully:', url);
     return url;
   } catch (error) {
-    console.error("Error generating signed URL:", error);
+    console.error("❌ [generateUploadUrl] Error generating signed URL:", {
+      error: error.message,
+      stack: error.stack,
+      fileName,
+      storageType: typeof storage,
+      bucketName
+    });
     return null;
   }
 };
