@@ -193,11 +193,11 @@ class AIService {
     try {
       // Get user DEK for encryption/decryption
       console.log(`[AI Service] 🔐 Getting user DEK for UID: ${uid}`);
-      const keyData = await getUserDek(uid);
+      const dek = await getUserDek(uid);
       
-      if (!keyData || !keyData.dek) {
+      if (!dek) {
         console.error(`[AI Service] ❌ Failed to get user DEK for UID: ${uid}`);
-        console.log(`[AI Service] keyData received:`, keyData);
+        console.log(`[AI Service] dek received:`, dek);
         return {
           text: "Unable to access your encrypted data. Please try again or contact support.",
           data: { error: "DEK retrieval failed" },

@@ -7,9 +7,7 @@ import accountsService from "./accounts.service.js";
 import {
   decryptValue,
   encryptValue,
-  getUserDek,
-  getPreviousDek,
-  logEncryptionOperation
+  getUserDek
 } from "../database/encryption.js";
 import crypto from 'crypto';
 
@@ -144,14 +142,13 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
     throw new Error("User not found");
   }
   let accessToken;
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
   if (accountId) {
     const account = await PlaidAccount.findOne({ _id: accountId });
     if (!account) {
       throw new Error("Account not found");
     }
-    accessToken = await decryptValue(account.accessToken, dek, uid);
+    accessToken = await decryptValue(account.accessToken, dek);
   }
   const userId = user._id.toString();
   let redirectUri;
@@ -239,9 +236,8 @@ const saveAccessToken = async (
       throw new Error(`User not found for uid: ${uid}`);
     }
 
-    const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
-    const encryptedAccessToken = await encryptValue(accessToken, dek, uid);
+    const dek = await getUserDek(uid);
+    const encryptedAccessToken = await encryptValue(accessToken, dek);
 
     const accessTokenDoc = new AccessToken({
       accessToken: encryptedAccessToken,
@@ -279,18 +275,14 @@ const getUserAccessTokens = async (email, uid) => {
     }
     
     const accessTokens = await AccessToken.find({ userId: user._id });
-    const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
-    const fallbackDek = await getPreviousDek(uid);
+    const dek = await getUserDek(uid);
 
     const decryptedTokens = [];
     for (const token of accessTokens) {
       try {
         const decryptedToken = await decryptValue(
           token.accessToken, 
-          dek, 
-          uid, 
-          fallbackDek
+          dek
         );
         decryptedTokens.push({
           ...token.toObject(),
@@ -670,8 +662,7 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
       return null;
     }
 
-    const keyData = await getUserDek(targetUid);
-    const dek = keyData.dek;
+    const dek = await getUserDek(targetUid);
     if (!dek) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
@@ -682,35 +673,13 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
     }
 
     // Try to decrypt with current DEK
-    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek, targetUid);
+    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek);
     
-    // If decryption fails, try with fallback DEK
     if (!accessToken) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
         uid: targetUid,
-        error: 'Failed to decrypt access token with current DEK, trying fallback'
-      });
-      
-      // Get fallback DEK (previous version)
-      const fallbackDek = await getPreviousDek(targetUid);
-      if (fallbackDek) {
-        accessToken = await decryptValue(accessTokenDoc.accessToken, fallbackDek, targetUid);
-        if (accessToken) {
-          logPlaidOperation('getAccessTokenFromItemId', true, {
-            itemId,
-            uid: targetUid,
-            note: 'Successfully decrypted with fallback DEK'
-          });
-        }
-      }
-    }
-
-    if (!accessToken) {
-      logPlaidOperation('getAccessTokenFromItemId', false, {
-        itemId,
-        uid: targetUid,
-        error: 'All decryption attempts failed for access token'
+        error: 'Failed to decrypt access token'
       });
       
       // Handle corrupted access token
@@ -1016,8 +985,7 @@ const updateTransactions = async (item) => {
 
 // Specific function to update Chase transactions
 const updateChaseTransactions = async (item, accessToken, uid, accounts) => {
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
 
   await updateAccountBalances(dek, accessToken, accounts);
 
@@ -1085,8 +1053,7 @@ const updateUniversalTransactions = async (item, accessToken, uid, accounts) => 
   const emails = user?.email;
   const emailObject = emails?.find((email) => email.isPrimary === true);
   const email = emailObject?.email;
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
 
   await updateAccountBalances(dek, accessToken, accounts);
 
@@ -1890,8 +1857,7 @@ const recoverStaleTransactions = async (itemId, uid, daysBack = 90) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
 
-    const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+    const dek = await getUserDek(uid);
     let totalRecovered = 0;
 
     // Recover transactions for each account
@@ -2402,7 +2368,7 @@ const errorMonitoring = {
 // Enhanced decryptValue with error monitoring
 const decryptValueWithMonitoring = async (cipherTextBase64, dek, uid, context = {}) => {
   try {
-    return await decryptValue(cipherTextBase64, dek, uid);
+    return await decryptValue(cipherTextBase64, dek);
   } catch (error) {
     // Track encryption errors for monitoring
     if (context.itemId) {

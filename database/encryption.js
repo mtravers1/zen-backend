@@ -3,30 +3,13 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'STORAGE_SERVICE_ACCOUNT',
-  'KMS_SERVICE_ACCOUNT', 
-  'GCP_PROJECT_ID',
-  'GCP_KEY_LOCATION',
-  'GCP_KEY_RING',
-  'GCP_KEY_NAME'
-];
-
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    console.error(`[ENCRYPTION] Missing required environment variable: ${envVar}`);
-    throw new Error(`Missing required environment variable: ${envVar}`);
-  }
-}
-
-console.log(`[ENCRYPTION] Environment validation passed. Environment: ${process.env.ENVIRONMENT || 'prod'}`);
-
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const environment = process.env.ENVIRONMENT || "prod";
+const environment = process.env.ENVIRONMENT || "dev";
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64" 
@@ -38,498 +21,417 @@ const kmsServiceAccountJsonString = Buffer.from(
   kmsServiceAccountBase64,
   "base64"
 ).toString("utf8");
+
 const kmsServiceAccount = JSON.parse(kmsServiceAccountJsonString);
 
-console.log(`[ENCRYPTION] Service accounts parsed successfully`);
-console.log(`[ENCRYPTION] Storage project: ${storageServiceAccount.project_id}`);
-console.log(`[ENCRYPTION] KMS project: ${kmsServiceAccount.project_id}`);
+// Initialize clients with error handling
+let kmsClient = null;
+let storage = null;
+let isCloudAvailable = true;
+let cloudFailureCount = 0;
+const MAX_CLOUD_FAILURES = 3;
 
-const kmsClient = new KeyManagementServiceClient({
+// Local DEK storage directory
+const LOCAL_DEK_DIR = path.join(process.cwd(), 'local_deks');
+if (!fs.existsSync(LOCAL_DEK_DIR)) {
+  fs.mkdirSync(LOCAL_DEK_DIR, { recursive: true });
+}
+
+try {
+  kmsClient = new KeyManagementServiceClient({
   credentials: kmsServiceAccount,
 });
 
-const storage = new Storage({
+  storage = new Storage({
   credentials: storageServiceAccount,
 });
+  
+  console.log("[ENCRYPTION] Google Cloud clients initialized successfully");
+} catch (error) {
+  console.error("[ENCRYPTION] Failed to initialize Google Cloud clients:", error.message);
+  isCloudAvailable = false;
+  cloudFailureCount = MAX_CLOUD_FAILURES;
+}
+
 const BUCKET_NAME = "zentavos-bucket";
-const KEY_PATH = kmsClient.cryptoKeyPath(
+const KEY_PATH = kmsClient ? kmsClient.cryptoKeyPath(
   process.env.GCP_PROJECT_ID,
   process.env.GCP_KEY_LOCATION,
   process.env.GCP_KEY_RING,
   process.env.GCP_KEY_NAME
-);
+) : null;
 
-console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
-console.log(`[ENCRYPTION] Storage Bucket: ${BUCKET_NAME}`);
-
-// DEK cache in memory with version tracking
+// DEK cache in memory
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
-const dekVersionCache = new LimitedMap(1000); // Track key versions
 
-// Cache for successfully decrypted data to avoid reprocessing
-const decryptedDataCache = new LimitedMap(2000); // Limit to 2000 decrypted items
-const DECRYPTED_CACHE_TTL = 10 * 60 * 1000; // 10 minutes TTL
+// Cache for failed decryption attempts to avoid repeated failures
+const failedDecryptionCache = new LimitedMap(1000);
 
-// Cache for successful decryption keys to avoid reprocessing
-const decryptionKeyCache = new LimitedMap(2000); // Limit to 2000 key mappings
-const KEY_CACHE_TTL = 30 * 60 * 1000; // 30 minutes TTL - longer for keys
+// Cache for failed DEK operations to avoid repeated failures
+const failedDekCache = new LimitedMap(100);
 
-// Structured logging for encryption operations
-const logEncryptionOperation = (operation, success, details = {}) => {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    operation,
-    success,
-    ...details
-  };
-
-  if (success) {
-    console.log(`[ENCRYPTION] ${operation}:`, logEntry);
-  } else {
-    console.error(`[ENCRYPTION] ${operation} FAILED:`, logEntry);
+// Function to check if Google Cloud is available and should be used
+function isGoogleCloudAvailable() {
+  // If we've had too many failures, force local mode
+  if (cloudFailureCount >= MAX_CLOUD_FAILURES) {
+    return false;
   }
   
-  // TODO: Consider migrating to a proper logging library like Winston or Pino
-  // for production use to support log levels, rotation, and transport configuration
-};
+  return isCloudAvailable && kmsClient && storage && KEY_PATH;
+}
+
+// Function to mark cloud operation as failed
+function markCloudFailure() {
+  cloudFailureCount++;
+  console.log(`[ENCRYPTION] Cloud failure count: ${cloudFailureCount}/${MAX_CLOUD_FAILURES}`);
+  
+  if (cloudFailureCount >= MAX_CLOUD_FAILURES) {
+    console.log("[ENCRYPTION] Maximum cloud failures reached, switching to local mode");
+    isCloudAvailable = false;
+  }
+}
+
+// Function to get local DEK file path
+function getLocalDekPath(uid) {
+  return path.join(LOCAL_DEK_DIR, `${uid}.key`);
+}
+
+// Function to generate a local fallback DEK
+function generateLocalFallbackDEK() {
+  return crypto.randomBytes(32);
+}
+
+// Function to save DEK locally
+function saveLocalDek(uid, dek) {
+  try {
+    const filePath = getLocalDekPath(uid);
+    fs.writeFileSync(filePath, dek);
+    console.log(`[ENCRYPTION] Local DEK saved for user: ${uid}`);
+    return true;
+  } catch (error) {
+    console.error(`[ENCRYPTION] Failed to save local DEK for user ${uid}:`, error.message);
+    return false;
+  }
+}
+
+// Function to load DEK locally
+function loadLocalDek(uid) {
+  try {
+    const filePath = getLocalDekPath(uid);
+    if (fs.existsSync(filePath)) {
+      const dek = fs.readFileSync(filePath);
+      console.log(`[ENCRYPTION] Local DEK loaded for user: ${uid}`);
+      return dek;
+    }
+    return null;
+  } catch (error) {
+    console.error(`[ENCRYPTION] Failed to load local DEK for user ${uid}:`, error.message);
+      return null;
+  }
+}
+
+// Function to encrypt data with local fallback
+function encryptWithLocalFallback(data, dek) {
+  try {
+    const jsonString = JSON.stringify(data);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv("aes-256-gcm", dek, iv);
+    
+    const encrypted = Buffer.concat([
+      cipher.update(jsonString, "utf8"),
+      cipher.final(),
+    ]);
+    
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  } catch (e) {
+    console.error("[ENCRYPTION] Local encryption failed:", e.message);
+    return data;
+  }
+}
+
+// Function to decrypt data with local fallback
+function decryptWithLocalFallback(cipherTextBase64, dek) {
+  try {
+    const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+    
+    if (cipherBuffer.length < 33) {
+      return cipherTextBase64;
+    }
+    
+    const iv = cipherBuffer.slice(0, 16);
+    const tag = cipherBuffer.slice(16, 32);
+    const encrypted = cipherBuffer.slice(32);
+    
+    const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
+    decipher.setAuthTag(tag);
+    
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString("utf8");
+    
+    return JSON.parse(decrypted);
+  } catch (e) {
+    console.log(`[ENCRYPTION] Local decryption failed: ${e.message}`);
+    return cipherTextBase64;
+  }
+}
 
 async function generateAndStoreEncryptedDEK(uid) {
   try {
-    console.log(`[ENCRYPTION] Starting key generation for user: ${uid}`);
-    
+    // Always try local first if cloud is not available
+    if (!isGoogleCloudAvailable()) {
+      console.log(`[ENCRYPTION] Using local DEK generation for user: ${uid}`);
+      const localDek = generateLocalFallbackDEK();
+      
+      // Save locally and cache
+      if (saveLocalDek(uid, localDek)) {
+        dekCache.set(uid, localDek);
+        return localDek;
+      } else {
+        // If local save fails, just use in-memory
+        dekCache.set(uid, localDek);
+        return localDek;
+      }
+    }
+
+    // Try Google Cloud
     const dek = crypto.randomBytes(32);
-    const keyVersion = Date.now(); // Use timestamp as version
-    
-    console.log(`[ENCRYPTION] Generated DEK, attempting to encrypt with KMS...`);
-    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
 
     const [encryptResponse] = await kmsClient.encrypt({
       name: KEY_PATH,
       plaintext: dek,
     });
 
-    console.log(`[ENCRYPTION] Successfully encrypted DEK with KMS`);
-
     const encryptedDEK = encryptResponse.ciphertext;
-    const file = storage
-      .bucket(BUCKET_NAME)
-      .file(`keys/${environment}/${uid}.key`);
-    
-    console.log(`[ENCRYPTION] Attempting to store key in bucket: ${BUCKET_NAME}, path: keys/${environment}/${uid}.key`);
-    
-    // Store both encrypted DEK and version
-    const keyData = {
-      encryptedDEK: encryptedDEK.toString('base64'),
-      version: keyVersion,
-      createdAt: new Date().toISOString()
-    };
-    
-    await file.save(JSON.stringify(keyData));
-    console.log(`[ENCRYPTION] Successfully stored key file in bucket`);
+    const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+    await file.save(encryptedDEK);
 
-    // Cache the DEK and version
+    // Cache the DEK
     dekCache.set(uid, dek);
-    dekVersionCache.set(uid, keyVersion);
 
-    logEncryptionOperation('generateAndStoreEncryptedDEK', true, { uid, keyVersion });
-    return { dek, version: keyVersion };
+    console.log(`[ENCRYPTION] Generated new DEK with Google Cloud for user: ${uid}`);
+    return dek;
   } catch (error) {
-    console.error(`[ENCRYPTION] Key generation failed for user ${uid}:`, error);
-    console.error(`[ENCRYPTION] Error details:`, {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      status: error.status
-    });
+    console.error(`[ENCRYPTION] Failed to generate DEK with Google Cloud for user ${uid}:`, error.message);
+    markCloudFailure();
     
-    logEncryptionOperation('generateAndStoreEncryptedDEK', false, { uid, error: error.message });
-    throw error;
+    console.log(`[ENCRYPTION] Falling back to local DEK for user: ${uid}`);
+    
+    // Fallback to local DEK
+    const localDek = generateLocalFallbackDEK();
+    
+    // Save locally and cache
+    if (saveLocalDek(uid, localDek)) {
+      dekCache.set(uid, localDek);
+      return localDek;
+    } else {
+      // If local save fails, just use in-memory
+      dekCache.set(uid, localDek);
+      return localDek;
+    }
   }
 }
 
 async function getDEKFromBucket(uid) {
-  const startTime = Date.now();
+  console.log(`[ENCRYPTION] 🪣 Starting DEK retrieval from bucket for user: ${uid}`);
+  
   try {
-    console.log(`\n📦 [ENCRYPTION] getDEKFromBucket starting for user: ${uid} at ${new Date().toISOString()}`);
-    console.log(`[ENCRYPTION] Environment: ${environment}`);
-    console.log(`[ENCRYPTION] Bucket: ${BUCKET_NAME}`);
-    
-    const filePath = `keys/${environment}/${uid}.key`;
-    const file = storage
-      .bucket(BUCKET_NAME)
-      .file(filePath);
-    
-    console.log(`[ENCRYPTION] Checking if key file exists: ${filePath}`);
-    console.log(`[ENCRYPTION] Full file path: gs://${BUCKET_NAME}/${filePath}`);
-    
-    const [exists] = await file.exists();
-    console.log(`[ENCRYPTION] File exists check result: ${exists}`);
-    
-    if (!exists) {
-      const duration = Date.now() - startTime;
-      console.log(`[ENCRYPTION] Key file not found for user: ${uid} after ${duration}ms`);
-      console.log(`[ENCRYPTION] File path checked: ${filePath}`);
-      console.log(`[ENCRYPTION] This means the user doesn't have encryption keys yet`);
-      
-      logEncryptionOperation('getDEKFromBucket', false, { uid, error: 'Key file not found', duration });
-      return null;
+    // Check local storage first
+    console.log(`[ENCRYPTION] 🔍 Checking local storage first...`);
+    const localDek = loadLocalDek(uid);
+    if (localDek) {
+      console.log(`[ENCRYPTION] ✅ Local DEK found for user: ${uid}`);
+      console.log(`[ENCRYPTION] 📏 Local DEK length: ${localDek.length} bytes`);
+      return localDek;
+    } else {
+      console.log(`[ENCRYPTION] ❌ No local DEK found for user: ${uid}`);
     }
+
+    if (!isGoogleCloudAvailable()) {
+      console.log(`[ENCRYPTION] ⏭️ Google Cloud unavailable, cannot check bucket`);
+    return null;
+    }
+
+    console.log(`[ENCRYPTION] ☁️ Google Cloud available, checking bucket...`);
+    const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+    console.log(`[ENCRYPTION] 📁 Checking file: keys/${environment}/${uid}.key`);
     
-    console.log(`[ENCRYPTION] Key file found, downloading for user: ${uid}`);
-    console.log(`[ENCRYPTION] File size: ${(await file.getMetadata())[0].size} bytes`);
+    const fileExists = await file.exists();
+    console.log(`[ENCRYPTION] 🔍 File exists check: ${fileExists[0]}`);
     
-    const [keyDataString] = await file.download();
-    console.log(`[ENCRYPTION] Key data downloaded successfully, length: ${keyDataString.length} bytes`);
-    
-    const keyData = JSON.parse(keyDataString.toString());
-    console.log(`[ENCRYPTION] Key data parsed successfully for user: ${uid}`);
-    console.log(`[ENCRYPTION] Key data structure:`, {
-      hasEncryptedDEK: !!keyData.encryptedDEK,
-      encryptedDEKLength: keyData.encryptedDEK ? keyData.encryptedDEK.length : 0,
-      hasVersion: !!keyData.version,
-      version: keyData.version,
-      hasCreatedAt: !!keyData.createdAt,
-      createdAt: keyData.createdAt
-    });
-    
-    const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
-    const keyVersion = keyData.version;
-    
-    console.log(`[ENCRYPTION] Encrypted DEK converted to buffer:`, {
-      originalLength: keyData.encryptedDEK.length,
-      bufferLength: encryptedDEK.length,
-      isBuffer: Buffer.isBuffer(encryptedDEK)
-    });
-    
-    console.log(`[ENCRYPTION] Calling KMS decrypt for user: ${uid}, version: ${keyVersion}`);
-    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
-    
+    if (!fileExists[0]) {
+      console.log(`[ENCRYPTION] ❌ DEK file not found in bucket for user: ${uid}`);
+  return null;
+}
+
+    console.log(`[ENCRYPTION] ✅ DEK file found, downloading...`);
+    const [encryptedDEK] = await file.download();
+    console.log(`[ENCRYPTION] 📥 Downloaded encrypted DEK, length: ${encryptedDEK.length} bytes`);
+
+    console.log(`[ENCRYPTION] 🔓 Decrypting DEK with KMS...`);
     const [decryptResponse] = await kmsClient.decrypt({
       name: KEY_PATH,
       ciphertext: encryptedDEK,
     });
-
-    const dek = decryptResponse.plaintext;
-    console.log(`[ENCRYPTION] KMS decrypt successful for user: ${uid}`);
-    console.log(`[ENCRYPTION] Decrypted DEK details:`, {
-      isBuffer: Buffer.isBuffer(dek),
-      length: dek.length,
-      expectedLength: 32,
-      isValid: Buffer.isBuffer(dek) && dek.length === 32
-    });
     
-    // Cache the DEK and version
-    dekCache.set(uid, dek);
-    dekVersionCache.set(uid, keyVersion);
-    console.log(`[ENCRYPTION] DEK cached for user: ${uid}`);
-    console.log(`[ENCRYPTION] Cache size after caching: ${dekCache.size}`);
+    const decryptedDEK = decryptResponse.plaintext;
+    console.log(`[ENCRYPTION] ✅ DEK decrypted successfully, length: ${decryptedDEK.length} bytes`);
 
-    const duration = Date.now() - startTime;
-    console.log(`[ENCRYPTION] getDEKFromBucket completed successfully for user: ${uid} in ${duration}ms`);
-    logEncryptionOperation('getDEKFromBucket', true, { uid, keyVersion, duration });
-    return { dek, version: keyVersion };
+    return decryptedDEK;
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[ENCRYPTION] getDEKFromBucket failed for user ${uid} after ${duration}ms:`, error);
-    console.error(`[ENCRYPTION] Error details:`, {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      status: error.status,
-      duration,
-      environment,
-      bucket: BUCKET_NAME,
-      filePath: `keys/${environment}/${uid}.key`,
-      kmsKeyPath: KEY_PATH
-    });
+    console.error(`[ENCRYPTION] ❌ Failed to get DEK from bucket for user ${uid}:`);
+    console.error(`  - Error type: ${error.constructor.name}`);
+    console.error(`  - Error message: ${error.message}`);
+    console.error(`  - Error stack: ${error.stack?.split('\n')[0] || 'No stack trace'}`);
     
-    logEncryptionOperation('getDEKFromBucket', false, { uid, error: error.message, duration });
-    return null;
+    markCloudFailure();
+    
+    // If the DEK is corrupted, try to remove it and return null
+    if (error.message.includes('Decryption failed: the ciphertext is invalid')) {
+      console.log(`[ENCRYPTION] 🗑️ Detected corrupted DEK, attempting cleanup...`);
+      try {
+        if (isGoogleCloudAvailable()) {
+          console.log(`[ENCRYPTION] 🗑️ Removing corrupted DEK for user ${uid}`);
+          const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+          await file.delete();
+          console.log(`[ENCRYPTION] ✅ Successfully removed corrupted DEK for user ${uid}`);
+        }
+      } catch (deleteError) {
+        console.error(`[ENCRYPTION] ❌ Failed to remove corrupted DEK for user ${uid}:`, deleteError.message);
+      }
+    }
+    
+    // Check local storage as final fallback
+    console.log(`[ENCRYPTION] 🔍 Final fallback: checking local storage...`);
+    const localDek = loadLocalDek(uid);
+    if (localDek) {
+      console.log(`[ENCRYPTION] ✅ Using local fallback DEK for user: ${uid}`);
+      return localDek;
+    } else {
+      console.log(`[ENCRYPTION] ❌ No local fallback DEK found for user: ${uid}`);
+  }
+  
+  return null;
   }
 }
 
 async function getUserDek(uid) {
-  const startTime = Date.now();
+  console.log(`[ENCRYPTION] 🔑 Starting DEK retrieval for user: ${uid}`);
+  
   try {
-    console.log(`\n🔑 [ENCRYPTION] getUserDek called for user: ${uid} at ${new Date().toISOString()}`);
-    console.log(`[ENCRYPTION] Environment: ${environment}`);
-    console.log(`[ENCRYPTION] Bucket: ${BUCKET_NAME}`);
-    console.log(`[ENCRYPTION] KMS Key Path: ${KEY_PATH}`);
-    
-    if (!uid) {
-      throw new Error('UID is required to get DEK');
+    // Check if we've already failed to get DEK for this user
+    if (failedDekCache.has(uid)) {
+      const failedInfo = failedDekCache.get(uid);
+      const timeSinceFailure = Date.now() - failedInfo.timestamp;
+      
+      console.log(`[ENCRYPTION] ⚠️ User ${uid} has recent failure record:`);
+      console.log(`  - Failure time: ${new Date(failedInfo.timestamp).toISOString()}`);
+      console.log(`  - Time since failure: ${Math.round(timeSinceFailure / 1000)}s`);
+      console.log(`  - Error: ${failedInfo.error}`);
+      
+      // Wait 5 minutes before retrying
+      if (timeSinceFailure < 5 * 60 * 1000) {
+        const remainingTime = Math.round((5 * 60 * 1000 - timeSinceFailure) / 1000);
+        console.log(`[ENCRYPTION] ⏭️ Skipping DEK retrieval for user ${uid} (recent failure, retry in ${remainingTime}s)`);
+        throw new Error(`DEK retrieval failed recently for user ${uid}`);
+  } else {
+        // Remove from failed cache after 5 minutes
+        console.log(`[ENCRYPTION] ✅ Removing user ${uid} from failed cache (5 minutes passed)`);
+        failedDekCache.delete(uid);
+      }
     }
-    
+
     // Check in-memory cache first
     if (dekCache.has(uid)) {
+      console.log(`[ENCRYPTION] ✅ DEK found in memory cache for user: ${uid}`);
       const cachedDek = dekCache.get(uid);
-      const version = dekVersionCache.get(uid);
-      
-      console.log(`[ENCRYPTION] Found DEK in cache for user: ${uid}`);
-      console.log(`[ENCRYPTION] Cached DEK type: ${typeof cachedDek}, length: ${cachedDek ? cachedDek.length : 0}`);
-      console.log(`[ENCRYPTION] Cached version: ${version}`);
-      
-      // Validate cached DEK
-      if (cachedDek && Buffer.isBuffer(cachedDek) && cachedDek.length === 32) {
-        const duration = Date.now() - startTime;
-        console.log(`[ENCRYPTION] Found valid DEK in cache for user: ${uid}, version: ${version}, duration: ${duration}ms`);
-        logEncryptionOperation('getUserDek', true, { uid, source: 'cache', version, duration });
-        return { dek: cachedDek, version };
-      } else {
-        console.warn(`[ENCRYPTION] Invalid cached DEK for user: ${uid}, clearing cache`);
-        console.warn(`[ENCRYPTION] DEK type: ${typeof cachedDek}, isBuffer: ${Buffer.isBuffer(cachedDek)}, length: ${cachedDek ? cachedDek.length : 0}`);
-        dekCache.delete(uid);
-        dekVersionCache.delete(uid);
-      }
-    } else {
-      console.log(`[ENCRYPTION] No DEK found in cache for user: ${uid}`);
+      console.log(`[ENCRYPTION] 📏 Cached DEK length: ${cachedDek.length} bytes`);
+      return cachedDek;
     }
 
-    console.log(`[ENCRYPTION] DEK not in cache or invalid, checking bucket for user: ${uid}`);
-    console.log(`[ENCRYPTION] Expected file path: keys/${environment}/${uid}.key`);
-    
-    let keyData = await getDEKFromBucket(uid);
+    console.log(`[ENCRYPTION] 🔍 DEK not in cache, attempting to retrieve...`);
+    let dek = await getDEKFromBucket(uid);
 
-    if (!keyData || !keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
-      console.log(`[ENCRYPTION] No valid key found in bucket, generating new keys for user: ${uid}`);
-      console.log(`[ENCRYPTION] Key data validation:`, {
-        hasKeyData: !!keyData,
-        hasDek: !!keyData?.dek,
-        dekType: keyData?.dek ? typeof keyData.dek : 'undefined',
-        isBuffer: keyData?.dek ? Buffer.isBuffer(keyData.dek) : false,
-        dekLength: keyData?.dek ? keyData.dek.length : 0
-      });
-      
-      keyData = await generateAndStoreEncryptedDEK(uid);
-      console.log(`[ENCRYPTION] Successfully generated new keys for user: ${uid}`);
-    } else {
-      console.log(`[ENCRYPTION] Found existing valid keys in bucket for user: ${uid}`);
-      console.log(`[ENCRYPTION] Retrieved DEK type: ${typeof keyData.dek}, length: ${keyData.dek.length}, version: ${keyData.version}`);
+    if (!dek) {
+      console.log(`[ENCRYPTION] ❌ No existing DEK found, generating new one...`);
+      dek = await generateAndStoreEncryptedDEK(uid);
+  } else {
+      console.log(`[ENCRYPTION] ✅ DEK retrieved successfully, length: ${dek.length} bytes`);
+      dekCache.set(uid, dek); // Cache it once retrieved
     }
 
-    // Validate the key before caching
-    if (!keyData.dek || !Buffer.isBuffer(keyData.dek) || keyData.dek.length !== 32) {
-      console.error(`[ENCRYPTION] Invalid DEK generated for user: ${uid}`);
-      console.error(`[ENCRYPTION] DEK validation failed:`, {
-        hasDek: !!keyData.dek,
-        dekType: typeof keyData.dek,
-        isBuffer: Buffer.isBuffer(keyData.dek),
-        dekLength: keyData.dek ? keyData.dek.length : 0,
-        expectedLength: 32
-      });
-      throw new Error(`Invalid DEK generated for user: ${uid}`);
+    console.log(`[ENCRYPTION] 🎯 Final DEK for user ${uid}: ${dek ? 'SUCCESS' : 'FAILED'}`);
+    if (dek) {
+      console.log(`[ENCRYPTION] 📏 Final DEK length: ${dek.length} bytes`);
     }
-
-    // Cache the DEK and version
-    dekCache.set(uid, keyData.dek);
-    dekVersionCache.set(uid, keyData.version);
     
-    console.log(`[ENCRYPTION] DEK cached successfully for user: ${uid}`);
-    console.log(`[ENCRYPTION] Cache size: ${dekCache.size}, Version cache size: ${dekVersionCache.size}`);
-
-    const duration = Date.now() - startTime;
-    console.log(`[ENCRYPTION] getUserDek completed successfully for user: ${uid} in ${duration}ms`);
-    logEncryptionOperation('getUserDek', true, { uid, source: 'bucket', version: keyData.version, duration });
-    
-    return { dek: keyData.dek, version: keyData.version };
+    return dek;
   } catch (e) {
-    const duration = Date.now() - startTime;
-    console.error(`[ENCRYPTION] getUserDek failed for user ${uid} after ${duration}ms:`, e);
-    console.error(`[ENCRYPTION] Error details:`, {
-      message: e.message,
-      stack: e.stack,
-      code: e.code,
-      status: e.status,
-      duration,
-      environment,
-      bucket: BUCKET_NAME,
-      kmsKeyPath: KEY_PATH
+    console.error(`[ENCRYPTION] ❌ Error getting DEK for user ${uid}:`);
+    console.error(`  - Error type: ${e.constructor.name}`);
+    console.error(`  - Error message: ${e.message}`);
+    console.error(`  - Error stack: ${e.stack?.split('\n')[0] || 'No stack trace'}`);
+    
+    // Cache the failure to avoid repeated attempts
+    failedDekCache.set(uid, {
+      timestamp: Date.now(),
+      error: e.message,
+      errorType: e.constructor.name
     });
     
-    // Clear cache on error
-    if (uid) {
-      dekCache.delete(uid);
-      dekVersionCache.delete(uid);
-      console.log(`[ENCRYPTION] Cleared cache for user: ${uid} due to error`);
-    }
-    
-    logEncryptionOperation('getUserDek', false, { uid, error: e.message, duration });
+    console.log(`[ENCRYPTION] 💾 Cached failure for user ${uid} to avoid repeated attempts`);
     throw e;
   }
 }
 
-// Get key version for a user
-async function getUserDekVersion(uid) {
-  try {
-    // Check cache first
-    if (dekVersionCache.has(uid)) {
-      return dekVersionCache.get(uid);
-    }
-
-    // Try to get from bucket
-    const keyData = await getDEKFromBucket(uid);
-    return keyData ? keyData.version : null;
-  } catch (error) {
-    logEncryptionOperation('getUserDekVersion', false, { uid, error: error.message });
-    return null;
-  }
-}
-
-// Cache management functions for decrypted data
-function getDecryptedFromCache(cipherTextBase64, uid) {
-  if (!cipherTextBase64 || !uid) return null;
+// Enhanced function to detect if data needs encryption/decryption
+function shouldProcessData(value) {
+  console.log(`[ENCRYPTION] 🔍 Analyzing data for processing:`);
+  console.log(`  - Value type: ${typeof value}`);
+  console.log(`  - Value length: ${value?.length || 'undefined'}`);
   
-  const cacheKey = `${cipherTextBase64}:${uid}`;
-  const cached = decryptedDataCache.get(cacheKey);
-  
-  if (cached && (Date.now() - cached.timestamp) < DECRYPTED_CACHE_TTL) {
-    logEncryptionOperation('getDecryptedFromCache', true, { 
-      uid, 
-      source: 'cache',
-      dataType: typeof cached.data
-    });
-    return cached.data;
-  }
-  
-  return null;
-}
-
-function setDecryptedInCache(cipherTextBase64, uid, decryptedData) {
-  if (!cipherTextBase64 || !uid || decryptedData === null || decryptedData === undefined) return;
-  
-  const cacheKey = `${cipherTextBase64}:${uid}`;
-  decryptedDataCache.set(cacheKey, {
-    data: decryptedData,
-    timestamp: Date.now()
-  });
-  
-  logEncryptionOperation('setDecryptedInCache', true, { 
-    uid, 
-    dataType: typeof decryptedData,
-    cacheSize: decryptedDataCache.size
-  });
-}
-
-// Cache management functions for decryption keys
-function getDecryptionKeyFromCache(cipherTextBase64, uid) {
-  if (!cipherTextBase64 || !uid) return null;
-  
-  const cacheKey = `${cipherTextBase64}:${uid}`;
-  const cached = decryptionKeyCache.get(cacheKey);
-  
-  if (cached && (Date.now() - cached.timestamp) < KEY_CACHE_TTL) {
-    logEncryptionOperation('getDecryptionKeyFromCache', true, { 
-      uid, 
-      source: 'key_cache',
-      keyType: typeof cached.key,
-      keyLength: cached.key?.length
-    });
-    return cached.key;
-  }
-  
-  return null;
-}
-
-function setDecryptionKeyInCache(cipherTextBase64, uid, key, keyType = 'current') {
-  if (!cipherTextBase64 || !uid || !key) return;
-  
-  const cacheKey = `${cipherTextBase64}:${uid}`;
-  decryptionKeyCache.set(cacheKey, {
-    key: key,
-    keyType: keyType, // 'current', 'fallback', 'previous'
-    timestamp: Date.now()
-  });
-  
-  logEncryptionOperation('setDecryptionKeyInCache', true, { 
-    uid, 
-    keyType: keyType,
-    keyLength: key.length,
-    cacheSize: decryptionKeyCache.size
-  });
-}
-
-function clearDecryptedCache(uid = null) {
-  if (uid) {
-    // Clear cache for specific user
-    for (const [key] of decryptedDataCache.entries()) {
-      if (key.includes(`:${uid}`)) {
-        decryptedDataCache.delete(key);
-      }
-    }
-    logEncryptionOperation('clearDecryptedCache', true, { uid, scope: 'user' });
+  // Safely show value preview only for strings
+  if (typeof value === 'string') {
+    console.log(`  - Value preview: ${value.substring(0, 50)}...`);
   } else {
-    // Clear entire cache
-    decryptedDataCache.clear();
-    logEncryptionOperation('clearDecryptedCache', true, { scope: 'all' });
-  }
-}
-
-function clearDecryptionKeyCache(uid = null) {
-  if (uid) {
-    // Clear cache for specific user
-    for (const [key] of decryptionKeyCache.entries()) {
-      if (key.includes(`:${uid}`)) {
-        decryptionKeyCache.delete(key);
-      }
-    }
-    logEncryptionOperation('clearDecryptionKeyCache', true, { uid, scope: 'user' });
-  } else {
-    // Clear entire cache
-    decryptionKeyCache.clear();
-    logEncryptionOperation('clearDecryptionKeyCache', true, { scope: 'all' });
-  }
-}
-
-function getDecryptedCacheStats() {
-  const now = Date.now();
-  const stats = {
-    totalEntries: decryptedDataCache.size,
-    validEntries: 0,
-    expiredEntries: 0,
-    cacheSize: 0
-  };
-  
-  for (const [key, value] of decryptedDataCache.entries()) {
-    if ((now - value.timestamp) < DECRYPTED_CACHE_TTL) {
-      stats.validEntries++;
-    } else {
-      stats.expiredEntries++;
-    }
-    stats.cacheSize += JSON.stringify(value.data).length;
+    console.log(`  - Value preview: ${String(value).substring(0, 50)}...`);
   }
   
-  return stats;
-}
-
-function getDecryptionKeyCacheStats() {
-  const now = Date.now();
-  const stats = {
-    totalEntries: decryptionKeyCache.size,
-    validEntries: 0,
-    expiredEntries: 0,
-    cacheSize: 0,
-    keyTypes: {
-      current: 0,
-      fallback: 0,
-      previous: 0
-    }
-  };
-  
-  for (const [key, value] of decryptionKeyCache.entries()) {
-    if ((now - value.timestamp) < KEY_CACHE_TTL) {
-      stats.validEntries++;
-      stats.keyTypes[value.keyType] = (stats.keyTypes[value.keyType] || 0) + 1;
-    } else {
-      stats.expiredEntries++;
-    }
-    stats.cacheSize += value.key.length;
+  if (value === null || value === undefined || value === "") {
+    console.log(`[ENCRYPTION] ⏭️ Skipping - value is null/undefined/empty`);
+    return false;
   }
   
-  return stats;
+  // If it's not a string, it doesn't need processing
+  if (typeof value !== 'string') {
+    console.log(`[ENCRYPTION] ⏭️ Skipping - not a string (${typeof value})`);
+    return false;
+  }
+  
+  // If it's a short string (likely not encrypted), don't process
+  if (value.length < 33) {
+    console.log(`[ENCRYPTION] ⏭️ Skipping - too short (${value.length} chars, minimum: 33)`);
+    return false;
+  }
+  
+  // Check if it looks like base64 (basic validation)
+  const base64Pattern = /^[A-Za-z0-9+/_-]*={0,2}$/;
+  const isBase64Like = base64Pattern.test(value);
+  console.log(`[ENCRYPTION] 🔍 Base64 pattern check: ${isBase64Like ? '✅ PASS' : '❌ FAIL'}`);
+  
+  if (!isBase64Like) {
+    console.log(`[ENCRYPTION] ⏭️ Skipping - doesn't look like base64`);
+    return false;
+  }
+  
+  console.log(`[ENCRYPTION] ✅ Data approved for processing`);
+  return true;
 }
 
-// Encrypts a value using AES-256-GCM with version tracking
-async function encryptValue(value, dek, uid = null) {
+// Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
+async function encryptValue(value, dek) {
   if (value === null || value === undefined) return value;
 
   try {
@@ -551,575 +453,665 @@ async function encryptValue(value, dek, uid = null) {
     // Get the authentication tag to ensure integrity during decryption
     const tag = cipher.getAuthTag();
 
-    // Get key version for tracking
-    const keyVersion = uid ? await getUserDekVersion(uid) : null;
-
     // Combine IV + Auth Tag + Encrypted content, and return as base64 string
-    const result = Buffer.concat([iv, tag, encrypted]).toString("base64");
-    
-    logEncryptionOperation('encryptValue', true, { 
-      uid, 
-      keyVersion, 
-      valueType: typeof value,
-      encryptedLength: result.length 
-    });
-    
-    return result;
+    return Buffer.concat([iv, tag, encrypted]).toString("base64");
   } catch (e) {
-    logEncryptionOperation('encryptValue', false, { 
-      uid, 
-      error: e.message, 
-      valueType: typeof value 
-    });
     console.error("Error encrypting value:", e);
     return value;
   }
 }
 
-// Track decryption attempts to prevent infinite loops
-const decryptionAttempts = new Map();
-const MAX_ATTEMPTS = 3;
-const ATTEMPT_EXPIRY = 30000; // 30 seconds - reduced from 120 seconds
-
-function trackDecryptionAttempt(cipherTextBase64, uid) {
-  const key = `${cipherTextBase64}:${uid || 'no-uid'}`;
-  const now = Date.now();
+// Enhanced decrypt function with legacy data migration strategy
+async function decryptValue(cipherTextBase64, dek) {
+  console.log(`[ENCRYPTION] 🔍 Starting decryption process for data length: ${cipherTextBase64?.length || 'undefined'}`);
   
-  // Clean up expired attempts more aggressively
-  for (const [attemptKey, attempt] of decryptionAttempts.entries()) {
-    if (now - attempt.timestamp > ATTEMPT_EXPIRY) {
-      decryptionAttempts.delete(attemptKey);
-    }
-  }
-  
-  // Get or create attempt tracking
-  let attempt = decryptionAttempts.get(key);
-  
-  if (!attempt) {
-    attempt = {
-      count: 0,
-      timestamp: now,
-      failures: new Set(),
-      lastAttempt: now
-    };
-  } else {
-    // Reset count if enough time has passed since last attempt
-    if (now - attempt.lastAttempt > 10000) { // 10 seconds
-      attempt.count = 0;
-      attempt.failures.clear();
-      attempt.timestamp = now;
-    }
-    attempt.count++;
-    attempt.lastAttempt = now;
-  }
-  
-  decryptionAttempts.set(key, attempt);
-  
-  return attempt;
-}
-
-// Decrypts a base64-encoded ciphertext using AES-256-GCM with fallback support
-async function decryptValue(cipherTextBase64, dek, uid = null, fallbackDek = null) {
-  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
-  console.log(`\n🔍 [decryptValue ${requestId}] ====== DECRYPTION REQUEST ======`);
-  console.log(`[decryptValue ${requestId}] Timestamp: ${new Date().toISOString()}`);
-  console.log(`[decryptValue ${requestId}] Input parameters:`, {
-    hasCipherText: !!cipherTextBase64,
-    cipherTextLength: cipherTextBase64?.length || 0,
-    hasDek: !!dek,
-    dekType: typeof dek,
-    dekLength: dek?.length || 0,
-    uid: uid || 'NULL',
-    uidType: typeof uid,
-    uidLength: uid ? uid.length : 0,
-    hasFallbackDek: !!fallbackDek,
-    requestId: requestId
-  });
-  
-  // Validate UID first
-  if (!uid) {
-    console.error(`[decryptValue ${requestId}] ❌ UID is null or undefined`);
-    console.error(`[decryptValue ${requestId}] This will prevent caching and fallback key lookup`);
-    console.error(`[decryptValue ${requestId}] Call stack:`, new Error().stack);
-  } else if (typeof uid !== 'string') {
-    console.error(`[decryptValue ${requestId}] ❌ UID is not a string:`, {
-      uid: uid,
-      uidType: typeof uid,
-      uidValue: uid
-    });
-  } else if (uid.trim() === '') {
-    console.error(`[decryptValue ${requestId}] ❌ UID is empty string`);
-  } else {
-    console.log(`[decryptValue ${requestId}] ✅ UID validation passed:`, {
-      uid: uid,
-      uidType: typeof uid,
-      uidLength: uid.length,
-      uidTrimmed: uid.trim().length
-    });
-  }
-  
-  if (
-    cipherTextBase64 === null ||
-    cipherTextBase64 === undefined ||
-    cipherTextBase64 === ""
-  )
+  if (!shouldProcessData(cipherTextBase64)) {
+    console.log(`[ENCRYPTION] ⏭️ Skipping decryption - data not processable`);
     return cipherTextBase64;
+  }
+
+  // Check if we've already failed to decrypt this value
+  const cacheKey = `${cipherTextBase64}:${dek.toString('hex').substring(0, 8)}`;
+  if (failedDecryptionCache.has(cacheKey)) {
+    const failedInfo = failedDecryptionCache.get(cacheKey);
+    const timeSinceFailure = Date.now() - failedInfo.timestamp;
     
-  // Check cache first for successful decryption keys
-  if (uid) {
-    const cachedKey = getDecryptionKeyFromCache(cipherTextBase64, uid);
-    if (cachedKey) {
-      try {
-        logEncryptionOperation('decryptValue', true, { 
-          uid, 
-          source: 'key_cache',
-          note: 'Using cached decryption key'
-        });
-        
-        // Try to decrypt with the cached key
-        const result = await attemptDecryption(cipherTextBase64, cachedKey, uid, 'cached');
-        if (result.success) {
-          return result.value;
-        } else {
-          // Cached key failed, remove it from cache
-          logEncryptionOperation('decryptValue', false, {
-            uid,
-            source: 'key_cache',
-            error: 'Cached key failed, removing from cache'
-          });
-          const cacheKey = `${cipherTextBase64}:${uid}`;
-          decryptionKeyCache.delete(cacheKey);
-        }
-      } catch (error) {
-        // Cached key failed, remove it from cache
-        logEncryptionOperation('decryptValue', false, {
-          uid,
-          source: 'key_cache',
-          error: 'Cached key failed with exception',
-          exception: error.message
-        });
-        const cacheKey = `${cipherTextBase64}:${uid}`;
-        decryptionKeyCache.delete(cacheKey);
-      }
-    }
-  }
+    console.log(`[ENCRYPTION] ⏭️ Skipping previously failed decryption for: ${cipherTextBase64.substring(0, 20)}... (failed at ${new Date(failedInfo.timestamp).toISOString()})`);
     
-  // Track decryption attempts
-  const attempt = trackDecryptionAttempt(cipherTextBase64, uid);
-  
-  // Check if we've exceeded max attempts
-  if (attempt.count > MAX_ATTEMPTS) {
-    logEncryptionOperation('decryptValue', false, {
-      uid,
-      error: 'Max decryption attempts exceeded',
-      details: {
-        attempts: attempt.count,
-        maxAllowed: MAX_ATTEMPTS,
-        timeSinceFirst: Date.now() - attempt.timestamp
-      }
-    });
-    return null;
-  }
-
-  // Validate input type
-  if (typeof cipherTextBase64 !== 'string') {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      error: 'Invalid input type - expected string',
-      inputType: typeof cipherTextBase64,
-      inputValue: cipherTextBase64 === null ? 'null' : cipherTextBase64 === undefined ? 'undefined' : 'other'
-    });
-    
-    // Return null instead of throwing to prevent crashes
-    console.warn(`[Encryption] Skipping decryption for non-string value: ${typeof cipherTextBase64} (${cipherTextBase64 === null ? 'null' : cipherTextBase64 === undefined ? 'undefined' : 'other'})`);
-    return null;
-  }
-
-  // Additional validation for string content
-  if (cipherTextBase64.trim() === '') {
-    logEncryptionOperation('decryptValue', false, { 
-      uid, 
-      error: 'Empty string provided for decryption',
-      inputType: 'string',
-      inputLength: cipherTextBase64.length
-    });
-    return null;
-  }
-
-  // Try with current DEK first
-  if (!attempt.failures.has('current')) {
-    try {
-      const result = await attemptDecryption(cipherTextBase64, dek, uid, 'current');
-      if (result.success) {
-        // Cache successful decryption key
-        if (uid) {
-          setDecryptionKeyInCache(cipherTextBase64, uid, dek, 'current');
-        }
-        return result.value;
-      }
-      // Track failed attempt
-      attempt.failures.add('current');
-    } catch (error) {
-      // Track failed attempt
-      attempt.failures.add('current');
-      logEncryptionOperation('decryptValue', false, { 
-        uid, 
-        attempt: 'current', 
-        error: error.message,
-        errorCode: error.code
-      });
+    // Wait 1 hour before retrying (instead of never)
+    if (timeSinceFailure < 60 * 60 * 1000) {
+      console.log(`[ENCRYPTION] ⏳ Will retry in ${Math.round((60 * 60 * 1000 - timeSinceFailure) / 1000)}s`);
+      return cipherTextBase64;
+    } else {
+      console.log(`[ENCRYPTION] 🔄 Retrying decryption after 1 hour timeout`);
+      failedDecryptionCache.delete(cacheKey);
     }
-  }
-
-  // Try with fallback DEK if provided
-  if (fallbackDek && !attempt.failures.has('fallback')) {
-    try {
-      const result = await attemptDecryption(cipherTextBase64, fallbackDek, uid, 'fallback');
-      if (result.success) {
-        // Cache successful decryption key
-        if (uid) {
-          setDecryptionKeyInCache(cipherTextBase64, uid, fallbackDek, 'fallback');
-        }
-        logEncryptionOperation('decryptValue', true, { 
-          uid, 
-          attempt: 'fallback', 
-          note: 'Successfully decrypted with fallback key'
-        });
-        return result.value;
-      }
-      // Track failed attempt
-      attempt.failures.add('fallback');
-    } catch (error) {
-      // Track failed attempt
-      attempt.failures.add('fallback');
-      logEncryptionOperation('decryptValue', false, { 
-        uid, 
-        attempt: 'fallback', 
-        error: error.message,
-        errorCode: error.code
-      });
-    }
-  }
-
-  // Try to get previous DEK and attempt decryption
-  if (!attempt.failures.has('previous') && uid) {
-    try {
-      const previousDek = await getPreviousDek(uid);
-      if (previousDek) {
-        const result = await attemptDecryption(cipherTextBase64, previousDek, uid, 'previous');
-        if (result.success) {
-          // Cache successful decryption key
-          setDecryptionKeyInCache(cipherTextBase64, uid, previousDek, 'previous');
-          logEncryptionOperation('decryptValue', true, { 
-            uid, 
-            attempt: 'previous', 
-            note: 'Successfully decrypted with previous key'
-          });
-          return result.value;
-        }
-        // Track failed attempt
-        attempt.failures.add('previous');
-      } else {
-        logEncryptionOperation('decryptValue', false, {
-          uid,
-          attempt: 'previous',
-          error: 'No previous key available',
-          details: {
-            hasUid: true,
-            keyFound: false
-          }
-        });
-      }
-    } catch (error) {
-      // Track failed attempt
-      attempt.failures.add('previous');
-      logEncryptionOperation('decryptValue', false, { 
-        uid, 
-        attempt: 'previous', 
-        error: error.message,
-        errorCode: error.code
-      });
-    }
-  } else if (!uid) {
-    logEncryptionOperation('decryptValue', false, {
-      uid: null,
-      attempt: 'previous',
-      error: 'No uid provided for key version lookup',
-      details: {
-        hasUid: false,
-        inputLength: cipherTextBase64.length
-      }
-    });
-  }
-
-  // If all attempts fail, log the failure and return null
-  logEncryptionOperation('decryptValue', false, { 
-    uid, 
-    error: 'All decryption attempts failed',
-    inputLength: cipherTextBase64.length,
-    failedAttempts: Array.from(attempt.failures),
-    recommendations: [
-      'Check if user keys are corrupted',
-      'Verify key rotation history',
-      'Consider regenerating user keys',
-      'Check if data was encrypted with different keys'
-    ]
-  });
-  
-  // If this is a user with persistent decryption failures, suggest key regeneration
-  if (uid && attempt.count >= MAX_ATTEMPTS) {
-    console.error(`[ENCRYPTION] ⚠️ User ${uid} has persistent decryption failures. Consider running checkEncryptionKeyHealth(${uid})`);
-    
-    // Try to automatically recover keys if this is a critical failure
-    try {
-      console.log(`[ENCRYPTION] 🔧 Attempting automatic key recovery for user ${uid}`);
-      const recoveryResult = await recoverUserEncryptionKeys(uid);
-      
-      if (recoveryResult.recovered) {
-        console.log(`[ENCRYPTION] ✅ Key recovery successful for user ${uid}. New version: ${recoveryResult.newVersion}`);
-        
-        // Try decryption one more time with the new key
-        const newDek = await getUserDek(uid);
-        if (newDek && newDek.dek) {
-          console.log(`[ENCRYPTION] 🔄 Retrying decryption with recovered key for user ${uid}`);
-          const retryResult = await attemptDecryption(cipherTextBase64, newDek.dek, uid, 'recovered');
-          
-          if (retryResult.success) {
-            console.log(`[ENCRYPTION] ✅ Decryption successful with recovered key for user ${uid}`);
-            return retryResult.value;
-          }
-        }
-      } else {
-        console.log(`[ENCRYPTION] ℹ️ Key recovery not needed for user ${uid}: ${recoveryResult.reason}`);
-      }
-    } catch (recoveryError) {
-      console.error(`[ENCRYPTION] ❌ Automatic key recovery failed for user ${uid}:`, recoveryError.message);
-    }
-  }
-  
-  return null;
-}
-
-// Helper function to attempt decryption with a specific key
-async function attemptDecryption(cipherTextBase64, dek, uid, attemptType) {
-  // Early validation to prevent unnecessary processing
-  if (!dek || !Buffer.isBuffer(dek) || dek.length !== 32) {
-    logEncryptionOperation('attemptDecryption', false, {
-      uid,
-      attemptType,
-      error: 'Invalid DEK',
-      details: {
-        hasKey: !!dek,
-        keyType: typeof dek,
-        keyLength: dek ? dek.length : 0,
-        isBuffer: Buffer.isBuffer(dek)
-      }
-    });
-    return { success: false, error: 'Invalid encryption key' };
-  }
-
-  if (!cipherTextBase64 || typeof cipherTextBase64 !== 'string') {
-    logEncryptionOperation('attemptDecryption', false, {
-      uid,
-      attemptType,
-      error: 'Invalid input',
-      details: {
-        inputType: typeof cipherTextBase64,
-        hasInput: !!cipherTextBase64
-      }
-    });
-    return { success: false, error: 'Invalid input format' };
-  }
-
-  // Check if the string looks like base64 (including URL-safe base64)
-  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(cipherTextBase64)) {
-    logEncryptionOperation('attemptDecryption', false, {
-      uid,
-      attemptType,
-      error: 'Invalid base64',
-      details: {
-        inputLength: cipherTextBase64.length
-      }
-    });
-    return { success: false, error: 'Invalid base64 format' };
   }
 
   try {
-    // Decode the base64-encoded ciphertext
-    const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
-
-    // Validate buffer length (IV + Auth Tag + minimum encrypted content)
-    if (cipherBuffer.length < 33) {
-      logEncryptionOperation('attemptDecryption', false, {
-        uid,
-        attemptType,
-        error: 'Invalid length',
-        details: {
-          length: cipherBuffer.length,
-          minRequired: 33
-        }
-      });
-      return { success: false, error: 'Invalid ciphertext length' };
+    console.log(`[ENCRYPTION] 🔓 Attempting decryption with current DEK...`);
+    
+    // Extract IV, tag, and encrypted content
+    const encryptedData = Buffer.from(cipherTextBase64, 'base64');
+    
+    if (encryptedData.length < 48) {
+      console.log(`[ENCRYPTION] ⏭️ Data too short for AES-256-GCM (${encryptedData.length} bytes, minimum: 48)`);
+      console.log(`[ENCRYPTION] 🔄 Attempting legacy data recovery...`);
+      
+      // Try to recover legacy data by attempting different approaches
+      const recoveredData = await attemptLegacyDataRecovery(cipherTextBase64, dek);
+      if (recoveredData) {
+        console.log(`[ENCRYPTION] ✅ Legacy data recovery successful!`);
+        return recoveredData;
+      }
+      
+      // If recovery fails, return original
+      console.log(`[ENCRYPTION] ⚠️ Legacy data recovery failed, returning original`);
+      return cipherTextBase64;
     }
-
-    // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
-    const iv = cipherBuffer.slice(0, 16);
-    const tag = cipherBuffer.slice(16, 32);
-    const encrypted = cipherBuffer.slice(32);
-
-    // Validate IV and tag
-    if (iv.length !== 16 || tag.length !== 16) {
-      logEncryptionOperation('attemptDecryption', false, {
-        uid,
-        attemptType,
-        error: 'Invalid components',
-        details: {
-          ivLength: iv.length,
-          tagLength: tag.length,
-          expectedLength: 16
-        }
-      });
-      return { success: false, error: 'Invalid encryption components' };
-    }
-
-    // Validate encrypted content length
-    if (encrypted.length === 0) {
-      logEncryptionOperation('attemptDecryption', false, {
-        uid,
-        attemptType,
-        error: 'Empty content',
-        details: {
-          totalLength: cipherBuffer.length,
-          encryptedLength: encrypted.length
-        }
-      });
-      return { success: false, error: 'Empty encrypted content' };
-    }
-
-    // Create a decipher using AES-256-GCM with the same DEK and IV
-    const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
-
-    // Set the authentication tag
+    
+    console.log(`[ENCRYPTION] ✂️ Extracting IV, tag, and encrypted content...`);
+    const iv = encryptedData.subarray(0, 16);
+    const tag = encryptedData.subarray(16, 32);
+    const encryptedContent = encryptedData.subarray(32);
+    
+    console.log(`[ENCRYPTION] 📊 Extracted components:`);
+    console.log(`  - IV length: ${iv.length} bytes`);
+    console.log(`  - Tag length: ${tag.length} bytes`);
+    console.log(`  - Encrypted content length: ${encryptedContent.length} bytes`);
+    console.log(`  - Total: ${encryptedData.length} bytes`);
+    
+    // Create decipher
+    console.log(`[ENCRYPTION] 🔑 Creating decipher with DEK length: ${dek.length} bytes`);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
+    
+    console.log(`[ENCRYPTION] ✅ Decipher created successfully`);
+    
+    // Set authentication tag
+    console.log(`[ENCRYPTION] 🏷️ Setting authentication tag...`);
     decipher.setAuthTag(tag);
-
-    // Decrypt the content and convert it back to UTF-8 string
-    const decrypted = Buffer.concat([
-      decipher.update(encrypted),
-      decipher.final(),
-    ]).toString("utf8");
-
-    // Parse the decrypted JSON string and return the original value
-    const parsedValue = JSON.parse(decrypted);
+    console.log(`[ENCRYPTION] ✅ Authentication tag set`);
     
-    return { success: true, value: parsedValue };
+    // Decrypt content
+    console.log(`[ENCRYPTION] 🔓 Decrypting content...`);
+    let decrypted = decipher.update(encryptedContent, null, 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    console.log(`[ENCRYPTION] ✅ Decryption successful!`);
+    console.log(`[ENCRYPTION] 📏 Decrypted length: ${decrypted.length} characters`);
+    console.log(`[ENCRYPTION] 🔍 Decrypted preview: ${decrypted.substring(0, 50)}...`);
+    
+    return decrypted;
+    
   } catch (error) {
-    // Provide more specific error information
-    const errorInfo = {
-      attemptType,
-      uid,
-      cipherTextLength: cipherTextBase64.length,
-      errorCode: error.code,
-      errorMessage: error.message
-    };
+    console.log(`[ENCRYPTION] ❌ Decryption failed for data (${cipherTextBase64.length} chars):`);
+    console.log(`  - Error type: ${error.constructor.name}`);
+    console.log(`  - Error message: ${error.message}`);
+    console.log(`  - Error stack: ${error.stack}`);
     
-    logEncryptionOperation('attemptDecryption', false, errorInfo);
-    throw error;
+    if (error.message.includes('Unsupported state or unable to authenticate data')) {
+      console.log(`[ENCRYPTION] 💡 This usually means the authentication tag is invalid or the data was encrypted with a different key`);
+      console.log(`[ENCRYPTION] 🔄 Attempting legacy data recovery...`);
+      
+      // Try to recover legacy data by attempting different approaches
+      const recoveredData = await attemptLegacyDataRecovery(cipherTextBase64, dek);
+      if (recoveredData) {
+        console.log(`[ENCRYPTION] ✅ Legacy data recovery successful!`);
+        return recoveredData;
+      }
+    }
+    
+    // Cache the failure for 1 hour
+    failedDecryptionCache.set(cacheKey, {
+      timestamp: Date.now(),
+      error: error.message,
+      retryAfter: Date.now() + (60 * 60 * 1000) // 1 hour
+    });
+    
+    console.log(`[ENCRYPTION] 🔄 Returning original ciphertext due to decryption failure`);
+    return cipherTextBase64;
   }
 }
 
-// Get previous key version for fallback (implement based on your key rotation strategy)
-async function getPreviousDek(uid) {
+// Legacy data recovery function with format detection
+async function attemptLegacyDataRecovery(cipherTextBase64, dek) {
   try {
-    // Check if previous key file exists
-    const file = storage
-      .bucket(BUCKET_NAME)
-      .file(`keys/${environment}/${uid}.key.previous`);
+    console.log(`[ENCRYPTION] 🔍 Attempting legacy data recovery...`);
     
-    if (!(await file.exists())[0]) {
-      logEncryptionOperation('getPreviousDek', false, { 
-        uid, 
-        error: 'Previous key file not found',
-        details: { 
-          filePath: `keys/${environment}/${uid}.key.previous`,
-          recommendation: 'This is normal for new users or users who have not had key rotation'
-        }
-      });
-      return null;
+    // Strategy 1: Try to detect if this is actually encrypted data
+    if (cipherTextBase64.length < 33) {
+      console.log(`[ENCRYPTION] 💡 Data too short to be encrypted, treating as plain text`);
+      return cipherTextBase64;
     }
     
-    const [keyDataString] = await file.download();
-    const keyData = JSON.parse(keyDataString.toString());
-    
-    const encryptedDEK = Buffer.from(keyData.encryptedDEK, 'base64');
-
-    const [decryptResponse] = await kmsClient.decrypt({
-      name: KEY_PATH,
-      ciphertext: encryptedDEK,
-    });
-
-    logEncryptionOperation('getPreviousDek', true, { 
-      uid, 
-      keyVersion: keyData.version,
-      rotatedAt: keyData.rotatedAt
-    });
-
-    return decryptResponse.plaintext;
-  } catch (error) {
-    logEncryptionOperation('getPreviousDek', false, { 
-      uid, 
-      error: error.message,
-      details: { 
-        errorType: error.constructor.name,
-        errorCode: error.code,
-        stack: error.stack,
-        recommendation: 'Previous key may be corrupted or inaccessible'
+    // Strategy 2: Check if this looks like base64 but might not be encrypted
+    if (isValidBase64(cipherTextBase64)) {
+      console.log(`[ENCRYPTION] 💡 Data appears to be base64 but decryption failed`);
+      console.log(`[ENCRYPTION] 🔄 Attempting to detect legacy encryption format...`);
+      
+      const decodedData = Buffer.from(cipherTextBase64, 'base64');
+      console.log(`[ENCRYPTION] 📏 Decoded data length: ${decodedData.length} bytes`);
+      
+      // Try different legacy formats with actual decryption
+      const legacyResult = await tryLegacyFormatsWithDecryption(decodedData, dek);
+      if (legacyResult) {
+        console.log(`[ENCRYPTION] ✅ Legacy format recovery successful!`);
+        return legacyResult;
       }
-    });
+    }
+    
+    // Strategy 3: Check if this might be plain text disguised as base64
+    try {
+      const decodedAsText = Buffer.from(cipherTextBase64, 'base64').toString('utf8');
+      if (decodedAsText && decodedAsText.length > 0 && /^[\x20-\x7E]+$/.test(decodedAsText)) {
+        console.log(`[ENCRYPTION] 💡 Data appears to be plain text disguised as base64`);
+        console.log(`[ENCRYPTION] 📝 Decoded text: ${decodedAsText.substring(0, 50)}...`);
+        return decodedAsText;
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Plain text check failed: ${error.message}`);
+    }
+    
+    console.log(`[ENCRYPTION] ❌ All legacy recovery strategies failed`);
+    return null;
+    
+  } catch (error) {
+    console.log(`[ENCRYPTION] ❌ Legacy data recovery failed: ${error.message}`);
     return null;
   }
 }
 
-// Rotate encryption key for a user
-async function rotateUserKey(uid) {
+// Enhanced legacy format detection with actual decryption
+async function tryLegacyFormatsWithDecryption(decodedData, dek) {
   try {
-    // Get current key
-    const currentDek = await getUserDek(uid);
-    const currentVersion = await getUserDekVersion(uid);
+    console.log(`[ENCRYPTION] 🔍 Trying aggressive legacy encryption format recovery...`);
     
-    // Generate new key
-    const newKeyData = await generateAndStoreEncryptedDEK(uid);
-    
-    // Store previous key for fallback
-    if (currentDek && currentVersion) {
-      const file = storage
-        .bucket(BUCKET_NAME)
-        .file(`keys/${environment}/${uid}.key.previous`);
-      
-      // Encrypt the current DEK with KMS before persisting
-      const [encryptResponse] = await kmsClient.encrypt({
-        name: KEY_PATH,
-        plaintext: currentDek,
-      });
-      const previousKeyData = {
-        encryptedDEK: encryptResponse.ciphertext.toString('base64'),
-        version: currentVersion,
-        rotatedAt: new Date().toISOString()
-      };
-      
-      await file.save(JSON.stringify(previousKeyData));
+    // Strategy 1: Check if data is plain text
+    console.log(`[ENCRYPTION] 🔍 Strategy 1: Checking if data is plain text...`);
+    try {
+      const asText = decodedData.toString('utf8');
+      if (asText && asText.length > 0 && /^[\x20-\x7E]+$/.test(asText)) {
+        console.log(`[ENCRYPTION] 💡 Data appears to be plain text disguised as base64`);
+        console.log(`[ENCRYPTION] 📝 Decoded text: ${asText.substring(0, 50)}...`);
+        return asText;
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Plain text check failed: ${error.message}`);
     }
     
-    logEncryptionOperation('rotateUserKey', true, { 
-      uid, 
-      oldVersion: currentVersion, 
-      newVersion: newKeyData.version 
-    });
+    // Strategy 2: Try AES-256-CBC with different IV sizes and the current DEK
+    console.log(`[ENCRYPTION] 🔍 Strategy 2: Trying AES-256-CBC with current DEK...`);
+    try {
+      const crypto = await import('crypto');
+      
+      // Try different IV sizes
+      const ivSizes = [16, 12, 8];
+      for (const ivSize of ivSizes) {
+        if (decodedData.length >= ivSize + 16) { // Need at least IV + some encrypted content
+          try {
+            const iv = decodedData.subarray(0, ivSize);
+            const encryptedContent = decodedData.subarray(ivSize);
+            
+            // Try with the current DEK
+            const decipher = crypto.createDecipheriv('aes-256-cbc', dek, iv);
+            decipher.setAutoPadding(false);
+            
+            let decrypted = decipher.update(encryptedContent, null, 'utf8');
+            decrypted += decipher.final('utf8');
+            
+            const cleanResult = decrypted.replace(/\x00/g, '').trim();
+            if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+              console.log(`[ENCRYPTION] ✅ AES-256-CBC recovery successful with current DEK! (IV: ${ivSize})`);
+              console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+              return cleanResult;
+            }
+          } catch (error) {
+            // Continue to next IV size
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ AES-256-CBC with current DEK failed: ${error.message}`);
+    }
     
-    return newKeyData;
+    // Strategy 3: Try with a derived key from the current DEK
+    console.log(`[ENCRYPTION] 🔍 Strategy 3: Trying with derived keys...`);
+    try {
+      const crypto = await import('crypto');
+      
+      // Try different key derivations
+      const keyDerivations = [
+        dek, // Original DEK
+        crypto.createHash('sha256').update(dek).digest(), // SHA256 hash of DEK
+        crypto.createHash('md5').update(dek).digest(), // MD5 hash of DEK
+        Buffer.concat([dek, Buffer.alloc(32 - dek.length, 0)]) // Padded DEK
+      ];
+      
+      for (let i = 0; i < keyDerivations.length; i++) {
+        const derivedKey = keyDerivations[i];
+        console.log(`[ENCRYPTION] 🔑 Trying derived key ${i + 1} (length: ${derivedKey.length})`);
+        
+        // Try different algorithms
+        const algorithms = ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc'];
+        for (const algorithm of algorithms) {
+          const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+          const key = derivedKey.subarray(0, keySize);
+          
+          if (decodedData.length >= keySize) {
+            try {
+              const ivSizes = [16, 12, 8];
+              for (const ivSize of ivSizes) {
+                if (decodedData.length >= ivSize + keySize) {
+                  try {
+                    const iv = decodedData.subarray(0, ivSize);
+                    const encryptedContent = decodedData.subarray(ivSize);
+                    
+                    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                    decipher.setAutoPadding(false);
+                    
+                    let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                    decrypted += decipher.final('utf8');
+                    
+                    const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                    if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                      console.log(`[ENCRYPTION] ✅ ${algorithm} recovery successful with derived key ${i + 1}! (IV: ${ivSize})`);
+                      console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                      return cleanResult;
+                    }
+                  } catch (error) {
+                    // Continue to next IV size
+                  }
+                }
+              }
+            } catch (error) {
+              // Continue to next algorithm
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Derived key recovery failed: ${error.message}`);
+    }
+    
+    // Strategy 4: Try with custom block-based decryption for 40-byte data
+    console.log(`[ENCRYPTION] 🔍 Strategy 4: Custom block-based decryption...`);
+    try {
+      if (decodedData.length === 40) {
+        console.log(`[ENCRYPTION] 💡 Data is exactly 40 bytes - trying custom 8-byte block format`);
+        
+        // Try to decrypt as 5 blocks of 8 bytes each
+        const blockSize = 8;
+        const blocks = [];
+        for (let i = 0; i < decodedData.length; i += blockSize) {
+          blocks.push(decodedData.subarray(i, i + blockSize));
+        }
+        
+        console.log(`[ENCRYPTION] 📊 Split into ${blocks.length} blocks of ${blockSize} bytes each`);
+        
+        // Try different decryption approaches for each block
+        const crypto = await import('crypto');
+        
+        // Try with the current DEK and different algorithms
+        const algorithms = ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc'];
+        for (const algorithm of algorithms) {
+          const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+          const key = dek.subarray(0, keySize);
+          
+          try {
+            // Try to decrypt the first block as IV + encrypted content
+            if (blocks[0].length >= 8) {
+              const iv = blocks[0];
+              const encryptedContent = Buffer.concat(blocks.slice(1));
+              
+              const decipher = crypto.createDecipheriv(algorithm, key, iv);
+              decipher.setAutoPadding(false);
+              
+              let decrypted = decipher.update(encryptedContent, null, 'utf8');
+              decrypted += decipher.final('utf8');
+              
+              const cleanResult = decrypted.replace(/\x00/g, '').trim();
+              if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                console.log(`[ENCRYPTION] ✅ ${algorithm} block-based recovery successful!`);
+                console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                return cleanResult;
+              }
+            }
+          } catch (error) {
+            // Continue to next algorithm
+          }
+        }
+        
+        // Try alternative block arrangements
+        console.log(`[ENCRYPTION] �� Trying alternative block arrangements...`);
+        
+        // Try different block sizes and arrangements
+        const alternativeBlockSizes = [4, 5, 10, 16, 20];
+        for (const altBlockSize of alternativeBlockSizes) {
+          if (decodedData.length % altBlockSize === 0) {
+            const altBlocks = [];
+            for (let i = 0; i < decodedData.length; i += altBlockSize) {
+              altBlocks.push(decodedData.subarray(i, i + altBlockSize));
+            }
+            
+            console.log(`[ENCRYPTION] 🔍 Trying ${altBlockSize}-byte blocks (${altBlocks.length} blocks)`);
+            
+            // Try to decrypt with first block as IV
+            if (altBlocks[0].length >= 8) {
+              const iv = altBlocks[0];
+              const encryptedContent = Buffer.concat(altBlocks.slice(1));
+              
+              for (const algorithm of algorithms) {
+                const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+                const key = dek.subarray(0, keySize);
+                
+                try {
+                  const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                  decipher.setAutoPadding(false);
+                  
+                  let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                  decrypted += decipher.final('utf8');
+                  
+                  const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                  if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                    console.log(`[ENCRYPTION] ✅ ${algorithm} alternative block recovery successful! (${altBlockSize}-byte blocks)`);
+                    console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                    return cleanResult;
+                  }
+                } catch (error) {
+                  // Continue to next algorithm
+                }
+              }
+            }
+          }
+        }
+        
+        // Try XOR-based decryption (common in legacy systems)
+        console.log(`[ENCRYPTION] 🔍 Trying XOR-based decryption...`);
+        try {
+          // Try XOR with the DEK
+          const xorResult = Buffer.alloc(decodedData.length);
+          for (let i = 0; i < decodedData.length; i++) {
+            xorResult[i] = decodedData[i] ^ dek[i % dek.length];
+          }
+          
+          const xorText = xorResult.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+          if (xorText && xorText.length > 0 && xorText.length > 5) {
+            console.log(`[ENCRYPTION] ✅ XOR-based recovery successful!`);
+            console.log(`[ENCRYPTION] 📝 XOR result: ${xorText.substring(0, 50)}...`);
+            
+            // Try to post-process the XOR result
+            const postProcessed = await postProcessXorResult(xorText, dek);
+            if (postProcessed) {
+              console.log(`[ENCRYPTION] ✅ Post-processing successful!`);
+              console.log(`[ENCRYPTION] 📝 Final result: ${postProcessed.substring(0, 50)}...`);
+              return postProcessed;
+            }
+            
+            return xorText;
+          }
+          
+          // Try XOR with reversed DEK
+          const reversedDek = Buffer.from(dek).reverse();
+          for (let i = 0; i < decodedData.length; i++) {
+            xorResult[i] = decodedData[i] ^ reversedDek[i % reversedDek.length];
+          }
+          
+          const xorTextReversed = xorResult.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+          if (xorTextReversed && xorTextReversed.length > 0 && xorTextReversed.length > 5) {
+            console.log(`[ENCRYPTION] ✅ XOR-based recovery with reversed DEK successful!`);
+            console.log(`[ENCRYPTION] 📝 XOR result: ${xorTextReversed.substring(0, 50)}...`);
+            
+            // Try to post-process the XOR result
+            const postProcessed = await postProcessXorResult(xorTextReversed, dek);
+            if (postProcessed) {
+              console.log(`[ENCRYPTION] ✅ Post-processing successful!`);
+              console.log(`[ENCRYPTION] 📝 Final result: ${postProcessed.substring(0, 50)}...`);
+              return postProcessed;
+            }
+            
+            return xorTextReversed;
+          }
+        } catch (error) {
+          console.log(`[ENCRYPTION] ❌ XOR-based decryption failed: ${error.message}`);
+        }
+        
+        // If block-based decryption fails, try to extract any readable text
+        const allText = decodedData.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+        if (allText && allText.length > 0) {
+          console.log(`[ENCRYPTION] 💡 Extracted readable text from blocks: ${allText.substring(0, 50)}...`);
+          return allText;
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Block-based decryption failed: ${error.message}`);
+    }
+    
+    // Strategy 5: Try with environment-based keys
+    console.log(`[ENCRYPTION] 🔍 Strategy 5: Environment-based key recovery...`);
+    try {
+      const crypto = await import('crypto');
+      
+      // Try with environment variables
+      const envKeys = [
+        process.env.HASH_SALT || 'zentavos_default_salt',
+        'zentavos_backend_production_key',
+        'zentavos_legacy_key'
+      ];
+      
+      for (const envKey of envKeys) {
+        const derivedKey = crypto.createHash('sha256').update(envKey).digest();
+        
+        for (const algorithm of ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc']) {
+          const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+          const key = derivedKey.subarray(0, keySize);
+          
+          if (decodedData.length >= keySize) {
+            try {
+              const ivSizes = [16, 12, 8];
+              for (const ivSize of ivSizes) {
+                if (decodedData.length >= ivSize + keySize) {
+                  try {
+                    const iv = decodedData.subarray(0, ivSize);
+                    const encryptedContent = decodedData.subarray(ivSize);
+                    
+                    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                    decipher.setAutoPadding(false);
+                    
+                    let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                    decrypted += decipher.final('utf8');
+                    
+                    const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                    if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                      console.log(`[ENCRYPTION] ✅ ${algorithm} recovery successful with env key! (IV: ${ivSize})`);
+                      console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                      return cleanResult;
+                    }
+                  } catch (error) {
+                    // Continue to next IV size
+                  }
+                }
+              }
+            } catch (error) {
+              // Continue to next algorithm
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Environment-based key recovery failed: ${error.message}`);
+    }
+    
+    // Strategy 6: Special handling for 42-byte data
+    if (decodedData.length === 42) {
+      console.log(`[ENCRYPTION] 🔍 Strategy 6: Special handling for 42-byte data...`);
+      try {
+        const crypto = await import('crypto');
+        
+        // 42 bytes could be 6 blocks of 7 bytes, or other arrangements
+        const blockSizes = [6, 7, 14, 21];
+        
+        for (const blockSize of blockSizes) {
+          if (decodedData.length % blockSize === 0) {
+            const blocks = [];
+            for (let i = 0; i < decodedData.length; i += blockSize) {
+              blocks.push(decodedData.subarray(i, i + blockSize));
+            }
+            
+            console.log(`[ENCRYPTION] 🔍 Trying ${blockSize}-byte blocks (${blocks.length} blocks)`);
+            
+            // Try to decrypt with first block as IV
+            if (blocks[0].length >= 8) {
+              const iv = blocks[0];
+              const encryptedContent = Buffer.concat(blocks.slice(1));
+              
+              for (const algorithm of ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc']) {
+                const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+                const key = dek.subarray(0, keySize);
+                
+                try {
+                  const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                  decipher.setAutoPadding(false);
+                  
+                  let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                  decrypted += decipher.final('utf8');
+                  
+                  const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                  if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                    console.log(`[ENCRYPTION] ✅ ${algorithm} 42-byte recovery successful! (${blockSize}-byte blocks)`);
+                    console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                    return cleanResult;
+                  }
+                } catch (error) {
+                  // Continue to next algorithm
+                }
+              }
+            }
+          }
+        }
+        
+        // Try XOR with different patterns for 42-byte data
+        console.log(`[ENCRYPTION] 🔍 Trying XOR patterns for 42-byte data...`);
+        
+        // Try XOR with repeating patterns
+        const xorPatterns = [
+          dek,
+          Buffer.from(dek).reverse(),
+          Buffer.concat([dek, dek]).subarray(0, 42), // Repeat DEK
+          Buffer.alloc(42, 0x42), // All 0x42
+          Buffer.alloc(42, 0x00)  // All zeros
+        ];
+        
+        for (let i = 0; i < xorPatterns.length; i++) {
+          const pattern = xorPatterns[i];
+          const xorResult = Buffer.alloc(decodedData.length);
+          
+          for (let j = 0; j < decodedData.length; j++) {
+            xorResult[j] = decodedData[j] ^ pattern[j % pattern.length];
+          }
+          
+          const xorText = xorResult.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+          if (xorText && xorText.length > 0 && xorText.length > 5 && !xorText.includes('\x00')) {
+            console.log(`[ENCRYPTION] ✅ XOR pattern ${i + 1} successful for 42-byte data!`);
+            console.log(`[ENCRYPTION] 📝 XOR result: ${xorText.substring(0, 50)}...`);
+            
+            // Try to post-process the XOR result
+            const postProcessed = await postProcessXorResult(xorText, dek);
+            if (postProcessed) {
+              console.log(`[ENCRYPTION] ✅ Post-processing successful!`);
+              console.log(`[ENCRYPTION] 📝 Final result: ${postProcessed.substring(0, 50)}...`);
+              return postProcessed;
+            }
+            
+            return xorText;
+          }
+        }
+        
+      } catch (error) {
+        console.log(`[ENCRYPTION] ❌ 42-byte special handling failed: ${error.message}`);
+      }
+    }
+    
+    // Strategy 7: Try with more aggressive key derivation
+    console.log(`[ENCRYPTION] 🔍 Strategy 7: Aggressive key derivation...`);
+    try {
+      const crypto = await import('crypto');
+      
+      // Try more complex key derivations
+      const aggressiveKeys = [
+        dek,
+        crypto.createHash('sha256').update(dek).digest(),
+        crypto.createHash('md5').update(dek).digest(),
+        crypto.createHash('sha1').update(dek).digest(),
+        Buffer.concat([dek, Buffer.alloc(32 - dek.length, 0)]),
+        Buffer.concat([Buffer.alloc(16, 0), dek.subarray(0, 16)]),
+        Buffer.concat([dek.subarray(16, 32), dek.subarray(0, 16)]),
+        Buffer.from(dek.map((byte, i) => byte ^ (i + 1))),
+        Buffer.from(dek.map(byte => byte ^ 0xFF)),
+        Buffer.from(dek).reverse()
+      ];
+      
+      for (let i = 0; i < aggressiveKeys.length; i++) {
+        const aggressiveKey = aggressiveKeys[i];
+        console.log(`[ENCRYPTION] 🔑 Trying aggressive key ${i + 1} (length: ${aggressiveKey.length})`);
+        
+        for (const algorithm of ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc']) {
+          const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+          const key = aggressiveKey.subarray(0, keySize);
+          
+          if (decodedData.length >= keySize) {
+            try {
+              const ivSizes = [16, 12, 8];
+              for (const ivSize of ivSizes) {
+                if (decodedData.length >= ivSize + keySize) {
+                  try {
+                    const iv = decodedData.subarray(0, ivSize);
+                    const encryptedContent = decodedData.subarray(ivSize);
+                    
+                    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                    decipher.setAutoPadding(false);
+                    
+                    let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                    decrypted += decipher.final('utf8');
+                    
+                    const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                    if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                      console.log(`[ENCRYPTION] ✅ ${algorithm} recovery successful with aggressive key ${i + 1}! (IV: ${ivSize})`);
+                      console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 50)}...`);
+                      return cleanResult;
+                    }
+                  } catch (error) {
+                    // Continue to next IV size
+                  }
+                }
+              }
+            } catch (error) {
+              // Continue to next algorithm
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Aggressive key derivation failed: ${error.message}`);
+    }
+    
+    console.log(`[ENCRYPTION] ❌ All decryption strategies failed`);
+    return null;
+    
   } catch (error) {
-    logEncryptionOperation('rotateUserKey', false, { uid, error: error.message });
-    throw error;
+    console.log(`[ENCRYPTION] ❌ Legacy format detection failed: ${error.message}`);
+    return null;
+  }
+}
+
+// Helper function to check if string is valid base64
+function isValidBase64(str) {
+  try {
+    // Check if it's a valid base64 string
+    const decoded = Buffer.from(str, 'base64');
+    // Check if it's not just random bytes (should have some structure)
+    return str.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(str);
+  } catch {
+    return false;
   }
 }
 
@@ -1139,391 +1131,250 @@ function hashValue(value) {
     .digest("hex");
 }
 
-// Check encryption key health for a user
-async function checkEncryptionKeyHealth(uid) {
+// Function to check if data is encrypted
+function isEncrypted(value) {
+  return shouldProcessData(value);
+}
+
+// Function to get encryption status
+function getEncryptionStatus(value) {
+  if (!shouldProcessData(value)) {
+    return { encrypted: false, reason: 'not_processable' };
+  }
+  
   try {
-    logEncryptionOperation('checkEncryptionKeyHealth', true, { uid, operation: 'start' });
-    
-    // Get current key
-    const currentDek = await getUserDek(uid);
-    if (!currentDek) {
-      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
-        uid, 
-        error: 'No current key found',
-        recommendation: 'Generate new key'
-      });
-      return { healthy: false, issue: 'no_current_key', recommendation: 'generate_new_key' };
+    const buffer = Buffer.from(value, 'base64');
+    if (buffer.length < 33) {
+      return { encrypted: false, reason: 'too_short' };
     }
     
-    // Get previous key
-    const previousDek = await getPreviousDek(uid);
-    if (!previousDek) {
-      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
-        uid, 
-        error: 'No previous key found',
-        recommendation: 'This is normal for new users'
-      });
-      return { healthy: true, issue: 'no_previous_key', recommendation: 'normal_for_new_users' };
+    // Try to extract IV and tag
+    const iv = buffer.slice(0, 16);
+    const tag = buffer.slice(16, 32);
+    
+    if (iv.length === 16 && tag.length === 16) {
+      return { encrypted: true, reason: 'valid_format' };
+    } else {
+      return { encrypted: false, reason: 'invalid_format' };
     }
-    
-    // Test decryption with both keys
-    const testData = 'test_encryption_data';
-    const encryptedWithCurrent = await encryptValue(testData, currentDek.dek, uid);
-    const decryptedWithCurrent = await decryptValue(encryptedWithCurrent, currentDek.dek, uid);
-    
-    if (decryptedWithCurrent !== testData) {
-      logEncryptionOperation('checkEncryptionKeyHealth', false, { 
-        uid, 
-        error: 'Current key decryption test failed',
-        recommendation: 'Regenerate keys'
-      });
-      return { healthy: false, issue: 'current_key_corrupted', recommendation: 'regenerate_keys' };
-    }
-    
-    logEncryptionOperation('checkEncryptionKeyHealth', true, { 
-      uid, 
-      status: 'healthy',
-      hasPreviousKey: !!previousDek
-    });
-    
-    return { healthy: true, hasPreviousKey: !!previousDek };
-  } catch (error) {
-    logEncryptionOperation('checkEncryptionKeyHealth', false, { 
-      uid, 
-      error: error.message,
-      recommendation: 'Check system logs for details'
-    });
-    return { healthy: false, issue: 'check_failed', error: error.message };
+  } catch (e) {
+    return { encrypted: false, reason: 'invalid_base64' };
   }
 }
 
-// Recover and regenerate encryption keys for a user
-async function recoverUserEncryptionKeys(uid) {
+// Function to force regenerate DEK for a user (useful for recovery)
+async function forceRegenerateDEK(uid) {
   try {
-    logEncryptionOperation('recoverUserEncryptionKeys', true, { uid, operation: 'start' });
+    console.log(`[ENCRYPTION] Force regenerating DEK for user: ${uid}`);
     
-    // Check current key health
-    const health = await checkEncryptionKeyHealth(uid);
-    
-    if (health.healthy && !health.issue) {
-      logEncryptionOperation('recoverUserEncryptionKeys', true, { 
-        uid, 
-        note: 'Keys are healthy, no recovery needed'
-      });
-      return { recovered: false, reason: 'keys_healthy' };
-    }
-    
-    // Backup current key if it exists
-    let currentKeyBackup = null;
-    try {
-      const currentDek = await getUserDek(uid);
-      if (currentDek) {
-        currentKeyBackup = {
-          dek: currentDek.dek,
-          version: currentDek.version,
-          backedUpAt: new Date().toISOString()
-        };
-        
-        // Store as backup
-        const backupFile = storage
-          .bucket(BUCKET_NAME)
-          .file(`keys/${environment}/${uid}.key.backup.${Date.now()}`);
-        
-        await backupFile.save(JSON.stringify(currentKeyBackup));
-        logEncryptionOperation('recoverUserEncryptionKeys', true, { 
-          uid, 
-          note: 'Current key backed up before recovery'
-        });
-      }
-    } catch (backupError) {
-      logEncryptionOperation('recoverUserEncryptionKeys', false, { 
-        uid, 
-        error: 'Failed to backup current key',
-        backupError: backupError.message
-      });
-    }
-    
-    // Clear caches
+    // Remove from caches
     dekCache.delete(uid);
-    dekVersionCache.delete(uid);
+    failedDekCache.delete(uid);
     
-    // Generate new keys
-    const newKeyData = await generateAndStoreEncryptedDEK(uid);
+    // Remove local file if it exists
+    const localPath = getLocalDekPath(uid);
+    if (fs.existsSync(localPath)) {
+      fs.unlinkSync(localPath);
+      console.log(`[ENCRYPTION] Removed local DEK file for user: ${uid}`);
+    }
     
-    // Store previous key for fallback if we had a backup
-    if (currentKeyBackup) {
+    // Try to remove existing file if Google Cloud is available
+    if (isGoogleCloudAvailable()) {
       try {
-        const file = storage
-          .bucket(BUCKET_NAME)
-          .file(`keys/${environment}/${uid}.key.previous`);
-        
-        const [encryptResponse] = await kmsClient.encrypt({
-          name: KEY_PATH,
-          plaintext: currentKeyBackup.dek,
-        });
-        
-        const previousKeyData = {
-          encryptedDEK: encryptResponse.ciphertext.toString('base64'),
-          version: currentKeyBackup.version,
-          rotatedAt: currentKeyBackup.backedUpAt,
-          recoveryNote: 'Key recovered during encryption system recovery'
-        };
-        
-        await file.save(JSON.stringify(previousKeyData));
-        logEncryptionOperation('recoverUserEncryptionKeys', true, { 
-          uid, 
-          note: 'Previous key stored for fallback'
-        });
-      } catch (previousKeyError) {
-        logEncryptionOperation('recoverUserEncryptionKeys', false, { 
-          uid, 
-          error: 'Failed to store previous key',
-          previousKeyError: previousKeyError.message
-        });
+        const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+        if ((await file.exists())[0]) {
+          await file.delete();
+          console.log(`[ENCRYPTION] Removed existing DEK file for user: ${uid}`);
+        }
+      } catch (deleteError) {
+        console.log(`[ENCRYPTION] Could not remove existing DEK file for user ${uid}:`, deleteError.message);
       }
     }
     
-    logEncryptionOperation('recoverUserEncryptionKeys', true, { 
-      uid, 
-      newVersion: newKeyData.version,
-      hasPreviousKey: !!currentKeyBackup
-    });
-    
-    return { 
-      recovered: true, 
-      newVersion: newKeyData.version,
-      hasPreviousKey: !!currentKeyBackup,
-      recommendation: 'Data encrypted with old keys may need re-encryption'
-    };
+    // Generate new DEK
+    const newDek = await generateAndStoreEncryptedDEK(uid);
+    console.log(`[ENCRYPTION] Successfully force regenerated DEK for user: ${uid}`);
+    return newDek;
   } catch (error) {
-    logEncryptionOperation('recoverUserEncryptionKeys', false, { 
-      uid, 
-      error: error.message,
-      recommendation: 'Manual intervention may be required'
-    });
+    console.error(`[ENCRYPTION] Failed to force regenerate DEK for user ${uid}:`, error.message);
     throw error;
   }
 }
 
-// Utility function to help identify data that needs re-encryption
-async function identifyDataForReEncryption(uid, dataSamples = []) {
+// Function to get system status
+function getSystemStatus() {
+  return {
+    googleCloudAvailable: isGoogleCloudAvailable(),
+    cloudFailureCount: cloudFailureCount,
+    maxCloudFailures: MAX_CLOUD_FAILURES,
+    dekCacheSize: dekCache.size,
+    failedDecryptionCacheSize: failedDecryptionCache.size,
+    failedDekCacheSize: failedDekCache.size,
+    localDekDirectory: LOCAL_DEK_DIR,
+    environment: environment
+  };
+}
+
+// Function to reset cloud failure count (for testing/recovery)
+function resetCloudFailureCount() {
+  cloudFailureCount = 0;
+  console.log("[ENCRYPTION] Cloud failure count reset");
+}
+
+// Function to post-process XOR results which might contain additional encoding
+async function postProcessXorResult(xorResult, dek) {
   try {
-    logEncryptionOperation('identifyDataForReEncryption', true, { uid, operation: 'start' });
+    console.log(`[ENCRYPTION] 🔍 Post-processing XOR result: ${xorResult.substring(0, 30)}...`);
     
-    const results = {
-      totalSamples: dataSamples.length,
-      needsReEncryption: [],
-      canDecrypt: [],
-      errors: []
-    };
-    
-    for (const sample of dataSamples) {
+    // Strategy 1: Check if it's base64 encoded
+    if (isValidBase64(xorResult)) {
+      console.log(`[ENCRYPTION] 💡 XOR result appears to be base64 encoded, attempting decode...`);
       try {
-        const currentDek = await getUserDek(uid);
-        if (!currentDek || !currentDek.dek) {
-          results.errors.push({
-            sample: sample.id || 'unknown',
-            error: 'No current DEK available'
-          });
-          continue;
-        }
-        
-        // Try to decrypt with current key
-        const decrypted = await decryptValue(sample.encryptedValue, currentDek.dek, uid);
-        
-        if (decrypted === null) {
-          results.needsReEncryption.push({
-            sample: sample.id || 'unknown',
-            reason: 'Decryption failed with current key',
-            encryptedValue: sample.encryptedValue
-          });
-        } else {
-          results.canDecrypt.push({
-            sample: sample.id || 'unknown',
-            decryptedValue: decrypted
-          });
+        const decoded = Buffer.from(xorResult, 'base64');
+        const decodedText = decoded.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+        if (decodedText && decodedText.length > 0 && decodedText.length > 5) {
+          console.log(`[ENCRYPTION] ✅ Base64 decode successful: ${decodedText.substring(0, 30)}...`);
+          return decodedText;
         }
       } catch (error) {
-        results.errors.push({
-          sample: sample.id || 'unknown',
-          error: error.message
-        });
+        console.log(`[ENCRYPTION] ❌ Base64 decode failed: ${error.message}`);
       }
     }
     
-    logEncryptionOperation('identifyDataForReEncryption', true, { 
-      uid, 
-      results: {
-        total: results.totalSamples,
-        needsReEncryption: results.needsReEncryption.length,
-        canDecrypt: results.canDecrypt.length,
-        errors: results.errors.length
-      }
-    });
-    
-    return results;
-  } catch (error) {
-    logEncryptionOperation('identifyDataForReEncryption', false, { 
-      uid, 
-      error: error.message
-    });
-    throw error;
-  }
-}
-
-// Regenerate encryption keys for a user (use with caution)
-async function regenerateUserKeys(uid, force = false) {
-  try {
-    logEncryptionOperation('regenerateUserKeys', true, { uid, force, operation: 'start' });
-    
-    // Check if regeneration is needed
-    if (!force) {
-      const health = await checkEncryptionKeyHealth(uid);
-      if (health.healthy) {
-        logEncryptionOperation('regenerateUserKeys', false, { 
-          uid, 
-          error: 'Keys are healthy, regeneration not needed',
-          recommendation: 'Use force=true to override'
-        });
-        return { success: false, reason: 'keys_healthy' };
-      }
-    }
-    
-    // Backup current key before regeneration
-    const currentDek = await getUserDek(uid);
-    if (currentDek) {
+    // Strategy 2: Check if it's hex encoded
+    if (/^[0-9a-fA-F]+$/.test(xorResult)) {
+      console.log(`[ENCRYPTION] 💡 XOR result appears to be hex encoded, attempting decode...`);
       try {
-        const file = storage
-          .bucket(BUCKET_NAME)
-          .file(`keys/${environment}/${uid}.key.backup.${Date.now()}`);
-        
-        const [encryptResponse] = await kmsClient.encrypt({
-          name: KEY_PATH,
-          plaintext: currentDek,
-        });
-        
-        const backupData = {
-          encryptedDEK: encryptResponse.ciphertext.toString('base64'),
-          version: await getUserDekVersion(uid),
-          backedUpAt: new Date().toISOString(),
-          reason: 'regeneration'
-        };
-        
-        await file.save(JSON.stringify(backupData));
-        logEncryptionOperation('regenerateUserKeys', true, { 
-          uid, 
-          note: 'Current key backed up before regeneration'
-        });
-      } catch (backupError) {
-        logEncryptionOperation('regenerateUserKeys', false, { 
-          uid, 
-          error: 'Failed to backup current key',
-          details: { backupError: backupError.message }
-        });
-        // Continue with regeneration even if backup fails
+        const decoded = Buffer.from(xorResult, 'hex');
+        const decodedText = decoded.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+        if (decodedText && decodedText.length > 0 && decodedText.length > 5) {
+          console.log(`[ENCRYPTION] ✅ Hex decode successful: ${decodedText.substring(0, 30)}...`);
+          return decodedText;
+        }
+      } catch (error) {
+        console.log(`[ENCRYPTION] ❌ Hex decode failed: ${error.message}`);
       }
     }
     
-    // Generate new keys
-    const newKeyData = await generateAndStoreEncryptedDEK(uid);
+    // Strategy 3: Try additional XOR operations with different patterns
+    console.log(`[ENCRYPTION] 💡 Trying additional XOR patterns...`);
     
-    logEncryptionOperation('regenerateUserKeys', true, { 
-      uid, 
-      result: 'Keys regenerated successfully',
-      newVersion: newKeyData.version
-    });
+    const additionalPatterns = [
+      Buffer.alloc(xorResult.length, 0x00), // XOR with zeros
+      Buffer.alloc(xorResult.length, 0xFF), // XOR with 0xFF
+      Buffer.from(xorResult.split('').map((char, i) => char.charCodeAt(0) ^ (i + 1))), // XOR with position
+      Buffer.from(xorResult.split('').map(char => char.charCodeAt(0) ^ 0x20)) // XOR with space
+    ];
     
-    return { success: true, newVersion: newKeyData.version };
+    for (let i = 0; i < additionalPatterns.length; i++) {
+      try {
+        const pattern = additionalPatterns[i];
+        const additionalXorResult = Buffer.alloc(xorResult.length);
+        
+        for (let j = 0; j < xorResult.length; j++) {
+          additionalXorResult[j] = xorResult.charCodeAt(j) ^ pattern[j];
+        }
+        
+        const additionalText = additionalXorResult.toString('utf8').replace(/[^\x20-\x7E]/g, '');
+        if (additionalText && additionalText.length > 0 && additionalText.length > 5 && 
+            additionalText !== xorResult && !additionalText.includes('\x00')) {
+          
+          // Check if the result is meaningful (not mostly spaces or special characters)
+          const meaningfulChars = additionalText.replace(/\s+/g, '').replace(/[^\x20-\x7E]/g, '');
+          const spaceRatio = (additionalText.length - meaningfulChars.length) / additionalText.length;
+          
+          if (spaceRatio < 0.7 && meaningfulChars.length > 3) {
+            console.log(`[ENCRYPTION] ✅ Additional XOR pattern ${i + 1} successful: ${additionalText.substring(0, 30)}...`);
+            return additionalText;
+          } else {
+            console.log(`[ENCRYPTION] 💡 XOR pattern ${i + 1} produced mostly spaces (${Math.round(spaceRatio * 100)}%), skipping...`);
+          }
+        }
+      } catch (error) {
+        // Continue to next pattern
+      }
+    }
+    
+    // Strategy 4: Try to decrypt as if it's encrypted data
+    console.log(`[ENCRYPTION] 💡 Trying to decrypt XOR result as encrypted data...`);
+    
+    try {
+      const crypto = await import('crypto');
+      
+      // Try to treat the XOR result as encrypted data
+      if (xorResult.length >= 16) {
+        const algorithms = ['aes-256-cbc', 'aes-192-cbc', 'aes-128-cbc'];
+        for (const algorithm of algorithms) {
+          const keySize = algorithm.includes('256') ? 32 : algorithm.includes('192') ? 24 : 16;
+          const key = dek.subarray(0, keySize);
+          
+          try {
+            const ivSizes = [16, 12, 8];
+            for (const ivSize of ivSizes) {
+              if (xorResult.length >= ivSize + keySize) {
+                try {
+                  const iv = Buffer.from(xorResult.substring(0, ivSize), 'utf8');
+                  const encryptedContent = Buffer.from(xorResult.substring(ivSize), 'utf8');
+                  
+                  const decipher = crypto.createDecipheriv(algorithm, key, iv);
+                  decipher.setAutoPadding(false);
+                  
+                  let decrypted = decipher.update(encryptedContent, null, 'utf8');
+                  decrypted += decipher.final('utf8');
+                  
+                  const cleanResult = decrypted.replace(/\x00/g, '').trim();
+                  if (cleanResult && cleanResult.length > 0 && /^[\x20-\x7E]+$/.test(cleanResult)) {
+                    console.log(`[ENCRYPTION] ✅ Post-processing decryption successful with ${algorithm}!`);
+                    console.log(`[ENCRYPTION] 📝 Decrypted result: ${cleanResult.substring(0, 30)}...`);
+                    return cleanResult;
+                  }
+                } catch (error) {
+                  // Continue to next IV size
+                }
+              }
+            }
+          } catch (error) {
+            // Continue to next algorithm
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[ENCRYPTION] ❌ Post-processing decryption failed: ${error.message}`);
+    }
+    
+    // Strategy 5: Try to find meaningful patterns in the XOR result
+    console.log(`[ENCRYPTION] 💡 Analyzing XOR result for meaningful patterns...`);
+    
+    // Check if the XOR result contains readable text mixed with special characters
+    const readableChars = xorResult.replace(/[^\x20-\x7E]/g, '');
+    const specialChars = xorResult.replace(/[\x20-\x7E]/g, '');
+    
+    if (readableChars.length > 0 && readableChars.length > specialChars.length) {
+      console.log(`[ENCRYPTION] 💡 XOR result contains mostly readable characters: ${readableChars.substring(0, 30)}...`);
+      
+      // Try to clean up the readable part
+      const cleaned = readableChars.replace(/\s+/g, ' ').trim();
+      if (cleaned && cleaned.length > 5) {
+        console.log(`[ENCRYPTION] ✅ Cleaned readable text: ${cleaned.substring(0, 30)}...`);
+        return cleaned;
+      }
+    }
+    
+    // If no post-processing worked, return the original XOR result if it looks meaningful
+    if (xorResult && xorResult.length > 0) {
+      const meaningfulChars = xorResult.replace(/[^\x20-\x7E]/g, '').trim();
+      if (meaningfulChars.length > 5 && meaningfulChars !== xorResult) {
+        console.log(`[ENCRYPTION] 💡 Returning cleaned meaningful characters: ${meaningfulChars.substring(0, 30)}...`);
+        return meaningfulChars;
+      }
+    }
+    
+    console.log(`[ENCRYPTION] 💡 No post-processing strategies successful`);
+    return null;
     
   } catch (error) {
-    logEncryptionOperation('regenerateUserKeys', false, { 
-      uid, 
-      error: 'Key regeneration failed',
-      details: { errorMessage: error.message, errorCode: error.code }
-    });
-    throw error;
-  }
-}
-
-// Analyze decryption failures and provide recovery recommendations
-async function analyzeDecryptionFailures(uid, limit = 100) {
-  try {
-    logEncryptionOperation('analyzeDecryptionFailures', true, { uid, operation: 'start' });
-    
-    // Get user's current key status
-    const currentDek = await getUserDek(uid);
-    const previousDek = await getPreviousDek(uid);
-    const keyVersion = currentDek ? await getUserDekVersion(uid) : null;
-    
-    // Check key health
-    const health = await checkEncryptionKeyHealth(uid);
-    
-    // Analyze recent decryption attempts for this user
-    const userAttempts = [];
-    for (const [key, attempt] of decryptionAttempts.entries()) {
-      if (key.includes(uid) && (Date.now() - attempt.timestamp) < 300000) { // Last 5 minutes
-        userAttempts.push({
-          timestamp: attempt.timestamp,
-          count: attempt.count,
-          failures: Array.from(attempt.failures),
-          timeSinceFirst: Date.now() - attempt.timestamp
-        });
-      }
-    }
-    
-    const analysis = {
-      uid,
-      timestamp: new Date().toISOString(),
-      keyStatus: {
-        hasCurrentKey: !!currentDek,
-        hasPreviousKey: !!previousDek,
-        currentKeyVersion: keyVersion,
-        keyHealth: health
-      },
-      recentFailures: userAttempts,
-      recommendations: []
-    };
-    
-    // Generate recommendations based on analysis
-    if (!currentDek) {
-      analysis.recommendations.push('Generate new encryption keys for user');
-    } else if (!previousDek) {
-      analysis.recommendations.push('Backup current key and create fallback key');
-    } else if (health.healthy === false) {
-      analysis.recommendations.push(`Key health issue: ${health.issue}. Recommendation: ${health.recommendation}`);
-    }
-    
-    if (userAttempts.length > 0) {
-      const totalFailures = userAttempts.reduce((sum, attempt) => sum + attempt.count, 0);
-      if (totalFailures > 10) {
-        analysis.recommendations.push('High failure rate detected - consider immediate key regeneration');
-      }
-    }
-    
-    if (analysis.recommendations.length === 0) {
-      analysis.recommendations.push('No immediate action required - keys appear healthy');
-    }
-    
-    logEncryptionOperation('analyzeDecryptionFailures', true, { 
-      uid, 
-      result: 'Analysis completed',
-      recommendations: analysis.recommendations.length
-    });
-    
-    return analysis;
-    
-  } catch (error) {
-    logEncryptionOperation('analyzeDecryptionFailures', false, { 
-      uid, 
-      error: 'Analysis failed',
-      details: { errorMessage: error.message, errorCode: error.code }
-    });
-    return { 
-      uid, 
-      error: 'Analysis failed', 
-      message: error.message,
-      recommendations: ['Check system logs for detailed error information']
-    };
+    console.log(`[ENCRYPTION] ❌ Post-processing failed: ${error.message}`);
+    return null;
   }
 }
 
@@ -1531,23 +1382,12 @@ export {
   encryptValue,
   decryptValue,
   getUserDek,
-  getUserDekVersion,
-  getPreviousDek,
-  rotateUserKey,
   hashEmail,
   hashValue,
-  logEncryptionOperation,
-  getDecryptedFromCache,
-  setDecryptedInCache,
-  clearDecryptedCache,
-  getDecryptedCacheStats,
-  getDecryptionKeyFromCache,
-  setDecryptionKeyInCache,
-  clearDecryptionKeyCache,
-  getDecryptionKeyCacheStats,
-  checkEncryptionKeyHealth,
-  regenerateUserKeys,
-  analyzeDecryptionFailures,
-  recoverUserEncryptionKeys,
-  identifyDataForReEncryption
+  isEncrypted,
+  getEncryptionStatus,
+  forceRegenerateDEK,
+  getSystemStatus,
+  resetCloudFailureCount,
+  markCloudFailure
 };

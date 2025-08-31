@@ -93,8 +93,7 @@ const getUserProfiles = async (email, uid) => {
     console.log(`[getUserProfiles] User found: ${user._id}`);
 
     const profiles = [];
-    const keyData = await getUserDek(uid);
-    const dek = keyData.dek;
+    const dek = await getUserDek(uid);
     
     console.log(`[getUserProfiles] DEK obtained:`, {
       hasDek: !!dek,
@@ -106,7 +105,7 @@ const getUserProfiles = async (email, uid) => {
     let decryptedFirstName, decryptedLastName, decryptedMiddleName, decryptedSuffix, decryptedPrefix;
     
     try {
-      decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+      decryptedFirstName = await decryptValue(user.name.firstName, dek);
       console.log(`[getUserProfiles] First name decrypted: ${decryptedFirstName ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting first name:`, error);
@@ -114,7 +113,7 @@ const getUserProfiles = async (email, uid) => {
     }
 
     try {
-      decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+      decryptedLastName = await decryptValue(user.name.lastName, dek);
       console.log(`[getUserProfiles] Last name decrypted: ${decryptedLastName ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting last name:`, error);
@@ -122,7 +121,7 @@ const getUserProfiles = async (email, uid) => {
     }
 
     try {
-      decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
+      decryptedMiddleName = await decryptValue(user.name.middleName, dek);
       console.log(`[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting middle name:`, error);
@@ -130,7 +129,7 @@ const getUserProfiles = async (email, uid) => {
     }
 
     try {
-      decryptedSuffix = await decryptValue(user.name.suffix, dek, uid);
+      decryptedSuffix = await decryptValue(user.name.suffix, dek);
       console.log(`[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting suffix:`, error);
@@ -138,7 +137,7 @@ const getUserProfiles = async (email, uid) => {
     }
 
     try {
-      decryptedPrefix = await decryptValue(user.name.prefix, dek, uid);
+      decryptedPrefix = await decryptValue(user.name.prefix, dek);
       console.log(`[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting prefix:`, error);
@@ -147,7 +146,7 @@ const getUserProfiles = async (email, uid) => {
 
     let decryptedPhotoUrl;
     try {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
       console.log(`[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? 'success' : 'failed'}`);
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting photo URL:`, error);
@@ -166,7 +165,7 @@ const getUserProfiles = async (email, uid) => {
     const decryptedEmail = await Promise.all(
       user.email.map((emailData) =>
         Promise.all([
-          decryptValue(emailData.email, dek, uid),
+          decryptValue(emailData.email, dek),
           emailData.emailType,
           emailData.isPrimary,
         ]).then(([email, emailType, isPrimary]) => ({
@@ -180,7 +179,7 @@ const getUserProfiles = async (email, uid) => {
     const decryptedPhones = await Promise.all(
       user.phones.map((phoneData) =>
         Promise.all([
-          decryptValue(phoneData.phone, dek, uid),
+          decryptValue(phoneData.phone, dek),
           phoneData.phoneType,
         ]).then(([phone, phoneType]) => ({
           phoneNumber: phone,
@@ -222,7 +221,7 @@ const getUserProfiles = async (email, uid) => {
       let decryptedName, decryptedIndustry, decryptedBusinessLogo;
       
       try {
-        decryptedName = await decryptValue(business.name, dek, uid);
+        decryptedName = await decryptValue(business.name, dek);
         console.log(`[getUserProfiles] Business name decrypted: ${decryptedName ? 'success' : 'failed'}`);
       } catch (error) {
         console.error(`[getUserProfiles] Error decrypting business name:`, error);
@@ -230,7 +229,7 @@ const getUserProfiles = async (email, uid) => {
       }
 
       try {
-        decryptedIndustry = await decryptValue(business.industryDesc, dek, uid);
+        decryptedIndustry = await decryptValue(business.industryDesc, dek);
         console.log(`[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? 'success' : 'failed'}`);
       } catch (error) {
         console.error(`[getUserProfiles] Error decrypting business industry:`, error);
@@ -240,8 +239,7 @@ const getUserProfiles = async (email, uid) => {
       try {
         decryptedBusinessLogo = await decryptValue(
           business.businessLogo,
-          dek,
-          uid
+          dek
         );
         console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
       } catch (error) {
@@ -255,7 +253,7 @@ const getUserProfiles = async (email, uid) => {
           business.businessOwnersDetails.map(async (owner) => {
             return {
               name: owner.name,
-              email: await decryptValue(owner.email, dek, uid),
+              email: await decryptValue(owner.email, dek),
               percentOwned: owner.percentOwned,
               position: owner.position,
             };
@@ -267,8 +265,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.businessOwners) {
         decryptedBusinessOwners = await decryptValue(
           business.businessOwners,
-          dek,
-          uid
+          dek
         );
       }
 
@@ -276,8 +273,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.businessLocations) {
         decryptdBusinessAddresses = await decryptValue(
           business.businessLocations,
-          dek,
-          uid
+          dek
         );
       }
 
@@ -285,57 +281,55 @@ const getUserProfiles = async (email, uid) => {
       if (business.phoneNumbers) {
         decryptdBusinessPhoneNumbers = await decryptValue(
           business.phoneNumbers,
-          dek,
-          uid
+          dek
         );
       }
       let descyptEntityType = null;
       if (business.entityType) {
-        descyptEntityType = await decryptValue(business.entityType, dek, uid);
+        descyptEntityType = await decryptValue(business.entityType, dek);
       }
       let descryptsubsidiaries = [];
       if (business.subsidiaries) {
-        descryptsubsidiaries = await decryptValue(business.subsidiaries, dek, uid);
+        descryptsubsidiaries = await decryptValue(business.subsidiaries, dek);
       }
       let decryptedBusinessDesc = null;
       if (business.businessDescription) {
         decryptedBusinessDesc = await decryptValue(
           business.businessDescription,
-          dek,
-          uid
+          dek
         );
       }
       let decryptedWebsite = null;
       if (business.website) {
-        decryptedWebsite = await decryptValue(business.website, dek, uid);
+        decryptedWebsite = await decryptValue(business.website, dek);
       }
       let formationDate = null;
       if (business.formationDate) {
-        formationDate = await decryptValue(business.formationDate, dek, uid);
+        formationDate = await decryptValue(business.formationDate, dek);
       }
       let taxInformation = null;
       if (business.taxInformation) {
-        taxInformation = await decryptValue(business.taxInformation, dek, uid);
+        taxInformation = await decryptValue(business.taxInformation, dek);
       }
       let legalName = null;
       if (business.legalName) {
-        legalName = await decryptValue(business.legalName, dek, uid);
+        legalName = await decryptValue(business.legalName, dek);
       }
       let ownership = null;
       if (business.ownership) {
-        ownership = await decryptValue(business.ownership, dek, uid);
+        ownership = await decryptValue(business.ownership, dek);
       }
       let entityType = null;
       if (business.industryDesc) {
-        entityType = await decryptValue(business.industryDesc, dek, uid);
+        entityType = await decryptValue(business.industryDesc, dek);
       }
       let businessType = null;
       if (business.businessType) {
-        businessType = await decryptValue(business.businessType, dek, uid);
+        businessType = await decryptValue(business.businessType, dek);
       }
       let entityTaxType = null;
       if (business.entityType) {
-        entityTaxType = await decryptValue(business.entityType, dek, uid);
+        entityTaxType = await decryptValue(business.entityType, dek);
       }
 
       const businessProfile = {
@@ -529,8 +523,7 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 };
 
 const updateBusinessProfile = async (profileId, formData, email, uid) => {
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
   try {
     if (!profileId) {
       throw new Error("No profile selected to update.");
@@ -628,8 +621,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
 };
 
 const deleteProfile = async (profileId, uid) => {
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
   try {
     if (!profileId) {
       throw new Error("No profile selected to delete.");
