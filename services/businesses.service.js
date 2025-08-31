@@ -239,8 +239,7 @@ const getUserProfiles = async (email, uid) => {
       try {
         decryptedBusinessLogo = await decryptValue(
           business.businessLogo,
-          dek,
-          uid
+          dek
         );
         console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
       } catch (error) {
@@ -266,8 +265,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.businessOwners) {
         decryptedBusinessOwners = await decryptValue(
           business.businessOwners,
-          dek,
-          uid
+          dek
         );
       }
 
@@ -275,8 +273,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.businessLocations) {
         decryptdBusinessAddresses = await decryptValue(
           business.businessLocations,
-          dek,
-          uid
+          dek
         );
       }
 
@@ -284,8 +281,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.phoneNumbers) {
         decryptdBusinessPhoneNumbers = await decryptValue(
           business.phoneNumbers,
-          dek,
-          uid
+          dek
         );
       }
       let descyptEntityType = null;
@@ -300,8 +296,7 @@ const getUserProfiles = async (email, uid) => {
       if (business.businessDescription) {
         decryptedBusinessDesc = await decryptValue(
           business.businessDescription,
-          dek,
-          uid
+          dek
         );
       }
       let decryptedWebsite = null;
