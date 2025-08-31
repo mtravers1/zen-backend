@@ -35,36 +35,35 @@ const getCachedDek = async (uid) => {
   }
   
   console.log(`[getCachedDek] Fetching fresh DEK for uid: ${uid}`);
-  const keyData = await getUserDek(uid);
+  const dek = await getUserDek(uid);
   
-  if (!keyData || !keyData.dek) {
+  if (!dek) {
     throw new Error(`Failed to get DEK for uid: ${uid}`);
   }
   
   // Validate DEK format
-  if (!Buffer.isBuffer(keyData.dek)) {
+  if (!Buffer.isBuffer(dek)) {
     console.error(`[getCachedDek] Invalid DEK format for uid: ${uid}:`, {
-      dekType: typeof keyData.dek,
-      dekLength: keyData.dek ? keyData.dek.length : 0,
-      isBuffer: Buffer.isBuffer(keyData.dek),
-      dekValue: keyData.dek
+      dekType: typeof dek,
+      dekLength: dek ? dek.length : 0,
+      isBuffer: Buffer.isBuffer(dek),
+      dekValue: dek
     });
-    throw new Error(`Invalid DEK format for uid: ${uid} - expected Buffer, got ${typeof keyData.dek}`);
+    throw new Error(`Invalid DEK format for uid: ${uid} - expected Buffer, got ${typeof dek}`);
   }
   
   // Cache the DEK
   dekCache.set(cacheKey, {
-    dek: keyData.dek,
+    dek: dek,
     timestamp: Date.now()
   });
   
   console.log(`[getCachedDek] DEK cached successfully for uid: ${uid}:`, {
-    dekType: typeof keyData.dek,
-    dekLength: keyData.dek.length,
-    isBuffer: Buffer.isBuffer(keyData.dek),
-    version: keyData.version
+    dekType: typeof dek,
+    dekLength: dek.length,
+    isBuffer: Buffer.isBuffer(dek)
   });
-  return keyData.dek;
+  return dek;
 };
 
 // Função para limpar cache do DEK em caso de erro

@@ -98,7 +98,7 @@ const debugDecryption = async (req, res) => {
           console.log(`[DEBUG DECRYPT] Testing field: ${field}`);
           try {
             const { decryptValue } = await import('../database/encryption.js');
-            const decrypted = await decryptValue(testAccount[field], dek, uid);
+            const decrypted = await decryptValue(testAccount[field], dek);
             console.log(`[DEBUG DECRYPT] ${field} decryption result:`, {
               success: true,
               originalLength: testAccount[field].length,

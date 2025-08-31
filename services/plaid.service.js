@@ -276,16 +276,13 @@ const getUserAccessTokens = async (email, uid) => {
     
     const accessTokens = await AccessToken.find({ userId: user._id });
     const dek = await getUserDek(uid);
-    const fallbackDek = await getPreviousDek(uid);
 
     const decryptedTokens = [];
     for (const token of accessTokens) {
       try {
         const decryptedToken = await decryptValue(
           token.accessToken, 
-          dek, 
-          uid, 
-          fallbackDek
+          dek
         );
         decryptedTokens.push({
           ...token.toObject(),
@@ -665,8 +662,7 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
       return null;
     }
 
-    const keyData = await getUserDek(targetUid);
-    const dek = keyData.dek;
+    const dek = await getUserDek(targetUid);
     if (!dek) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
@@ -677,35 +673,13 @@ const getAccessTokenFromItemId = async (itemId, uid = null) => {
     }
 
     // Try to decrypt with current DEK
-    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek, targetUid);
+    let accessToken = await decryptValue(accessTokenDoc.accessToken, dek);
     
-    // If decryption fails, try with fallback DEK
     if (!accessToken) {
       logPlaidOperation('getAccessTokenFromItemId', false, {
         itemId,
         uid: targetUid,
-        error: 'Failed to decrypt access token with current DEK, trying fallback'
-      });
-      
-      // Get fallback DEK (previous version)
-      const fallbackDek = await getPreviousDek(targetUid);
-      if (fallbackDek) {
-        accessToken = await decryptValue(accessTokenDoc.accessToken, fallbackDek, targetUid);
-        if (accessToken) {
-          logPlaidOperation('getAccessTokenFromItemId', true, {
-            itemId,
-            uid: targetUid,
-            note: 'Successfully decrypted with fallback DEK'
-          });
-        }
-      }
-    }
-
-    if (!accessToken) {
-      logPlaidOperation('getAccessTokenFromItemId', false, {
-        itemId,
-        uid: targetUid,
-        error: 'All decryption attempts failed for access token'
+        error: 'Failed to decrypt access token'
       });
       
       // Handle corrupted access token
