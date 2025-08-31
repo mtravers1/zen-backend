@@ -13,11 +13,7 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
-  hashValue,
-  getDecryptedCacheStats,
-  clearDecryptedCache,
-  getDecryptionKeyCacheStats,
-  clearDecryptionKeyCache
+  hashValue
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
 
@@ -201,7 +197,7 @@ const safeDecryptValue = async (value, dek, uid) => {
     });
     
     // Use the new decryptValue function with UID for caching
-    const decrypted = await decryptValue(value, dek, uid);
+    const decrypted = await decryptValue(value, dek);
     
     console.log(`[safeDecryptValue ${requestId}] ✅ Decryption result:`, {
       success: true,
@@ -1535,7 +1531,7 @@ const getCashFlows = async (profile, uid) => {
 
     const transactions = [];
     for (const transaction of transactionsResponse) {
-      const decryptedAmount = await decryptValue(transaction.amount, dek, uid);
+      const decryptedAmount = await decryptValue(transaction.amount, dek);
       const decryptedAccountType = await decryptValue(
         transaction.accountType,
         dek,

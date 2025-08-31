@@ -16,26 +16,25 @@ const saveTrip = async ({
   email,
   uid,
 }) => {
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
 
   const encryptedLocations = await Promise.all(
     locations.map(async (loc) => ({
-      latitude: await encryptValue(loc.latitude.toString(), dek, uid),
-      longitude: await encryptValue(loc.longitude.toString(), dek, uid),
+      latitude: await encryptValue(loc.latitude.toString(), dek),
+      longitude: await encryptValue(loc.longitude.toString(), dek),
     }))
   );
 
   const encryptedMetadata = {
     ...metadata,
     placeName: metadata.placeName
-      ? await encryptValue(metadata.placeName, dek, uid)
+      ? await encryptValue(metadata.placeName, dek)
       : undefined,
     pickupAddress: metadata.pickupAddress
-      ? await encryptValue(metadata.pickupAddress, dek, uid)
+      ? await encryptValue(metadata.pickupAddress, dek)
       : undefined,
     dropoffAddress: metadata.dropoffAddress
-      ? await encryptValue(metadata.dropoffAddress, dek, uid)
+      ? await encryptValue(metadata.dropoffAddress, dek)
       : undefined,
   };
 
@@ -63,8 +62,7 @@ const fetchFilteredTrips = async (query, uid) => {
     authUid: uid,
   });
 
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
 
   const filter = {};
 
@@ -121,13 +119,13 @@ const fetchFilteredTrips = async (query, uid) => {
           profileData = await Business.findById(profileId).lean();
           if (!profileData) {
             profileData = await User.findById(profileId).lean();
-            const first = await decryptValue(profileData.name.firstName, dek, uid);
+            const first = await decryptValue(profileData.name.firstName, dek);
             const middle = profileData.name?.middleName
               ? " " +
-                (await decryptValue(profileData.name.middleName, dek, uid)) +
+                (await decryptValue(profileData.name.middleName, dek)) +
                 " "
               : " ";
-            const last = await decryptValue(profileData.name.lastName, dek, uid);
+            const last = await decryptValue(profileData.name.lastName, dek);
 
             setting = {
               name: first + middle + last,
@@ -135,7 +133,7 @@ const fetchFilteredTrips = async (query, uid) => {
               type: "personal",
             };
           } else {
-            const name = await decryptValue(profileData.name, dek, uid);
+            const name = await decryptValue(profileData.name, dek);
             setting = {
               name: name,
               _id: profileData._id,
@@ -148,13 +146,13 @@ const fetchFilteredTrips = async (query, uid) => {
         const decryptedMetadata = {
           ...trip.metadata,
           placeName: trip.metadata.placeName
-            ? await decryptValue(trip.metadata.placeName, dek, uid)
+            ? await decryptValue(trip.metadata.placeName, dek)
             : undefined,
           pickupAddress: trip.metadata.pickupAddress
-            ? await decryptValue(trip.metadata.pickupAddress, dek, uid)
+            ? await decryptValue(trip.metadata.pickupAddress, dek)
             : undefined,
           dropoffAddress: trip.metadata.dropoffAddress
-            ? await decryptValue(trip.metadata.dropoffAddress, dek, uid)
+            ? await decryptValue(trip.metadata.dropoffAddress, dek)
             : undefined,
           profileData: setting,
         };
@@ -163,10 +161,10 @@ const fetchFilteredTrips = async (query, uid) => {
         const decryptedLocations = await Promise.all(
           trip.locations.map(async (loc) => ({
             latitude: loc.latitude
-              ? parseFloat(await decryptValue(loc.latitude, dek, uid))
+              ? parseFloat(await decryptValue(loc.latitude, dek))
               : null,
             longitude: loc.longitude
-              ? parseFloat(await decryptValue(loc.longitude, dek, uid))
+              ? parseFloat(await decryptValue(loc.longitude, dek))
               : null,
           }))
         );
@@ -232,8 +230,7 @@ const getLastVehicleIdUsed = async (uid) => {
 };
 
 const updateTrip = async (tripId, updateData, uid) => {
-  const keyData = await getUserDek(uid);
-  const dek = keyData.dek;
+  const dek = await getUserDek(uid);
 
   const encryptedData = { ...updateData };
 
@@ -241,8 +238,8 @@ const updateTrip = async (tripId, updateData, uid) => {
   if (updateData.locations) {
     encryptedData.locations = await Promise.all(
       updateData.locations.map(async (loc) => ({
-        latitude: await encryptValue(loc.latitude.toString(), dek, uid),
-        longitude: await encryptValue(loc.longitude.toString(), dek, uid),
+        latitude: await encryptValue(loc.latitude.toString(), dek),
+        longitude: await encryptValue(loc.longitude.toString(), dek),
       }))
     );
   }
