@@ -10,7 +10,7 @@ const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const environment = process.env.ENVIRONMENT || "dev";
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
-  "base64"
+  "base64" 
 ).toString("utf8");
 const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
@@ -42,6 +42,9 @@ const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
 
 // Cache for failed decryption attempts to avoid repeated failures
 const failedDecryptionCache = new LimitedMap(1000);
+
+// Cache for failed DEK operations to avoid repeated failures
+const failedDekCache = new LimitedMap(100);
 
 async function generateAndStoreEncryptedDEK(uid) {
   try {
@@ -83,12 +86,40 @@ async function getDEKFromBucket(uid) {
     return decryptResponse.plaintext;
   } catch (error) {
     console.error(`[ENCRYPTION] Failed to get DEK from bucket for user ${uid}:`, error.message);
+    
+    // If the DEK is corrupted, try to remove it and return null
+    if (error.message.includes('Decryption failed: the ciphertext is invalid')) {
+      try {
+        console.log(`[ENCRYPTION] Removing corrupted DEK for user ${uid}`);
+        const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+        await file.delete();
+        console.log(`[ENCRYPTION] Successfully removed corrupted DEK for user ${uid}`);
+      } catch (deleteError) {
+        console.error(`[ENCRYPTION] Failed to remove corrupted DEK for user ${uid}:`, deleteError.message);
+      }
+    }
+    
     return null;
   }
 }
 
 async function getUserDek(uid) {
   try {
+    // Check if we've already failed to get DEK for this user
+    if (failedDekCache.has(uid)) {
+      const failedInfo = failedDekCache.get(uid);
+      const timeSinceFailure = Date.now() - failedInfo.timestamp;
+      
+      // Wait 5 minutes before retrying
+      if (timeSinceFailure < 5 * 60 * 1000) {
+        console.log(`[ENCRYPTION] Skipping DEK retrieval for user ${uid} (recent failure)`);
+        throw new Error(`DEK retrieval failed recently for user ${uid}`);
+      } else {
+        // Remove from failed cache after 5 minutes
+        failedDekCache.delete(uid);
+      }
+    }
+
     // Check in-memory cache first
     if (dekCache.has(uid)) {
       return dekCache.get(uid);
@@ -104,7 +135,14 @@ async function getUserDek(uid) {
 
     return dek;
   } catch (e) {
-    console.error("Error getting DEK:", e);
+    console.error(`[ENCRYPTION] Error getting DEK for user ${uid}:`, e.message);
+    
+    // Cache the failure to avoid repeated attempts
+    failedDekCache.set(uid, {
+      timestamp: Date.now(),
+      error: e.message
+    });
+    
     throw e;
   }
 }
@@ -269,12 +307,43 @@ function getEncryptionStatus(value) {
   }
 }
 
-export { 
-  encryptValue, 
-  decryptValue, 
-  getUserDek, 
-  hashEmail, 
+// Function to force regenerate DEK for a user (useful for recovery)
+async function forceRegenerateDEK(uid) {
+  try {
+    console.log(`[ENCRYPTION] Force regenerating DEK for user: ${uid}`);
+    
+    // Remove from caches
+    dekCache.delete(uid);
+    failedDekCache.delete(uid);
+    
+    // Try to remove existing file
+    try {
+      const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+      if ((await file.exists())[0]) {
+        await file.delete();
+        console.log(`[ENCRYPTION] Removed existing DEK file for user: ${uid}`);
+      }
+    } catch (deleteError) {
+      console.log(`[ENCRYPTION] Could not remove existing DEK file for user ${uid}:`, deleteError.message);
+    }
+    
+    // Generate new DEK
+    const newDek = await generateAndStoreEncryptedDEK(uid);
+    console.log(`[ENCRYPTION] Successfully force regenerated DEK for user: ${uid}`);
+    return newDek;
+  } catch (error) {
+    console.error(`[ENCRYPTION] Failed to force regenerate DEK for user ${uid}:`, error.message);
+    throw error;
+  }
+}
+
+export {
+  encryptValue,
+  decryptValue,
+  getUserDek,
+  hashEmail,
   hashValue,
   isEncrypted,
-  getEncryptionStatus
+  getEncryptionStatus,
+  forceRegenerateDEK
 };
