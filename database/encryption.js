@@ -21,21 +21,33 @@ const kmsServiceAccountJsonString = Buffer.from(
 ).toString("utf8");
 const kmsServiceAccount = JSON.parse(kmsServiceAccountJsonString);
 
-const kmsClient = new KeyManagementServiceClient({
-  credentials: kmsServiceAccount,
-});
+// Initialize clients with error handling
+let kmsClient = null;
+let storage = null;
+let isCloudAvailable = true;
 
-const storage = new Storage({
-  credentials: storageServiceAccount,
-});
+try {
+  kmsClient = new KeyManagementServiceClient({
+    credentials: kmsServiceAccount,
+  });
+  
+  storage = new Storage({
+    credentials: storageServiceAccount,
+  });
+  
+  console.log("[ENCRYPTION] Google Cloud clients initialized successfully");
+} catch (error) {
+  console.error("[ENCRYPTION] Failed to initialize Google Cloud clients:", error.message);
+  isCloudAvailable = false;
+}
 
 const BUCKET_NAME = "zentavos-bucket";
-const KEY_PATH = kmsClient.cryptoKeyPath(
+const KEY_PATH = kmsClient ? kmsClient.cryptoKeyPath(
   process.env.GCP_PROJECT_ID,
   process.env.GCP_KEY_LOCATION,
   process.env.GCP_KEY_RING,
   process.env.GCP_KEY_NAME
-);
+) : null;
 
 // DEK cache in memory
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
@@ -46,8 +58,77 @@ const failedDecryptionCache = new LimitedMap(1000);
 // Cache for failed DEK operations to avoid repeated failures
 const failedDekCache = new LimitedMap(100);
 
+// Local fallback DEK storage (in-memory only, not persistent)
+const localDekStorage = new Map();
+
+// Function to check if Google Cloud is available
+function isGoogleCloudAvailable() {
+  return isCloudAvailable && kmsClient && storage && KEY_PATH;
+}
+
+// Function to generate a local fallback DEK
+function generateLocalFallbackDEK() {
+  return crypto.randomBytes(32);
+}
+
+// Function to encrypt data with local fallback
+function encryptWithLocalFallback(data, dek) {
+  try {
+    const jsonString = JSON.stringify(data);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv("aes-256-gcm", dek, iv);
+    
+    const encrypted = Buffer.concat([
+      cipher.update(jsonString, "utf8"),
+      cipher.final(),
+    ]);
+    
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  } catch (e) {
+    console.error("[ENCRYPTION] Local encryption failed:", e.message);
+    return data;
+  }
+}
+
+// Function to decrypt data with local fallback
+function decryptWithLocalFallback(cipherTextBase64, dek) {
+  try {
+    const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+    
+    if (cipherBuffer.length < 33) {
+      return cipherTextBase64;
+    }
+    
+    const iv = cipherBuffer.slice(0, 16);
+    const tag = cipherBuffer.slice(16, 32);
+    const encrypted = cipherBuffer.slice(32);
+    
+    const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
+    decipher.setAuthTag(tag);
+    
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString("utf8");
+    
+    return JSON.parse(decrypted);
+  } catch (e) {
+    console.log(`[ENCRYPTION] Local decryption failed: ${e.message}`);
+    return cipherTextBase64;
+  }
+}
+
 async function generateAndStoreEncryptedDEK(uid) {
   try {
+    if (!isGoogleCloudAvailable()) {
+      console.log(`[ENCRYPTION] Google Cloud unavailable, using local fallback for user: ${uid}`);
+      const localDek = generateLocalFallbackDEK();
+      localDekStorage.set(uid, localDek);
+      dekCache.set(uid, localDek);
+      return localDek;
+    }
+
     const dek = crypto.randomBytes(32);
 
     const [encryptResponse] = await kmsClient.encrypt({
@@ -65,13 +146,25 @@ async function generateAndStoreEncryptedDEK(uid) {
     console.log(`[ENCRYPTION] Generated new DEK for user: ${uid}`);
     return dek;
   } catch (error) {
-    console.error(`[ENCRYPTION] Failed to generate DEK for user ${uid}:`, error.message);
-    throw error;
+    console.error(`[ENCRYPTION] Failed to generate DEK with Google Cloud for user ${uid}:`, error.message);
+    console.log(`[ENCRYPTION] Falling back to local DEK for user: ${uid}`);
+    
+    // Fallback to local DEK
+    const localDek = generateLocalFallbackDEK();
+    localDekStorage.set(uid, localDek);
+    dekCache.set(uid, localDek);
+    
+    return localDek;
   }
 }
 
 async function getDEKFromBucket(uid) {
   try {
+    if (!isGoogleCloudAvailable()) {
+      console.log(`[ENCRYPTION] Google Cloud unavailable, checking local storage for user: ${uid}`);
+      return localDekStorage.get(uid) || null;
+    }
+
     const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
     if (!(await file.exists())[0]) {
       return null;
@@ -90,13 +183,22 @@ async function getDEKFromBucket(uid) {
     // If the DEK is corrupted, try to remove it and return null
     if (error.message.includes('Decryption failed: the ciphertext is invalid')) {
       try {
-        console.log(`[ENCRYPTION] Removing corrupted DEK for user ${uid}`);
-        const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
-        await file.delete();
-        console.log(`[ENCRYPTION] Successfully removed corrupted DEK for user ${uid}`);
+        if (isGoogleCloudAvailable()) {
+          console.log(`[ENCRYPTION] Removing corrupted DEK for user ${uid}`);
+          const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+          await file.delete();
+          console.log(`[ENCRYPTION] Successfully removed corrupted DEK for user ${uid}`);
+        }
       } catch (deleteError) {
         console.error(`[ENCRYPTION] Failed to remove corrupted DEK for user ${uid}:`, deleteError.message);
       }
+    }
+    
+    // Check local storage as fallback
+    const localDek = localDekStorage.get(uid);
+    if (localDek) {
+      console.log(`[ENCRYPTION] Using local fallback DEK for user: ${uid}`);
+      return localDek;
     }
     
     return null;
@@ -315,16 +417,19 @@ async function forceRegenerateDEK(uid) {
     // Remove from caches
     dekCache.delete(uid);
     failedDekCache.delete(uid);
+    localDekStorage.delete(uid);
     
-    // Try to remove existing file
-    try {
-      const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
-      if ((await file.exists())[0]) {
-        await file.delete();
-        console.log(`[ENCRYPTION] Removed existing DEK file for user: ${uid}`);
+    // Try to remove existing file if Google Cloud is available
+    if (isGoogleCloudAvailable()) {
+      try {
+        const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+        if ((await file.exists())[0]) {
+          await file.delete();
+          console.log(`[ENCRYPTION] Removed existing DEK file for user: ${uid}`);
+        }
+      } catch (deleteError) {
+        console.log(`[ENCRYPTION] Could not remove existing DEK file for user ${uid}:`, deleteError.message);
       }
-    } catch (deleteError) {
-      console.log(`[ENCRYPTION] Could not remove existing DEK file for user ${uid}:`, deleteError.message);
     }
     
     // Generate new DEK
@@ -337,6 +442,18 @@ async function forceRegenerateDEK(uid) {
   }
 }
 
+// Function to get system status
+function getSystemStatus() {
+  return {
+    googleCloudAvailable: isGoogleCloudAvailable(),
+    dekCacheSize: dekCache.size,
+    failedDecryptionCacheSize: failedDecryptionCache.size,
+    failedDekCacheSize: failedDekCache.size,
+    localDekStorageSize: localDekStorage.size,
+    environment: environment
+  };
+}
+
 export {
   encryptValue,
   decryptValue,
@@ -345,5 +462,6 @@ export {
   hashValue,
   isEncrypted,
   getEncryptionStatus,
-  forceRegenerateDEK
+  forceRegenerateDEK,
+  getSystemStatus
 };
