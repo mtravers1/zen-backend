@@ -40,37 +40,51 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
 // DEK cache in memory
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
 
+// Cache for failed decryption attempts to avoid repeated failures
+const failedDecryptionCache = new LimitedMap(1000);
+
 async function generateAndStoreEncryptedDEK(uid) {
-  const dek = crypto.randomBytes(32);
+  try {
+    const dek = crypto.randomBytes(32);
 
-  const [encryptResponse] = await kmsClient.encrypt({
-    name: KEY_PATH,
-    plaintext: dek,
-  });
+    const [encryptResponse] = await kmsClient.encrypt({
+      name: KEY_PATH,
+      plaintext: dek,
+    });
 
-  const encryptedDEK = encryptResponse.ciphertext;
-  const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
-  await file.save(encryptedDEK);
+    const encryptedDEK = encryptResponse.ciphertext;
+    const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+    await file.save(encryptedDEK);
 
-  // Cache the DEK
-  dekCache.set(uid, dek);
+    // Cache the DEK
+    dekCache.set(uid, dek);
 
-  return dek;
+    console.log(`[ENCRYPTION] Generated new DEK for user: ${uid}`);
+    return dek;
+  } catch (error) {
+    console.error(`[ENCRYPTION] Failed to generate DEK for user ${uid}:`, error.message);
+    throw error;
+  }
 }
 
 async function getDEKFromBucket(uid) {
-  const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
-  if (!(await file.exists())[0]) {
+  try {
+    const file = storage.bucket(BUCKET_NAME).file(`keys/${environment}/${uid}.key`);
+    if (!(await file.exists())[0]) {
+      return null;
+    }
+    const [encryptedDEK] = await file.download();
+
+    const [decryptResponse] = await kmsClient.decrypt({
+      name: KEY_PATH,
+      ciphertext: encryptedDEK,
+    });
+
+    return decryptResponse.plaintext;
+  } catch (error) {
+    console.error(`[ENCRYPTION] Failed to get DEK from bucket for user ${uid}:`, error.message);
     return null;
   }
-  const [encryptedDEK] = await file.download();
-
-  const [decryptResponse] = await kmsClient.decrypt({
-    name: KEY_PATH,
-    ciphertext: encryptedDEK,
-  });
-
-  return decryptResponse.plaintext;
 }
 
 async function getUserDek(uid) {
@@ -93,6 +107,30 @@ async function getUserDek(uid) {
     console.error("Error getting DEK:", e);
     throw e;
   }
+}
+
+// Enhanced function to detect if data needs encryption/decryption
+function shouldProcessData(value) {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+  
+  // If it's not a string, it doesn't need processing
+  if (typeof value !== 'string') {
+    return false;
+  }
+  
+  // If it's a short string (likely not encrypted), don't process
+  if (value.length < 33) {
+    return false;
+  }
+  
+  // Check if it looks like base64 (basic validation)
+  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(value)) {
+    return false;
+  }
+  
+  return true;
 }
 
 // Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
@@ -126,24 +164,28 @@ async function encryptValue(value, dek) {
   }
 }
 
-// Decrypts a base64-encoded ciphertext using AES-256-GCM and a provided DEK
+// Enhanced decrypt function with better error handling and fallback
 async function decryptValue(cipherTextBase64, dek) {
-  if (
-    cipherTextBase64 === null ||
-    cipherTextBase64 === undefined ||
-    cipherTextBase64 === ""
-  )
+  if (!shouldProcessData(cipherTextBase64)) {
     return cipherTextBase64;
+  }
+
+  // Check if we've already failed to decrypt this value
+  const cacheKey = `${cipherTextBase64}:${dek.toString('hex').substring(0, 8)}`;
+  if (failedDecryptionCache.has(cacheKey)) {
+    console.log(`[ENCRYPTION] Skipping previously failed decryption for: ${cipherTextBase64.substring(0, 20)}...`);
+    return cipherTextBase64;
+  }
 
   try {
-    // Check if the value is actually encrypted (should be at least 33 characters in base64)
-    if (cipherTextBase64.length < 33) {
-      // This is likely not encrypted data, return as is
-      return cipherTextBase64;
-    }
-
     // Decode the base64-encoded ciphertext
     const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+
+    // Validate buffer length (IV + Auth Tag + minimum encrypted content)
+    if (cipherBuffer.length < 33) {
+      console.log(`[ENCRYPTION] Data too short to be encrypted: ${cipherTextBase64.length} chars`);
+      return cipherTextBase64;
+    }
 
     // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
     const iv = cipherBuffer.slice(0, 16);
@@ -163,9 +205,19 @@ async function decryptValue(cipherTextBase64, dek) {
     ]).toString("utf8");
 
     // Parse the decrypted JSON string and return the original value
-    return JSON.parse(decrypted);
+    const result = JSON.parse(decrypted);
+    console.log(`[ENCRYPTION] Successfully decrypted data: ${typeof result}`);
+    return result;
   } catch (e) {
-    // If decryption fails, return the original value (it might not be encrypted)
+    // Log the failure and cache it to avoid repeated attempts
+    console.log(`[ENCRYPTION] Decryption failed for data (${cipherTextBase64.length} chars): ${e.message}`);
+    failedDecryptionCache.set(cacheKey, {
+      timestamp: Date.now(),
+      error: e.message,
+      dataLength: cipherTextBase64.length
+    });
+    
+    // Return the original value (it might not be encrypted or was encrypted with different keys)
     return cipherTextBase64;
   }
 }
@@ -186,4 +238,43 @@ function hashValue(value) {
     .digest("hex");
 }
 
-export { encryptValue, decryptValue, getUserDek, hashEmail, hashValue };
+// Function to check if data is encrypted
+function isEncrypted(value) {
+  return shouldProcessData(value);
+}
+
+// Function to get encryption status
+function getEncryptionStatus(value) {
+  if (!shouldProcessData(value)) {
+    return { encrypted: false, reason: 'not_processable' };
+  }
+  
+  try {
+    const buffer = Buffer.from(value, 'base64');
+    if (buffer.length < 33) {
+      return { encrypted: false, reason: 'too_short' };
+    }
+    
+    // Try to extract IV and tag
+    const iv = buffer.slice(0, 16);
+    const tag = buffer.slice(16, 32);
+    
+    if (iv.length === 16 && tag.length === 16) {
+      return { encrypted: true, reason: 'valid_format' };
+    } else {
+      return { encrypted: false, reason: 'invalid_format' };
+    }
+  } catch (e) {
+    return { encrypted: false, reason: 'invalid_base64' };
+  }
+}
+
+export { 
+  encryptValue, 
+  decryptValue, 
+  getUserDek, 
+  hashEmail, 
+  hashValue,
+  isEncrypted,
+  getEncryptionStatus
+};
