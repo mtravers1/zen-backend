@@ -39,12 +39,12 @@ if (!fs.existsSync(LOCAL_DEK_DIR)) {
 
 try {
   kmsClient = new KeyManagementServiceClient({
-    credentials: kmsServiceAccount,
-  });
-  
+  credentials: kmsServiceAccount,
+});
+
   storage = new Storage({
-    credentials: storageServiceAccount,
-  });
+  credentials: storageServiceAccount,
+});
   
   console.log("[ENCRYPTION] Google Cloud clients initialized successfully");
 } catch (error) {
@@ -126,7 +126,7 @@ function loadLocalDek(uid) {
     return null;
   } catch (error) {
     console.error(`[ENCRYPTION] Failed to load local DEK for user ${uid}:`, error.message);
-    return null;
+      return null;
   }
 }
 
@@ -251,7 +251,7 @@ async function getDEKFromBucket(uid) {
 
     if (!isGoogleCloudAvailable()) {
       console.log(`[ENCRYPTION] ⏭️ Google Cloud unavailable, cannot check bucket`);
-      return null;
+    return null;
     }
 
     console.log(`[ENCRYPTION] ☁️ Google Cloud available, checking bucket...`);
@@ -263,9 +263,9 @@ async function getDEKFromBucket(uid) {
     
     if (!fileExists[0]) {
       console.log(`[ENCRYPTION] ❌ DEK file not found in bucket for user: ${uid}`);
-      return null;
-    }
-    
+  return null;
+}
+
     console.log(`[ENCRYPTION] ✅ DEK file found, downloading...`);
     const [encryptedDEK] = await file.download();
     console.log(`[ENCRYPTION] 📥 Downloaded encrypted DEK, length: ${encryptedDEK.length} bytes`);
@@ -311,9 +311,9 @@ async function getDEKFromBucket(uid) {
       return localDek;
     } else {
       console.log(`[ENCRYPTION] ❌ No local fallback DEK found for user: ${uid}`);
-    }
-    
-    return null;
+  }
+  
+  return null;
   }
 }
 
@@ -336,7 +336,7 @@ async function getUserDek(uid) {
         const remainingTime = Math.round((5 * 60 * 1000 - timeSinceFailure) / 1000);
         console.log(`[ENCRYPTION] ⏭️ Skipping DEK retrieval for user ${uid} (recent failure, retry in ${remainingTime}s)`);
         throw new Error(`DEK retrieval failed recently for user ${uid}`);
-      } else {
+  } else {
         // Remove from failed cache after 5 minutes
         console.log(`[ENCRYPTION] ✅ Removing user ${uid} from failed cache (5 minutes passed)`);
         failedDekCache.delete(uid);
@@ -357,7 +357,7 @@ async function getUserDek(uid) {
     if (!dek) {
       console.log(`[ENCRYPTION] ❌ No existing DEK found, generating new one...`);
       dek = await generateAndStoreEncryptedDEK(uid);
-    } else {
+  } else {
       console.log(`[ENCRYPTION] ✅ DEK retrieved successfully, length: ${dek.length} bytes`);
       dekCache.set(uid, dek); // Cache it once retrieved
     }
@@ -486,12 +486,12 @@ async function decryptValue(cipherTextBase64, dek) {
     }
 
     console.log(`[ENCRYPTION] ✂️ Extracting IV, tag, and encrypted content...`);
-    
+
     // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
     const iv = cipherBuffer.slice(0, 16);
     const tag = cipherBuffer.slice(16, 32);
     const encrypted = cipherBuffer.slice(32);
-    
+
     console.log(`[ENCRYPTION] 📊 Extracted components:`);
     console.log(`  - IV length: ${iv.length} bytes`);
     console.log(`  - Tag length: ${tag.length} bytes`);
@@ -515,7 +515,7 @@ async function decryptValue(cipherTextBase64, dek) {
     }
 
     console.log(`[ENCRYPTION] 🔑 Creating decipher with DEK length: ${dek.length} bytes`);
-    
+
     // Create a decipher using AES-256-GCM with the same DEK and IV
     const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
     console.log(`[ENCRYPTION] ✅ Decipher created successfully`);

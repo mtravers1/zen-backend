@@ -1,6 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -8,9 +5,12 @@ import createError from "http-errors";
 import cors from "cors";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
 import { structuredLoggingMiddleware, errorHandlingMiddleware, cleanupMiddleware } from "./middlewares/structuredLogging.js";
+import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
 import router from "./routes/index.js";
+
+dotenv.config();
 
 const app = express();
 
