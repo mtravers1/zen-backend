@@ -391,7 +391,13 @@ function shouldProcessData(value) {
   console.log(`[ENCRYPTION] 🔍 Analyzing data for processing:`);
   console.log(`  - Value type: ${typeof value}`);
   console.log(`  - Value length: ${value?.length || 'undefined'}`);
-  console.log(`  - Value preview: ${value?.substring(0, 50) || 'undefined'}...`);
+  
+  // Safely show value preview only for strings
+  if (typeof value === 'string') {
+    console.log(`  - Value preview: ${value.substring(0, 50)}...`);
+  } else {
+    console.log(`  - Value preview: ${String(value).substring(0, 50)}...`);
+  }
   
   if (value === null || value === undefined || value === "") {
     console.log(`[ENCRYPTION] ⏭️ Skipping - value is null/undefined/empty`);
