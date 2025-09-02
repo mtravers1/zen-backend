@@ -1,6 +1,6 @@
 import AccessToken from "../database/models/AccessToken.js";
 import User from "../database/models/User.js";
-import plaidClient from "../config/plaid.js";
+import getPlaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
@@ -17,6 +17,9 @@ const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 const androidPackageName = process.env.BUNDLEID || "com.zentavos.mobile";
+
+// Initialize Plaid client
+const plaidClient = getPlaidClient();
 
 // Structured logging for Plaid operations
 const logPlaidOperation = (operation, success, details = {}) => {

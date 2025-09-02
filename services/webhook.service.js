@@ -1,8 +1,11 @@
-import plaidClient from "../config/plaid.js";
+import getPlaidClient from "../config/plaid.js";
 import plaidService from "./plaid.service.js";
 import webTokenDecoder from "../lib/webTokenDecoder.js";
 import sha256 from "crypto-js/sha256.js";
 import structuredLogger from "../lib/structuredLogger.js";
+
+// Initialize Plaid client
+const plaidClient = getPlaidClient();
 
 const webhookHandler = async (event, signature = null, body = null) => {
   const startTime = Date.now();
