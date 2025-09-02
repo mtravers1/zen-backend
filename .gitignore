@@ -57,6 +57,7 @@ typings/
 # dotenv environment variables file
 .env
 .env.previous
+test.env
 
 # next.js build output
 .next
@@ -72,3 +73,4 @@ user-limits-report.json
 scripts/user-limits-report.js
 routes/dev.router.js
 
+.cursor/*

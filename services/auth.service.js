@@ -13,18 +13,21 @@ import Assets from "../database/models/Assets.js";
 import Business from "../database/models/Businesses.js";
 // import Trips from "../database/models/Trips.js";
 import AccessToken from "../database/models/AccessToken.js";
+import VerificationCode from "../database/models/VerificationCode.js";
 import plaidService from "./plaid.service.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const own = async (uid) => {
   const userResponse = await User.findOne({
     authUid: uid,
   }).select("-password");
 
-  const dek = await getUserDek(uid);
+  const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
   const emails = await Promise.all(
     userResponse.email.map(async (email) => {
       return {
-        email: await decryptValue(email.email, dek),
+        email: await decryptValue(email.email, dek, uid),
         emailType: email.emailType,
         isPrimary: email.isPrimary,
       };
@@ -33,17 +36,21 @@ const own = async (uid) => {
 
   const decryptedFirstName = await decryptValue(
     userResponse.name.firstName,
-    dek
+    dek,
+    uid
   );
-  const decryptedLastName = await decryptValue(userResponse.name.lastName, dek);
+  const decryptedLastName = await decryptValue(userResponse.name.lastName, dek, uid);
   const decryptedMiddleName = await decryptValue(
     userResponse.name.middleName,
-    dek
+    dek,
+    uid
   );
-  const decryptedPhone = await decryptValue(userResponse.phones[0].phone, dek);
+  const decryptedPhone = userResponse.phones && userResponse.phones.length > 0 
+    ? await decryptValue(userResponse.phones[0].phone, dek, uid)
+    : null;
   let decryptedPhotoUrl;
   if (userResponse.profilePhotoUrl) {
-    decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek);
+    decryptedPhotoUrl = await decryptValue(userResponse.profilePhotoUrl, dek, uid);
   }
 
   const retrievedUser = {
@@ -66,6 +73,17 @@ const own = async (uid) => {
 
 const signUp = async (data) => {
   try {
+    // Validate required fields
+    if (!data.email || !data.firstName || !data.lastName || !data.authUid) {
+      throw new Error("Missing required fields: email, firstName, lastName, and authUid are required");
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      throw new Error("Invalid email format");
+    }
+
     let existingUser = null;
 
     try {
@@ -88,9 +106,13 @@ const signUp = async (data) => {
       throw new Error("User already exists");
     }
 
-    const dek = await getUserDek(uid);
-    console.log("data", data);
+    // Generate encryption keys first
+    console.log("Generating encryption keys for new user:", uid);
+    const keyData = await getUserDek(uid);
+    const dek = keyData.dek;
+    console.log("Generated DEK for new user:", { uid, hasDek: !!dek });
 
+    // Now encrypt all the sensitive data
     const encryptedEmail = await encryptValue(
       data.email.trim().toLowerCase(),
       dek
@@ -100,81 +122,90 @@ const signUp = async (data) => {
 
     const emailSchema = {
       email: encryptedEmail,
-      //TODO: add email type to the schema
       emailType: "personal",
       isPrimary: true,
     };
 
-    const encryptedFirstName = await encryptValue(data.firstName, dek);
-
-    const encryptedLastName = await encryptValue(data.lastName, dek);
-
-    const encryptedMiddleName = await encryptValue(data.middleName, dek);
+    const encryptedFirstName = await encryptValue(data.firstName || "", dek);
+    const encryptedLastName = await encryptValue(data.lastName || "", dek);
+    const encryptedMiddleName = await encryptValue(data.middleName || "", dek);
 
     const nameSchema = {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
-      prefix: data.prefix,
-      suffix: data.suffix,
+      prefix: data.prefix || null,
+      suffix: data.suffix || null,
       middleName: encryptedMiddleName,
     };
 
-    const encryptedPhone = await encryptValue(data.phone, dek);
+    const encryptedPhone = data.phone ? await encryptValue(data.phone, dek) : null;
 
     const phoneNumbersSchema = {
       phone: encryptedPhone,
     };
 
+    // Only include phone if provided
+    const phoneArray = data.phone ? [phoneNumbersSchema] : [];
+
     const addressSchema = {
-      street: data.address1,
-      city: data.city,
-      state: data.state,
-      postalCode: data.zip,
-      country: data.country,
+      street: data.address1 || null,
+      city: data.city || null,
+      state: data.state || null,
+      postalCode: data.zip || null,
+      country: data.country || null,
     };
 
-    const encryptedPhotoUrl = await encryptValue(data.profilePhotoUrl, dek);
+    // Only include address if at least one field is provided
+    const addressArray = (data.address1 || data.city || data.state || data.zip || data.country) 
+      ? [addressSchema] 
+      : [];
 
-    const encryptedAnnualIncome = await encryptValue(data.annualIncome, dek);
+    const encryptedPhotoUrl = data.profilePhotoUrl ? await encryptValue(data.profilePhotoUrl, dek) : null;
+    const encryptedAnnualIncome = data.annualIncome ? await encryptValue(data.annualIncome, dek) : null;
+    const encryptedSSn = data.ssn ? await encryptValue(data.ssn, dek) : null;
 
-    const encryptedSSn = await encryptValue(data.ssn, dek);
-
+    // Create the user with encrypted data
     const user = new User({
       email: [emailSchema],
-      phones: [phoneNumbersSchema],
-      role: data.role,
+      phones: phoneArray,
+      role: data.role || "individual",
       authUid: data.authUid,
       profilePhotoUrl: encryptedPhotoUrl,
-      numAccounts: data.numAccounts,
+      numAccounts: data.numAccounts || 0,
       name: nameSchema,
-      maritalStatus: data.maritalStatus,
-      address: [addressSchema],
-      dateOfBirth: data.dob ? Date.parse(data.dob) : data.dob,
-      occupation: data.occupation,
+      maritalStatus: data.maritalStatus || "single",
+      address: addressArray,
+      dateOfBirth: data.dob ? Date.parse(data.dob) : null,
+      occupation: data.occupation || null,
       annualIncome: encryptedAnnualIncome,
-      ssn: encryptedSSn,
+      encryptedSSN: encryptedSSn,
       emailHash: hashEmail(data.email),
     });
 
     await user.save();
+    console.log("Successfully created new user with encrypted data");
 
     const newUser = await User.findOne({
       authUid: data.authUid,
     });
 
-    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek);
-    const decryptedLastName = await decryptValue(newUser.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(
-      newUser.name.middleName,
-      dek
-    );
-    const decryptedPhone = await decryptValue(newUser.phones[0].phone, dek);
-    const decryptedPhotoUrl = await decryptValue(newUser.profilePhotoUrl, dek);
+    // Now decrypt the data for the response
+    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(newUser.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(newUser.name.middleName, dek, uid);
+    const decryptedPhone = newUser.phones && newUser.phones.length > 0 
+      ? await decryptValue(newUser.phones[0].phone, dek, uid)
+      : null;
+    const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek, uid) : null;
 
     const retrievedUser = {
       id: newUser._id,
-      email: newUser.email,
-      phone: newUser.phone,
+      email: [{
+        email: data.email.trim().toLowerCase(), // Return original email for response
+        emailType: "personal",
+        isPrimary: true,
+      }],
+      phone: decryptedPhone,
       role: newUser.role,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
@@ -187,35 +218,60 @@ const signUp = async (data) => {
     return retrievedUser;
   } catch (error) {
     console.log("error in signup", error);
+    
+    // Log specific error types for debugging
+    if (error.name === 'ValidationError') {
+      console.error("MongoDB Validation Error:", error.message);
+      console.error("Validation Details:", error.errors);
+    } else if (error.message.includes('ENCRYPTION')) {
+      console.error("Encryption Error:", error.message);
+    } else if (error.message.includes('User not found')) {
+      console.error("User Lookup Error:", error.message);
+    }
 
-    throw new Error(error);
+    // Re-throw the error with more context
+    throw new Error(`Signup failed: ${error.message}`);
   }
 };
 
 const signIn = async (uid) => {
   try {
+    structuredLogger.logOperationStart('auth_service_signin', { user_id: uid });
     console.log("uid", uid);
+
     const user = await User.findOne({
       authUid: uid,
     }).select("-password");
-    if (!user) {
-      throw new Error("User not found");
-    }
-    const dek = await getUserDek(uid);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
-    const decryptedPhone = await decryptValue(user.phones[0].phone, dek);
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_signin',
+        user_id: uid,
+        error_classification: 'user_not_found'
+      });
+      throw error;
+    }
+
+    structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
+
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
+    const decryptedPhone = user.phones && user.phones.length > 0 
+      ? await decryptValue(user.phones[0].phone, dek, uid)
+      : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
     }
 
     const emails = await Promise.all(
       user.email.map(async (email) => {
         return {
-          email: await decryptValue(email.email, dek),
+          email: await decryptValue(email.email, dek, uid),
           emailType: email.emailType,
           isPrimary: email.isPrimary,
         };
@@ -235,29 +291,213 @@ const signIn = async (uid) => {
       },
     };
 
+    structuredLogger.logSuccess('auth_service_signin', { user_id: uid });
     return retrievedUser;
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_signin',
+      user_id: uid,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'decryption_error'
+    });
     console.log("error in signin", error);
     throw new Error(error);
   }
 };
 
-const checkEmail = async (email, method) => {
-  const emailHash = hashEmail(email);
-  const user = await User.findOne({
-    emailHash,
-  });
-  if (!user) {
-    throw new Error("User not found");
+// New method to handle sign-in with auto-creation for new users
+const signInOrCreate = async (uid, userData = null) => {
+  try {
+    structuredLogger.logOperationStart('auth_service_signin_or_create', { user_id: uid });
+    console.log("uid", uid);
+    console.log("userData", userData);
+
+    let user = await User.findOne({
+      authUid: uid,
+    }).select("-password");
+
+    console.log("User lookup result:", { found: !!user, uid });
+
+    if (!user) {
+      // User doesn't exist, create a basic user profile
+      console.log("User not found, creating new user with data:", userData);
+      
+      if (!userData) {
+        const error = new Error("User not found and no user data provided for creation");
+        structuredLogger.logErrorBlock(error, {
+          operation: 'auth_service_signin_or_create',
+          user_id: uid,
+          error_classification: 'missing_user_data'
+        });
+        throw error;
+      }
+
+      structuredLogger.logOperationStart('auth_service_create_basic_user', { user_id: uid });
+      
+      // Create a basic user with minimal data
+      const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
+      
+      const encryptedEmail = await encryptValue(
+        userData.email.trim().toLowerCase(),
+        dek
+      );
+
+      const emailSchema = {
+        email: encryptedEmail,
+        emailType: "personal",
+        isPrimary: true,
+      };
+
+      // For new users, we might only have email, so create minimal profile
+      const nameSchema = {
+        firstName: userData.firstName ? await encryptValue(userData.firstName, dek) : await encryptValue("New", dek),
+        lastName: userData.lastName ? await encryptValue(userData.lastName, dek) : await encryptValue("User", dek),
+        prefix: userData.prefix || null,
+        suffix: userData.suffix || null,
+        middleName: userData.middleName ? await encryptValue(userData.middleName, dek) : null,
+      };
+
+      const phoneNumbersSchema = {
+        phone: userData.phone ? await encryptValue(userData.phone, dek) : null,
+      };
+
+      const phoneArray = userData.phone ? [phoneNumbersSchema] : [];
+
+      const addressSchema = {
+        street: userData.address1 || null,
+        city: userData.city || null,
+        state: userData.state || null,
+        postalCode: userData.zip || null,
+        country: userData.country || null,
+      };
+
+      const addressArray = (userData.address1 || userData.city || userData.state || userData.zip || userData.country) 
+        ? [addressSchema] 
+        : [];
+
+      user = new User({
+        email: [emailSchema],
+        phones: phoneArray,
+        role: "individual", // Use valid enum value
+        authUid: uid,
+        profilePhotoUrl: "",
+        numAccounts: 0,
+        name: nameSchema,
+        maritalStatus: "single", // Use valid enum value
+        address: addressArray,
+        dateOfBirth: null,
+        occupation: null,
+        annualIncome: null,
+        encryptedSSN: null, // Use correct field name
+        emailHash: hashEmail(userData.email),
+      });
+
+      await user.save();
+      structuredLogger.logSuccess('auth_service_create_basic_user', { user_id: uid });
+    }
+
+    // Now proceed with normal sign-in flow
+    structuredLogger.logOperationStart('auth_service_decrypt_user_data', { user_id: uid });
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
+
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek, uid);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek, uid);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek, uid);
+    const decryptedPhone = user.phones && user.phones.length > 0 
+      ? await decryptValue(user.phones[0].phone, dek, uid)
+      : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek, uid);
+    }
+
+    const emails = await Promise.all(
+      user.email.map(async (email) => {
+        return {
+          email: await decryptValue(email.email, dek, uid),
+          emailType: email.emailType,
+          isPrimary: email.isPrimary,
+        };
+      })
+    );
+
+    const retrievedUser = {
+      id: user._id,
+      email: emails,
+      phone: decryptedPhone,
+      role: user.role,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
+    structuredLogger.logSuccess('auth_service_signin_or_create', { user_id: uid });
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_signin_or_create',
+      user_id: uid,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'decryption_error'
+    });
+    console.log("error in signin_or_create", error);
+    throw new Error(error);
   }
-  return user;
+};
+
+const checkEmail = async (email, method) => {
+  try {
+    structuredLogger.logOperationStart('auth_service_check_email', {
+      email: email,
+      method: method
+    });
+
+    const emailHash = hashEmail(email);
+    const user = await User.findOne({
+      emailHash,
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_check_email',
+        email: email,
+        method: method,
+        error_classification: 'user_not_found'
+      });
+      throw error;
+    }
+
+    structuredLogger.logSuccess('auth_service_check_email', { email: email });
+    return user;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_check_email',
+      email: email,
+      method: method,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 'database_error'
+    });
+    throw error;
+  }
 };
 
 const checkEmailFirebase = async (email) => {
   try {
+    structuredLogger.logOperationStart('auth_service_check_email_firebase', { email: email });
+
     const user = await admin.auth().getUserByEmail(email);
+
+    structuredLogger.logSuccess('auth_service_check_email_firebase', { email: email });
     return user;
   } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_check_email_firebase',
+      email: email,
+      error_classification: 'firebase_error'
+    });
     throw new Error("User not found");
   }
 };
@@ -286,7 +526,8 @@ const deleteUser = async (uid) => {
       throw new Error("User not found");
     }
     //get dek
-    const dek = await getUserDek(uid);
+    const keyData = await getUserDek(uid);
+  const dek = keyData.dek;
     //get accounts and save ids
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
@@ -327,7 +568,7 @@ const deleteUser = async (uid) => {
       userId: user._id,
     });
     for (const token of accessToken) {
-      const decryptedAccessToken = await decryptValue(token.accessToken, dek);
+      const decryptedAccessToken = await decryptValue(token.accessToken, dek, uid);
       await plaidService.invalidateAccessToken(decryptedAccessToken);
     }
     await AccessToken.deleteMany({
@@ -350,14 +591,121 @@ const deleteUser = async (uid) => {
   }
 };
 
+const createVerificationCode = async (email) => {
+  try {
+    console.log(`[DEBUG] Creating verification code for email: ${email}`);
+    
+    // Test database connection first
+    console.log(`[DEBUG] Testing database connection...`);
+    const testQuery = await VerificationCode.findOne({});
+    console.log(`[DEBUG] Database connection test result:`, testQuery ? 'Connected' : 'No data but connected');
+    
+    // Generate a 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`[DEBUG] Generated code: ${code}`);
+    
+    // Set expiration to 10 minutes from now
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    console.log(`[DEBUG] Code expires at: ${expiresAt}`);
+    
+    // Delete any existing codes for this email
+    console.log(`[DEBUG] Deleting existing codes...`);
+    const deletedCount = await VerificationCode.deleteMany({ email });
+    console.log(`[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`);
+    
+    // Create new verification code
+    console.log(`[DEBUG] Creating VerificationCode model instance...`);
+    const verificationCode = new VerificationCode({
+      email,
+      code,
+      expiresAt
+    });
+    console.log(`[DEBUG] Model instance created:`, verificationCode);
+    
+    console.log(`[DEBUG] Saving verification code to database...`);
+    const savedCode = await verificationCode.save();
+    console.log(`[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`);
+    
+    return code;
+  } catch (error) {
+    console.error('[ERROR] Error in createVerificationCode:', error);
+    console.error('[ERROR] Error stack:', error.stack);
+    structuredLogger.logErrorBlock(error, {
+      operation: 'create_verification_code',
+      email: email,
+      error_classification: 'database_error'
+    });
+    throw new Error('Failed to create verification code');
+  }
+};
+
+const verifyCode = async (email, code) => {
+  try {
+    console.log(`[DEBUG] Verifying code for email: ${email}, code: ${code}`);
+    
+    // Find the verification code
+    const verificationCode = await VerificationCode.findOne({
+      email,
+      code,
+      expiresAt: { $gt: new Date() },
+      used: false
+    });
+    
+    console.log(`[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`);
+    
+    console.log(`[DEBUG] Found verification code:`, verificationCode ? {
+      id: verificationCode._id,
+      email: verificationCode.email,
+      code: verificationCode.code,
+      expiresAt: verificationCode.expiresAt,
+      used: verificationCode.used,
+      createdAt: verificationCode.createdAt
+    } : 'null');
+    
+    if (!verificationCode) {
+      console.log(`[DEBUG] No valid verification code found for email: ${email}, code: ${code}`);
+      
+      // Let's also check what codes exist for this email
+      const allCodes = await VerificationCode.find({ email });
+      console.log(`[DEBUG] All codes for email ${email}:`, allCodes.map(c => ({
+        code: c.code,
+        expiresAt: c.expiresAt,
+        used: c.used,
+        createdAt: c.createdAt
+      })));
+      
+      return { valid: false, message: 'Invalid or expired verification code' };
+    }
+    
+    console.log(`[DEBUG] Marking code as used...`);
+    // Mark the code as used
+    verificationCode.used = true;
+    await verificationCode.save();
+    
+    console.log(`[DEBUG] Code verified successfully`);
+    return { valid: true, message: 'Verification code validated successfully' };
+  } catch (error) {
+    console.error('[ERROR] Error in verifyCode:', error);
+    structuredLogger.logErrorBlock(error, {
+      operation: 'verify_verification_code',
+      email: email,
+      error_classification: 'database_error'
+    });
+    throw new Error('Failed to verify code');
+  }
+};
+
 const authService = {
   signUp,
   signIn,
+  signInOrCreate,
   checkEmail,
   own,
   changeUserPassword,
   checkEmailFirebase,
   deleteUser,
+  createVerificationCode,
+  verifyCode,
 };
 
 export default authService;

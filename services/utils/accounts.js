@@ -90,17 +90,17 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
 /*export const getStartOfWeek = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
-  const day = d.getUTCDay(); // Domingo=0, Lunes=1, ..., Sábado=6
-  const diff = day === 0 ? -6 : 1 - day; // Lunes = día 1
+  const day = d.getUTCDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+  const diff = -day; // For weeks Sunday to Saturday
   d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().split("T")[0]; // solo la fecha
+  return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };*/
 
 export const getStartOfWeek = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
-  const day = d.getUTCDay(); // Domingo = 0, Lunes = 1, ..., Sábado = 6
-  const diff = -day; // Para semanas domingo a sábado
+  const day = d.getUTCDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+  const diff = -day; // For weeks Sunday to Saturday
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };
@@ -115,7 +115,7 @@ export const groupByWeek = (transactions) => {
     return acc;
   }, {});
 
-  // Obtener las semanas mínima y máxima del grupo
+  // Get the minimum and maximum weeks of the group
   const allWeeksSorted = Object.keys(groupedTrans).sort(
     (a, b) => new Date(a) - new Date(b)
   );
@@ -123,13 +123,13 @@ export const groupByWeek = (transactions) => {
   const start = new Date(allWeeksSorted[0]);
   const end = new Date(allWeeksSorted[allWeeksSorted.length - 1]);
 
-  // Iterar por todas las semanas entre el inicio y el fin
+  // Iterate through all weeks between the start and end
   const orderedGrouped = {};
   const current = new Date(start);
   while (current <= end) {
     const key = current.toISOString().split("T")[0];
     orderedGrouped[key] = groupedTrans[key] || [];
-    current.setUTCDate(current.getUTCDate() + 7); // avanzar a la siguiente semana
+    current.setUTCDate(current.getUTCDate() + 7); // advance to the next week
   }
 
   /*const keys = Object.keys(orderedGrouped).map((or) => {

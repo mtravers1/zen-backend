@@ -1,25 +1,36 @@
 import { Router } from "express";
-import accountsController from "../controllers/accounts.controller.js";
+import controller from "../controllers/accounts.controller.js";
 
 const router = Router();
 
-router.post("/add-account", accountsController.addAccount);
-router.post("/", accountsController.getAccounts);
-router.post("/cash-flows", accountsController.getCashFlows);
-router.post("/cash-flows-weekly", accountsController.getCashFlowsWeekly);
-router.post("/cash-flows-by-plaidaccount", accountsController.getCashFlowsByPlaidAccount);
+router.get("/debug/:profileId", controller.debugProfile);
+router.get("/debug-decrypt/:profileId", controller.debugDecryption);
+router.get("/debug-cache", controller.debugCache);
+router.get("/debug-encryption/:uid", controller.debugEncryption);
+router.post("/add-account", controller.addAccount);
+router.post("/", controller.getAccounts);
+router.post("/cash-flows", controller.getCashFlows);
+router.post("/cash-flows-weekly", controller.getCashFlowsWeekly);
+router.post("/cash-flows-by-plaidaccount", controller.getCashFlowsByPlaidAccount);
 router.get(
   "/profile-transactions/:profileId",
-  accountsController.getProfileTransactions
+  controller.getProfileTransactions
 );
-router.get("/transactions", accountsController.getUserTransactions);
+router.get("/transactions", controller.getUserTransactions);
 router.get(
   "/transactions/:accountId",
-  accountsController.getTransactionsByAccount
+  controller.getTransactionsByAccount
 );
-router.get("/details/:accountId/:profileId", accountsController.getAccountDetails);
-router.get("/", accountsController.getAllUserAccounts);
-router.post("/add-photo", accountsController.addAccountPhoto);
-router.post("/get-photo", accountsController.getAccountPhoto);
+router.get("/details/:accountId/:profileId", controller.getAccountDetails);
+router.get("/", controller.getAllUserAccounts);
+router.post("/add-photo", controller.addAccountPhoto);
+router.post("/get-photo", controller.getAccountPhoto);
+router.get("/photo/:fileName", controller.serveAccountPhoto);
+router.delete("/:accountId", controller.deleteAccount);
+
+// Cache management endpoints
+router.get('/cache/stats', controller.getCacheStats);
+router.post('/cache/clear', controller.clearAllCaches);
+router.post('/cache/clear-decryption', controller.clearDecryptionCache);
 
 export default router;
