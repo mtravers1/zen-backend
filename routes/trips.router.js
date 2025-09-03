@@ -6,6 +6,8 @@ const router = Router();
 // Crear un nuevo trip
 router.post("/", tripsController.createTrip);
 
+router.get("/check-limit", tripsController.checkTripLimit);
+
 //get trips
 router.get("/", tripsController.getFilteredTrips);
 router.get("/lastvehicle", tripsController.getLatVehicleUsed);

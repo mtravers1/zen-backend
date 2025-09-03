@@ -11,6 +11,8 @@ import tripRoutes from "./trips.router.js";
 import filesRouter from "./files.router.js";
 import aiRouter from "./ai.router.js";
 import paymentsRouter from "./payments.router.js";
+import subscriptionsRouter from "./subscriptions.router.js";
+import roleRouter from "./role.router.js";
 
 const router = Router();
 
@@ -28,6 +30,8 @@ router.use("/trips", tripRoutes);
 router.use("/files", filesRouter);
 router.use("/ai", aiRouter);
 router.use("/payments", paymentsRouter);
+router.use("/subscriptions", subscriptionsRouter);
+router.use("/role", roleRouter);
 
 // router.use('/users', require('./users.router'));
 // router.use('/roles', require('./roles.router'));

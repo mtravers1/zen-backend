@@ -63,7 +63,7 @@ const own = async (uid) => {
       middleName: decryptedMiddleName,
     },
     account_type: userResponse.account_type,
-    id_uuid: userResponse.id_uuid
+    id_uuid: userResponse.id_uuid,
   };
 
   return retrievedUser;

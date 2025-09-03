@@ -212,9 +212,15 @@ const getAccounts = async (email, uid) => {
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
+  console.log(`[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`);
+  
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
+  
+  console.log(`[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`);
+  console.log(`[PLAID] Account details:`, response.data.accounts?.map(acc => `${acc.name} (${acc.account_id})`));
+  
   return response.data;
 };
 
@@ -954,6 +960,34 @@ const detectInternalTransfers = async (transactions) => {
   return transfers;
 };
 
+const getInstitutionUpdateToken = async (institutionId, uid) => {
+  try {
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Find account for this institution and user
+    const account = await PlaidAccount.findOne({
+      institution_id: institutionId,
+      owner_id: user._id,
+    });
+
+    if (!account) {
+      throw new Error("Institution not found or user does not have access");
+    }
+
+    // Decrypt access token
+    const dek = await getUserDek(uid);
+    const decryptedAccessToken = await decryptValue(account.accessToken, dek);
+
+    return { access_token: decryptedAccessToken };
+  } catch (error) {
+    console.error("Error getting institution update token:", error);
+    throw error;
+  }
+};
+
 const invalidateAccessToken = async (accessToken) => {
   return await structuredLogger.withContext(
     'invalidate_access_token',
@@ -1005,6 +1039,7 @@ const plaidService = {
   repairAccessTokenWebhook,
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
+  getInstitutionUpdateToken,
   invalidateAccessToken,
 };
 
