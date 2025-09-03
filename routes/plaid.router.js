@@ -1,5 +1,6 @@
 import { Router } from "express";
 import plaidController from "../controllers/plaid.controller.js";
+import platformDetection from "../middlewares/platformDetection.js";
 
 const router = Router();
 
