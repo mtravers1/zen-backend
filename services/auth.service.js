@@ -16,6 +16,7 @@ import AccessToken from "../database/models/AccessToken.js";
 import VerificationCode from "../database/models/VerificationCode.js";
 import plaidService from "./plaid.service.js";
 import structuredLogger from "../lib/structuredLogger.js";
+import { getOldestAccessToken } from "./utils/accounts.js";
 
 const own = async (uid) => {
   const userResponse = await User.findOne({
@@ -556,13 +557,9 @@ const deleteUser = async (uid) => {
     //   user: user._id,
     // });
     //get accesstokens, decrypt and delete them and invalidate them
-    const accessToken = await AccessToken.find({
-      userId: user._id,
-    });
-    for (const token of accessToken) {
-      const decryptedAccessToken = await decryptValue(token.accessToken, dek);
-      await plaidService.invalidateAccessToken(decryptedAccessToken);
-    }
+    const accessToken = await getOldestAccessToken({userId: user._id});
+    const decryptedAccessToken = await decryptValue(accessToken.accessToken, dek);
+    await plaidService.invalidateAccessToken(decryptedAccessToken);
     await AccessToken.deleteMany({
       userId: user._id,
     });

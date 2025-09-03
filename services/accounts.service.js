@@ -14,7 +14,8 @@ import {
   getUserDek,
   hashValue,
 } from "../database/encryption.js";
-import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
+import { calculateWeeklyTotals, getOldestAccessToken, groupByWeek } from "./utils/accounts.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const serviceAccountJsonString = Buffer.from(
@@ -29,31 +30,22 @@ const storage = new Storage({
 const bucketName = "zentavos-bucket";
 
 const addAccount = async (accessToken, email, uid) => {
-  const dek = await getUserDek(uid);
-  const user = await User.findOne({
-    authUid: uid,
-  });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  const userId = user._id.toString();
-  const userType = user.role;
-
-  // Decrypt the access token if it's encrypted (from frontend)
-  const decryptedAccessToken = await decryptValue(accessToken, dek);
-
-  const accountsResponse = await plaidService.getAccountsWithAccessToken(
-    decryptedAccessToken
-  );
-
-  console.log(
-    `[ACCOUNTS] Plaid returned ${
-      accountsResponse.accounts?.length || 0
-    } accounts for institution ${accountsResponse.item?.institution_name}`
-  );
-  console.log(
-    `[ACCOUNTS] Institution ID: ${accountsResponse.item?.institution_id}`
-  );
+  return await structuredLogger.withContext(
+    'add_account',
+    { email, uid, has_access_token: !!accessToken },
+    async () => {
+      const dek = await getUserDek(uid);
+      const user = await User.findOne({
+        authUid: uid,
+      });
+      if (!user) {
+        throw new Error("User not found");
+      }
+      const userId = user._id.toString();
+      const userType = user.role;
+      const accountsResponse = await plaidService.getAccountsWithAccessToken(
+        accessToken
+      );
 
   const accounts = accountsResponse.accounts;
   const institutionId = accountsResponse.item.institution_id;
@@ -663,39 +655,76 @@ const addAccount = async (accessToken, email, uid) => {
     await account.save();
   }
 
-  return { savedAccounts, existingAccounts: responseExistingAccounts };
+      structuredLogger.logSuccess('add_account_completed', {
+        user_id: userId,
+        institution_id: institutionId,
+        institution_name: institutionName,
+        saved_accounts_count: savedAccounts.length,
+        existing_accounts_count: existingAccounts.length,
+        transactions_count: transactions.length,
+        investment_transactions_count: investmentTransactions.length
+      });
+
+      return { savedAccounts, existingAccounts: responseExistingAccounts };
+    }
+  );
 };
 
 const removeAccount = async (accountId, email) => {
-  const user = await User.findOne({
-    "email.email": email.toLowerCase(),
-  });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  const plaidAccounts = user.plaidAccounts;
+  return await structuredLogger.withContext(
+    'remove_account',
+    { accountId, email },
+    async () => {
+      const user = await User.findOne({
+        "email.email": email.toLowerCase(),
+      });
+      if (!user) {
+        throw new Error("User not found");
+      }
+      const plaidAccounts = user.plaidAccounts;
 
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
-  user.plaidAccounts = plaidAccounts.filter(
-    (id) => id.toString() !== account._id.toString()
+      const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+      if (!account) {
+        structuredLogger.logErrorBlock(new Error("Account not found"), {
+          operation: 'remove_account',
+          accountId,
+          email
+        });
+        return;
+      }
+
+      user.plaidAccounts = plaidAccounts.filter(
+        (id) => id.toString() !== account._id.toString()
+      );
+
+      await user.save();
+
+      await PlaidAccount.deleteOne({ plaid_account_id: accountId });
+      await Transaction.deleteMany({ plaidAccountId: accountId });
+      await Liability.deleteMany({ accountId });
+
+      structuredLogger.logSuccess('remove_account_completed', {
+        accountId,
+        email,
+        user_id: user._id
+      });
+    }
   );
-
-  await user.save();
-
-  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
-  await Transaction.deleteMany({ plaidAccountId: accountId });
-  await Liability.deleteMany({ accountId });
 };
 
 const getAccounts = async (profile, uid) => {
-  const dek = await getUserDek(uid);
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccountsResponse = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  })
-    .lean()
-    .select("-accessToken")
-    .exec();
+  return await structuredLogger.withContext(
+    'get_accounts',
+    { uid, profile_id: profile.id },
+    async () => {
+      const dek = await getUserDek(uid);
+      const plaidIds = profile.plaidAccounts;
+      const plaidAccountsResponse = await PlaidAccount.find({
+        _id: { $in: plaidIds },
+      })
+        .lean()
+        .select("-accessToken")
+        .exec();
 
   let plaidAccounts = [];
 
@@ -760,28 +789,49 @@ const getAccounts = async (profile, uid) => {
     (account) => account.account_type === "other"
   );
 
-  return {
-    depositoryAccounts,
-    creditAccounts,
-    investmentAccounts,
-    loanAccounts,
-    otherAccounts,
-  };
+      structuredLogger.logSuccess('get_accounts_completed', {
+        uid,
+        profile_id: profile.id,
+        total_accounts: plaidAccounts.length,
+        depository_accounts: depositoryAccounts.length,
+        credit_accounts: creditAccounts.length,
+        investment_accounts: investmentAccounts.length,
+        loan_accounts: loanAccounts.length,
+        other_accounts: otherAccounts.length
+      });
+
+      return {
+        depositoryAccounts,
+        creditAccounts,
+        investmentAccounts,
+        loanAccounts,
+        otherAccounts,
+      };
+    }
+  );
 };
 
 const getAllUserAccounts = async (email, uid) => {
-  const user = await User.findOne({
-    authUid: uid,
-  })
-    .populate("plaidAccounts", "-transactions")
-    .exec();
-  if (!user) {
-    throw new Error("User not found");
-  }
+  return await structuredLogger.withContext(
+    'get_all_user_accounts',
+    { email, uid },
+    async () => {
+      const user = await User.findOne({
+        authUid: uid,
+      })
+        .populate("plaidAccounts", "-transactions")
+        .exec();
+      if (!user) {
+        throw new Error("User not found");
+      }
 
-  if (!user.plaidAccounts.length) {
-    return [];
-  }
+      if (!user.plaidAccounts.length) {
+        structuredLogger.logSuccess('get_all_user_accounts_completed', {
+          uid,
+          accounts_count: 0
+        });
+        return [];
+      }
 
   const accountsResponse = user.plaidAccounts;
 
@@ -835,8 +885,14 @@ const getAllUserAccounts = async (email, uid) => {
     });
   }
 
-  console.timeEnd("getAllUserAccounts");
-  return accounts;
+      structuredLogger.logSuccess('get_all_user_accounts_completed', {
+        uid,
+        accounts_count: accounts.length
+      });
+      
+      return accounts;
+    }
+  );
 };
 const calculateCashFlowsWeekly = async (
   depositoryTransactions,
@@ -997,10 +1053,14 @@ const getCashFlowsWeekly = async (profile, uid) => {
 };
 
 const getCashFlows = async (profile, uid) => {
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccountsResponse = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  }).lean();
+  return await structuredLogger.withContext(
+    'get_cash_flows',
+    { uid, profile_id: profile.id },
+    async () => {
+      const plaidIds = profile.plaidAccounts;
+      const plaidAccountsResponse = await PlaidAccount.find({
+        _id: { $in: plaidIds },
+      }).lean();
 
   const dek = await getUserDek(uid);
 
@@ -1421,17 +1481,28 @@ const getCashFlows = async (profile, uid) => {
     index++;
   }
 
-  return {
-    currentCashFlow,
-    totalCashBalance,
-    averageDailySpend,
-    averageDailyIncome,
-    netWorth,
-    cashRunway,
-    advice,
-    averageDailyNet,
-    weeklyCashFlow,
-  };
+      structuredLogger.logSuccess('get_cash_flows_completed', {
+        uid,
+        profile_id: profile.id,
+        current_cash_flow: currentCashFlow,
+        total_cash_balance: totalCashBalance,
+        net_worth: netWorth,
+        cash_runway: cashRunway
+      });
+
+      return {
+        currentCashFlow,
+        totalCashBalance,
+        averageDailySpend,
+        averageDailyIncome,
+        netWorth,
+        cashRunway,
+        advice,
+        averageDailyNet,
+        weeklyCashFlow,
+      };
+    }
+  );
 };
 
 const getTransactions = async (
@@ -1439,7 +1510,11 @@ const getTransactions = async (
   uid,
   pagination = { paginate: false }
 ) => {
-  const allTransactions = [];
+  return await structuredLogger.withContext(
+    'get_transactions',
+    { uid, accounts_count: accounts.length, pagination },
+    async () => {
+      const allTransactions = [];
 
   for (const plaidAccount of accounts) {
     const transactionsResponse = await Transaction.find({
@@ -1542,6 +1617,8 @@ const getTransactions = async (
   }
 
   return sortedTransactions;
+    }
+  );
 };
 
 const getUserTransactions = async (
@@ -1798,12 +1875,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
   const deac = await getDecryptedAccount(account, dek);
 
-  const access_token = await AccessToken.findOne({
-    userId: profileId,
-    institutionId: deac.institution_id,
-  })
-    .lean()
-    .exec();
+  const access_token = await getOldestAccessToken({userId: profileId, institutionId: deac.institution_id})
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
   let liabilityPlaid;
