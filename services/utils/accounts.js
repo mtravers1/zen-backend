@@ -1,3 +1,5 @@
+import AccessToken from "../../database/models/AccessToken.js";
+
 export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
   const weeklySummary = [];
   let totalGeneralDeposits = 0;
@@ -104,6 +106,15 @@ export const getStartOfWeek = (date) => {
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };
+
+export const getOldestAccessToken = async (find) => {
+  const accessTokens = await AccessToken.find(find).sort({ createdAt: 1 });
+  if (accessTokens.length > 1) {
+    console.error("Multiple access tokens found for query: ", find);
+  }
+  return accessTokens[0];
+};
+
 
 export const groupByWeek = (transactions) => {
   if (transactions.length === 0) return {};

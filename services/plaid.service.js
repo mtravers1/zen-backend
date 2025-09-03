@@ -10,6 +10,7 @@ import {
   getUserDek,
 } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
+import { getOldestAccessToken } from "./utils/accounts.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
@@ -170,7 +171,7 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await AccessToken.find({ userId });
+  const tokens = await getOldestAccessToken({userId});
 
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
@@ -313,7 +314,7 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await AccessToken.findOne({ itemId });
+  const access = await getOldestAccessToken({ itemId });
   if (!access) {
     return;
   }
@@ -403,7 +404,7 @@ const updateTransactions = async (item) => {
     async () => {
       structuredLogger.logOperationStart('update_transactions', { item_id: item });
       
-      const accessInfo = await AccessToken.findOne({ itemId: item });
+      const accessInfo = await getOldestAccessToken({ itemId: item });
       if (!accessInfo) {
         structuredLogger.logErrorBlock(new Error("Access token not found for item"), {
           operation: 'update_transactions',
@@ -680,7 +681,7 @@ const updateInvestmentTransactions = async (item) => {
     { item_id: item },
     async () => {
       structuredLogger.logOperationStart('update_investment_transactions', { item_id: item });
-  const accessInfo = await AccessToken.findOne({ itemId: item });
+  const accessInfo = await getOldestAccessToken({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
