@@ -414,9 +414,15 @@ const getAccounts = async (email, uid) => {
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
+  console.log(`[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`);
+  
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
+  
+  console.log(`[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`);
+  console.log(`[PLAID] Account details:`, response.data.accounts?.map(acc => `${acc.name} (${acc.account_id})`));
+  
   return response.data;
 };
 

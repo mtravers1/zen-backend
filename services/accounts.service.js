@@ -38,13 +38,33 @@ const addAccount = async (accessToken, email, uid) => {
   }
   const userId = user._id.toString();
   const userType = user.role;
+
+  // Decrypt the access token if it's encrypted (from frontend)
+  const decryptedAccessToken = await decryptValue(accessToken, dek);
+
   const accountsResponse = await plaidService.getAccountsWithAccessToken(
-    accessToken
+    decryptedAccessToken
+  );
+
+  console.log(
+    `[ACCOUNTS] Plaid returned ${
+      accountsResponse.accounts?.length || 0
+    } accounts for institution ${accountsResponse.item?.institution_name}`
+  );
+  console.log(
+    `[ACCOUNTS] Institution ID: ${accountsResponse.item?.institution_id}`
   );
 
   const accounts = accountsResponse.accounts;
   const institutionId = accountsResponse.item.institution_id;
   const institutionName = accountsResponse.item.institution_name;
+
+  if (!accounts || accounts.length === 0) {
+    console.log(
+      `[ACCOUNTS] ⚠️ No accounts returned from Plaid for institution ${institutionName}`
+    );
+    return { savedAccounts: [], existingAccounts: [] };
+  }
 
   const userAccounts = user.plaidAccounts;
   let savedAccounts = [];
@@ -66,13 +86,40 @@ const addAccount = async (accessToken, email, uid) => {
     });
 
     if (existingAccount) {
-      existingAccounts.push(existingAccount);
+      console.log(
+        `[ACCOUNTS] Updating existing account: ${account.name} (${account.account_id})`
+      );
+
+      // Update balances with new data
+      existingAccount.currentBalance = await encryptValue(
+        account.balances?.current?.toString() || "0",
+        dek
+      );
+      existingAccount.availableBalance = await encryptValue(
+        account.balances?.available?.toString() || "0",
+        dek
+      );
+
+      // Update access token (may have changed)
+      existingAccount.accessToken = await encryptValue(
+        decryptedAccessToken,
+        dek
+      );
+
+      // Save updates
+      await existingAccount.save();
+
+      console.log(`[ACCOUNTS] ✅ Updated existing account: ${account.name}`);
+
+      // Add to savedAccounts so frontend sees it as "processed"
+      savedAccounts.push(existingAccount);
+
       continue;
     }
 
     const encryptedMask = await encryptValue(account.mask, dek);
 
-    const encryptedToken = await encryptValue(accessToken, dek);
+    const encryptedToken = await encryptValue(decryptedAccessToken, dek);
 
     const encriptedName = await encryptValue(account.name, dek);
 
@@ -179,7 +226,9 @@ const addAccount = async (accessToken, email, uid) => {
   if (accountsResponse.item.products.includes("liabilities")) {
     try {
       liabilitiesResponse =
-        await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+        await plaidService.getLoanLiabilitiesWithAccessToken(
+          decryptedAccessToken
+        );
     } catch (error) {
       console.error(
         "Error fetching liabilities:",
