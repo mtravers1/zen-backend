@@ -56,6 +56,7 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.previous
 test.env
 
 # next.js build output
@@ -63,5 +64,13 @@ test.env
 
 
 dist/
+.DS_Store
+
+.claude/
+CLAUDE.md
+claude/
+user-limits-report.json
+scripts/user-limits-report.js
+routes/dev.router.js
 
 .cursor/*

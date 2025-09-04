@@ -13,10 +13,14 @@ router.post("/check-email-firebase", authController.checkEmailFirebase);
 router.post("/check-email", authController.checkEmail);
 router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
-router.post("/verifyCode", firebaseAuth, authController.verifyCode);
+router.post("/verifyCode", authController.verifyCode);
 router.post("/resetPassword", authController.resetPassword);
 router.delete("/:uid", authController.deleteUser);
-router.post('/recover-encryption-keys/:uid', firebaseAuth, authController.recoverEncryptionKeys);
+router.post(
+  "/recover-encryption-keys/:uid",
+  firebaseAuth,
+  authController.recoverEncryptionKeys
+);
 router.get("/test", (req, res) => {
   const aiurl = process.env.AI_URL;
   const aimodel = process.env.AI_MODEL;

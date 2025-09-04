@@ -1,4 +1,5 @@
 import User from "../database/models/User.js";
+import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
 
 const APPLE_PRODUCTION_URL = 'https://buy.itunes.apple.com/verifyReceipt';
 const APPLE_SANDBOX_URL = 'https://sandbox.itunes.apple.com/verifyReceipt';
@@ -17,7 +18,7 @@ const validatePayment = async (platform, receipt, uid) => {
         }
 
         if (result.status === 0) {
-            await updateUserSubscription(user._id.toString(), result);
+            await updateUserSubscription(user._id.toString(), result, platform);
             return { message: "Valid receipt" }
         } else {
             return { message: 'Invalid receipt' };
@@ -28,8 +29,53 @@ const validatePayment = async (platform, receipt, uid) => {
     }
 };
 
-const updateUserSubscription = async (userId, data) => {
-    console.log(`Updating user ${userId} to plan ${data.latest_receipt_info[0].product_id} valid until ${data.latest_receipt_info[0].expires_date_ms}`);
+const updateUserSubscription = async (userId, data, platform) => {
+    try {
+        const productId = data.latest_receipt_info[0].product_id;
+        const expiresDateMs = data.latest_receipt_info[0].expires_date_ms;
+        
+        console.log(`Updating user ${userId} to plan ${productId} valid until ${expiresDateMs}`);
+        
+        // Get environment from NODE_ENV or default to 'dev'
+        const nodeEnv = process.env.NODE_ENV || 'dev';
+        const environment = nodeEnv === 'development' ? 'dev' : nodeEnv;
+        
+        // Get plan name from product mappings
+        const planMappings = PRODUCT_MAPPINGS[environment]?.[platform];
+        if (!planMappings) {
+            console.warn(`No product mappings found for environment: ${environment}, platform: ${platform}`);
+        }
+        
+        let planName = planMappings?.[productId];
+        if (!planName) {
+            console.warn(`Unknown product ID: ${productId} for environment: ${environment}, platform: ${platform}. Using Free as fallback.`);
+            planName = 'Free';
+        }
+        
+        // Find and update user
+        const user = await User.findById(userId);
+        if (!user) {
+            throw new Error(`User not found: ${userId}`);
+        }
+        
+        // Update user subscription info
+        user.account_type = planName;
+        
+        // Save user
+        await user.save();
+        
+        console.log(`✅ Successfully updated user ${userId} to plan: ${planName}`);
+        
+        return {
+            success: true,
+            userId: userId,
+            planName: planName
+        };
+        
+    } catch (error) {
+        console.error(`❌ Error updating user subscription:`, error);
+        throw error;
+    }
 }
 
 const validateApple = async (receipt) => {

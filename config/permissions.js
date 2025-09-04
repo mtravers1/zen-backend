@@ -5,9 +5,13 @@ const permissions = {
     storage_max_gb: 0.1,
     docs_max: 10,
     receipts_max: 10,
-    accounts_max: 2,
+    accounts_max: 1,
     storage_limit: 0.1,
     buy_more_space: false,
+    pricing: {
+      monthly: "Free",
+      annual: "Free"
+    }
   },
   Personal: {
     create_trips_max: -1,
@@ -15,19 +19,41 @@ const permissions = {
     storage_max_gb: 2,
     docs_max: 100,
     receipts_max: 100,
-    accounts_max: 5,
+    accounts_max: 2,
     storage_limit: 2,
     buy_more_space: true,
+    pricing: {
+      monthly: "$9.99",
+      annual: "$99.90"
+    }
   },
-  Entrepreneur: {
+  Founder: {
     create_trips_max: -1,
-    businesses_max: 2,
+    businesses_max: 1,
     storage_max_gb: 10,
     docs_max: 1000,
     receipts_max: 1000,
-    accounts_max: 10,
+    accounts_max: 4,
     storage_limit: 10,
     buy_more_space: true,
+    pricing: {
+      monthly: "$14.99",
+      annual: "$149.90"
+    }
+  },
+  Entrepreneur: {
+    create_trips_max: -1,
+    businesses_max: 3,
+    storage_max_gb: 25,
+    docs_max: 1000,
+    receipts_max: 1000,
+    accounts_max: 7,
+    storage_limit: 25,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$24.99",
+      annual: "$249.90"
+    }
   },
   Tycoon: {
     create_trips_max: -1,
@@ -38,6 +64,10 @@ const permissions = {
     accounts_max: -1,
     storage_limit: 100,
     buy_more_space: true,
+    pricing: {
+      monthly: "$49.99",
+      annual: "$499.90"
+    }
   },
   CFO: {
     create_trips_max: -1,
@@ -91,6 +121,76 @@ const permissions = {
     assign_clients: true,
     storage_limit: -1,
     buy_more_space: true,
+  },
+  "Personal+1": {
+    create_trips_max: -1,
+    businesses_max: 0,
+    storage_max_gb: 2,
+    docs_max: 100,
+    receipts_max: 100,
+    accounts_max: 3, // Personal (2) + 1
+    storage_limit: 2,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$12.99",
+      annual: "$129.90"
+    }
+  },
+  "Founder+1": {
+    create_trips_max: -1,
+    businesses_max: 1,
+    storage_max_gb: 10,
+    docs_max: 1000,
+    receipts_max: 1000,
+    accounts_max: 5, // Founder (4) + 1
+    storage_limit: 10,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$17.99",
+      annual: "$179.90"
+    }
+  },
+  "Entrepreneur+1": {
+    create_trips_max: -1,
+    businesses_max: 3,
+    storage_max_gb: 25,
+    docs_max: 1000,
+    receipts_max: 1000,
+    accounts_max: 8, // Entrepreneur (7) + 1
+    storage_limit: 25,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$27.99",
+      annual: "$279.90"
+    }
+  },
+  "Entrepreneur+2": {
+    create_trips_max: -1,
+    businesses_max: 3,
+    storage_max_gb: 25,
+    docs_max: 1000,
+    receipts_max: 1000,
+    accounts_max: 9, // Entrepreneur (7) + 2
+    storage_limit: 25,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$30.99",
+      annual: "$309.90"
+    }
+  },
+  "Tycoon+100gb": {
+    create_trips_max: -1,
+    businesses_max: -1,
+    storage_max_gb: 200, // Tycoon (100) + 100gb
+    docs_max: -1,
+    receipts_max: -1,
+    accounts_max: -1,
+    storage_limit: 200,
+    buy_more_space: true,
+    pricing: {
+      monthly: "$59.99",
+      annual: "$599.90"
+    }
   },
 };
 
