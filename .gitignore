@@ -56,8 +56,11 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.*
 .env.previous
 test.env
+!.env.example
+!.env.sample
 
 # next.js build output
 .next
