@@ -18,8 +18,6 @@ function getPlaidClient() {
   // Improved environment configuration with correct Plaid project mappings
   switch (environment.toLowerCase()) {
     case "dev":
-    case "development":
-    case "local":
       // Zentavos Dev Sandbox
       plaidEnv = PlaidEnvironments.sandbox;
       break;
@@ -28,12 +26,12 @@ function getPlaidClient() {
       plaidEnv = PlaidEnvironments.development;
       break;
     case "prod":
-    case "production":
+    case "uat": // Temporary fix. Please remove
       // Zentavos (production)
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown environment: ${environment}. Must be one of: dev, development, local, staging, prod, production`);
+      throw new Error(`Unknown environment: ${environment}. Must be one of: dev, staging, prod`);
   }
 
   const plaidConfig = new Configuration({
