@@ -7,7 +7,7 @@ import crypto from "crypto";
 dotenv.config();
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const environmnet = process.env.ENVIRONMENT || "prod";
+const BUCKET_ENVIRONMENT_NAME = process.env.BUCKET_ENVIRONMENT_NAME;
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64" 
@@ -50,7 +50,7 @@ async function generateAndStoreEncryptedDEK(uid) {
   const encryptedDEK = encryptResponse.ciphertext;
   const file = storage
     .bucket(BUCKET_NAME)
-    .file(`keys/${environmnet}/${uid}.key`);
+    .file(`keys/${BUCKET_ENVIRONMENT_NAME}/${uid}.key`);
   await file.save(encryptedDEK);
 
   // Cache the DEK
@@ -62,7 +62,7 @@ async function generateAndStoreEncryptedDEK(uid) {
 async function getDEKFromBucket(uid) {
   const file = storage
     .bucket(BUCKET_NAME)
-    .file(`keys/${environmnet}/${uid}.key`);
+    .file(`keys/${BUCKET_ENVIRONMENT_NAME}/${uid}.key`);
   if (!(await file.exists())[0]) {
     return null;
   }
