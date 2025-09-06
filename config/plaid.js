@@ -6,17 +6,22 @@ function getPlaidClient() {
   if (plaidClient) {
     return plaidClient;
   }
-
-  const environment = process.env.ENVIRONMENT;
-  if (!environment) {
+  
+/***
+ * # **IMPORTANT**
+ * # The bucket name where we store user encryption keys. 
+ *  using the wrong bucket will lose all data for all users!
+ * */
+  const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
+  if (!USER_ENCRYPTION_KEY_BUCKET_NAME) {
     throw new Error('ENVIRONMENT variable is required');
   }
 
   let plaidEnv;
-  console.log("environment", environment);
+  console.log("USER_ENCRYPTION_KEY_BUCKET_NAME", USER_ENCRYPTION_KEY_BUCKET_NAME);
 
-  // Improved environment configuration with correct Plaid project mappings
-  switch (environment.toLowerCase()) {
+  // Improved USER_ENCRYPTION_KEY_BUCKET_NAME configuration with correct Plaid project mappings
+  switch (USER_ENCRYPTION_KEY_BUCKET_NAME.toLowerCase()) {
     case "dev":
       // Zentavos Dev Sandbox
       plaidEnv = PlaidEnvironments.sandbox;
