@@ -14,7 +14,7 @@ function getPlaidClient() {
  * */
   const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
   if (!USER_ENCRYPTION_KEY_BUCKET_NAME) {
-    throw new Error('ENVIRONMENT variable is required');
+    throw new Error('USER_ENCRYPTION_KEY_BUCKET_NAME environment variable is required');
   }
 
   let plaidEnv;
@@ -36,7 +36,7 @@ function getPlaidClient() {
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown environment: ${environment}. Must be one of: dev, staging, prod`);
+      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, staging, prod`);
   }
 
   const plaidConfig = new Configuration({
