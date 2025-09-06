@@ -1,6 +1,6 @@
 import AccessToken from "../database/models/AccessToken.js";
 import User from "../database/models/User.js";
-import plaidClient from "../config/plaid.js";
+import getPlaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
@@ -72,6 +72,7 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
       if (accessToken) {
         plaidRequest.access_token = accessToken;
       }
+      const plaidClient = getPlaidClient();
       const response = await plaidClient
         .linkTokenCreate(plaidRequest)
         .catch((error) => {
@@ -93,6 +94,7 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
 };
 
 const getPublicToken = async (linkToken) => {
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.linkTokenGet({
     link_token: linkToken,
   });
@@ -104,6 +106,7 @@ const getAccessToken = async (publicToken) => {
     'get_access_token',
     { publicToken: publicToken ? '[REDACTED]' : null },
     async () => {
+      const plaidClient = getPlaidClient();
       const response = await plaidClient.itemPublicTokenExchange({
         public_token: publicToken,
       });
@@ -191,6 +194,7 @@ const getAccounts = async (email, uid) => {
   try {
     const tokens = await getUserAccessTokens(email, uid);
     if (!tokens.length) return [];
+    const plaidClient = getPlaidClient();
     const accountsPromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsGet({
         access_token: token.accessToken,
@@ -214,6 +218,7 @@ const getAccounts = async (email, uid) => {
 const getAccountsWithAccessToken = async (accessToken) => {
   console.log(`[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`);
   
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
@@ -229,6 +234,7 @@ const getBalance = async (email) => {
     const tokens = await getUserAccessTokens(email);
     if (!tokens.length) return [];
 
+    const plaidClient = getPlaidClient();
     const balancePromises = tokens.map(async (token) => {
       const response = await plaidClient.accountsGet({
         access_token: token.accessToken,
@@ -249,6 +255,7 @@ const getBalance = async (email) => {
 };
 
 const getInstitutions = async () => {
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.institutionsGet({
     count: 500,
     offset: 0,
@@ -269,6 +276,7 @@ const getTransactions = async (email, uid) => {
   const tokens = await getUserAccessTokens(email, uid);
   if (!tokens.length) return [];
 
+  const plaidClient = getPlaidClient();
   const transactionsPromises = tokens.map(async (token) => {
     const response = await plaidClient.transactionsSync({
       access_token: token.accessToken,
@@ -284,6 +292,7 @@ const getTransactions = async (email, uid) => {
 };
 
 const getTransactionsWithAccessToken = async (accessToken) => {
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.transactionsSync({
     access_token: accessToken,
   });
@@ -294,6 +303,7 @@ const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
   const today = new Date();
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(today.getFullYear() - 2);
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.investmentsTransactionsGet({
     access_token: accessToken,
     start_date: twoYearsAgo.toISOString().split("T")[0],
@@ -306,6 +316,7 @@ const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
 };
 
 const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.liabilitiesGet({
     access_token: accessToken,
   });
@@ -313,6 +324,7 @@ const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
 };
 
 const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
+  const plaidClient = getPlaidClient();
   const response = await plaidClient.investmentsHoldingsGet({
     access_token: accessToken,
   });
@@ -334,6 +346,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
   let newAccountsBalances;
 
   try {
+    const plaidClient = getPlaidClient();
     newAccountsBalances = await plaidClient.accountsGet({
       access_token: accessToken,
       // min_last_updated_datetime: new Date().toISOString(),
@@ -485,6 +498,7 @@ const updateTransactions = async (item) => {
       break;
     }
     try {
+      const plaidClient = getPlaidClient();
       const response = await plaidClient.transactionsSync({
         access_token: accessToken,
         cursor: cursor,
@@ -733,6 +747,7 @@ const updateInvestmentTransactions = async (item) => {
   }
 
   while (hasMore) {
+    const plaidClient = getPlaidClient();
     const response = await plaidClient.investmentsTransactionsGet({
       access_token: accessToken,
       start_date,
@@ -849,6 +864,7 @@ const repairAccessToken = async (accountId, email) => {
         }
         const accessToken = account.accessToken;
 
+        const plaidClient = getPlaidClient();
         const plaidAccountsResponse = await plaidClient.accountsGet({
           access_token: accessToken,
         });
@@ -994,6 +1010,7 @@ const invalidateAccessToken = async (accessToken) => {
     { has_access_token: !!accessToken },
     async () => {
       try {
+        const plaidClient = getPlaidClient();
         await plaidClient.itemRemove({
           access_token: accessToken,
           client_id: plaidClientId,
@@ -1012,6 +1029,129 @@ const invalidateAccessToken = async (accessToken) => {
       }
     }
   );
+};
+
+// Webhook failure tracking
+const webhookFailureTracker = new Map();
+
+const resetWebhookFailures = (itemId) => {
+  if (webhookFailureTracker.has(itemId)) {
+    webhookFailureTracker.delete(itemId);
+    structuredLogger.logSuccess('reset_webhook_failures', {
+      item_id: itemId
+    });
+  }
+};
+
+const trackWebhookFailure = (itemId) => {
+  const currentFailures = webhookFailureTracker.get(itemId) || 0;
+  const newFailureCount = currentFailures + 1;
+  webhookFailureTracker.set(itemId, newFailureCount);
+  
+  structuredLogger.logErrorBlock(new Error(`Webhook failure tracked for item ${itemId}`), {
+    operation: 'track_webhook_failure',
+    item_id: itemId,
+    failure_count: newFailureCount
+  });
+  
+  return newFailureCount;
+};
+
+const getWebhookFailureCount = (itemId) => {
+  return webhookFailureTracker.get(itemId) || 0;
+};
+
+const validateWebhookSignature = (body, signature, webhookSecret) => {
+  try {
+    const crypto = require('crypto');
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(body, 'utf8')
+      .digest('base64');
+    
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'base64'),
+      Buffer.from(expectedSignature, 'base64')
+    );
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'validate_webhook_signature'
+    });
+    return false;
+  }
+};
+
+const checkIfChaseBank = async (itemId, accessToken) => {
+  try {
+    const plaidClient = getPlaidClient();
+    const response = await plaidClient.institutionsGetById({
+      institution_id: 'ins_3',
+      country_codes: ['US']
+    });
+    
+    return response.data.institution.name.toLowerCase().includes('chase');
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'check_if_chase_bank',
+      item_id: itemId
+    });
+    return false;
+  }
+};
+
+const handleItemError = async (event) => {
+  try {
+    structuredLogger.logOperationStart('handle_item_error', {
+      item_id: event.item_id,
+      error_code: event.error?.error_code,
+      error_message: event.error?.error_message
+    });
+    
+    // Track webhook failure
+    if (event.item_id) {
+      trackWebhookFailure(event.item_id);
+    }
+    
+    // Handle specific error codes
+    if (event.error?.error_code === 'ITEM_LOGIN_REQUIRED') {
+      // Mark accounts as requiring re-authentication
+      const accounts = await PlaidAccount.find({ itemId: event.item_id });
+      for (const account of accounts) {
+        account.isAccessTokenExpired = true;
+        await account.save();
+      }
+    }
+    
+    return `Item error handled: ${event.error?.error_code}`;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'handle_item_error',
+      item_id: event.item_id
+    });
+    throw error;
+  }
+};
+
+const handleAccountsUpdate = async (event) => {
+  try {
+    structuredLogger.logOperationStart('handle_accounts_update', {
+      item_id: event.item_id,
+      account_ids: event.account_ids
+    });
+    
+    // Reset webhook failures on successful account update
+    if (event.item_id) {
+      resetWebhookFailures(event.item_id);
+    }
+    
+    return `Accounts update handled for ${event.account_ids?.length || 0} accounts`;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'handle_accounts_update',
+      item_id: event.item_id
+    });
+    throw error;
+  }
 };
 
 const plaidService = {
@@ -1041,6 +1181,14 @@ const plaidService = {
   getInvestmentsHoldingsWithAccessToken,
   getInstitutionUpdateToken,
   invalidateAccessToken,
+  resetWebhookFailures,
+  trackWebhookFailure,
+  getWebhookFailureCount,
+  webhookFailureTracker,
+  validateWebhookSignature,
+  checkIfChaseBank,
+  handleItemError,
+  handleAccountsUpdate,
 };
 
 export default plaidService;
