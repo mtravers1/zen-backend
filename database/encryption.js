@@ -12,7 +12,7 @@ const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
  * # The bucket name where we store user encryption keys. 
  *  using the wrong bucket will lose all data for all users!
  * */
-const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
+const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV || process.env.USER_ENCRYPTION_KEY_BUCKET_NAME_STG || process.env.USER_ENCRYPTION_KEY_BUCKET_NAME_PROD;
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64" 
