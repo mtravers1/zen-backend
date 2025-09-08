@@ -89,6 +89,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
             throw new Error('Missing item_id for TRANSACTIONS webhook');
           }
           
+          // Add debugging information
+          structuredLogger.logOperationStart('webhook_transactions_debug', {
+            item_id: event.item_id,
+            webhook_type: event.webhook_type,
+            webhook_code: event.webhook_code,
+            error_code: event.error?.error_code,
+            error_message: event.error?.error_message
+          });
+          
           result = await structuredLogger.withContext('processTransactionSync', {
             item_id: event.item_id,
             webhook_type: event.webhook_type,
