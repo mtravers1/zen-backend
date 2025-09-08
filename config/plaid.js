@@ -23,6 +23,7 @@ function getPlaidClient() {
   // Improved USER_ENCRYPTION_KEY_BUCKET_NAME configuration with correct Plaid project mappings
   switch (USER_ENCRYPTION_KEY_BUCKET_NAME.toLowerCase()) {
     case "dev":
+    case "development":
       // Zentavos Dev Sandbox
       plaidEnv = PlaidEnvironments.sandbox;
       break;
@@ -36,7 +37,7 @@ function getPlaidClient() {
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, staging, prod`);
+      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, development, staging, prod`);
   }
 
   const plaidConfig = new Configuration({

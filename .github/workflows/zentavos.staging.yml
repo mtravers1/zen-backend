@@ -75,7 +75,7 @@ jobs:
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
-          sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ secrets.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
+          sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
           sed -i -e "/\"type\"\:.*/d" package.json
           cd ..
       - name: VPN config

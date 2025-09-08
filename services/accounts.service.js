@@ -43,6 +43,7 @@ const addAccount = async (accessToken, email, uid) => {
       }
       const userId = user._id.toString();
       const userType = user.role;
+      const decryptedAccessToken = accessToken;
       const accountsResponse = await plaidService.getAccountsWithAccessToken(
         accessToken
       );
