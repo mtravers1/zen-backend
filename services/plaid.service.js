@@ -21,7 +21,7 @@ const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 
 const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
   return await structuredLogger.withContext(
-    'create_link_token',
+    "create_link_token",
     { email, isAndroid, accountId, uid, screen },
     async () => {
       const user = await User.findOne({
@@ -76,18 +76,18 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
       const response = await plaidClient
         .linkTokenCreate(plaidRequest)
         .catch((error) => {
-          structuredLogger.logPlaidApi('link_token_create', false, {
+          structuredLogger.logPlaidApi("link_token_create", false, {
             error: error.message,
-            plaid_request: plaidRequest
+            plaid_request: plaidRequest,
           });
           throw error;
         });
-      
-      structuredLogger.logPlaidApi('link_token_create', true, {
+
+      structuredLogger.logPlaidApi("link_token_create", true, {
         user_id: userId,
-        has_access_token: !!accessToken
+        has_access_token: !!accessToken,
       });
-      
+
       return response.data;
     }
   );
@@ -103,18 +103,18 @@ const getPublicToken = async (linkToken) => {
 
 const getAccessToken = async (publicToken) => {
   return await structuredLogger.withContext(
-    'get_access_token',
-    { publicToken: publicToken ? '[REDACTED]' : null },
+    "get_access_token",
+    { publicToken: publicToken ? "[REDACTED]" : null },
     async () => {
       const plaidClient = getPlaidClient();
       const response = await plaidClient.itemPublicTokenExchange({
         public_token: publicToken,
       });
-      
-      structuredLogger.logPlaidApi('item_public_token_exchange', true, {
-        has_public_token: !!publicToken
+
+      structuredLogger.logPlaidApi("item_public_token_exchange", true, {
+        has_public_token: !!publicToken,
       });
-      
+
       return response.data;
     }
   );
@@ -128,7 +128,7 @@ const saveAccessToken = async (
   uid
 ) => {
   return await structuredLogger.withContext(
-    'save_access_token',
+    "save_access_token",
     { email, itemId, institutionId, uid },
     async () => {
       const user = await User.findOne({
@@ -141,14 +141,14 @@ const saveAccessToken = async (
       const dek = await getUserDek(uid);
 
       const encryptedToken = await encryptValue(accessToken, dek);
-
       // Check if access token already exists for this itemId
       const existingToken = await getOldestAccessToken({ itemId });
+
       if (existingToken) {
-        structuredLogger.logSuccess('access_token_already_exists', {
+        structuredLogger.logSuccess("access_token_already_exists", {
           user_id: userId,
           item_id: itemId,
-          institution_id: institutionId
+          institution_id: institutionId,
         });
         return {
           userId,
@@ -165,13 +165,12 @@ const saveAccessToken = async (
         institutionId,
       });
       await newToken.save();
-      
-      structuredLogger.logEncryptionOperation('save_access_token', true, {
+      structuredLogger.logEncryptionOperation("save_access_token", true, {
         user_id: userId,
         item_id: itemId,
-        institution_id: institutionId
+        institution_id: institutionId,
       });
-      
+
       return {
         userId,
         accessToken,
@@ -190,7 +189,7 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await getOldestAccessToken({userId});
+  const tokens = await AccessToken.find({ userId });
 
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
@@ -238,10 +237,9 @@ const getAccountsWithAccessToken = async (accessToken) => {
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
-  
   console.log(`[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`);
   console.log(`[PLAID] Account details:`, response.data.accounts?.map(acc => `${acc.name} (${acc.account_id})`));
-  
+ 
   return response.data;
 };
 
@@ -271,6 +269,7 @@ const getBalance = async (email) => {
 };
 
 const getInstitutions = async () => {
+  
   const plaidClient = getPlaidClient();
   const response = await plaidClient.institutionsGet({
     count: 500,
@@ -348,20 +347,11 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  // First try to find in AccessToken collection
-  let access = await getOldestAccessToken({ itemId });
+  const access = await AccessToken.findOne({ itemId });
   
   if (!access) {
-    // If not found in AccessToken collection, try to find in PlaidAccount collection
-    const plaidAccount = await PlaidAccount.findOne({ itemId });
-    if (plaidAccount) {
-      const dek = await getUserDek(uid);
-      const decryptedToken = await decryptValue(plaidAccount.accessToken, dek);
-      return decryptedToken;
-    }
     return;
   }
-  
   const accessToken = access.accessToken;
   const dek = await getUserDek(uid);
   const decryptedToken = await decryptValue(accessToken, dek);
@@ -443,105 +433,43 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 };
 
 const updateTransactions = async (item) => {
-  return await structuredLogger.withContext(
-    'update_transactions',
-    { item_id: item },
-    async () => {
-      structuredLogger.logOperationStart('update_transactions', { item_id: item });
-      
-      // Try to find access token by itemId
-      let accessInfo = await getOldestAccessToken({ itemId: item });
-      
-      // If not found by itemId, try to find by looking up PlaidAccount records
-      if (!accessInfo) {
-        structuredLogger.logErrorBlock(new Error("Access token not found for item by itemId"), {
-          operation: 'update_transactions',
-          item_id: item,
-          search_method: 'itemId'
-        });
-        
-        // Try to find access token through PlaidAccount records
-        const plaidAccount = await PlaidAccount.findOne({ itemId: item });
-        if (plaidAccount) {
-          // Get the user's dek to decrypt the access token
-          const user = await User.findById(plaidAccount.owner_id);
-          if (user) {
-            const dek = await getUserDek(user.authUid);
-            const decryptedAccessToken = await decryptValue(plaidAccount.accessToken, dek);
-            
-            // Create a temporary accessInfo object
-            accessInfo = {
-              accessToken: decryptedAccessToken,
-              itemId: item,
-              userId: plaidAccount.owner_id,
-              institutionId: plaidAccount.institution_id
-            };
-            
-            structuredLogger.logSuccess('access_token_found_via_plaid_account', {
-              item_id: item,
-              user_id: plaidAccount.owner_id,
-              institution_id: plaidAccount.institution_id
-            });
-          }
-        }
-      }
-      
-      if (!accessInfo) {
-        structuredLogger.logErrorBlock(new Error("Access token not found for item"), {
-          operation: 'update_transactions',
-          item_id: item,
-          search_methods: ['itemId', 'plaidAccount']
-        });
-        return;
-      }
-      const userId = accessInfo.userId;
-      const user = await User.findById(userId);
-      if (!user) {
-        structuredLogger.logErrorBlock(new Error("User not found"), {
-          operation: 'update_transactions',
-          item_id: item,
-          user_id: userId
-        });
-        return;
-      }
-      const uid = user?.authUid;
-      
-      // Use the access token from accessInfo if available, otherwise try to get it from itemId
-      let accessToken = accessInfo.accessToken;
-      if (!accessToken) {
-        accessToken = await getAccessTokenFromItemId(item, uid);
-        if (!accessToken) {
-          structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
-            operation: 'update_transactions',
-            item_id: item,
-            user_id: userId
-          });
-          //TODO: remove item
-          return;
-        }
-      }
+  console.log("Updating transactions for item:", item);
+  const accessInfo = await AccessToken.findOne({ itemId: item });
+  if (!accessInfo) return;
+  const userId = accessInfo.userId;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const uid = user?.authUid;
+  const accessToken = await getAccessTokenFromItemId(item, uid);
+  if (!accessToken) {
+    accessToken = await getAccessTokenFromItemId(item, uid);
+    if (!accessToken) {
+      structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
+        operation: 'update_transactions',
+        item_id: item,
+        user_id: userId
+      });
+      //TODO: remove item
+      return;
+    }
+  }
 
-      const accounts = await PlaidAccount.find({ itemId: item });
+  const accounts = await PlaidAccount.find({ itemId: item });
 
-      if (!accounts.length) {
-        structuredLogger.logErrorBlock(new Error("No accounts found for item"), {
-          operation: 'update_transactions',
-          item_id: item,
-          user_id: userId
-        });
-        //TODO: remove item
-        return;
-      }
+  if (!accounts.length) {
+    //TODO: remove item
+    return;
+  }
 
-      const emails = user?.email;
+  const emails = user?.email;
 
-      const emailObject = emails?.find((email) => email.isPrimary === true);
+  const emailObject = emails?.find((email) => email.isPrimary === true);
 
-      const email = emailObject?.email;
+  const email = emailObject?.email;
 
-      const dek = await getUserDek(uid);
+  const dek = await getUserDek(uid);
 
-      await updateAccountBalances(dek, accessToken, accounts);
+  await updateAccountBalances(dek, accessToken, accounts);
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
@@ -556,12 +484,7 @@ const updateTransactions = async (item) => {
     oldCursor = cursor;
     iterationCoounter++;
     if (iterationCoounter > maxIterations) {
-      structuredLogger.logErrorBlock(new Error("Max iterations reached"), {
-        operation: 'update_transactions',
-        item_id: item,
-        max_iterations: maxIterations,
-        current_iteration: iterationCoounter
-      });
+      console.log("Max iterations reached, stopping");
       hasMore = false;
       break;
     }
@@ -580,12 +503,9 @@ const updateTransactions = async (item) => {
       hasMore = response.data.has_more;
       newTransactions.push(...transactions);
 
-      structuredLogger.logSuccess('fetch_transactions_batch', {
-        item_id: item,
-        new_transactions: transactions.length,
-        modified_transactions: modifiedTransactions.length,
-        removed_transactions: removedTransactions.length
-      });
+      console.log(
+        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
+      );
 
       const accountMap = new Map();
       for (const account of accounts) {
@@ -719,18 +639,15 @@ const updateTransactions = async (item) => {
         error.response?.data?.error_code ===
         "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
       ) {
-        structuredLogger.logSuccess('pagination_mutation_handled', {
-          item_id: item,
-          message: "Mutation detected during pagination, restarting with old cursor"
-        });
+        console.log(
+          "Mutation detected during pagination, restarting with old cursor..."
+        );
         cursor = oldCursor; // Reiniciar con el cursor anterior
       } else {
-        structuredLogger.logErrorBlock(error, {
-          operation: 'update_transactions',
-          item_id: item,
-          error_code: error.response?.data?.error_code,
-          plaid_response: error.response?.data
-        });
+        console.error(
+          "Error syncing transactions:",
+          error.response?.data || error
+        );
         break;
       }
     }
@@ -751,138 +668,138 @@ const updateTransactions = async (item) => {
       await transaction.save();
     }
   }
-      structuredLogger.logSuccess('update_transactions_completed', {
-        item_id: item,
-        user_id: userId,
-        total_transactions_processed: newTransactions.length,
-        internal_transfers_detected: internalTransfers.length
-      });
+  console.log("Finished updating transactions");
 
-      return transactionsByAccount;
-    }
-  );
+  return transactionsByAccount;
 };
 
 const updateInvestmentTransactions = async (item) => {
   return await structuredLogger.withContext(
-    'update_investment_transactions',
+    "update_investment_transactions",
     { item_id: item },
     async () => {
-      structuredLogger.logOperationStart('update_investment_transactions', { item_id: item });
-  const accessInfo = await getOldestAccessToken({ itemId: item });
-  if (!accessInfo) return;
-  const userId = accessInfo.userId;
-  const user = await User.findById(userId);
-  if (!user) return;
-  const uid = user?.authUid;
-  const accessToken = await getAccessTokenFromItemId(item, uid);
-
-  if (!accessToken) {
-    return;
-  }
-  const accounts = await PlaidAccount.find({ itemId: item });
-
-  const dek = await getUserDek(uid);
-  await updateAccountBalances(dek, accessToken, accounts);
-  let offset = 0;
-  let hasMore = true;
-  const plaidAccountIds = accounts.map((account) => account.plaid_account_id);
-
-  const lastTransaction = await Transaction.findOne({
-    plaidAccountId: { $in: plaidAccountIds },
-    isInvestment: true,
-  })
-    .sort({ transactionDate: -1 })
-    .limit(1);
-
-  const today = new Date();
-  const end_date = today.toISOString().split("T")[0];
-
-  let start_date;
-
-  if (lastTransaction) {
-    const safeStart = new Date(lastTransaction.transactionDate);
-    safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
-    if (safeStart > today) {
-      start_date = end_date;
-    } else {
-      start_date = safeStart.toISOString().split("T")[0];
-    }
-  } else {
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(today.getFullYear() - 2);
-    start_date = twoYearsAgo.toISOString().split("T")[0];
-  }
-
-  while (hasMore) {
-    const plaidClient = getPlaidClient();
-    const response = await plaidClient.investmentsTransactionsGet({
-      access_token: accessToken,
-      start_date,
-      end_date,
-      options: {
-        count: 500,
-        offset,
-      },
-    });
-    const transactions = response.data.investment_transactions;
-    const totalInvestments = response.data.total_investment_transactions;
-    hasMore = offset + transactions.length < totalInvestments;
-    offset += transactions.length;
-    for (let transaction of transactions) {
-      const existingTransaction = await Transaction.findOne({
-        plaidTransactionId: transaction.investment_transaction_id,
-      });
-      if (existingTransaction) {
-        continue;
-      }
-      const accountType = "investment";
-      const encryptedAccountType = await encryptValue(accountType, dek);
-      const encryptedName = await encryptValue(transaction.name, dek);
-      const encryptedAmount = await encryptValue(transaction.amount, dek);
-
-      const encryptedSecurityId = await encryptValue(
-        transaction.security_id,
-        dek
-      );
-      const encryptedPrice = await encryptValue(transaction.price, dek);
-
-      const encryptedQuantity = await encryptValue(transaction.quantity, dek);
-
-      const encryptedFees = await encryptValue(transaction.fees, dek);
-
-      const encryptedType = await encryptValue(transaction.type, dek);
-
-      const encryptedSubType = await encryptValue(transaction.subtype, dek);
-      const account = accounts.find(
-        (account) => account.plaid_account_id === transaction.account_id
-      );
-      const newTransaction = new Transaction({
-        accountId: account._id,
-        plaidTransactionId: transaction.investment_transaction_id,
-        plaidAccountId: transaction.account_id,
-        transactionDate: transaction.date,
-        amount: encryptedAmount,
-        currency: transaction.iso_currency_code,
-        isInvestment: true,
-        name: encryptedName,
-        fees: encryptedFees,
-        price: encryptedPrice,
-        quantity: encryptedQuantity,
-        securityId: encryptedSecurityId,
-        type: encryptedType,
-        subType: encryptedSubType,
-        accountType: encryptedAccountType,
-      });
-
-      await newTransaction.save();
-    }
-  }
-      structuredLogger.logSuccess('update_investment_transactions_completed', {
+      structuredLogger.logOperationStart("update_investment_transactions", {
         item_id: item,
-        user_id: userId
       });
-      
+      const accessInfo = await getOldestAccessToken({ itemId: item });
+      if (!accessInfo) return;
+      const userId = accessInfo.userId;
+      const user = await User.findById(userId);
+      if (!user) return;
+      const uid = user?.authUid;
+      const accessToken = await getAccessTokenFromItemId(item, uid);
+
+      if (!accessToken) {
+        return;
+      }
+      const accounts = await PlaidAccount.find({ itemId: item });
+
+      const dek = await getUserDek(uid);
+      await updateAccountBalances(dek, accessToken, accounts);
+      let offset = 0;
+      let hasMore = true;
+      const plaidAccountIds = accounts.map(
+        (account) => account.plaid_account_id
+      );
+
+      const lastTransaction = await Transaction.findOne({
+        plaidAccountId: { $in: plaidAccountIds },
+        isInvestment: true,
+      })
+        .sort({ transactionDate: -1 })
+        .limit(1);
+
+      const today = new Date();
+      const end_date = today.toISOString().split("T")[0];
+
+      let start_date;
+
+      if (lastTransaction) {
+        const safeStart = new Date(lastTransaction.transactionDate);
+        safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
+        if (safeStart > today) {
+          start_date = end_date;
+        } else {
+          start_date = safeStart.toISOString().split("T")[0];
+        }
+      } else {
+        const twoYearsAgo = new Date();
+        twoYearsAgo.setFullYear(today.getFullYear() - 2);
+        start_date = twoYearsAgo.toISOString().split("T")[0];
+      }
+
+      while (hasMore) {
+        const plaidClient = getPlaidClient();
+        const response = await plaidClient.investmentsTransactionsGet({
+          access_token: accessToken,
+          start_date,
+          end_date,
+          options: {
+            count: 500,
+            offset,
+          },
+        });
+        const transactions = response.data.investment_transactions;
+        const totalInvestments = response.data.total_investment_transactions;
+        hasMore = offset + transactions.length < totalInvestments;
+        offset += transactions.length;
+        for (let transaction of transactions) {
+          const existingTransaction = await Transaction.findOne({
+            plaidTransactionId: transaction.investment_transaction_id,
+          });
+          if (existingTransaction) {
+            continue;
+          }
+          const accountType = "investment";
+          const encryptedAccountType = await encryptValue(accountType, dek);
+          const encryptedName = await encryptValue(transaction.name, dek);
+          const encryptedAmount = await encryptValue(transaction.amount, dek);
+
+          const encryptedSecurityId = await encryptValue(
+            transaction.security_id,
+            dek
+          );
+          const encryptedPrice = await encryptValue(transaction.price, dek);
+
+          const encryptedQuantity = await encryptValue(
+            transaction.quantity,
+            dek
+          );
+
+          const encryptedFees = await encryptValue(transaction.fees, dek);
+
+          const encryptedType = await encryptValue(transaction.type, dek);
+
+          const encryptedSubType = await encryptValue(transaction.subtype, dek);
+          const account = accounts.find(
+            (account) => account.plaid_account_id === transaction.account_id
+          );
+          const newTransaction = new Transaction({
+            accountId: account._id,
+            plaidTransactionId: transaction.investment_transaction_id,
+            plaidAccountId: transaction.account_id,
+            transactionDate: transaction.date,
+            amount: encryptedAmount,
+            currency: transaction.iso_currency_code,
+            isInvestment: true,
+            name: encryptedName,
+            fees: encryptedFees,
+            price: encryptedPrice,
+            quantity: encryptedQuantity,
+            securityId: encryptedSecurityId,
+            type: encryptedType,
+            subType: encryptedSubType,
+            accountType: encryptedAccountType,
+          });
+
+          await newTransaction.save();
+        }
+      }
+      structuredLogger.logSuccess("update_investment_transactions_completed", {
+        item_id: item,
+        user_id: userId,
+      });
+
       return "Investment transactions updated";
     }
   );
@@ -918,15 +835,15 @@ const repairAccessTokenWebhook = async (item) => {
 
 const repairAccessToken = async (accountId, email) => {
   return await structuredLogger.withContext(
-    'repair_access_token',
+    "repair_access_token",
     { accountId, email },
     async () => {
       try {
         const account = await PlaidAccount.findById(accountId);
         if (!account) {
           structuredLogger.logErrorBlock(new Error("Account not found"), {
-            operation: 'repair_access_token',
-            accountId
+            operation: "repair_access_token",
+            accountId,
           });
           return;
         }
@@ -966,20 +883,23 @@ const repairAccessToken = async (accountId, email) => {
           await accountsService.removeAccount(accountId, email);
         }
 
-        const resAddAcount = await accountsService.addAccount(accessToken, email);
+        const resAddAcount = await accountsService.addAccount(
+          accessToken,
+          email
+        );
 
-        structuredLogger.logSuccess('repair_access_token_completed', {
+        structuredLogger.logSuccess("repair_access_token_completed", {
           accountId,
           removed_accounts: removedAccounts.length,
-          unchanged_accounts: unchangedAccounts.length
+          unchanged_accounts: unchangedAccounts.length,
         });
 
         return { accounts, existingAccounts: resAddAcount.existingAccounts };
       } catch (error) {
         structuredLogger.logErrorBlock(error, {
-          operation: 'repair_access_token',
+          operation: "repair_access_token",
           accountId,
-          email
+          email,
         });
         throw error;
       }
@@ -1074,7 +994,7 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
 
 const invalidateAccessToken = async (accessToken) => {
   return await structuredLogger.withContext(
-    'invalidate_access_token',
+    "invalidate_access_token",
     { has_access_token: !!accessToken },
     async () => {
       try {
@@ -1084,14 +1004,14 @@ const invalidateAccessToken = async (accessToken) => {
           client_id: plaidClientId,
           secret: plaidSecret,
         });
-        
-        structuredLogger.logPlaidApi('item_remove', true, {
-          has_access_token: !!accessToken
+
+        structuredLogger.logPlaidApi("item_remove", true, {
+          has_access_token: !!accessToken,
         });
       } catch (error) {
-        structuredLogger.logPlaidApi('item_remove', false, {
+        structuredLogger.logPlaidApi("item_remove", false, {
           error: error.message,
-          has_access_token: !!accessToken
+          has_access_token: !!accessToken,
         });
         throw error;
       }
@@ -1105,8 +1025,8 @@ const webhookFailureTracker = new Map();
 const resetWebhookFailures = (itemId) => {
   if (webhookFailureTracker.has(itemId)) {
     webhookFailureTracker.delete(itemId);
-    structuredLogger.logSuccess('reset_webhook_failures', {
-      item_id: itemId
+    structuredLogger.logSuccess("reset_webhook_failures", {
+      item_id: itemId,
     });
   }
 };
@@ -1115,13 +1035,16 @@ const trackWebhookFailure = (itemId) => {
   const currentFailures = webhookFailureTracker.get(itemId) || 0;
   const newFailureCount = currentFailures + 1;
   webhookFailureTracker.set(itemId, newFailureCount);
-  
-  structuredLogger.logErrorBlock(new Error(`Webhook failure tracked for item ${itemId}`), {
-    operation: 'track_webhook_failure',
-    item_id: itemId,
-    failure_count: newFailureCount
-  });
-  
+
+  structuredLogger.logErrorBlock(
+    new Error(`Webhook failure tracked for item ${itemId}`),
+    {
+      operation: "track_webhook_failure",
+      item_id: itemId,
+      failure_count: newFailureCount,
+    }
+  );
+
   return newFailureCount;
 };
 
@@ -1131,19 +1054,19 @@ const getWebhookFailureCount = (itemId) => {
 
 const validateWebhookSignature = (body, signature, webhookSecret) => {
   try {
-    const crypto = require('crypto');
+    const crypto = require("crypto");
     const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(body, 'utf8')
-      .digest('base64');
-    
+      .createHmac("sha256", webhookSecret)
+      .update(body, "utf8")
+      .digest("base64");
+
     return crypto.timingSafeEqual(
-      Buffer.from(signature, 'base64'),
-      Buffer.from(expectedSignature, 'base64')
+      Buffer.from(signature, "base64"),
+      Buffer.from(expectedSignature, "base64")
     );
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: 'validate_webhook_signature'
+      operation: "validate_webhook_signature",
     });
     return false;
   }
@@ -1153,15 +1076,15 @@ const checkIfChaseBank = async (itemId, accessToken) => {
   try {
     const plaidClient = getPlaidClient();
     const response = await plaidClient.institutionsGetById({
-      institution_id: 'ins_3',
-      country_codes: ['US']
+      institution_id: "ins_3",
+      country_codes: ["US"],
     });
-    
-    return response.data.institution.name.toLowerCase().includes('chase');
+
+    return response.data.institution.name.toLowerCase().includes("chase");
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: 'check_if_chase_bank',
-      item_id: itemId
+      operation: "check_if_chase_bank",
+      item_id: itemId,
     });
     return false;
   }
@@ -1169,19 +1092,19 @@ const checkIfChaseBank = async (itemId, accessToken) => {
 
 const handleItemError = async (event) => {
   try {
-    structuredLogger.logOperationStart('handle_item_error', {
+    structuredLogger.logOperationStart("handle_item_error", {
       item_id: event.item_id,
       error_code: event.error?.error_code,
-      error_message: event.error?.error_message
+      error_message: event.error?.error_message,
     });
-    
+
     // Track webhook failure
     if (event.item_id) {
       trackWebhookFailure(event.item_id);
     }
-    
+
     // Handle specific error codes
-    if (event.error?.error_code === 'ITEM_LOGIN_REQUIRED') {
+    if (event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
       // Mark accounts as requiring re-authentication
       const accounts = await PlaidAccount.find({ itemId: event.item_id });
       for (const account of accounts) {
@@ -1189,12 +1112,12 @@ const handleItemError = async (event) => {
         await account.save();
       }
     }
-    
+
     return `Item error handled: ${event.error?.error_code}`;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: 'handle_item_error',
-      item_id: event.item_id
+      operation: "handle_item_error",
+      item_id: event.item_id,
     });
     throw error;
   }
@@ -1202,26 +1125,27 @@ const handleItemError = async (event) => {
 
 const handleAccountsUpdate = async (event) => {
   try {
-    structuredLogger.logOperationStart('handle_accounts_update', {
+    structuredLogger.logOperationStart("handle_accounts_update", {
       item_id: event.item_id,
-      account_ids: event.account_ids
+      account_ids: event.account_ids,
     });
-    
+
     // Reset webhook failures on successful account update
     if (event.item_id) {
       resetWebhookFailures(event.item_id);
     }
-    
-    return `Accounts update handled for ${event.account_ids?.length || 0} accounts`;
+
+    return `Accounts update handled for ${
+      event.account_ids?.length || 0
+    } accounts`;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: 'handle_accounts_update',
-      item_id: event.item_id
+      operation: "handle_accounts_update",
+      item_id: event.item_id,
     });
     throw error;
   }
 };
-
 
 const plaidService = {
   createLinkToken,

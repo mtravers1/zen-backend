@@ -2,9 +2,10 @@ import accountsService from "../services/accounts.service.js";
 
 const addAccount = async (req, res) => {
   try {
+    const { token } = req.body;
     const email = req.user.email;
     const uid = req.user.uid;
-    const response = await accountsService.addAccount(email, uid);
+    const response = await accountsService.addAccount(token, email, uid);
     res.status(201).send(response);
   } catch (error) {
     console.log(error);
@@ -174,7 +175,6 @@ const getAccountPhoto = async (req, res) => {
     res.status(500).send({ message: error.message });
   }
 };
-
 const serveAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.params;
@@ -204,7 +204,6 @@ const serveAccountPhoto = async (req, res) => {
     res.status(500).send({ message: error.message });
   }
 };
-
 const accountsController = {
   addAccount,
   getAccounts,
