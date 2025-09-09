@@ -142,6 +142,22 @@ const saveAccessToken = async (
 
       const encryptedToken = await encryptValue(accessToken, dek);
 
+      // Check if access token already exists for this itemId
+      const existingToken = await getOldestAccessToken({ itemId });
+      if (existingToken) {
+        structuredLogger.logSuccess('access_token_already_exists', {
+          user_id: userId,
+          item_id: itemId,
+          institution_id: institutionId
+        });
+        return {
+          userId,
+          accessToken,
+          itemId,
+          institutionId,
+        };
+      }
+
       const newToken = new AccessToken({
         userId,
         accessToken: encryptedToken,
@@ -332,10 +348,20 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await getOldestAccessToken({ itemId });
+  // First try to find in AccessToken collection
+  let access = await getOldestAccessToken({ itemId });
+  
   if (!access) {
+    // If not found in AccessToken collection, try to find in PlaidAccount collection
+    const plaidAccount = await PlaidAccount.findOne({ itemId });
+    if (plaidAccount) {
+      const dek = await getUserDek(uid);
+      const decryptedToken = await decryptValue(plaidAccount.accessToken, dek);
+      return decryptedToken;
+    }
     return;
   }
+  
   const accessToken = access.accessToken;
   const dek = await getUserDek(uid);
   const decryptedToken = await decryptValue(accessToken, dek);
@@ -423,11 +449,48 @@ const updateTransactions = async (item) => {
     async () => {
       structuredLogger.logOperationStart('update_transactions', { item_id: item });
       
-      const accessInfo = await getOldestAccessToken({ itemId: item });
+      // Try to find access token by itemId
+      let accessInfo = await getOldestAccessToken({ itemId: item });
+      
+      // If not found by itemId, try to find by looking up PlaidAccount records
+      if (!accessInfo) {
+        structuredLogger.logErrorBlock(new Error("Access token not found for item by itemId"), {
+          operation: 'update_transactions',
+          item_id: item,
+          search_method: 'itemId'
+        });
+        
+        // Try to find access token through PlaidAccount records
+        const plaidAccount = await PlaidAccount.findOne({ itemId: item });
+        if (plaidAccount) {
+          // Get the user's dek to decrypt the access token
+          const user = await User.findById(plaidAccount.owner_id);
+          if (user) {
+            const dek = await getUserDek(user.authUid);
+            const decryptedAccessToken = await decryptValue(plaidAccount.accessToken, dek);
+            
+            // Create a temporary accessInfo object
+            accessInfo = {
+              accessToken: decryptedAccessToken,
+              itemId: item,
+              userId: plaidAccount.owner_id,
+              institutionId: plaidAccount.institution_id
+            };
+            
+            structuredLogger.logSuccess('access_token_found_via_plaid_account', {
+              item_id: item,
+              user_id: plaidAccount.owner_id,
+              institution_id: plaidAccount.institution_id
+            });
+          }
+        }
+      }
+      
       if (!accessInfo) {
         structuredLogger.logErrorBlock(new Error("Access token not found for item"), {
           operation: 'update_transactions',
-          item_id: item
+          item_id: item,
+          search_methods: ['itemId', 'plaidAccount']
         });
         return;
       }
@@ -442,15 +505,20 @@ const updateTransactions = async (item) => {
         return;
       }
       const uid = user?.authUid;
-      const accessToken = await getAccessTokenFromItemId(item, uid);
+      
+      // Use the access token from accessInfo if available, otherwise try to get it from itemId
+      let accessToken = accessInfo.accessToken;
       if (!accessToken) {
-        structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
-          operation: 'update_transactions',
-          item_id: item,
-          user_id: userId
-        });
-        //TODO: remove item
-        return;
+        accessToken = await getAccessTokenFromItemId(item, uid);
+        if (!accessToken) {
+          structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
+            operation: 'update_transactions',
+            item_id: item,
+            user_id: userId
+          });
+          //TODO: remove item
+          return;
+        }
       }
 
       const accounts = await PlaidAccount.find({ itemId: item });
@@ -1153,6 +1221,7 @@ const handleAccountsUpdate = async (event) => {
     throw error;
   }
 };
+
 
 const plaidService = {
   createLinkToken,
