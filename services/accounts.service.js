@@ -747,8 +747,8 @@ const getAccounts = async (profile, uid) => {
     loanAccounts,
     otherAccounts,
   };
-}
-)
+    }
+  );
 };
 
 const getAllUserAccounts = async (email, uid) => {
