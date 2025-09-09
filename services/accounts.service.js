@@ -32,7 +32,7 @@ const bucketName = "zentavos-bucket";
 const addAccount = async (email, uid) => {
   return await structuredLogger.withContext(
     'add_account',
-    { email, uid, has_access_token: !!accessToken },
+    { email, uid },
     async () => {
       const dek = await getUserDek(uid);
       const user = await User.findOne({
@@ -46,8 +46,11 @@ const addAccount = async (email, uid) => {
       const accessToken = await getOldestAccessToken({ userId  });
       console.log('USER ID',{userId})
       console.log('ACCESS TOKEN',{accessToken})
+      
+      // Decrypt the access token before using it
+      const decryptedAccessToken = await decryptValue(accessToken.accessToken, dek);
       const accountsResponse = await plaidService.getAccountsWithAccessToken(
-        accessToken
+        decryptedAccessToken
       );
 
   const accounts = accountsResponse.accounts;
