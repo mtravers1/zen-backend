@@ -2373,6 +2373,52 @@ const formatAccountsBalances = (accounts) => {
   return accounts;
 };
 
+const getCashFlowsWeekly = async (profile, uid) => {
+  const plaidIds = profile.plaidAccounts;
+  const plaidAccountsResponse = await PlaidAccount.find({
+    _id: { $in: plaidIds },
+  }).lean();
+
+  let plaidAccounts = [];
+
+  const dek = await getUserDek(uid);
+  for (const plaidAccount of plaidAccountsResponse) {
+    const decryptedCurrentBalance = await decryptValue(
+      plaidAccount.currentBalance,
+      dek
+    );
+    const decryptedAvailableBalance = await decryptValue(
+      plaidAccount.availableBalance,
+      dek
+    );
+    const decryptedAccountType = await decryptValue(
+      plaidAccount.account_type,
+      dek
+    );
+    const decryptedAccountSubtype = await decryptValue(
+      plaidAccount.account_subtype,
+      dek
+    );
+    plaidAccounts.push({
+      ...plaidAccount,
+      currentBalance: decryptedCurrentBalance,
+      availableBalance: decryptedAvailableBalance,
+      account_type: decryptedAccountType,
+      account_subtype: decryptedAccountSubtype,
+    });
+  }
+
+  const { depositoryTransactions, creditTransactions, allTransactions } =
+    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
+
+  const groupedTransactions = groupByWeek([
+    ...depositoryTransactions,
+    ...creditTransactions,
+  ]);
+  const result = calculateWeeklyTotals(groupedTransactions, allTransactions);
+  return { weeklyCashFlow: result };
+};
+
 const accountsService = {
   addAccount,
   getAccounts,
