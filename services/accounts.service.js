@@ -15,6 +15,7 @@ import {
   hashValue,
 } from "../database/encryption.js";
 import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const serviceAccountJsonString = Buffer.from(
