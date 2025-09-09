@@ -1,14 +1,10 @@
 import accountsService from "../services/accounts.service.js";
-import plaidService from "../services/plaid.service.js";
-import { getOldestAccessToken } from "../services/utils/accounts.js";
 
 const addAccount = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const token = await getOldestAccessToken({ userId: uid });
-    console.log({token});
-    const response = await accountsService.addAccount(token, email, uid);
+    const response = await accountsService.addAccount(email, uid);
     res.status(201).send(response);
   } catch (error) {
     console.log(error);
