@@ -19,10 +19,26 @@ const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 
-const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
+const createLinkToken = async (
+  email,
+  isAndroid,
+  accountId,
+  uid,
+  screen,
+  mode,
+  access_token
+) => {
   return await structuredLogger.withContext(
     "create_link_token",
-    { email, isAndroid, accountId, uid, screen },
+    {
+      email,
+      isAndroid,
+      accountId,
+      uid,
+      screen,
+      mode,
+      has_access_token: !!access_token,
+    },
     async () => {
       const user = await User.findOne({
         authUid: uid,
@@ -39,6 +55,15 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
         }
         accessToken = await decryptValue(account.accessToken, dek);
       }
+
+      // UPDATE MODE: Use provided access_token for update mode
+      if (mode === "update") {
+        if (!access_token) {
+          throw new Error("access_token required for update mode");
+        }
+        accessToken = access_token; // Token already comes decrypted from getInstitutionUpdateToken
+      }
+
       const userId = user._id.toString();
       let redirectUri;
       if (screen === "add-account") {
@@ -51,7 +76,7 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
-        android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+        android_package_name: isAndroid ? "com.zentavos.zentavosdev" : null,
         redirect_uri: !isAndroid ? redirectUri : null,
         //TODO: change this to fit every environment
         webhook: webhookUrl,
@@ -59,6 +84,8 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
         user: {
           client_user_id: userId,
         },
+        // NOTE: For update mode, Plaid documentation suggests omitting products array
+        // Testing with products first - may need to remove for update mode if issues arise
         products: ["transactions"],
         optional_products: ["investments", "liabilities"],
         hosted_link: {

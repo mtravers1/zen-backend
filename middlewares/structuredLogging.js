@@ -107,11 +107,11 @@ export const structuredLoggingMiddleware = (req, res, next) => {
     console.log(`[REQUEST ${requestId}] ====== RESPONSE ======`);
     console.log(`[REQUEST ${requestId}] Status Code: ${res.statusCode}`);
     console.log(`[REQUEST ${requestId}] Response Type: ${typeof data}`);
-    console.log(`[REQUEST ${requestId}] Response Length: ${typeof data === 'string' ? data.length : JSON.stringify(data).length}`);
+    console.log(`[REQUEST ${requestId}] Response Length: ${typeof data === 'string' ? data.length : (data ? JSON.stringify(data).length : 0)}`);
     
     if (typeof data === 'string' && data.length < 200) {
       console.log(`[REQUEST ${requestId}] Response Preview:`, data);
-    } else if (typeof data === 'object') {
+    } else if (typeof data === 'object' && data !== null) {
       console.log(`[REQUEST ${requestId}] Response Keys:`, Object.keys(data));
     }
     

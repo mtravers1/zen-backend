@@ -6,6 +6,7 @@ const router = Router();
 router.post("/addFile", filesController.addFile);
 router.get("/getFiles/:profileId", filesController.getFiles);
 router.get("/check-limit", filesController.checkStorageLimit);
+router.get("/storage-status", filesController.getStorageStatus);
 router.get("/getFolders/:profileId", filesController.getFolders);
 router.post("/add-file", filesController.generateFileUrl);
 router.post("/get-file", filesController.getFileUrl);

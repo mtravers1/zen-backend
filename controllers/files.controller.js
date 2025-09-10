@@ -1,19 +1,11 @@
 import filesService from "../services/files.service.js";
 import permissionsService from "../services/permissions.service.js";
+import storageService from "../services/storage.service.js";
 
 const addFile = async (req, res) => {
   try {
     const data = req.body;
     const uid = req.user.uid;
-
-    const canUploadFile = await permissionsService.canPerformAction(
-      uid,
-      "upload_file"
-    );
-
-    if (!canUploadFile.success) {
-      return res.status(403).send(canUploadFile);
-    }
 
     const response = await filesService.addFile(data, uid);
     res.status(201).json(response);
@@ -112,6 +104,30 @@ const checkStorageLimit = async (req, res) => {
   }
 };
 
+const getStorageStatus = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const storageStatus = await storageService.getStorageStatus(uid);
+
+    res.status(200).json({
+      storage: {
+        usedBytes: storageStatus.usedBytes,
+        usedMB: storageStatus.usedMB,
+        usedGB: storageStatus.usedGB,
+        fileCount: storageStatus.fileCount,
+      },
+      limits: {
+        maxGB: storageStatus.limitGB,
+        usagePercentage: parseFloat(storageStatus.usagePercentage),
+        isOverLimit: storageStatus.isOverLimit,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting storage status:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 const filesController = {
   addFile,
   getFiles,
@@ -121,5 +137,6 @@ const filesController = {
   getFileUrl,
   genereteImageUrl,
   checkStorageLimit,
+  getStorageStatus,
 };
 export default filesController;
