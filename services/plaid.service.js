@@ -189,7 +189,7 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await AccessToken.find({ userId });
+  const tokens = await getOldestAccessToken({ userId });
 
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
@@ -347,7 +347,7 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await AccessToken.findOne({ itemId });
+  const access = await getOldestAccessToken({ itemId });
   
   if (!access) {
     return;
@@ -434,7 +434,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 
 const updateTransactions = async (item) => {
   console.log("Updating transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
+  const accessInfo = await getOldestAccessToken({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
