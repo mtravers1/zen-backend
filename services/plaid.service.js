@@ -434,7 +434,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 
 const updateTransactions = async (item) => {
   console.log("Updating transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
+  const accessInfo = await getOldestAccessToken({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
