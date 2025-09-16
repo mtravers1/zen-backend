@@ -13,9 +13,7 @@
       "restart": true,
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
-      "env": {
-        "NODE_ENV": "development"
-      }
+      "envFile": "${workspaceFolder}/.env"
     },
     {
       "type": "node",
