@@ -1,6 +1,5 @@
 import permissions from "../config/permissions.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
-import User from "../database/models/User.js";
 
 const formatPlanName = (planId) => {
   return planId
@@ -30,28 +29,18 @@ const getProductIdForPlan = (planId, platform) => {
   const env = nodeEnv === "development" ? "dev" : nodeEnv;
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
 
-  console.log(
-    `🔍 getProductIdForPlan("${planId}", "${platform}") - env: ${env}`
-  );
-  console.log(`🔍 Available mappings:`, mappings);
 
   if (!mappings) {
-    console.log(`❌ No mappings found for env: ${env}, platform: ${platform}`);
     return null;
   }
 
   // Find the productId that maps to this planId
   for (const [productId, mappedPlanId] of Object.entries(mappings)) {
-    console.log(
-      `🔍 Checking: "${productId}" → "${mappedPlanId}" vs "${planId}"`
-    );
     if (mappedPlanId === planId) {
-      console.log(`✅ Found match: "${planId}" → "${productId}"`);
       return productId;
     }
   }
 
-  console.log(`❌ No match found for planId: "${planId}"`);
   return null;
 };
 
@@ -123,19 +112,9 @@ const generateFeaturesFromLimits = (limits) => {
 
 const getAvailablePlans = async (req, res) => {
   try {
-    const uid = req.user?.uid;
+    console.log("🚀 [SUBSCRIPTIONS] getAvailablePlans called");
     const platform = req.headers["x-platform"] || "ios"; // Default to iOS
-
-    // Get current user plan
-    let currentUserPlan = "Free"; // Default
-    if (uid) {
-      try {
-        const user = await User.findOne({ uid });
-        currentUserPlan = user?.account_type || "Free";
-      } catch (error) {
-        console.warn("Could not fetch user plan:", error.message);
-      }
-    }
+    console.log("🚀 [SUBSCRIPTIONS] platform:", platform);
 
     // Admin/internal roles that should NOT be shown to users for purchase
     const adminRoles = ["CFO", "CFO Management", "Admin", "Super Admin"];
@@ -168,15 +147,11 @@ const getAvailablePlans = async (req, res) => {
           annual: permissions[planId].pricing?.annual || "TBD",
           sku: getProductIdForPlan(planId, platform),
         },
-        isCurrentPlan: planId === currentUserPlan,
         available: true,
       }));
 
-    // Filter plans based on user role if authenticated
+    // No role-based filtering - frontend handles plan eligibility
     let filteredPlans = allPlans;
-    if (uid && req.user?.role === "business_owner") {
-      filteredPlans = allPlans.filter((plan) => plan.business_owner_allowed);
-    }
 
     // Sort plans according to hierarchy
     const sortedPlans = filteredPlans.sort((a, b) => {
@@ -190,11 +165,14 @@ const getAvailablePlans = async (req, res) => {
       return indexA - indexB;
     });
 
+    console.log("🚀 [SUBSCRIPTIONS] Response ready - plans count:", sortedPlans.length);
+    console.log("🚀 [SUBSCRIPTIONS] First plan example:", sortedPlans[0]);
+    
     res.status(200).json({
-      currentUserPlan,
       plans: sortedPlans,
     });
   } catch (error) {
+    console.error("🚀 [SUBSCRIPTIONS] ERROR in getAvailablePlans:", error);
     console.error("Error getting available plans:", error);
     res.status(500).json({ message: error.message });
   }

@@ -37,8 +37,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(logger("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "1mb" })); // Increased limit for iOS receipts
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
 // Apply structured logging middleware BEFORE authentication
