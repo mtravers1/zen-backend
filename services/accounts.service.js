@@ -1774,9 +1774,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const access_token = await getOldestAccessToken({
     userId: profileId,
     institutionId: deac.institution_id,
-  })
-    .lean()
-    .exec();
+  });
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
   let liabilityPlaid;
