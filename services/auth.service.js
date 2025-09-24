@@ -82,26 +82,26 @@ const signUp = async (data) => {
       throw new Error("Invalid email format");
     }
 
-    let existingUser = null;
-
-    try {
-      existingUser = await checkEmail(data.email);
-    } catch (err) {
-      if (err.message !== "User not found") {
-        throw err;
-      }
-    }
-
-    // if (existingUser) {
-    //   throw new Error("User already exists");
-    // }
-
     const uid = data.authUid;
-    const existingUid = await User.findOne({
+    
+    // Use atomic operation to check and create user to prevent race conditions
+    // First, try to find existing user by authUid (most reliable check)
+    const existingUserByUid = await User.findOne({
       authUid: uid,
     });
-    if (existingUid) {
+    
+    if (existingUserByUid) {
       throw new Error("User already exists");
+    }
+
+    // Also check by email hash to prevent duplicate emails
+    const emailHash = hashEmail(data.email);
+    const existingUserByEmail = await User.findOne({
+      emailHash,
+    });
+    
+    if (existingUserByEmail) {
+      throw new Error("User with this email already exists");
     }
 
     // Generate encryption keys first
@@ -179,8 +179,22 @@ const signUp = async (data) => {
       emailHash: hashEmail(data.email),
     });
 
-    await user.save();
-    console.log("Successfully created new user with encrypted data");
+    try {
+      await user.save();
+      console.log("Successfully created new user with encrypted data");
+    } catch (saveError) {
+      // Handle unique constraint violations
+      if (saveError.code === 11000) {
+        if (saveError.keyPattern && saveError.keyPattern.authUid) {
+          throw new Error("User already exists");
+        }
+        if (saveError.keyPattern && saveError.keyPattern.emailHash) {
+          throw new Error("User with this email already exists");
+        }
+        throw new Error("User already exists");
+      }
+      throw saveError;
+    }
 
     const newUser = await User.findOne({
       authUid: data.authUid,
@@ -387,8 +401,26 @@ const signInOrCreate = async (uid, userData = null) => {
         emailHash: hashEmail(userData.email),
       });
 
-      await user.save();
-      structuredLogger.logSuccess('auth_service_create_basic_user', { user_id: uid });
+      try {
+        await user.save();
+        structuredLogger.logSuccess('auth_service_create_basic_user', { user_id: uid });
+      } catch (saveError) {
+        // Handle unique constraint violations - user might have been created by another request
+        if (saveError.code === 11000) {
+          // User already exists, try to find them
+          user = await User.findOne({
+            authUid: uid,
+          }).select("-password");
+          
+          if (!user) {
+            // If we still can't find the user, re-throw the error
+            throw saveError;
+          }
+          // User exists, continue with normal flow
+        } else {
+          throw saveError;
+        }
+      }
     }
 
     // Now proceed with normal sign-in flow
