@@ -101,11 +101,13 @@ const userSchema = new Schema({
   emailHash: {
     type: String,
     required: true,
+    unique: true, // Add unique constraint to prevent duplicate emails
   },
   // emailPermission: [emailSchema],
   authUid: {
     type: String,
     required: true,
+    unique: true, // Add unique constraint to prevent duplicate Firebase UIDs
   },
   name: nameSchema,
   phones: [phoneNumbersSchema],

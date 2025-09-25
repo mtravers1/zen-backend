@@ -293,6 +293,12 @@ class AIService {
       // Enhanced system prompt with tool instructions
       const enhancedSystemPrompt = `${systemPrompt}
 
+## CRITICAL IDENTITY RULES
+- **NEVER identify yourself as ChatGPT, OpenAI, or any other AI model**
+- **ALWAYS introduce yourself as "Zen AI" or "I am Zen AI"**
+- **You are Zentavos' AI financial assistant named Zen AI**
+- **When asked "Como te llamas?" or "What is your name?", always respond with "Soy Zen AI" or "I am Zen AI"**
+
 ## CRITICAL INSTRUCTIONS FOR FINANCIAL DATA REQUESTS
 
 When a user asks for specific financial data, you MUST use the available tools:
@@ -625,9 +631,76 @@ DO NOT ask for user ID - you already have it in the uid parameter.`;
         
         try {
           parsedResponse = JSON.parse(cleanedResponse);
+          console.log(`[AI Service] ✅ Successfully parsed JSON response:`, {
+            hasResponse: !!parsedResponse.response,
+            hasText: !!parsedResponse.text,
+            hasData: !!parsedResponse.data
+          });
         } catch (parseError) {
           console.warn(`[AI Service] ⚠️ Response is not JSON, treating as plain text:`, parseError.message);
-          parsedResponse = { response: cleanedResponse, text: cleanedResponse };
+          
+          // Check if this looks like raw JSON that should be converted
+          if (cleanedResponse.includes('"response":') && cleanedResponse.includes('"data":')) {
+            console.log(`[AI Service] 🔍 Detected raw JSON format, attempting to extract readable text`);
+            try {
+              // Try to extract the response text from the raw JSON
+              const responseMatch = cleanedResponse.match(/"response":\s*"([^"]+)"/);
+              // Improved data extraction to handle more complex JSON structures
+              const dataMatch = cleanedResponse.match(/"data":\s*(\[[\s\S]*?\]|\{[\s\S]*?\})/);
+              
+              if (responseMatch && responseMatch[1]) {
+                const extractedText = responseMatch[1];
+                let extractedData = null;
+                
+                if (dataMatch && dataMatch[1]) {
+                  try {
+                    extractedData = JSON.parse(dataMatch[1]);
+                  } catch (dataParseError) {
+                    console.warn(`[AI Service] ⚠️ Could not parse data from raw JSON:`, dataParseError.message);
+                    // Try to extract individual data fields manually
+                    try {
+                      const accountNameMatch = cleanedResponse.match(/"account_name":\s*"([^"]+)"/);
+                      const currentBalanceMatch = cleanedResponse.match(/"currentBalance":\s*([0-9.]+)/);
+                      const availableBalanceMatch = cleanedResponse.match(/"availableBalance":\s*([0-9.]+)/);
+                      const institutionNameMatch = cleanedResponse.match(/"institution_name":\s*"([^"]+)"/);
+                      
+                      if (accountNameMatch || currentBalanceMatch || availableBalanceMatch) {
+                        extractedData = {};
+                        if (accountNameMatch) extractedData.account_name = accountNameMatch[1];
+                        if (currentBalanceMatch) extractedData.currentBalance = parseFloat(currentBalanceMatch[1]);
+                        if (availableBalanceMatch) extractedData.availableBalance = parseFloat(availableBalanceMatch[1]);
+                        if (institutionNameMatch) extractedData.institution_name = institutionNameMatch[1];
+                        console.log(`[AI Service] ✅ Manually extracted data fields:`, extractedData);
+                      }
+                    } catch (manualExtractError) {
+                      console.warn(`[AI Service] ⚠️ Manual data extraction also failed:`, manualExtractError.message);
+                    }
+                  }
+                }
+                
+                parsedResponse = {
+                  response: extractedText,
+                  text: extractedText,
+                  data: extractedData,
+                  source: 'tool_result',
+                  error: false
+                };
+                console.log(`[AI Service] ✅ Successfully extracted text from raw JSON:`, {
+                  textLength: extractedText.length,
+                  hasData: !!extractedData
+                });
+              } else {
+                // Fallback to treating as plain text
+                parsedResponse = { response: cleanedResponse, text: cleanedResponse };
+              }
+            } catch (extractError) {
+              console.warn(`[AI Service] ⚠️ Failed to extract from raw JSON:`, extractError.message);
+              parsedResponse = { response: cleanedResponse, text: cleanedResponse };
+            }
+          } else {
+            // Not raw JSON, treat as plain text
+            parsedResponse = { response: cleanedResponse, text: cleanedResponse };
+          }
         }
       }
       

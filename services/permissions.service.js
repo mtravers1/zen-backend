@@ -50,16 +50,13 @@ const countUserTrips = async (userId, month = null, year = null) => {
 
 const calculateStorageUsage = async (userId) => {
   try {
-    // DEVELOPMENT: Always return limit exceeded in development environment
-    if (process.env.NODE_ENV === "development") {
-      return 999; // Always exceeds any plan limit in development
-    }
+    const user = await User.findOne({ _id: userId });
+    if (!user) throw new Error("User not found");
 
-    // Note: Files schema doesn't have file size field
-    // This is a placeholder - would need to implement file size tracking
-    const fileCount = await Files.countDocuments({ userId: userId });
-    // Assuming average file size of 0.1MB for now
-    return (fileCount * 0.1) / 1024; // Convert to GB
+    const storageService = (await import("./storage.service.js")).default;
+    const storageStatus = await storageService.getStorageStatus(user.authUid);
+
+    return parseFloat(storageStatus.usedGB);
   } catch (error) {
     console.error("Error calculating storage usage:", error);
     return 0;

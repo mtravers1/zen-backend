@@ -19,10 +19,26 @@ const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 
-const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
+const createLinkToken = async (
+  email,
+  isAndroid,
+  accountId,
+  uid,
+  screen,
+  mode,
+  access_token
+) => {
   return await structuredLogger.withContext(
     "create_link_token",
-    { email, isAndroid, accountId, uid, screen },
+    {
+      email,
+      isAndroid,
+      accountId,
+      uid,
+      screen,
+      mode,
+      has_access_token: !!access_token,
+    },
     async () => {
       const user = await User.findOne({
         authUid: uid,
@@ -39,6 +55,15 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
         }
         accessToken = await decryptValue(account.accessToken, dek);
       }
+
+      // UPDATE MODE: Use provided access_token for update mode
+      if (mode === "update") {
+        if (!access_token) {
+          throw new Error("access_token required for update mode");
+        }
+        accessToken = access_token; // Token already comes decrypted from getInstitutionUpdateToken
+      }
+
       const userId = user._id.toString();
       let redirectUri;
       if (screen === "add-account") {
@@ -51,14 +76,15 @@ const createLinkToken = async (email, isAndroid, accountId, uid, screen) => {
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
-        android_package_name: isAndroid ? "com.zentavos.mobile" : null,
+        android_package_name: isAndroid ? process.env.BUNDLEID : null,
         redirect_uri: !isAndroid ? redirectUri : null,
-        //TODO: change this to fit every environment
         webhook: webhookUrl,
         language: "en",
         user: {
           client_user_id: userId,
         },
+        // NOTE: For update mode, Plaid documentation suggests omitting products array
+        // Testing with products first - may need to remove for update mode if issues arise
         products: ["transactions"],
         optional_products: ["investments", "liabilities"],
         hosted_link: {
@@ -189,7 +215,7 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await AccessToken.find({ userId });
+  const tokens = await getOldestAccessToken({ userId });
 
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
@@ -347,7 +373,7 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await AccessToken.findOne({ itemId });
+  const access = await getOldestAccessToken({ itemId });
   
   if (!access) {
     return;
@@ -434,7 +460,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 
 const updateTransactions = async (item) => {
   console.log("Updating transactions for item:", item);
-  const accessInfo = await AccessToken.findOne({ itemId: item });
+  const accessInfo = await getOldestAccessToken({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
   const user = await User.findById(userId);

@@ -14,7 +14,7 @@ import {
   getUserDek,
   hashValue,
 } from "../database/encryption.js";
-import { calculateWeeklyTotals, groupByWeek } from "./utils/accounts.js";
+import { calculateWeeklyTotals, getOldestAccessToken, groupByWeek } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
@@ -1771,12 +1771,10 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
   const deac = await getDecryptedAccount(account, dek);
 
-  const access_token = await AccessToken.findOne({
+  const access_token = await getOldestAccessToken({
     userId: profileId,
     institutionId: deac.institution_id,
-  })
-    .lean()
-    .exec();
+  });
   const decryptAccessToken = await decryptValue(access_token.accessToken, dek);
 
   let liabilityPlaid;
