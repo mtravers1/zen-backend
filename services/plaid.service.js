@@ -76,9 +76,8 @@ const createLinkToken = async (
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
-        android_package_name: isAndroid ? "com.zentavos.zentavosdev" : null,
+        android_package_name: isAndroid ? process.env.BUNDLEID : null,
         redirect_uri: !isAndroid ? redirectUri : null,
-        //TODO: change this to fit every environment
         webhook: webhookUrl,
         language: "en",
         user: {
