@@ -25,10 +25,9 @@ const isBusinessOwnerPlan = (planId) => {
 // Get Product ID for a plan on a specific platform
 const getProductIdForPlan = (planId, platform) => {
   // Map NODE_ENV to productMappings keys
-  const nodeEnv = process.env.NODE_ENV || "dev";
+  const nodeEnv = process.env.ENVIRONMENT;
   const env = nodeEnv === "development" ? "dev" : nodeEnv;
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
-
 
   if (!mappings) {
     return null;
@@ -165,9 +164,12 @@ const getAvailablePlans = async (req, res) => {
       return indexA - indexB;
     });
 
-    console.log("🚀 [SUBSCRIPTIONS] Response ready - plans count:", sortedPlans.length);
+    console.log(
+      "🚀 [SUBSCRIPTIONS] Response ready - plans count:",
+      sortedPlans.length
+    );
     console.log("🚀 [SUBSCRIPTIONS] First plan example:", sortedPlans[0]);
-    
+
     res.status(200).json({
       plans: sortedPlans,
     });
