@@ -17,6 +17,7 @@ import VerificationCode from "../database/models/VerificationCode.js";
 import plaidService from "./plaid.service.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import { getOldestAccessToken } from "./utils/accounts.js";
+import jwt from "jsonwebtoken";
 
 const own = async (uid) => {
   const userResponse = await User.findOne({
@@ -717,6 +718,251 @@ const verifyCode = async (email, code) => {
   }
 };
 
+// OAuth validation functions
+const validateGoogleToken = async (idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_google_token");
+    
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    
+    const userData = {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      displayName: decodedToken.name,
+      photoURL: decodedToken.picture,
+      emailVerified: decodedToken.email_verified,
+      provider: 'google'
+    };
+    
+    structuredLogger.logSuccess("auth_validate_google_token", {
+      uid: userData.uid,
+      email: userData.email
+    });
+    
+    return { success: true, user: userData };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_google_token",
+      error_classification: "google_token_validation_error"
+    });
+    
+    return { 
+      success: false, 
+      error: error.message || "Google token validation failed" 
+    };
+  }
+};
+
+const validateAppleToken = async (idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_apple_token");
+    
+    // First try to verify as Firebase token
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      
+      const userData = {
+        uid: decodedToken.uid,
+        email: decodedToken.email,
+        displayName: decodedToken.name,
+        photoURL: decodedToken.picture,
+        emailVerified: decodedToken.email_verified,
+        provider: 'apple'
+      };
+      
+      structuredLogger.logSuccess("auth_validate_apple_token_firebase", {
+        uid: userData.uid,
+        email: userData.email
+      });
+      
+      return { success: true, user: userData };
+    } catch (firebaseError) {
+      // If it's not a Firebase token, decode the Apple JWT
+      structuredLogger.logOperationStart("auth_validate_apple_token_jwt");
+      
+      const decoded = jwt.decode(idToken);
+      
+      if (!decoded) {
+        throw new Error('Invalid Apple ID token - cannot decode JWT');
+      }
+      
+      // Basic validation of Apple JWT structure
+      if (!decoded.sub || !decoded.iss || !decoded.aud) {
+        throw new Error('Invalid Apple ID token - missing required claims');
+      }
+      
+      // Verify issuer (should be Apple)
+      if (decoded.iss !== 'https://appleid.apple.com') {
+        throw new Error('Invalid Apple ID token - wrong issuer');
+      }
+      
+      // Verify audience (should be your app's client ID)
+      const expectedAudience = process.env.APPLE_CLIENT_ID || 'com.zentavos.mobile';
+      if (decoded.aud !== expectedAudience) {
+        throw new Error('Invalid Apple ID token - wrong audience');
+      }
+      
+      // Check token expiration
+      const now = Math.floor(Date.now() / 1000);
+      if (decoded.exp && decoded.exp < now) {
+        throw new Error('Invalid Apple ID token - token expired');
+      }
+      
+      const userData = {
+        uid: `apple_${decoded.sub}`,
+        email: decoded.email || null,
+        displayName: decoded.name || 'Apple User',
+        photoURL: null,
+        emailVerified: true,
+        provider: 'apple'
+      };
+      
+      structuredLogger.logSuccess("auth_validate_apple_token_jwt", {
+        uid: userData.uid,
+        email: userData.email
+      });
+      
+      return { success: true, user: userData };
+    }
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_apple_token",
+      error_classification: "apple_token_validation_error"
+    });
+    
+    return { 
+      success: false, 
+      error: error.message || "Apple token validation failed" 
+    };
+  }
+};
+
+const validateOAuthToken = async (provider, idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_oauth_token", {
+      provider: provider
+    });
+    
+    let result;
+    
+    switch (provider) {
+      case 'google':
+        result = await validateGoogleToken(idToken);
+        break;
+      case 'apple':
+        result = await validateAppleToken(idToken);
+        break;
+      default:
+        throw new Error(`Unsupported OAuth provider: ${provider}`);
+    }
+    
+    if (result.success) {
+      structuredLogger.logSuccess("auth_validate_oauth_token", {
+        provider: provider,
+        uid: result.user.uid,
+        email: result.user.email
+      });
+    } else {
+      structuredLogger.logErrorBlock(new Error(result.error), {
+        operation: "auth_validate_oauth_token",
+        provider: provider,
+        error_classification: "oauth_validation_failed"
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_oauth_token",
+      provider: provider,
+      error_classification: "oauth_validation_error"
+    });
+    
+    return {
+      success: false,
+      error: error.message || "OAuth validation failed"
+    };
+  }
+};
+
+const createFirebaseUser = async (userData) => {
+  try {
+    structuredLogger.logOperationStart("auth_create_firebase_user", {
+      uid: userData.uid,
+      email: userData.email,
+      provider: userData.provider
+    });
+    
+    // Check if user already exists
+    let firebaseUser;
+    try {
+      firebaseUser = await admin.auth().getUser(userData.uid);
+      structuredLogger.logSuccess("auth_firebase_user_exists", {
+        uid: userData.uid,
+        email: userData.email
+      });
+    } catch (error) {
+      // User doesn't exist, create it
+      if (error.code === 'auth/user-not-found') {
+        firebaseUser = await admin.auth().createUser({
+          uid: userData.uid,
+          email: userData.email,
+          displayName: userData.displayName,
+          photoURL: userData.photoURL,
+          emailVerified: userData.emailVerified
+        });
+        
+        structuredLogger.logSuccess("auth_firebase_user_created", {
+          uid: userData.uid,
+          email: userData.email
+        });
+      } else {
+        throw error;
+      }
+    }
+    
+    return { success: true, user: firebaseUser };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_create_firebase_user",
+      uid: userData.uid,
+      error_classification: "firebase_user_creation_error"
+    });
+    
+    return {
+      success: false,
+      error: error.message || "Failed to create Firebase user"
+    };
+  }
+};
+
+const generateFirebaseToken = async (uid) => {
+  try {
+    structuredLogger.logOperationStart("auth_generate_firebase_token", {
+      uid: uid
+    });
+    
+    const customToken = await admin.auth().createCustomToken(uid);
+    
+    structuredLogger.logSuccess("auth_generate_firebase_token", {
+      uid: uid
+    });
+    
+    return { success: true, token: customToken };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_generate_firebase_token",
+      uid: uid,
+      error_classification: "firebase_token_generation_error"
+    });
+    
+    return {
+      success: false,
+      error: error.message || "Failed to generate Firebase token"
+    };
+  }
+};
+
 const authService = {
   signUp,
   signIn,
@@ -728,6 +974,11 @@ const authService = {
   deleteUser,
   createVerificationCode,
   verifyCode,
+  validateOAuthToken,
+  validateGoogleToken,
+  validateAppleToken,
+  createFirebaseUser,
+  generateFirebaseToken,
 };
 
 export default authService;

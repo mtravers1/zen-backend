@@ -9,8 +9,10 @@ const router = Router();
 
 router.post("/signup", authController.signUp);
 router.post("/signin", authController.signIn);
+router.post("/signin-oauth", authController.signInWithOAuth);
 router.post("/check-email-firebase", authController.checkEmailFirebase);
 router.post("/check-email", authController.checkEmail);
+router.post("/check-oauth-validation", authController.checkOAuthValidation);
 router.get("/own", authController.own);
 router.post("/sendCode", authController.sendCode);
 router.post("/verifyCode", authController.verifyCode);

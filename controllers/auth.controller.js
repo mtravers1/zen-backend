@@ -402,6 +402,178 @@ const recoverEncryptionKeys = async (req, res) => {
   }
 };
 
+const checkOAuthValidation = async (req, res) => {
+  try {
+    const { provider, idToken, accessToken } = req.body;
+
+    if (!provider || (!idToken && !accessToken)) {
+      return res.status(400).json({
+        success: false,
+        message: "Provider and either idToken or accessToken are required"
+      });
+    }
+
+    structuredLogger.logOperationStart("auth_check_oauth_validation", {
+      provider: provider,
+      hasIdToken: !!idToken,
+      hasAccessToken: !!accessToken
+    });
+
+    // Validate the OAuth token using the service
+    const validationResult = await authService.validateOAuthToken(provider, idToken);
+
+    if (!validationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: "OAuth validation failed",
+        error: validationResult.error
+      });
+    }
+
+    // Create or get Firebase user
+    const firebaseUserResult = await authService.createFirebaseUser(validationResult.user);
+
+    if (!firebaseUserResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create Firebase user",
+        error: firebaseUserResult.error
+      });
+    }
+
+    // Generate Firebase custom token
+    const tokenResult = await authService.generateFirebaseToken(validationResult.user.uid);
+
+    if (!tokenResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate Firebase token",
+        error: tokenResult.error
+      });
+    }
+
+    structuredLogger.logSuccess("auth_check_oauth_validation", {
+      provider: provider,
+      uid: validationResult.user.uid,
+      email: validationResult.user.email
+    });
+
+    res.status(200).json({
+      success: true,
+      user: validationResult.user,
+      firebaseToken: tokenResult.token,
+      message: "OAuth validation successful"
+    });
+
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_check_oauth_validation",
+      provider: req.body.provider,
+      error_classification: "oauth_validation_error"
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "OAuth validation failed",
+      error: error.message
+    });
+  }
+};
+
+const signInWithOAuth = async (req, res) => {
+  try {
+    const { provider, idToken, accessToken, userData } = req.body;
+
+    if (!provider || (!idToken && !accessToken)) {
+      return res.status(400).json({
+        success: false,
+        message: "Provider and either idToken or accessToken are required"
+      });
+    }
+
+    structuredLogger.logOperationStart("auth_signin_oauth", {
+      provider: provider,
+      hasIdToken: !!idToken,
+      hasAccessToken: !!accessToken,
+      hasUserData: !!userData
+    });
+
+    // Validate the OAuth token using the service
+    const validationResult = await authService.validateOAuthToken(provider, idToken);
+
+    if (!validationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: "OAuth validation failed",
+        error: validationResult.error
+      });
+    }
+
+    // Create or get Firebase user
+    const firebaseUserResult = await authService.createFirebaseUser(validationResult.user);
+
+    if (!firebaseUserResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create Firebase user",
+        error: firebaseUserResult.error
+      });
+    }
+
+    // Generate Firebase custom token
+    const tokenResult = await authService.generateFirebaseToken(validationResult.user.uid);
+
+    if (!tokenResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate Firebase token",
+        error: tokenResult.error
+      });
+    }
+
+    // Use the existing signInOrCreate method to handle user creation/retrieval
+    const userDataForSignIn = {
+      email: validationResult.user.email,
+      method: provider,
+      firstName: validationResult.user.displayName?.split(' ')[0] || 'User',
+      lastName: validationResult.user.displayName?.split(' ').slice(1).join(' ') || '',
+      photoUrl: validationResult.user.photoURL,
+      authUid: validationResult.user.uid,
+      numAccounts: 0,
+      role: 'individual'
+    };
+
+    const signInResult = await authService.signInOrCreate(validationResult.user.uid, userDataForSignIn);
+
+    structuredLogger.logSuccess("auth_signin_oauth", {
+      provider: provider,
+      uid: validationResult.user.uid,
+      email: validationResult.user.email,
+      userId: signInResult.id
+    });
+
+    res.status(200).json({
+      success: true,
+      user: signInResult,
+      firebaseToken: tokenResult.token,
+      message: "OAuth sign-in successful"
+    });
+
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_signin_oauth",
+      provider: req.body.provider,
+      error_classification: "oauth_signin_error"
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "OAuth sign-in failed",
+      error: error.message
+    });
+  }
+};
+
 const authController = {
   own,
   signUp,
@@ -413,6 +585,8 @@ const authController = {
   checkEmailFirebase,
   deleteUser,
   recoverEncryptionKeys,
+  checkOAuthValidation,
+  signInWithOAuth,
 };
 
 export default authController;
