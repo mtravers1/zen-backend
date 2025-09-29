@@ -59,70 +59,32 @@ const signUp = async (req, res) => {
 
 const signIn = async (req, res) => {
   try {
-    // Extract uid from Firebase token in Authorization header
-    const idToken = req.headers.authorization?.split("Bearer ")[1];
-    if (!idToken) {
-      return res.status(401).send("Authorization token required");
-    }
+    const { email, password } = req.body;
 
-    // Verify the token to get the uid
-    const admin = (await import("../lib/firebaseAdmin.js")).default;
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const uid = decodedToken.uid;
-
-    structuredLogger.logOperationStart("auth_signin", { user_id: uid });
-
-    // Extract user data from request body
-    const { email, method, password, firstName, lastName, photoUrl, authUid, numAccounts, role } = req.body;
-
-    // Log received data for debugging
-    console.log("Received signin request:", {
-      email,
-      method,
-      hasPassword: !!password,
-      hasFirstName: !!firstName,
-      hasLastName: !!lastName,
-      hasPhotoUrl: !!photoUrl,
-      hasAuthUid: !!authUid,
-      numAccounts,
-      role,
-    });
+    structuredLogger.logOperationStart("auth_signin_email", { email });
 
     // Validate required fields
-    if (!email) {
-      return res.status(400).send("Email is required");
+    if (!email || !password) {
+      return res.status(400).send("Email and password are required");
     }
 
-    // Create user data for signInOrCreate - include all available data
-    const userData = {
-      email: email,
-      method: method,
-      password: password,
-      firstName: firstName,
-      lastName: lastName,
-      profilePhotoUrl: photoUrl,
-      authUid: authUid,
-      numAccounts: numAccounts || 0,
-      role: role || 'individual',
-    };
-
-    // Use signInOrCreate to handle both existing and new users
-    const user = await authService.signInOrCreate(uid, userData);
-    structuredLogger.logSuccess("auth_signin", { user_id: uid });
+    // Use authService to handle email/password authentication
+    const user = await authService.signIn(email, password);
+    structuredLogger.logSuccess("auth_signin_email", { email });
     res.status(200).send(user);
   } catch (error) {
     const errorClassification =
-      error.message === "User not found"
+      error.message === "User not found" || error.message === "Invalid credentials"
         ? "user_not_found"
         : "authentication_error";
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_signin",
-      user_id: "unknown",
+      operation: "auth_signin_email",
+      email: req.body.email,
       error_classification: errorClassification,
     });
 
-    if (error.message === "User not found") {
-      return res.status(404).send(error.message);
+    if (error.message === "User not found" || error.message === "Invalid credentials") {
+      return res.status(401).send("Invalid email or password");
     }
     res.status(500).send(error.message);
   }
