@@ -963,6 +963,86 @@ const generateFirebaseToken = async (uid) => {
   }
 };
 
+const signIn = async (email, password) => {
+  try {
+    structuredLogger.logOperationStart('auth_service_signin_email', { email });
+    
+    // Find user by email
+    const user = await User.findOne({
+      "email.email": { $regex: new RegExp(`^${email}$`, 'i') }
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_signin_email',
+        email: email,
+        error_classification: 'user_not_found'
+      });
+      throw error;
+    }
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      const error = new Error("Invalid credentials");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_signin_email',
+        email: email,
+        error_classification: 'invalid_credentials'
+      });
+      throw error;
+    }
+
+    // Decrypt user data
+    const dek = await getUserDek(user.authUid);
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedPhone = user.phones && user.phones.length > 0 
+      ? await decryptValue(user.phones[0].phone, dek)
+      : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+    }
+
+    const emails = await Promise.all(
+      user.email.map(async (emailObj) => {
+        return {
+          email: await decryptValue(emailObj.email, dek),
+          emailType: emailObj.emailType,
+          isPrimary: emailObj.isPrimary,
+        };
+      })
+    );
+
+    const retrievedUser = {
+      id: user._id,
+      email: emails,
+      phone: decryptedPhone,
+      role: user.role,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
+    structuredLogger.logSuccess('auth_service_signin_email', { email });
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_signin_email',
+      email: email,
+      error_classification: error.message === "User not found" ? 'user_not_found' : 
+                           error.message === "Invalid credentials" ? 'invalid_credentials' : 'decryption_error'
+    });
+    throw error;
+  }
+};
+
 const authService = {
   signUp,
   signIn,
