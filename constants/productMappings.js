@@ -30,15 +30,17 @@ export const PRODUCT_MAPPINGS = {
     },
     android: {
       // Base subscription plans - NEED to be created in Google Play Store
-      "com.zentavos.android.personal": "Personal",
-      "com.zentavos.android.founder": "Founder",
-      "com.zentavos.android.entrepreneur": "Entrepreneur",
-      "com.zentavos.android.tycoon": "Tycoon",
+      "com.zentavos.zentavosdev.personal": "Personal",
+      "com.zentavos.zentavosdev.founder": "Founder",
+      "com.zentavos.zentavosdev.entrepreneur": "Entrepreneur",
+      "com.zentavos.zentavosdev.tycoon": "Tycoon",
 
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
-      "com.zentavos.android.personal.plus1": "Personal+1",
-      "com.zentavos.android.founder.plus1": "Founder+1",
-      "com.zentavos.android.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.zentavosdev.personal.plus1": "Personal+1",
+      "com.zentavos.zentavosdev.founder.plus1": "Founder+1",
+      "com.zentavos.zentavosdev.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.zentavosdev.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.zentavosdev.tycoon.100gb": "Tycoon+100gb",
       // Tycoon is unlimited, no add-ons needed
     },
   },
@@ -59,15 +61,17 @@ export const PRODUCT_MAPPINGS = {
     },
     android: {
       // Base subscription plans - NEED to be created in Google Play Store
-      "com.zentavos.stg.android.personal": "Personal",
-      "com.zentavos.stg.android.founder": "Founder",
-      "com.zentavos.stg.android.entrepreneur": "Entrepreneur",
-      "com.zentavos.stg.android.tycoon": "Tycoon",
+      "com.zentavos.stg.personal": "Personal",
+      "com.zentavos.stg.founder": "Founder",
+      "com.zentavos.stg.entrepreneur": "Entrepreneur",
+      "com.zentavos.stg.tycoon": "Tycoon",
 
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
-      "com.zentavos.stg.android.personal.plus1": "Personal+1",
-      "com.zentavos.stg.android.founder.plus1": "Founder+1",
-      "com.zentavos.stg.android.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.stg.personal.plus1": "Personal+1",
+      "com.zentavos.stg.founder.plus1": "Founder+1",
+      "com.zentavos.stg.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.stg.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.stg.tycoon.100gb": "Tycoon+100gb",
     },
   },
   prod: {
@@ -86,15 +90,17 @@ export const PRODUCT_MAPPINGS = {
     },
     android: {
       // Base subscription plans - NEED to be created in Google Play Store
-      "com.zentavos.sub.android.personal": "Personal",
-      "com.zentavos.sub.android.founder": "Founder",
-      "com.zentavos.sub.android.entrepreneur": "Entrepreneur",
-      "com.zentavos.sub.android.tycoon": "Tycoon",
+      "com.zentavos.mobile.personal": "Personal",
+      "com.zentavos.mobile.founder": "Founder",
+      "com.zentavos.mobile.entrepreneur": "Entrepreneur",
+      "com.zentavos.mobile.tycoon": "Tycoon",
 
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
-      "com.zentavos.sub.android.personal.plus1": "Personal+1",
-      "com.zentavos.sub.android.founder.plus1": "Founder+1",
-      "com.zentavos.sub.android.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.mobile.personal.plus1": "Personal+1",
+      "com.zentavos.mobile.founder.plus1": "Founder+1",
+      "com.zentavos.mobile.entrepreneur.plus1": "Entrepreneur+1",
+      "com.zentavos.mobile.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.mobile.tycoon.100gb": "Tycoon+100gb",
     },
   },
 };
