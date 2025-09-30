@@ -931,7 +931,7 @@ const signIn = async (email, password) => {
     structuredLogger.logOperationStart('auth_service_signin_email', { email: normalizedEmail });
     
     // Step 1: Validate email and password using Firebase REST API
-    const firebaseApiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+    const firebaseApiKey = process.env.FIREBASE_API_KEY;
     if (!firebaseApiKey) {
       throw new Error("Firebase API key not configured");
     }
