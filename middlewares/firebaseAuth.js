@@ -1,5 +1,6 @@
 import { unless } from "express-unless";
 import admin from "firebase-admin";
+import jwt from "jsonwebtoken";
 
 async function firebaseAuthentication(req, res, next) {
   const idToken = req.headers.authorization?.split("Bearer ")[1];
@@ -23,35 +24,72 @@ async function firebaseAuthentication(req, res, next) {
   }
 
   try {
-    console.log(`[FIREBASE AUTH ${requestId}] 🔍 Verifying ID token...`);
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    
-    console.log(`[FIREBASE AUTH ${requestId}] ✅ Token verified successfully:`, {
-      uid: decodedToken.uid,
-      email: decodedToken.email,
-      emailVerified: decodedToken.email_verified,
-      tokenIssuedAt: new Date(decodedToken.iat * 1000).toISOString(),
-      tokenExpiresAt: new Date(decodedToken.exp * 1000).toISOString(),
-      tokenIssuer: decodedToken.iss,
-      tokenAudience: decodedToken.aud,
-      tokenKeys: Object.keys(decodedToken)
-    });
-    
-    req.user = decodedToken;
-    req.requestId = requestId; // Add request ID for tracking
-    
-    console.log(`[FIREBASE AUTH ${requestId}] ✅ req.user set successfully:`, {
-      uid: req.user.uid,
-      email: req.user.email,
-      userKeys: Object.keys(req.user),
-      hasUid: !!req.user.uid,
-      uidType: typeof req.user.uid,
-      uidLength: req.user.uid ? req.user.uid.length : 0
-    });
-    
-    next();
+    // First, try to verify as JWT custom token
+    console.log(`[FIREBASE AUTH ${requestId}] 🔍 Trying JWT custom token verification...`);
+    try {
+      const decodedJWT = jwt.verify(idToken, process.env.SECRET);
+      
+      console.log(`[FIREBASE AUTH ${requestId}] ✅ JWT custom token verified successfully:`, {
+        userId: decodedJWT.userId,
+        email: decodedJWT.email,
+        tokenIssuedAt: new Date(decodedJWT.iat * 1000).toISOString(),
+        tokenExpiresAt: new Date(decodedJWT.exp * 1000).toISOString(),
+        tokenKeys: Object.keys(decodedJWT)
+      });
+      
+      // Set user info in request object (compatible with Firebase format)
+      req.user = {
+        uid: decodedJWT.userId, // Use userId as uid for compatibility
+        email: decodedJWT.email,
+        userId: decodedJWT.userId
+      };
+      req.requestId = requestId;
+      
+      console.log(`[FIREBASE AUTH ${requestId}] ✅ JWT req.user set successfully:`, {
+        uid: req.user.uid,
+        email: req.user.email,
+        userId: req.user.userId,
+        userKeys: Object.keys(req.user)
+      });
+      
+      return next();
+    } catch (jwtError) {
+      console.log(`[FIREBASE AUTH ${requestId}] JWT verification failed, trying Firebase:`, {
+        jwtError: jwtError.message,
+        jwtErrorName: jwtError.name
+      });
+      
+      // If JWT fails, try Firebase token verification
+      console.log(`[FIREBASE AUTH ${requestId}] 🔍 Verifying Firebase ID token...`);
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      
+      console.log(`[FIREBASE AUTH ${requestId}] ✅ Firebase token verified successfully:`, {
+        uid: decodedToken.uid,
+        email: decodedToken.email,
+        emailVerified: decodedToken.email_verified,
+        tokenIssuedAt: new Date(decodedToken.iat * 1000).toISOString(),
+        tokenExpiresAt: new Date(decodedToken.exp * 1000).toISOString(),
+        tokenIssuer: decodedToken.iss,
+        tokenAudience: decodedToken.aud,
+        tokenKeys: Object.keys(decodedToken)
+      });
+      
+      req.user = decodedToken;
+      req.requestId = requestId; // Add request ID for tracking
+      
+      console.log(`[FIREBASE AUTH ${requestId}] ✅ Firebase req.user set successfully:`, {
+        uid: req.user.uid,
+        email: req.user.email,
+        userKeys: Object.keys(req.user),
+        hasUid: !!req.user.uid,
+        uidType: typeof req.user.uid,
+        uidLength: req.user.uid ? req.user.uid.length : 0
+      });
+      
+      return next();
+    }
   } catch (error) {
-    console.error(`[FIREBASE AUTH ${requestId}] ❌ Token verification failed:`, {
+    console.error(`[FIREBASE AUTH ${requestId}] ❌ Both JWT and Firebase token verification failed:`, {
       error: error.message,
       errorCode: error.code,
       errorStack: error.stack,
