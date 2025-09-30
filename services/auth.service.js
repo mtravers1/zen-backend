@@ -1058,7 +1058,7 @@ const signIn = async (email, password) => {
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_service_signin_email',
-      email: normalizedEmail,
+      email: email, // Use original email instead of normalizedEmail
       error_classification: error.message === "User not found" ? 'user_not_found' : 
                            error.message === "Invalid credentials" ? 'invalid_credentials' : 'decryption_error'
     });
