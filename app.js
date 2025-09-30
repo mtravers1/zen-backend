@@ -49,7 +49,6 @@ app.use((req, res, next) => {
   // Define paths that should be excluded from authentication
   const excludedPaths = [
     "/api/auth/signup",
-    "/api/auth/signup-direct",
     "/api/auth/signin",
     "/api/auth/check-email",
     "/api/auth/check-email-firebase",
