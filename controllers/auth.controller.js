@@ -25,50 +25,56 @@ const signUp = async (req, res) => {
   try {
     // Step 1: Validate required fields first
     if (!data.email || !data.firstName || !data.lastName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Missing required fields: email, firstName, and lastName are required" 
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing required fields: email, firstName, and lastName are required",
       });
     }
 
     // Step 2: Check if user already exists BEFORE creating anything
-    const emailHash = require("../services/auth.service.js").hashEmail(data.email);
-    const existingUserByEmail = await require("../database/models/User.js").default.findOne({
+    const emailHash = authService.hashEmail(data.email);
+    const User = (await import("../database/models/User.js")).default;
+    const existingUserByEmail = await User.findOne({
       emailHash,
     });
-    
+
     if (existingUserByEmail) {
       return res.status(400).json({
         success: false,
-        message: "User with this email already exists"
+        message: "User with this email already exists",
       });
     }
 
     // Step 3: Check if authUid is provided in data (for direct signup) or in header (for Firebase token)
     let authUid = data.authUid || req.user?.uid;
-    
+
     if (!authUid) {
       // If no authUid provided, create Firebase user first
       if (!data.password) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Password is required for direct sign-up" 
+        return res.status(400).json({
+          success: false,
+          message: "Password is required for direct sign-up",
         });
       }
-      
-      const firebaseUser = await authService.createFirebaseUserWithEmailPassword(data.email, data.password);
+
+      const firebaseUser =
+        await authService.createFirebaseUserWithEmailPassword(
+          data.email,
+          data.password
+        );
       authUid = firebaseUser.uid;
     }
 
     // Step 4: Check if user exists by authUid (double check)
-    const existingUserByUid = await require("../database/models/User.js").default.findOne({
+    const existingUserByUid = await User.findOne({
       authUid: authUid,
     });
-    
+
     if (existingUserByUid) {
       return res.status(400).json({
         success: false,
-        message: "User already exists"
+        message: "User already exists",
       });
     }
 
@@ -95,7 +101,7 @@ const signUp = async (req, res) => {
       authUid: authUid,
     });
     const user = await authService.signUp(data);
-    structuredLogger.logSuccess("auth_signup", { 
+    structuredLogger.logSuccess("auth_signup", {
       email: data.email,
       userId: user.id,
       authUid: authUid,
@@ -108,40 +114,40 @@ const signUp = async (req, res) => {
       authUid: data?.authUid,
       error_classification: "registration_error",
     });
-    
+
     // Handle specific error cases with appropriate status codes
     if (error.message.includes("User with this email already exists")) {
       return res.status(400).json({
         success: false,
-        message: "User with this email already exists"
+        message: "User with this email already exists",
       });
     }
-    
+
     if (error.message.includes("User already exists")) {
       return res.status(400).json({
         success: false,
-        message: "User already exists"
+        message: "User already exists",
       });
     }
-    
+
     if (error.message.includes("Missing required fields")) {
       return res.status(400).json({
         success: false,
-        message: error.message
+        message: error.message,
       });
     }
-    
+
     if (error.message.includes("Invalid email format")) {
       return res.status(400).json({
         success: false,
-        message: "Invalid email format"
+        message: "Invalid email format",
       });
     }
-    
+
     // For all other errors, return 500
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -163,7 +169,8 @@ const signIn = async (req, res) => {
     res.status(200).send(user);
   } catch (error) {
     const errorClassification =
-      error.message === "User not found" || error.message === "Invalid credentials"
+      error.message === "User not found" ||
+      error.message === "Invalid credentials"
         ? "user_not_found"
         : "authentication_error";
     structuredLogger.logErrorBlock(error, {
@@ -172,13 +179,15 @@ const signIn = async (req, res) => {
       error_classification: errorClassification,
     });
 
-    if (error.message === "User not found" || error.message === "Invalid credentials") {
+    if (
+      error.message === "User not found" ||
+      error.message === "Invalid credentials"
+    ) {
       return res.status(401).send("Invalid email or password");
     }
     res.status(500).send(error.message);
   }
 };
-
 
 const checkEmail = async (req, res) => {
   const { email, method } = req.body;
@@ -306,34 +315,34 @@ const testExistingUserLogin = async (req, res) => {
   const { email } = req.body;
   try {
     structuredLogger.logOperationStart("auth_test_existing_user", { email });
-    
+
     // Find user by email hash
-    const emailHash = require("../services/auth.service.js").hashEmail(email);
-    const User = require("../database/models/User.js").default;
+    const emailHash = authService.hashEmail(email);
+    const User = (await import("../database/models/User.js")).default;
     const user = await User.findOne({ emailHash: emailHash });
-    
+
     if (!user) {
-      return res.status(404).send({ 
-        success: false, 
+      return res.status(404).send({
+        success: false,
         message: "User not found",
-        email: email 
+        email: email,
       });
     }
-    
+
     // Test DEK retrieval
-    const { getUserDek } = require("../database/encryption.js");
+    const { getUserDek } = await import("../database/encryption.js");
     const dek = await getUserDek(user.authUid);
-    
-    res.status(200).send({ 
-      success: true, 
+
+    res.status(200).send({
+      success: true,
       message: "User found and DEK retrieved successfully",
       user: {
         id: user._id,
         authUid: user.authUid,
         email: email,
         hasDek: !!dek,
-        dekLength: dek?.length
-      }
+        dekLength: dek?.length,
+      },
     });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
@@ -341,10 +350,10 @@ const testExistingUserLogin = async (req, res) => {
       email: email,
       error_classification: "test_error",
     });
-    res.status(500).send({ 
-      success: false, 
+    res.status(500).send({
+      success: false,
       message: error.message,
-      error: error.toString()
+      error: error.toString(),
     });
   }
 };
@@ -353,111 +362,117 @@ const testExistingUserLogin = async (req, res) => {
 const testEncryptionConsistency = async (req, res) => {
   const { email } = req.body;
   try {
-    structuredLogger.logOperationStart("auth_test_encryption_consistency", { email });
-    
+    structuredLogger.logOperationStart("auth_test_encryption_consistency", {
+      email,
+    });
+
     // Find user by email hash
-    const emailHash = require("../services/auth.service.js").hashEmail(email);
-    const User = require("../database/models/User.js").default;
+    const emailHash = authService.hashEmail(email);
+    const User = (await import("../database/models/User.js")).default;
     const user = await User.findOne({ emailHash: emailHash });
-    
+
     if (!user) {
-      return res.status(404).send({ 
-        success: false, 
+      return res.status(404).send({
+        success: false,
         message: "User not found",
-        email: email 
+        email: email,
       });
     }
-    
+
     // Test DEK retrieval
-    const { getUserDek, decryptValue } = require("../database/encryption.js");
+    const { getUserDek, decryptValue } = await import(
+      "../database/encryption.js"
+    );
     const dek = await getUserDek(user.authUid);
-    
+
     if (!dek) {
-      return res.status(500).send({ 
-        success: false, 
+      return res.status(500).send({
+        success: false,
         message: "Failed to retrieve DEK",
-        email: email 
+        email: email,
       });
     }
-    
+
     // Test decryption of all encrypted fields
     const decryptionTests = [];
-    
+
     try {
       const decryptedFirstName = await decryptValue(user.name.firstName, dek);
       decryptionTests.push({
         field: "firstName",
         success: true,
-        value: decryptedFirstName
+        value: decryptedFirstName,
       });
     } catch (error) {
       decryptionTests.push({
         field: "firstName",
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
-    
+
     try {
       const decryptedLastName = await decryptValue(user.name.lastName, dek);
       decryptionTests.push({
         field: "lastName",
         success: true,
-        value: decryptedLastName
+        value: decryptedLastName,
       });
     } catch (error) {
       decryptionTests.push({
         field: "lastName",
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
-    
+
     try {
       const decryptedEmail = await decryptValue(user.email[0].email, dek);
       decryptionTests.push({
         field: "email",
         success: true,
-        value: decryptedEmail
+        value: decryptedEmail,
       });
     } catch (error) {
       decryptionTests.push({
         field: "email",
         success: false,
-        error: error.message
+        error: error.message,
       });
     }
-    
+
     if (user.phones && user.phones.length > 0) {
       try {
         const decryptedPhone = await decryptValue(user.phones[0].phone, dek);
         decryptionTests.push({
           field: "phone",
           success: true,
-          value: decryptedPhone
+          value: decryptedPhone,
         });
       } catch (error) {
         decryptionTests.push({
           field: "phone",
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
     }
-    
-    const allSuccessful = decryptionTests.every(test => test.success);
-    
-    res.status(200).send({ 
-      success: allSuccessful, 
-      message: allSuccessful ? "All encryption/decryption tests passed" : "Some encryption/decryption tests failed",
+
+    const allSuccessful = decryptionTests.every((test) => test.success);
+
+    res.status(200).send({
+      success: allSuccessful,
+      message: allSuccessful
+        ? "All encryption/decryption tests passed"
+        : "Some encryption/decryption tests failed",
       user: {
         id: user._id,
         authUid: user.authUid,
         email: email,
         hasDek: !!dek,
-        dekLength: dek?.length
+        dekLength: dek?.length,
       },
-      decryptionTests: decryptionTests
+      decryptionTests: decryptionTests,
     });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
@@ -465,10 +480,10 @@ const testEncryptionConsistency = async (req, res) => {
       email: email,
       error_classification: "encryption_test_error",
     });
-    res.status(500).send({ 
-      success: false, 
+    res.status(500).send({
+      success: false,
       message: error.message,
-      error: error.toString()
+      error: error.toString(),
     });
   }
 };
@@ -486,12 +501,10 @@ const verifyCode = async (req, res) => {
   }
 
   if (!email) {
-    return res
-      .status(400)
-      .send({
-        message: "User email not found in token or request body",
-        valid: false,
-      });
+    return res.status(400).send({
+      message: "User email not found in token or request body",
+      valid: false,
+    });
   }
 
   // Normalize email to lowercase for consistency with sendCode
@@ -633,73 +646,79 @@ const checkOAuthValidation = async (req, res) => {
     if (!provider || (!idToken && !accessToken)) {
       return res.status(400).json({
         success: false,
-        message: "Provider and either idToken or accessToken are required"
+        message: "Provider and either idToken or accessToken are required",
       });
     }
 
     structuredLogger.logOperationStart("auth_check_oauth_validation", {
       provider: provider,
       hasIdToken: !!idToken,
-      hasAccessToken: !!accessToken
+      hasAccessToken: !!accessToken,
     });
 
     // Validate the OAuth token using the service
-    const validationResult = await authService.validateOAuthToken(provider, idToken);
+    const validationResult = await authService.validateOAuthToken(
+      provider,
+      idToken
+    );
 
     if (!validationResult.success) {
       return res.status(401).json({
         success: false,
         message: "OAuth validation failed",
-        error: validationResult.error
+        error: validationResult.error,
       });
     }
 
     // Create or get Firebase user
-    const firebaseUserResult = await authService.createFirebaseUser(validationResult.user);
+    const firebaseUserResult = await authService.createFirebaseUser(
+      validationResult.user
+    );
 
     if (!firebaseUserResult.success) {
       return res.status(500).json({
         success: false,
         message: "Failed to create Firebase user",
-        error: firebaseUserResult.error
+        error: firebaseUserResult.error,
       });
     }
 
     // Generate Firebase custom token
-    const tokenResult = await authService.generateFirebaseToken(validationResult.user.uid);
+    const tokenResult = await authService.generateFirebaseToken(
+      validationResult.user.uid
+    );
 
     if (!tokenResult.success) {
       return res.status(500).json({
         success: false,
         message: "Failed to generate Firebase token",
-        error: tokenResult.error
+        error: tokenResult.error,
       });
     }
 
     structuredLogger.logSuccess("auth_check_oauth_validation", {
       provider: provider,
       uid: validationResult.user.uid,
-      email: validationResult.user.email
+      email: validationResult.user.email,
     });
 
     res.status(200).json({
       success: true,
       user: validationResult.user,
       firebaseToken: tokenResult.token,
-      message: "OAuth validation successful"
+      message: "OAuth validation successful",
     });
-
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_check_oauth_validation",
       provider: req.body.provider,
-      error_classification: "oauth_validation_error"
+      error_classification: "oauth_validation_error",
     });
 
     res.status(500).json({
       success: false,
       message: "OAuth validation failed",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -711,7 +730,7 @@ const signInWithOAuth = async (req, res) => {
     if (!provider || (!idToken && !accessToken)) {
       return res.status(400).json({
         success: false,
-        message: "Provider and either idToken or accessToken are required"
+        message: "Provider and either idToken or accessToken are required",
       });
     }
 
@@ -719,39 +738,46 @@ const signInWithOAuth = async (req, res) => {
       provider: provider,
       hasIdToken: !!idToken,
       hasAccessToken: !!accessToken,
-      hasUserData: !!userData
+      hasUserData: !!userData,
     });
 
     // Validate the OAuth token using the service
-    const validationResult = await authService.validateOAuthToken(provider, idToken);
+    const validationResult = await authService.validateOAuthToken(
+      provider,
+      idToken
+    );
 
     if (!validationResult.success) {
       return res.status(401).json({
         success: false,
         message: "OAuth validation failed",
-        error: validationResult.error
+        error: validationResult.error,
       });
     }
 
     // Create or get Firebase user
-    const firebaseUserResult = await authService.createFirebaseUser(validationResult.user);
+    const firebaseUserResult = await authService.createFirebaseUser(
+      validationResult.user
+    );
 
     if (!firebaseUserResult.success) {
       return res.status(500).json({
         success: false,
         message: "Failed to create Firebase user",
-        error: firebaseUserResult.error
+        error: firebaseUserResult.error,
       });
     }
 
     // Generate Firebase custom token
-    const tokenResult = await authService.generateFirebaseToken(validationResult.user.uid);
+    const tokenResult = await authService.generateFirebaseToken(
+      validationResult.user.uid
+    );
 
     if (!tokenResult.success) {
       return res.status(500).json({
         success: false,
         message: "Failed to generate Firebase token",
-        error: tokenResult.error
+        error: tokenResult.error,
       });
     }
 
@@ -759,41 +785,44 @@ const signInWithOAuth = async (req, res) => {
     const userDataForSignIn = {
       email: validationResult.user.email,
       method: provider,
-      firstName: validationResult.user.displayName?.split(' ')[0] || 'User',
-      lastName: validationResult.user.displayName?.split(' ').slice(1).join(' ') || '',
+      firstName: validationResult.user.displayName?.split(" ")[0] || "User",
+      lastName:
+        validationResult.user.displayName?.split(" ").slice(1).join(" ") || "",
       photoUrl: validationResult.user.photoURL,
       authUid: validationResult.user.uid,
       numAccounts: 0,
-      role: 'individual'
+      role: "individual",
     };
 
-    const signInResult = await authService.signInOrCreate(validationResult.user.uid, userDataForSignIn);
+    const signInResult = await authService.signInOrCreate(
+      validationResult.user.uid,
+      userDataForSignIn
+    );
 
     structuredLogger.logSuccess("auth_signin_oauth", {
       provider: provider,
       uid: validationResult.user.uid,
       email: validationResult.user.email,
-      userId: signInResult.id
+      userId: signInResult.id,
     });
 
     res.status(200).json({
       success: true,
       user: signInResult,
       firebaseToken: tokenResult.token,
-      message: "OAuth sign-in successful"
+      message: "OAuth sign-in successful",
     });
-
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_signin_oauth",
       provider: req.body.provider,
-      error_classification: "oauth_signin_error"
+      error_classification: "oauth_signin_error",
     });
 
     res.status(500).json({
       success: false,
       message: "OAuth sign-in failed",
-      error: error.message
+      error: error.message,
     });
   }
 };
