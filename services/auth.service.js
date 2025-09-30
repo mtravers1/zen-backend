@@ -25,15 +25,26 @@ const own = async (uid) => {
   }).select("-password");
 
   const dek = await getUserDek(uid);
-  const emails = await Promise.all(
-    userResponse.email.map(async (email) => {
-      return {
-        email: await decryptValue(email.email, dek),
-        emailType: email.emailType,
-        isPrimary: email.isPrimary,
-      };
-    })
-  );
+  // Handle both old and new email structures
+  let emails = [];
+  if (Array.isArray(userResponse.email)) {
+    emails = await Promise.all(
+      userResponse.email.map(async (email) => {
+        return {
+          email: await decryptValue(email.email, dek),
+          emailType: email.emailType,
+          isPrimary: email.isPrimary,
+        };
+      })
+    );
+  } else {
+    // Fallback for old structure or direct email field
+    emails = [{
+      email: await decryptValue(userResponse.email, dek),
+      emailType: "personal",
+      isPrimary: true,
+    }];
+  }
 
   const decryptedFirstName = await decryptValue(
     userResponse.name.firstName,
@@ -210,13 +221,13 @@ const signUp = async (data) => {
       : null;
     const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek) : null;
 
+    // Generate JWT token for the new user
+    const token = generateJWTToken(newUser._id, data.email.trim().toLowerCase());
+
     const retrievedUser = {
       id: newUser._id,
-      email: [{
-        email: data.email.trim().toLowerCase(), // Return original email for response
-        emailType: "personal",
-        isPrimary: true,
-      }],
+      _id: newUser._id, // Also include _id for compatibility
+      email: data.email.trim().toLowerCase(), // Return email as string for mobile compatibility
       phone: decryptedPhone,
       role: newUser.role,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -225,6 +236,7 @@ const signUp = async (data) => {
         lastName: decryptedLastName,
         middleName: decryptedMiddleName,
       },
+      token: token, // Include JWT token
     };
 
     return retrievedUser;
@@ -868,6 +880,23 @@ const createFirebaseUser = async (userData) => {
   }
 };
 
+const generateJWTToken = (userId, email) => {
+  try {
+    const payload = {
+      userId: userId,
+      email: email,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+    };
+    
+    const token = jwt.sign(payload, process.env.SECRET);
+    return token;
+  } catch (error) {
+    console.error("Error generating JWT token:", error);
+    throw new Error("Failed to generate authentication token");
+  }
+};
+
 const generateFirebaseToken = async (uid) => {
   try {
     structuredLogger.logOperationStart("auth_generate_firebase_token", {
@@ -897,37 +926,78 @@ const generateFirebaseToken = async (uid) => {
 
 const signIn = async (email, password) => {
   try {
-    structuredLogger.logOperationStart('auth_service_signin_email', { email });
+    // Normalize email to lowercase for consistency
+    const normalizedEmail = email.trim().toLowerCase();
+    structuredLogger.logOperationStart('auth_service_signin_email', { email: normalizedEmail });
     
-    // Find user by email
+    // Step 1: Validate email and password using Firebase REST API
+    const firebaseApiKey = process.env.FIREBASE_API_KEY;
+    if (!firebaseApiKey) {
+      throw new Error("Firebase API key not configured");
+    }
+
+    // Use Firebase REST API to verify email/password and get UID
+    const verifyPasswordUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`;
+    
+    const verifyResponse = await fetch(verifyPasswordUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password: password,
+        returnSecureToken: true
+      })
+    });
+
+    const verifyResult = await verifyResponse.json();
+
+    if (!verifyResponse.ok) {
+      console.log("Firebase password verification failed:", verifyResult);
+      const error = new Error("Invalid credentials");
+      structuredLogger.logErrorBlock(error, {
+        operation: 'auth_service_signin_email',
+        email: normalizedEmail,
+        error_classification: 'invalid_credentials',
+        firebaseError: verifyResult.error?.message
+      });
+      throw error;
+    }
+
+    // Step 2: Get the Firebase UID from the verification result
+    const firebaseUid = verifyResult.localId;
+    console.log("Firebase email/password verification successful, UID:", firebaseUid);
+
+    // Step 3: Find user in our database using the Firebase UID
     const user = await User.findOne({
-      "email.email": { $regex: new RegExp(`^${email}$`, 'i') }
+      authUid: firebaseUid
     });
 
     if (!user) {
+      console.log("User not found in database for Firebase UID:", firebaseUid);
       const error = new Error("User not found");
       structuredLogger.logErrorBlock(error, {
         operation: 'auth_service_signin_email',
-        email: email,
+        email: normalizedEmail,
+        firebaseUid: firebaseUid,
         error_classification: 'user_not_found'
       });
       throw error;
     }
 
-    // Verify password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      const error = new Error("Invalid credentials");
-      structuredLogger.logErrorBlock(error, {
-        operation: 'auth_service_signin_email',
-        email: email,
-        error_classification: 'invalid_credentials'
-      });
-      throw error;
-    }
+    console.log("User found in database:", { 
+      userId: user._id, 
+      authUid: user.authUid,
+      email: normalizedEmail,
+      firebaseUid: firebaseUid
+    });
 
     // Decrypt user data
+    console.log("Getting DEK for user:", { authUid: user.authUid, userId: user._id });
     const dek = await getUserDek(user.authUid);
+    console.log("DEK retrieved successfully:", { hasDek: !!dek, dekLength: dek?.length });
+    
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
     const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
@@ -939,19 +1009,34 @@ const signIn = async (email, password) => {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
     }
 
-    const emails = await Promise.all(
-      user.email.map(async (emailObj) => {
-        return {
-          email: await decryptValue(emailObj.email, dek),
-          emailType: emailObj.emailType,
-          isPrimary: emailObj.isPrimary,
-        };
-      })
-    );
+    // Handle both old and new email structures
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await decryptValue(emailObj.email, dek),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        })
+      );
+    } else {
+      // Fallback for old structure or direct email field
+      emails = [{
+        email: await decryptValue(user.email, dek),
+        emailType: "personal",
+        isPrimary: true,
+      }];
+    }
+
+    // Generate JWT token for the user
+    const token = generateJWTToken(user._id, normalizedEmail);
 
     const retrievedUser = {
       id: user._id,
-      email: emails,
+      _id: user._id, // Also include _id for compatibility
+      email: emails[0]?.email || normalizedEmail, // Return primary email as string for mobile compatibility
       phone: decryptedPhone,
       role: user.role,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -960,14 +1045,15 @@ const signIn = async (email, password) => {
         lastName: decryptedLastName,
         middleName: decryptedMiddleName,
       },
+      token: token, // Include JWT token
     };
 
-    structuredLogger.logSuccess('auth_service_signin_email', { email });
+    structuredLogger.logSuccess('auth_service_signin_email', { email: normalizedEmail });
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_service_signin_email',
-      email: email,
+      email: normalizedEmail,
       error_classification: error.message === "User not found" ? 'user_not_found' : 
                            error.message === "Invalid credentials" ? 'invalid_credentials' : 'decryption_error'
     });

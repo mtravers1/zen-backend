@@ -41,4 +41,10 @@ router.get("/test", (req, res) => {
   });
 });
 
+// Test endpoint for existing users
+router.post("/test-existing-user", authController.testExistingUserLogin);
+
+// Test endpoint for encryption consistency
+router.post("/test-encryption-consistency", authController.testEncryptionConsistency);
+
 export default router;
