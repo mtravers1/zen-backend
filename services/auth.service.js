@@ -426,12 +426,14 @@ const signInOrCreate = async (uid, userData = null) => {
 
 const checkEmail = async (email, method) => {
   try {
+    // Normalize email to lowercase for consistency
+    const normalizedEmail = email.trim().toLowerCase();
     structuredLogger.logOperationStart('auth_service_check_email', {
-      email: email,
+      email: normalizedEmail,
       method: method
     });
 
-    const emailHash = hashEmail(email);
+    const emailHash = hashEmail(normalizedEmail);
     const user = await User.findOne({
       emailHash,
     });
@@ -440,19 +442,19 @@ const checkEmail = async (email, method) => {
       const error = new Error("User not found");
       structuredLogger.logErrorBlock(error, {
         operation: 'auth_service_check_email',
-        email: email,
+        email: normalizedEmail,
         method: method,
         error_classification: 'user_not_found'
       });
       throw error;
     }
 
-    structuredLogger.logSuccess('auth_service_check_email', { email: email });
+    structuredLogger.logSuccess('auth_service_check_email', { email: normalizedEmail });
     return user;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_service_check_email',
-      email: email,
+      email: email, // Use original email for logging in catch block
       method: method,
       error_classification: error.message === "User not found" ? 'user_not_found' : 'database_error'
     });
