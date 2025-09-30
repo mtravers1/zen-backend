@@ -1,6 +1,7 @@
 import { unless } from "express-unless";
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
+import User from "../database/models/user.model.js";
 
 async function firebaseAuthentication(req, res, next) {
   const idToken = req.headers.authorization?.split("Bearer ")[1];
@@ -37,9 +38,16 @@ async function firebaseAuthentication(req, res, next) {
         tokenKeys: Object.keys(decodedJWT)
       });
       
+      // Find user in database to get authUid (Firebase UID)
+      const user = await User.findById(decodedJWT.userId).lean();
+      if (!user) {
+        console.error(`[FIREBASE AUTH ${requestId}] ❌ User not found in database for userId: ${decodedJWT.userId}`);
+        return res.status(401).send("Unauthorized");
+      }
+      
       // Set user info in request object (compatible with Firebase format)
       req.user = {
-        uid: decodedJWT.userId, // Use userId as uid for compatibility
+        uid: user.authUid, // Use Firebase UID for compatibility
         email: decodedJWT.email,
         userId: decodedJWT.userId
       };
@@ -49,6 +57,7 @@ async function firebaseAuthentication(req, res, next) {
         uid: req.user.uid,
         email: req.user.email,
         userId: req.user.userId,
+        authUid: user.authUid,
         userKeys: Object.keys(req.user)
       });
       
