@@ -41,12 +41,12 @@ const signUp = async (req, res) => {
       email: data.email,
       has_phone: !!data.phone,
     });
-    await authService.signUp(data);
-    structuredLogger.logSuccess("auth_signup", { email: data.email });
-    res.status(201).send({
+    const user = await authService.signUp(data);
+    structuredLogger.logSuccess("auth_signup", { 
       email: data.email,
-      phone: data.phone,
+      userId: user.id 
     });
+    res.status(201).send(user);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_signup",
@@ -208,6 +208,178 @@ const resetPassword = async (req, res) => {
       error_classification: "password_reset_error",
     });
     res.status(500).send(error.message);
+  }
+};
+
+// Test endpoint to verify existing user can login
+const testExistingUserLogin = async (req, res) => {
+  const { email } = req.body;
+  try {
+    structuredLogger.logOperationStart("auth_test_existing_user", { email });
+    
+    // Find user by email hash
+    const emailHash = require("../services/auth.service.js").hashEmail(email);
+    const User = require("../database/models/User.js").default;
+    const user = await User.findOne({ emailHash: emailHash });
+    
+    if (!user) {
+      return res.status(404).send({ 
+        success: false, 
+        message: "User not found",
+        email: email 
+      });
+    }
+    
+    // Test DEK retrieval
+    const { getUserDek } = require("../database/encryption.js");
+    const dek = await getUserDek(user.authUid);
+    
+    res.status(200).send({ 
+      success: true, 
+      message: "User found and DEK retrieved successfully",
+      user: {
+        id: user._id,
+        authUid: user.authUid,
+        email: email,
+        hasDek: !!dek,
+        dekLength: dek?.length
+      }
+    });
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_test_existing_user",
+      email: email,
+      error_classification: "test_error",
+    });
+    res.status(500).send({ 
+      success: false, 
+      message: error.message,
+      error: error.toString()
+    });
+  }
+};
+
+// Test endpoint to verify encryption/decryption consistency
+const testEncryptionConsistency = async (req, res) => {
+  const { email } = req.body;
+  try {
+    structuredLogger.logOperationStart("auth_test_encryption_consistency", { email });
+    
+    // Find user by email hash
+    const emailHash = require("../services/auth.service.js").hashEmail(email);
+    const User = require("../database/models/User.js").default;
+    const user = await User.findOne({ emailHash: emailHash });
+    
+    if (!user) {
+      return res.status(404).send({ 
+        success: false, 
+        message: "User not found",
+        email: email 
+      });
+    }
+    
+    // Test DEK retrieval
+    const { getUserDek, decryptValue } = require("../database/encryption.js");
+    const dek = await getUserDek(user.authUid);
+    
+    if (!dek) {
+      return res.status(500).send({ 
+        success: false, 
+        message: "Failed to retrieve DEK",
+        email: email 
+      });
+    }
+    
+    // Test decryption of all encrypted fields
+    const decryptionTests = [];
+    
+    try {
+      const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+      decryptionTests.push({
+        field: "firstName",
+        success: true,
+        value: decryptedFirstName
+      });
+    } catch (error) {
+      decryptionTests.push({
+        field: "firstName",
+        success: false,
+        error: error.message
+      });
+    }
+    
+    try {
+      const decryptedLastName = await decryptValue(user.name.lastName, dek);
+      decryptionTests.push({
+        field: "lastName",
+        success: true,
+        value: decryptedLastName
+      });
+    } catch (error) {
+      decryptionTests.push({
+        field: "lastName",
+        success: false,
+        error: error.message
+      });
+    }
+    
+    try {
+      const decryptedEmail = await decryptValue(user.email[0].email, dek);
+      decryptionTests.push({
+        field: "email",
+        success: true,
+        value: decryptedEmail
+      });
+    } catch (error) {
+      decryptionTests.push({
+        field: "email",
+        success: false,
+        error: error.message
+      });
+    }
+    
+    if (user.phones && user.phones.length > 0) {
+      try {
+        const decryptedPhone = await decryptValue(user.phones[0].phone, dek);
+        decryptionTests.push({
+          field: "phone",
+          success: true,
+          value: decryptedPhone
+        });
+      } catch (error) {
+        decryptionTests.push({
+          field: "phone",
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    const allSuccessful = decryptionTests.every(test => test.success);
+    
+    res.status(200).send({ 
+      success: allSuccessful, 
+      message: allSuccessful ? "All encryption/decryption tests passed" : "Some encryption/decryption tests failed",
+      user: {
+        id: user._id,
+        authUid: user.authUid,
+        email: email,
+        hasDek: !!dek,
+        dekLength: dek?.length
+      },
+      decryptionTests: decryptionTests
+    });
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_test_encryption_consistency",
+      email: email,
+      error_classification: "encryption_test_error",
+    });
+    res.status(500).send({ 
+      success: false, 
+      message: error.message,
+      error: error.toString()
+    });
   }
 };
 
@@ -549,6 +721,8 @@ const authController = {
   recoverEncryptionKeys,
   checkOAuthValidation,
   signInWithOAuth,
+  testExistingUserLogin,
+  testEncryptionConsistency,
 };
 
 export default authController;
