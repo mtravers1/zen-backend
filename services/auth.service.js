@@ -84,8 +84,13 @@ const own = async (uid) => {
 const signUp = async (data) => {
   try {
     // Validate required fields
-    if (!data.email || !data.firstName || !data.lastName || !data.authUid) {
-      throw new Error("Missing required fields: email, firstName, lastName, and authUid are required");
+    if (!data.email || !data.firstName || !data.lastName) {
+      throw new Error("Missing required fields: email, firstName, and lastName are required");
+    }
+
+    // authUid should be provided by the controller from Firebase token
+    if (!data.authUid) {
+      throw new Error("Missing required field: authUid must be provided from Firebase token");
     }
 
     // Validate email format

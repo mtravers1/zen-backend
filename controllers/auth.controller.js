@@ -23,6 +23,18 @@ const own = async (req, res) => {
 const signUp = async (req, res) => {
   const { data, isBusinessOwner } = req.body;
   try {
+    // Extract authUid from Firebase token in header
+    const authUid = req.user?.uid;
+    if (!authUid) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Firebase authentication required for sign-up" 
+      });
+    }
+
+    // Add authUid to data object
+    data.authUid = authUid;
+
     if (isBusinessOwner) {
       const uid = req.user?.uid;
       if (uid) {
@@ -40,11 +52,13 @@ const signUp = async (req, res) => {
     structuredLogger.logOperationStart("auth_signup", {
       email: data.email,
       has_phone: !!data.phone,
+      authUid: authUid,
     });
     const user = await authService.signUp(data);
     structuredLogger.logSuccess("auth_signup", { 
       email: data.email,
-      userId: user.id 
+      userId: user.id,
+      authUid: authUid,
     });
     res.status(201).send(user);
   } catch (error) {
