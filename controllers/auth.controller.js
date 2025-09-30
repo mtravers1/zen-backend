@@ -71,10 +71,45 @@ const signUp = async (req, res) => {
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_signup",
-      email: data.email,
+      email: data?.email,
+      authUid: data?.authUid,
       error_classification: "registration_error",
     });
-    res.status(500).send(error.message);
+    
+    // Handle specific error cases with appropriate status codes
+    if (error.message.includes("User with this email already exists")) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this email already exists"
+      });
+    }
+    
+    if (error.message.includes("User already exists")) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists"
+      });
+    }
+    
+    if (error.message.includes("Missing required fields")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    if (error.message.includes("Invalid email format")) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format"
+      });
+    }
+    
+    // For all other errors, return 500
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 

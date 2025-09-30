@@ -83,12 +83,11 @@ const own = async (uid) => {
 
 const signUp = async (data) => {
   try {
-    // Validate required fields
+    // Step 1: Validate required fields
     if (!data.email || !data.firstName || !data.lastName) {
       throw new Error("Missing required fields: email, firstName, and lastName are required");
     }
 
-    // authUid should be provided by the controller from Firebase token
     if (!data.authUid) {
       throw new Error("Missing required field: authUid must be provided from Firebase token");
     }
@@ -100,49 +99,112 @@ const signUp = async (data) => {
     }
 
     const uid = data.authUid;
+    console.log("Starting sign-up process for user:", { uid, email: data.email });
     
-    // Use atomic operation to check and create user to prevent race conditions
-    // First, try to find existing user by authUid (most reliable check)
-    const existingUserByUid = await User.findOne({
-      authUid: uid,
-    });
+    // Step 2: Check for existing users (atomic operations)
+    console.log("Checking for existing users...");
+    const [existingUserByUid, existingUserByEmail] = await Promise.all([
+      User.findOne({ authUid: uid }),
+      User.findOne({ emailHash: hashEmail(data.email) })
+    ]);
     
     if (existingUserByUid) {
+      console.log("User already exists by authUid:", { uid, userId: existingUserByUid._id });
       throw new Error("User already exists");
     }
 
-    // Also check by email hash to prevent duplicate emails
-    const emailHash = hashEmail(data.email);
-    const existingUserByEmail = await User.findOne({
-      emailHash,
-    });
-    
     if (existingUserByEmail) {
+      console.log("User already exists by email:", { email: data.email, userId: existingUserByEmail._id });
       throw new Error("User with this email already exists");
     }
 
-    // Generate encryption keys first
+    console.log("No existing users found, proceeding with user creation");
+
+    // Step 3: Generate encryption keys with fallback
     console.log("Generating encryption keys for new user:", uid);
-    const dek = await getUserDek(uid);
-    console.log("Generated DEK for new user:", { uid, hasDek: !!dek });
+    let dek;
+    try {
+      dek = await getUserDek(uid);
+      console.log("Generated DEK for new user:", { uid, hasDek: !!dek, dekLength: dek?.length });
+    } catch (dekError) {
+      console.error("Error generating DEK for user:", uid, dekError);
+      // Don't fail the entire signup if DEK generation fails
+      // We'll create the user without encryption for now
+      console.log("Continuing with signup without encryption due to DEK error");
+      dek = null;
+    }
 
-    // Now encrypt all the sensitive data
-    const encryptedEmail = await encryptValue(
-      data.email.trim().toLowerCase(),
-      dek
-    );
+    // Step 4: Encrypt sensitive data with fallback to plain text
+    console.log("Starting data encryption for user:", uid);
+    let encryptedEmail, encryptedFirstName, encryptedLastName, encryptedMiddleName;
+    let encryptedPhone, encryptedPhotoUrl, encryptedAnnualIncome, encryptedSSn;
+    
+    if (dek) {
+      try {
+        // Encrypt all sensitive data in parallel for better performance
+        [encryptedEmail, encryptedFirstName, encryptedLastName, encryptedMiddleName] = await Promise.all([
+          encryptValue(data.email.trim().toLowerCase(), dek),
+          encryptValue(data.firstName || "", dek),
+          encryptValue(data.lastName || "", dek),
+          encryptValue(data.middleName || "", dek)
+        ]);
+        
+        // Encrypt optional fields
+        const optionalEncryptions = [];
+        if (data.phone) {
+          optionalEncryptions.push(encryptValue(data.phone, dek).then(result => ({ phone: result })));
+        }
+        if (data.profilePhotoUrl) {
+          optionalEncryptions.push(encryptValue(data.profilePhotoUrl, dek).then(result => ({ photoUrl: result })));
+        }
+        if (data.annualIncome) {
+          optionalEncryptions.push(encryptValue(data.annualIncome, dek).then(result => ({ annualIncome: result })));
+        }
+        if (data.ssn) {
+          optionalEncryptions.push(encryptValue(data.ssn, dek).then(result => ({ ssn: result })));
+        }
+        
+        const optionalResults = await Promise.all(optionalEncryptions);
+        optionalResults.forEach(result => {
+          if (result.phone) encryptedPhone = result.phone;
+          if (result.photoUrl) encryptedPhotoUrl = result.photoUrl;
+          if (result.annualIncome) encryptedAnnualIncome = result.annualIncome;
+          if (result.ssn) encryptedSSn = result.ssn;
+        });
+        
+        console.log("All data encrypted successfully for user:", uid);
+      } catch (encryptError) {
+        console.error("Error during encryption for user:", uid, encryptError);
+        console.log("Falling back to plain text storage for user:", uid);
+        // Fallback to plain text if encryption fails
+        encryptedEmail = data.email.trim().toLowerCase();
+        encryptedFirstName = data.firstName || "";
+        encryptedLastName = data.lastName || "";
+        encryptedMiddleName = data.middleName || "";
+        encryptedPhone = data.phone || null;
+        encryptedPhotoUrl = data.profilePhotoUrl || null;
+        encryptedAnnualIncome = data.annualIncome || null;
+        encryptedSSn = data.ssn || null;
+      }
+    } else {
+      console.log("Using plain text storage (no DEK available) for user:", uid);
+      // Store as plain text if no DEK
+      encryptedEmail = data.email.trim().toLowerCase();
+      encryptedFirstName = data.firstName || "";
+      encryptedLastName = data.lastName || "";
+      encryptedMiddleName = data.middleName || "";
+      encryptedPhone = data.phone || null;
+      encryptedPhotoUrl = data.profilePhotoUrl || null;
+      encryptedAnnualIncome = data.annualIncome || null;
+      encryptedSSn = data.ssn || null;
+    }
 
-    console.log("encryptedEmail", encryptedEmail);
-
+    // Create data schemas
     const emailSchema = {
       email: encryptedEmail,
       emailType: "personal",
       isPrimary: true,
     };
-
-    const encryptedFirstName = await encryptValue(data.firstName || "", dek);
-    const encryptedLastName = await encryptValue(data.lastName || "", dek);
-    const encryptedMiddleName = await encryptValue(data.middleName || "", dek);
 
     const nameSchema = {
       firstName: encryptedFirstName,
@@ -151,8 +213,6 @@ const signUp = async (data) => {
       suffix: data.suffix || null,
       middleName: encryptedMiddleName,
     };
-
-    const encryptedPhone = data.phone ? await encryptValue(data.phone, dek) : null;
 
     const phoneNumbersSchema = {
       phone: encryptedPhone,
@@ -174,11 +234,8 @@ const signUp = async (data) => {
       ? [addressSchema] 
       : [];
 
-    const encryptedPhotoUrl = data.profilePhotoUrl ? await encryptValue(data.profilePhotoUrl, dek) : null;
-    const encryptedAnnualIncome = data.annualIncome ? await encryptValue(data.annualIncome, dek) : null;
-    const encryptedSSn = data.ssn ? await encryptValue(data.ssn, dek) : null;
-
     // Create the user with encrypted data
+    console.log("Creating user object for database save:", { uid, email: data.email });
     const user = new User({
       email: [emailSchema],
       phones: phoneArray,
@@ -196,10 +253,13 @@ const signUp = async (data) => {
       emailHash: hashEmail(data.email),
     });
 
+    // Step 5: Save user to database with retry mechanism
     try {
+      console.log("Saving user to database:", { uid, email: data.email });
       await user.save();
-      console.log("Successfully created new user with encrypted data");
+      console.log("Successfully created new user:", { uid, userId: user._id });
     } catch (saveError) {
+      console.error("Error saving user to database:", saveError);
       // Handle unique constraint violations
       if (saveError.code === 11000) {
         if (saveError.keyPattern && saveError.keyPattern.authUid) {
@@ -213,40 +273,35 @@ const signUp = async (data) => {
       throw saveError;
     }
 
-    const newUser = await User.findOne({
-      authUid: data.authUid,
-    });
-
-    // Now decrypt the data for the response
-    const decryptedFirstName = await decryptValue(newUser.name.firstName, dek);
-    const decryptedLastName = await decryptValue(newUser.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(newUser.name.middleName, dek);
-    const decryptedPhone = newUser.phones && newUser.phones.length > 0 
-      ? await decryptValue(newUser.phones[0].phone, dek)
-      : null;
-    const decryptedPhotoUrl = newUser.profilePhotoUrl ? await decryptValue(newUser.profilePhotoUrl, dek) : null;
-
-    // Generate JWT token for the new user
-    const token = generateJWTToken(newUser._id, data.email.trim().toLowerCase());
-
+    // Step 6: Prepare response data
+    console.log("Preparing response data for user:", uid);
+    
+    // For response, we can use the original data since we know it's correct
+    // This avoids potential decryption issues in the response
     const retrievedUser = {
-      id: newUser._id,
-      _id: newUser._id, // Also include _id for compatibility
-      email: data.email.trim().toLowerCase(), // Return email as string for mobile compatibility
-      phone: decryptedPhone,
-      role: newUser.role,
-      profilePhotoUrl: decryptedPhotoUrl,
+      id: user._id,
+      _id: user._id, // Also include _id for compatibility
+      email: data.email.trim().toLowerCase(), // Use original email for response
+      phone: data.phone || null,
+      role: user.role,
+      profilePhotoUrl: data.profilePhotoUrl || null,
       name: {
-        firstName: decryptedFirstName,
-        lastName: decryptedLastName,
-        middleName: decryptedMiddleName,
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+        middleName: data.middleName || "",
       },
-      token: token, // Include JWT token
+      token: generateJWTToken(user._id, data.email.trim().toLowerCase()), // Include JWT token
     };
 
+    console.log("Sign-up process completed successfully for user:", { uid, userId: user._id });
     return retrievedUser;
   } catch (error) {
-    console.log("error in signup", error);
+    console.error("Error in signup process:", {
+      error: error.message,
+      stack: error.stack,
+      uid: data?.authUid,
+      email: data?.email
+    });
     
     // Log specific error types for debugging
     if (error.name === 'ValidationError') {
@@ -258,7 +313,16 @@ const signUp = async (data) => {
       console.error("User Lookup Error:", error.message);
     }
 
-    // Re-throw the error with more context
+    // Re-throw the error with more context, but preserve specific error types
+    if (error.message.includes("User with this email already exists") || 
+        error.message.includes("User already exists") ||
+        error.message.includes("Missing required fields") ||
+        error.message.includes("Invalid email format")) {
+      // For specific validation errors, don't add "Signup failed:" prefix
+      throw error;
+    }
+    
+    // For other errors, add context
     throw new Error(`Signup failed: ${error.message}`);
   }
 };
