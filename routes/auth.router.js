@@ -8,6 +8,7 @@ dotenv.config();
 const router = Router();
 
 router.post("/signup", authController.signUp);
+router.post("/signup-direct", authController.signUpDirect);
 router.post("/signin", authController.signIn);
 router.post("/signin-oauth", authController.signInWithOAuth);
 router.post("/check-email-firebase", authController.checkEmailFirebase);

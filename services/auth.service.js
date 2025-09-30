@@ -1070,6 +1070,33 @@ const signIn = async (email, password) => {
   }
 };
 
+const createFirebaseUser = async (email, password) => {
+  try {
+    structuredLogger.logOperationStart('auth_service_create_firebase_user', { email });
+    
+    // Create user in Firebase using Admin SDK
+    const userRecord = await admin.auth().createUser({
+      email: email.trim().toLowerCase(),
+      password: password,
+      emailVerified: false,
+    });
+
+    structuredLogger.logSuccess('auth_service_create_firebase_user', { 
+      email, 
+      uid: userRecord.uid 
+    });
+    
+    return userRecord;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: 'auth_service_create_firebase_user',
+      email: email,
+      error_classification: 'firebase_user_creation_error'
+    });
+    throw error;
+  }
+};
+
 const authService = {
   signUp,
   signIn,

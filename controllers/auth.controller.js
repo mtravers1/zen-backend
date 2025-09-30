@@ -23,13 +23,20 @@ const own = async (req, res) => {
 const signUp = async (req, res) => {
   const { data, isBusinessOwner } = req.body;
   try {
-    // Extract authUid from Firebase token in header
-    const authUid = req.user?.uid;
+    // Check if authUid is provided in data (for direct signup) or in header (for Firebase token)
+    let authUid = data.authUid || req.user?.uid;
+    
     if (!authUid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Firebase authentication required for sign-up" 
-      });
+      // If no authUid provided, create Firebase user first
+      if (!data.email || !data.password) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Email and password are required for direct sign-up" 
+        });
+      }
+      
+      const firebaseUser = await authService.createFirebaseUser(data.email, data.password);
+      authUid = firebaseUser.uid;
     }
 
     // Add authUid to data object
@@ -103,6 +110,7 @@ const signIn = async (req, res) => {
     res.status(500).send(error.message);
   }
 };
+
 
 const checkEmail = async (req, res) => {
   const { email, method } = req.body;
