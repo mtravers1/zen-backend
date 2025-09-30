@@ -101,24 +101,9 @@ const signUp = async (data) => {
     const uid = data.authUid;
     console.log("Starting sign-up process for user:", { uid, email: data.email });
     
-    // Step 2: Check for existing users (atomic operations)
-    console.log("Checking for existing users...");
-    const [existingUserByUid, existingUserByEmail] = await Promise.all([
-      User.findOne({ authUid: uid }),
-      User.findOne({ emailHash: hashEmail(data.email) })
-    ]);
-    
-    if (existingUserByUid) {
-      console.log("User already exists by authUid:", { uid, userId: existingUserByUid._id });
-      throw new Error("User already exists");
-    }
-
-    if (existingUserByEmail) {
-      console.log("User already exists by email:", { email: data.email, userId: existingUserByEmail._id });
-      throw new Error("User with this email already exists");
-    }
-
-    console.log("No existing users found, proceeding with user creation");
+    // Step 2: User existence checks are now handled in the controller
+    // This ensures we don't create Firebase users unnecessarily
+    console.log("Proceeding with user creation (existence checks done in controller)");
 
     // Step 3: Generate encryption keys with fallback
     console.log("Generating encryption keys for new user:", uid);

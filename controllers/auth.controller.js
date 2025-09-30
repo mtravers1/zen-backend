@@ -23,20 +23,53 @@ const own = async (req, res) => {
 const signUp = async (req, res) => {
   const { data, isBusinessOwner } = req.body;
   try {
-    // Check if authUid is provided in data (for direct signup) or in header (for Firebase token)
+    // Step 1: Validate required fields first
+    if (!data.email || !data.firstName || !data.lastName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required fields: email, firstName, and lastName are required" 
+      });
+    }
+
+    // Step 2: Check if user already exists BEFORE creating anything
+    const emailHash = require("../services/auth.service.js").hashEmail(data.email);
+    const existingUserByEmail = await require("../database/models/User.js").default.findOne({
+      emailHash,
+    });
+    
+    if (existingUserByEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this email already exists"
+      });
+    }
+
+    // Step 3: Check if authUid is provided in data (for direct signup) or in header (for Firebase token)
     let authUid = data.authUid || req.user?.uid;
     
     if (!authUid) {
       // If no authUid provided, create Firebase user first
-      if (!data.email || !data.password) {
+      if (!data.password) {
         return res.status(400).json({ 
           success: false, 
-          message: "Email and password are required for direct sign-up" 
+          message: "Password is required for direct sign-up" 
         });
       }
       
       const firebaseUser = await authService.createFirebaseUserWithEmailPassword(data.email, data.password);
       authUid = firebaseUser.uid;
+    }
+
+    // Step 4: Check if user exists by authUid (double check)
+    const existingUserByUid = await require("../database/models/User.js").default.findOne({
+      authUid: authUid,
+    });
+    
+    if (existingUserByUid) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists"
+      });
     }
 
     // Add authUid to data object
