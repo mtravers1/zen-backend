@@ -1,7 +1,7 @@
 import { unless } from "express-unless";
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
-import User from "../database/models/user.model.js";
+import User from "../database/models/User.js";
 
 async function firebaseAuthentication(req, res, next) {
   const idToken = req.headers.authorization?.split("Bearer ")[1];
