@@ -35,7 +35,7 @@ const signUp = async (req, res) => {
         });
       }
       
-      const firebaseUser = await authService.createFirebaseUser(data.email, data.password);
+      const firebaseUser = await authService.createFirebaseUserWithEmailPassword(data.email, data.password);
       authUid = firebaseUser.uid;
     }
 
