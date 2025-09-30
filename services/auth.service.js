@@ -462,16 +462,18 @@ const checkEmail = async (email, method) => {
 
 const checkEmailFirebase = async (email) => {
   try {
-    structuredLogger.logOperationStart('auth_service_check_email_firebase', { email: email });
+    // Normalize email to lowercase for consistency
+    const normalizedEmail = email.trim().toLowerCase();
+    structuredLogger.logOperationStart('auth_service_check_email_firebase', { email: normalizedEmail });
 
-    const user = await admin.auth().getUserByEmail(email);
+    const user = await admin.auth().getUserByEmail(normalizedEmail);
 
-    structuredLogger.logSuccess('auth_service_check_email_firebase', { email: email });
+    structuredLogger.logSuccess('auth_service_check_email_firebase', { email: normalizedEmail });
     return user;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: 'auth_service_check_email_firebase',
-      email: email,
+      email: email, // Use original email for logging
       error_classification: 'firebase_error'
     });
     throw new Error("User not found");
