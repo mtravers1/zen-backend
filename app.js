@@ -50,8 +50,10 @@ app.use((req, res, next) => {
   const excludedPaths = [
     "/api/auth/signup",
     "/api/auth/signin",
+    "/api/auth/signin-oauth",
     "/api/auth/check-email",
     "/api/auth/check-email-firebase",
+    "/api/auth/check-oauth-validation",
     "/api/auth/recoverypassword",
     "/api/_info/version",
     "/api/webhook/plaid",

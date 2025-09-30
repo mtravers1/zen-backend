@@ -800,14 +800,33 @@ const validateGoogleToken = async (idToken) => {
   try {
     structuredLogger.logOperationStart("auth_validate_google_token");
 
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    // Validate Google ID token using Google's API
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Google token validation failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const tokenInfo = await response.json();
+
+    // Verify the token is for our app
+    const expectedAudience =
+      process.env.GOOGLE_CLIENT_ID ||
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com";
+    if (tokenInfo.aud !== expectedAudience) {
+      throw new Error("Invalid audience for Google token");
+    }
 
     const userData = {
-      uid: decodedToken.uid,
-      email: decodedToken.email,
-      displayName: decodedToken.name,
-      photoURL: decodedToken.picture,
-      emailVerified: decodedToken.email_verified,
+      uid: tokenInfo.sub,
+      email: tokenInfo.email,
+      displayName: tokenInfo.name,
+      photoURL: tokenInfo.picture,
+      emailVerified: tokenInfo.email_verified === "true",
       provider: "google",
     };
 
