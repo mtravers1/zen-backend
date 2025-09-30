@@ -2,6 +2,7 @@ import authService from "../services/auth.service.js";
 import permissionsService from "../services/permissions.service.js";
 import { emailValidation } from "../lib/mailer/mailer.js";
 import structuredLogger from "../lib/structuredLogger.js";
+import { hashEmail } from "../database/encryption.js";
 
 const own = async (req, res) => {
   const { uid } = req.user;
@@ -33,7 +34,7 @@ const signUp = async (req, res) => {
     }
 
     // Step 2: Check if user already exists BEFORE creating anything
-    const emailHash = authService.hashEmail(data.email);
+    const emailHash = hashEmail(data.email);
     const User = (await import("../database/models/User.js")).default;
     const existingUserByEmail = await User.findOne({
       emailHash,
@@ -317,7 +318,7 @@ const testExistingUserLogin = async (req, res) => {
     structuredLogger.logOperationStart("auth_test_existing_user", { email });
 
     // Find user by email hash
-    const emailHash = authService.hashEmail(email);
+    const emailHash = hashEmail(email);
     const User = (await import("../database/models/User.js")).default;
     const user = await User.findOne({ emailHash: emailHash });
 
@@ -367,7 +368,7 @@ const testEncryptionConsistency = async (req, res) => {
     });
 
     // Find user by email hash
-    const emailHash = authService.hashEmail(email);
+    const emailHash = hashEmail(email);
     const User = (await import("../database/models/User.js")).default;
     const user = await User.findOne({ emailHash: emailHash });
 

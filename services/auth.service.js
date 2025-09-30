@@ -129,10 +129,10 @@ const signUp = async (data) => {
       });
     } catch (dekError) {
       console.error("Error generating DEK for user:", uid, dekError);
-      // Don't fail the entire signup if DEK generation fails
-      // We'll create the user without encryption for now
-      console.log("Continuing with signup without encryption due to DEK error");
-      dek = null;
+      // DEK generation is critical for security - fail signup if it fails
+      throw new Error(
+        `Failed to generate encryption keys: ${dekError.message}`
+      );
     }
 
     // Step 4: Encrypt sensitive data with fallback to plain text
@@ -143,82 +143,55 @@ const signUp = async (data) => {
       encryptedMiddleName;
     let encryptedPhone, encryptedPhotoUrl, encryptedAnnualIncome, encryptedSSn;
 
-    if (dek) {
-      try {
-        // Encrypt all sensitive data in parallel for better performance
-        [
-          encryptedEmail,
-          encryptedFirstName,
-          encryptedLastName,
-          encryptedMiddleName,
-        ] = await Promise.all([
-          encryptValue(data.email.trim().toLowerCase(), dek),
-          encryptValue(data.firstName || "", dek),
-          encryptValue(data.lastName || "", dek),
-          encryptValue(data.middleName || "", dek),
-        ]);
+    // Encrypt all sensitive data in parallel for better performance
+    [
+      encryptedEmail,
+      encryptedFirstName,
+      encryptedLastName,
+      encryptedMiddleName,
+    ] = await Promise.all([
+      encryptValue(data.email.trim().toLowerCase(), dek),
+      encryptValue(data.firstName || "", dek),
+      encryptValue(data.lastName || "", dek),
+      encryptValue(data.middleName || "", dek),
+    ]);
 
-        // Encrypt optional fields
-        const optionalEncryptions = [];
-        if (data.phone) {
-          optionalEncryptions.push(
-            encryptValue(data.phone, dek).then((result) => ({ phone: result }))
-          );
-        }
-        if (data.profilePhotoUrl) {
-          optionalEncryptions.push(
-            encryptValue(data.profilePhotoUrl, dek).then((result) => ({
-              photoUrl: result,
-            }))
-          );
-        }
-        if (data.annualIncome) {
-          optionalEncryptions.push(
-            encryptValue(data.annualIncome, dek).then((result) => ({
-              annualIncome: result,
-            }))
-          );
-        }
-        if (data.ssn) {
-          optionalEncryptions.push(
-            encryptValue(data.ssn, dek).then((result) => ({ ssn: result }))
-          );
-        }
-
-        const optionalResults = await Promise.all(optionalEncryptions);
-        optionalResults.forEach((result) => {
-          if (result.phone) encryptedPhone = result.phone;
-          if (result.photoUrl) encryptedPhotoUrl = result.photoUrl;
-          if (result.annualIncome) encryptedAnnualIncome = result.annualIncome;
-          if (result.ssn) encryptedSSn = result.ssn;
-        });
-
-        console.log("All data encrypted successfully for user:", uid);
-      } catch (encryptError) {
-        console.error("Error during encryption for user:", uid, encryptError);
-        console.log("Falling back to plain text storage for user:", uid);
-        // Fallback to plain text if encryption fails
-        encryptedEmail = data.email.trim().toLowerCase();
-        encryptedFirstName = data.firstName || "";
-        encryptedLastName = data.lastName || "";
-        encryptedMiddleName = data.middleName || "";
-        encryptedPhone = data.phone || null;
-        encryptedPhotoUrl = data.profilePhotoUrl || null;
-        encryptedAnnualIncome = data.annualIncome || null;
-        encryptedSSn = data.ssn || null;
-      }
-    } else {
-      console.log("Using plain text storage (no DEK available) for user:", uid);
-      // Store as plain text if no DEK
-      encryptedEmail = data.email.trim().toLowerCase();
-      encryptedFirstName = data.firstName || "";
-      encryptedLastName = data.lastName || "";
-      encryptedMiddleName = data.middleName || "";
-      encryptedPhone = data.phone || null;
-      encryptedPhotoUrl = data.profilePhotoUrl || null;
-      encryptedAnnualIncome = data.annualIncome || null;
-      encryptedSSn = data.ssn || null;
+    // Encrypt optional fields
+    const optionalEncryptions = [];
+    if (data.phone) {
+      optionalEncryptions.push(
+        encryptValue(data.phone, dek).then((result) => ({ phone: result }))
+      );
     }
+    if (data.profilePhotoUrl) {
+      optionalEncryptions.push(
+        encryptValue(data.profilePhotoUrl, dek).then((result) => ({
+          photoUrl: result,
+        }))
+      );
+    }
+    if (data.annualIncome) {
+      optionalEncryptions.push(
+        encryptValue(data.annualIncome, dek).then((result) => ({
+          annualIncome: result,
+        }))
+      );
+    }
+    if (data.ssn) {
+      optionalEncryptions.push(
+        encryptValue(data.ssn, dek).then((result) => ({ ssn: result }))
+      );
+    }
+
+    const optionalResults = await Promise.all(optionalEncryptions);
+    optionalResults.forEach((result) => {
+      if (result.phone) encryptedPhone = result.phone;
+      if (result.photoUrl) encryptedPhotoUrl = result.photoUrl;
+      if (result.annualIncome) encryptedAnnualIncome = result.annualIncome;
+      if (result.ssn) encryptedSSn = result.ssn;
+    });
+
+    console.log("All data encrypted successfully for user:", uid);
 
     // Create data schemas
     const emailSchema = {
