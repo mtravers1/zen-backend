@@ -801,6 +801,7 @@ const validateGoogleToken = async (idToken) => {
     structuredLogger.logOperationStart("auth_validate_google_token");
 
     // Validate Google ID token using Google's API
+    // Firebase Admin SDK expects Firebase ID tokens, not Google ID tokens
     const response = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
     );
@@ -1056,7 +1057,12 @@ const generateFirebaseToken = async (uid) => {
       uid: uid,
     });
 
-    const customToken = await admin.auth().createCustomToken(uid);
+    // Generate Firebase custom token with proper claims
+    const customToken = await admin.auth().createCustomToken(uid, {
+      // Add standard claims that will be present in the ID token
+      email_verified: true,
+      // Note: auth_time is a reserved claim and cannot be set manually
+    });
 
     structuredLogger.logSuccess("auth_generate_firebase_token", {
       uid: uid,

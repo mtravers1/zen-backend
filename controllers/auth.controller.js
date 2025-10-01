@@ -3,6 +3,7 @@ import permissionsService from "../services/permissions.service.js";
 import { emailValidation } from "../lib/mailer/mailer.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import { hashEmail } from "../database/encryption.js";
+import admin from "../lib/firebaseAdmin.js";
 
 const own = async (req, res) => {
   const { uid } = req.user;
@@ -756,22 +757,131 @@ const signInWithOAuth = async (req, res) => {
       });
     }
 
-    // Create or get Firebase user
-    const firebaseUserResult = await authService.createFirebaseUser(
-      validationResult.user
-    );
+    // Check if user exists in Firebase by email first
+    let existingFirebaseUser;
+    try {
+      existingFirebaseUser = await admin
+        .auth()
+        .getUserByEmail(validationResult.user.email);
+    } catch (error) {
+      // User doesn't exist in Firebase
+      existingFirebaseUser = null;
+    }
 
-    if (!firebaseUserResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to create Firebase user",
-        error: firebaseUserResult.error,
+    let firebaseUser;
+    let signInResult;
+
+    if (existingFirebaseUser) {
+      // User exists in Firebase - Sign In flow
+      structuredLogger.logOperationStart(
+        "auth_oauth_signin_existing_firebase_user",
+        {
+          email: validationResult.user.email,
+          firebaseUid: existingFirebaseUser.uid,
+        }
+      );
+
+      firebaseUser = existingFirebaseUser;
+
+      // Log the correct Firebase UID being used
+      console.log("Using existing Firebase user with UID:", firebaseUser.uid);
+      console.log("Google UID from token:", validationResult.user.uid);
+
+      // Check if user exists in database
+      const User = (await import("../database/models/User.js")).default;
+      const emailHash = hashEmail(validationResult.user.email);
+      const existingDbUser = await User.findOne({
+        emailHash: emailHash,
+      });
+
+      if (existingDbUser) {
+        // User exists in both Firebase and database
+        signInResult = existingDbUser;
+        structuredLogger.logSuccess("auth_oauth_signin_existing_user", {
+          email: validationResult.user.email,
+          userId: existingDbUser._id,
+          firebaseUid: firebaseUser.uid,
+        });
+      } else {
+        // User exists in Firebase but not in database - create database entry
+        const userDataForSignIn = {
+          email: validationResult.user.email,
+          method: provider,
+          firstName: validationResult.user.displayName?.split(" ")[0] || "User",
+          lastName:
+            validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+            "",
+          photoUrl: validationResult.user.photoURL,
+          authUid: firebaseUser.uid,
+          numAccounts: 0,
+          role: "individual",
+        };
+
+        signInResult = await authService.signInOrCreate(
+          firebaseUser.uid,
+          userDataForSignIn
+        );
+
+        structuredLogger.logSuccess(
+          "auth_oauth_signin_firebase_user_created_db",
+          {
+            email: validationResult.user.email,
+            userId: signInResult.id,
+            firebaseUid: firebaseUser.uid,
+          }
+        );
+      }
+    } else {
+      // User doesn't exist in Firebase - Sign Up flow
+      structuredLogger.logOperationStart("auth_oauth_signup_new_user", {
+        email: validationResult.user.email,
+      });
+
+      // Create Firebase user
+      const firebaseUserResult = await authService.createFirebaseUser(
+        validationResult.user
+      );
+
+      if (!firebaseUserResult.success) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create Firebase user",
+          error: firebaseUserResult.error,
+        });
+      }
+
+      firebaseUser = firebaseUserResult.user;
+
+      // Create user in database
+      const userDataForSignUp = {
+        email: validationResult.user.email,
+        method: provider,
+        firstName: validationResult.user.displayName?.split(" ")[0] || "User",
+        lastName:
+          validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+          "",
+        photoUrl: validationResult.user.photoURL,
+        authUid: firebaseUser.uid,
+        numAccounts: 0,
+        role: "individual",
+      };
+
+      signInResult = await authService.signInOrCreate(
+        firebaseUser.uid,
+        userDataForSignUp
+      );
+
+      structuredLogger.logSuccess("auth_oauth_signup_new_user", {
+        email: validationResult.user.email,
+        userId: signInResult.id,
+        firebaseUid: firebaseUser.uid,
       });
     }
 
-    // Generate Firebase custom token
+    // Generate Firebase custom token for authentication
+    // Both existing and new users need custom tokens for API authentication
     const tokenResult = await authService.generateFirebaseToken(
-      validationResult.user.uid
+      firebaseUser.uid
     );
 
     if (!tokenResult.success) {
@@ -782,36 +892,23 @@ const signInWithOAuth = async (req, res) => {
       });
     }
 
-    // Use the existing signInOrCreate method to handle user creation/retrieval
-    const userDataForSignIn = {
-      email: validationResult.user.email,
-      method: provider,
-      firstName: validationResult.user.displayName?.split(" ")[0] || "User",
-      lastName:
-        validationResult.user.displayName?.split(" ").slice(1).join(" ") || "",
-      photoUrl: validationResult.user.photoURL,
-      authUid: validationResult.user.uid,
-      numAccounts: 0,
-      role: "individual",
-    };
-
-    const signInResult = await authService.signInOrCreate(
-      validationResult.user.uid,
-      userDataForSignIn
-    );
-
     structuredLogger.logSuccess("auth_signin_oauth", {
       provider: provider,
-      uid: validationResult.user.uid,
+      uid: firebaseUser.uid,
       email: validationResult.user.email,
       userId: signInResult.id,
+      isNewUser: !existingFirebaseUser,
     });
 
+    // Return user data with Firebase token (as expected by mobile)
     res.status(200).json({
       success: true,
       user: signInResult,
       firebaseToken: tokenResult.token,
-      message: "OAuth sign-in successful",
+      isNewUser: !existingFirebaseUser,
+      message: existingFirebaseUser
+        ? "OAuth sign-in successful"
+        : "OAuth sign-up successful",
     });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
