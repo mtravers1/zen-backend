@@ -194,17 +194,21 @@ const validateSubscription = async (originalTransactionId) => {
 
 const formatPlanName = (planId) => {
   return planId
-    .replace(/\+(\d+)gb/i, ' + $1GB Storage')
-    .replace(/\+(\d+)/, ' + $1 Institution')
-    .replace(/([A-Z])/g, ' $1')
+    .replace(/\+(\d+)gb/i, " + $1GB Storage")
+    .replace(/\+(\d+)/, " + $1 Institution")
+    .replace(/([A-Z])/g, " $1")
     .trim();
 };
 
 const isBusinessOwnerPlan = (planId) => {
   const businessOwnerPlans = [
-    'Founder', 'Founder+1',
-    'Entrepreneur', 'Entrepreneur+1', 'Entrepreneur+2',
-    'Tycoon', 'Tycoon+100gb'
+    "Founder",
+    "Founder+1",
+    "Entrepreneur",
+    "Entrepreneur+1",
+    "Entrepreneur+2",
+    "Tycoon",
+    "Tycoon+100gb",
   ];
   return businessOwnerPlans.includes(planId);
 };
@@ -212,27 +216,31 @@ const isBusinessOwnerPlan = (planId) => {
 // Get Product ID for a plan on a specific platform
 const getProductIdForPlan = (planId, platform) => {
   // Map NODE_ENV to productMappings keys
-  const nodeEnv = process.env.NODE_ENV || 'dev';
-  const env = nodeEnv === 'development' ? 'dev' : nodeEnv;
+  const nodeEnv = process.env.ENVIRONMENT;
+  const env = nodeEnv === "development" ? "dev" : nodeEnv;
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
-  
-  console.log(`🔍 getProductIdForPlan("${planId}", "${platform}") - env: ${env}`);
+
+  console.log(
+    `🔍 getProductIdForPlan("${planId}", "${platform}") - env: ${env}`
+  );
   console.log(`🔍 Available mappings:`, mappings);
-  
+
   if (!mappings) {
     console.log(`❌ No mappings found for env: ${env}, platform: ${platform}`);
     return null;
   }
-  
+
   // Find the productId that maps to this planId
   for (const [productId, mappedPlanId] of Object.entries(mappings)) {
-    console.log(`🔍 Checking: "${productId}" → "${mappedPlanId}" vs "${planId}"`);
+    console.log(
+      `🔍 Checking: "${productId}" → "${mappedPlanId}" vs "${planId}"`
+    );
     if (mappedPlanId === planId) {
       console.log(`✅ Found match: "${planId}" → "${productId}"`);
       return productId;
     }
   }
-  
+
   console.log(`❌ No match found for planId: "${planId}"`);
   return null;
 };
@@ -240,42 +248,48 @@ const getProductIdForPlan = (planId, platform) => {
 const getAvailablePlans = async (req, res) => {
   try {
     // Admin/internal roles that should NOT be shown to users for purchase
-    const adminRoles = ['CFO', 'CFO Management', 'Admin', 'Super Admin'];
-    
+    const adminRoles = ["CFO", "CFO Management", "Admin", "Super Admin"];
+
     // Plan hierarchy for proper ordering (base plans + add-ons)
     const planOrder = [
-      'Free', 'Personal', 'Personal+1', 
-      'Founder', 'Founder+1',
-      'Entrepreneur', 'Entrepreneur+1', 'Entrepreneur+2',
-      'Tycoon', 'Tycoon+100gb'
+      "Free",
+      "Personal",
+      "Personal+1",
+      "Founder",
+      "Founder+1",
+      "Entrepreneur",
+      "Entrepreneur+1",
+      "Entrepreneur+2",
+      "Tycoon",
+      "Tycoon+100gb",
     ];
 
     // Filter out admin roles and create plan objects
     const allPlans = Object.keys(permissions)
-      .filter(planId => !adminRoles.includes(planId))
-      .map(planId => ({
+      .filter((planId) => !adminRoles.includes(planId))
+      .map((planId) => ({
         id: planId,
         name: formatPlanName(planId),
         limits: permissions[planId],
         business_owner_allowed: isBusinessOwnerPlan(planId),
         product_ids: {
-          ios: getProductIdForPlan(planId, 'ios'),
-          android: getProductIdForPlan(planId, 'android')
-        }
+          ios: getProductIdForPlan(planId, "ios"),
+          android: getProductIdForPlan(planId, "android"),
+        },
       }));
 
     // Sort plans according to hierarchy
     const sortedPlans = allPlans.sort((a, b) => {
       const indexA = planOrder.indexOf(a.id);
       const indexB = planOrder.indexOf(b.id);
-      
+
       // If plan not in order array, put it at the end
       if (indexA === -1) return 1;
       if (indexB === -1) return -1;
-      
+
       return indexA - indexB;
     });
-    
+
     res.status(200).json({ plans: sortedPlans });
   } catch (error) {
     console.error("Error getting available plans:", error);
