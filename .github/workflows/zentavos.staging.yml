@@ -2,9 +2,9 @@ name: zentavos-api-stg
 
 on:
   push:
-    branches: [ staging ]
+    branches: [staging]
   pull_request:
-    branches: [ staging ]
+    branches: [staging]
   workflow_dispatch:
 
 env:
@@ -73,7 +73,7 @@ jobs:
           sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID }}|g" .env
           sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID }}|g" .env
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ vars.FIREBASE_API_KEY_STG }}|g" .env
+          sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_STG }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
