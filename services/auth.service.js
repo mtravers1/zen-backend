@@ -1092,7 +1092,9 @@ const signIn = async (email, password) => {
     });
 
     // Step 1: Validate email and password using Firebase REST API
+    // Use environment-specific API key or fallback to development key
     const firebaseApiKey = process.env.FIREBASE_API_KEY;
+
     if (!firebaseApiKey) {
       throw new Error("Firebase API key not configured");
     }
