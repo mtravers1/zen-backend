@@ -1,26 +1,21 @@
-import { Router } from 'express';
-import * as userController from '../controllers/user.controller.js';
+import { Router } from "express";
+import userController from "../controllers/user.controller.js";
 
 const router = Router();
 
-/* GET users listing. */
-router.get('/', userController.list);
+/* GET users listing for admin interface */
+router.get("/", userController.listUsers);
 
-router.post('/table', tableList);
+/* GET user by ID for admin interface */
+router.get("/:userId", userController.getUserById);
 
-router.get('/getMyUser', userController.getMyUser);
+/* PUT update user method/provider */
+router.put("/:userId/method", userController.updateUserMethod);
 
-router.post('/checkPermission', userController.checkUserPermission);
-    
-router.route('/:userId',)
-    .get(userController.read)
-    .put(userController.update);
+/* GET current user session info (for compatibility) */
+router.get("/getMyUser", userController.getMyUser);
 
-router.put('/changepassword/:userId', userController.changePassword)
+/* POST check user permission (for compatibility) */
+router.post("/checkPermission", userController.checkUserPermission);
 
-
-/* Define all params */
-router.param('userId', userController.userByID);
-
-
-module.exports = router;
+export default router;

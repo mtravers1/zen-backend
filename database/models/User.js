@@ -109,6 +109,12 @@ const userSchema = new Schema({
     required: true,
     unique: true, // Add unique constraint to prevent duplicate Firebase UIDs
   },
+  method: {
+    type: String,
+    required: true,
+    enum: ["google", "apple", "email"],
+    default: "email",
+  },
   name: nameSchema,
   phones: [phoneNumbersSchema],
   deleted: {
