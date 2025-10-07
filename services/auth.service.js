@@ -954,7 +954,7 @@ const validateGoogleToken = async (idToken) => {
     });
 
     const userData = {
-      uid: decodedToken.payload.sub,
+      googleUid: decodedToken.payload.sub, // Store Google UID separately
       email: decodedToken.payload.email,
       displayName: decodedToken.payload.name,
       photoURL: decodedToken.payload.picture,
@@ -963,7 +963,7 @@ const validateGoogleToken = async (idToken) => {
     };
 
     structuredLogger.logSuccess("auth_validate_google_token", {
-      uid: userData.uid,
+      googleUid: userData.googleUid,
       email: userData.email,
     });
 
