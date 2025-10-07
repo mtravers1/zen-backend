@@ -68,66 +68,40 @@ async function generateAndStoreEncryptedDEK(uid) {
 }
 
 async function getDEKFromBucket(uid) {
-  const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`;
-  console.log(`[getDEKFromBucket] Checking for DEK file at: ${filePath}`);
-
-  const file = storage.bucket(BUCKET_NAME).file(filePath);
-
-  const [exists] = await file.exists();
-  console.log(`[getDEKFromBucket] DEK file exists: ${exists} for UID: ${uid}`);
-
-  if (!exists) {
+  const file = storage
+    .bucket(BUCKET_NAME)
+    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+  if (!(await file.exists())[0]) {
     return null;
   }
-
-  console.log(`[getDEKFromBucket] Downloading DEK file for UID: ${uid}`);
   const [encryptedDEK] = await file.download();
 
-  console.log(`[getDEKFromBucket] Decrypting DEK for UID: ${uid}`);
   const [decryptResponse] = await kmsClient.decrypt({
     name: KEY_PATH,
     ciphertext: encryptedDEK,
   });
 
-  console.log(`[getDEKFromBucket] Successfully decrypted DEK for UID: ${uid}`);
   return decryptResponse.plaintext;
 }
 
 async function getUserDek(uid) {
   try {
-    console.log(`[getUserDek] Attempting to get DEK for UID: ${uid}`);
-    console.log(`[getUserDek] UID type: ${typeof uid}, length: ${uid?.length}`);
-    console.log(
-      `[getUserDek] Bucket path will be: keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`
-    );
-
     // Check in-memory cache first
     if (dekCache.has(uid)) {
-      console.log(`[getUserDek] DEK found in cache for UID: ${uid}`);
       return dekCache.get(uid);
     }
 
-    console.log(
-      `[getUserDek] DEK not in cache, fetching from bucket for UID: ${uid}`
-    );
     let dek = await getDEKFromBucket(uid);
 
     if (!dek) {
-      console.log(
-        `[getUserDek] DEK not found in bucket, generating new one for UID: ${uid}`
-      );
       dek = await generateAndStoreEncryptedDEK(uid);
     } else {
-      console.log(`[getUserDek] DEK retrieved from bucket for UID: ${uid}`);
       dekCache.set(uid, dek); // Cache it once retrieved
     }
 
-    console.log(
-      `[getUserDek] Successfully obtained DEK for UID: ${uid}, DEK length: ${dek?.length}`
-    );
     return dek;
   } catch (e) {
-    console.error(`[getUserDek] Error getting DEK for UID: ${uid}:`, e);
+    console.error("Error getting DEK:", e);
     throw e;
   }
 }
@@ -196,11 +170,6 @@ async function decryptValue(cipherTextBase64, dek) {
     // Parse the decrypted JSON string and return the original value
     return JSON.parse(decrypted);
   } catch (e) {
-    console.error(`[decryptValue] Decryption failed for value:`, {
-      error: e.message,
-      valuePreview: cipherTextBase64?.substring(0, 50) + "...",
-      dekAvailable: !!dek,
-    });
     return cipherTextBase64; // Return original value if decryption fails
   }
 }
