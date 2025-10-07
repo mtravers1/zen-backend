@@ -78,8 +78,17 @@ const addBusinesses = async (businessList, email, uid) => {
 };
 
 const getUserProfiles = async (email, uid) => {
-  console.log(`[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`);
-  
+  console.log(
+    `[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`
+  );
+  console.log(`[getUserProfiles] UID details:`, {
+    uid: uid,
+    uidType: typeof uid,
+    uidLength: uid?.length,
+    uidTrimmed: uid?.trim(),
+    uidIsString: typeof uid === "string",
+  });
+
   try {
     const user = await User.findOne({
       authUid: uid,
@@ -94,19 +103,27 @@ const getUserProfiles = async (email, uid) => {
 
     const profiles = [];
     const dek = await getUserDek(uid);
-    
+
     console.log(`[getUserProfiles] DEK obtained:`, {
       hasDek: !!dek,
       dekType: typeof dek,
-      dekLength: dek ? dek.length : 0
+      dekLength: dek ? dek.length : 0,
     });
 
     // Decrypt user name fields with error handling
-    let decryptedFirstName, decryptedLastName, decryptedMiddleName, decryptedSuffix, decryptedPrefix;
-    
+    let decryptedFirstName,
+      decryptedLastName,
+      decryptedMiddleName,
+      decryptedSuffix,
+      decryptedPrefix;
+
     try {
       decryptedFirstName = await decryptValue(user.name.firstName, dek);
-      console.log(`[getUserProfiles] First name decrypted: ${decryptedFirstName ? 'success' : 'failed'}`);
+      console.log(`[getUserProfiles] First name decryption result:`, {
+        original: user.name.firstName,
+        decrypted: decryptedFirstName,
+        success: decryptedFirstName !== user.name.firstName,
+      });
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting first name:`, error);
       decryptedFirstName = null;
@@ -114,7 +131,11 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedLastName = await decryptValue(user.name.lastName, dek);
-      console.log(`[getUserProfiles] Last name decrypted: ${decryptedLastName ? 'success' : 'failed'}`);
+      console.log(`[getUserProfiles] Last name decryption result:`, {
+        original: user.name.lastName,
+        decrypted: decryptedLastName,
+        success: decryptedLastName !== user.name.lastName,
+      });
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting last name:`, error);
       decryptedLastName = null;
@@ -122,7 +143,11 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedMiddleName = await decryptValue(user.name.middleName, dek);
-      console.log(`[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Middle name decrypted: ${
+          decryptedMiddleName ? "success" : "failed"
+        }`
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting middle name:`, error);
       decryptedMiddleName = null;
@@ -130,7 +155,11 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedSuffix = await decryptValue(user.name.suffix, dek);
-      console.log(`[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Suffix decrypted: ${
+          decryptedSuffix ? "success" : "failed"
+        }`
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting suffix:`, error);
       decryptedSuffix = null;
@@ -138,7 +167,11 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedPrefix = await decryptValue(user.name.prefix, dek);
-      console.log(`[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Prefix decrypted: ${
+          decryptedPrefix ? "success" : "failed"
+        }`
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting prefix:`, error);
       decryptedPrefix = null;
@@ -147,19 +180,41 @@ const getUserProfiles = async (email, uid) => {
     let decryptedPhotoUrl;
     try {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
-      console.log(`[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Photo URL decrypted: ${
+          decryptedPhotoUrl ? "success" : "failed"
+        }`
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting photo URL:`, error);
       decryptedPhotoUrl = null;
     }
 
     let name;
-    if (!decryptedFirstName && !decryptedLastName) {
+
+    // Check if decryption actually worked (decrypted value should be different from encrypted)
+    const firstNameDecrypted =
+      decryptedFirstName && decryptedFirstName !== user.name.firstName;
+    const lastNameDecrypted =
+      decryptedLastName && decryptedLastName !== user.name.lastName;
+
+    if (!firstNameDecrypted && !lastNameDecrypted) {
       name = email;
-      console.log(`[getUserProfiles] Using email as name: ${name}`);
+      console.log(
+        `[getUserProfiles] Decryption failed, using email as name: ${name}`
+      );
     } else {
-      name = decryptedFirstName + " " + decryptedLastName;
+      // Use successfully decrypted values
+      const firstName = firstNameDecrypted ? decryptedFirstName : "User";
+      const lastName = lastNameDecrypted ? decryptedLastName : "";
+      name = `${firstName} ${lastName}`.trim();
       console.log(`[getUserProfiles] Using decrypted name: ${name}`);
+      console.log(
+        `[getUserProfiles] First name decrypted successfully: ${firstNameDecrypted}`
+      );
+      console.log(
+        `[getUserProfiles] Last name decrypted successfully: ${lastNameDecrypted}`
+      );
     }
 
     const decryptedEmail = await Promise.all(
@@ -217,33 +272,51 @@ const getUserProfiles = async (email, uid) => {
 
     for (const business of businesses) {
       console.log(`[getUserProfiles] Processing business: ${business._id}`);
-      
+
       let decryptedName, decryptedIndustry, decryptedBusinessLogo;
-      
+
       try {
         decryptedName = await decryptValue(business.name, dek);
-        console.log(`[getUserProfiles] Business name decrypted: ${decryptedName ? 'success' : 'failed'}`);
+        console.log(
+          `[getUserProfiles] Business name decrypted: ${
+            decryptedName ? "success" : "failed"
+          }`
+        );
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business name:`, error);
-        decryptedName = 'Unknown Business';
+        console.error(
+          `[getUserProfiles] Error decrypting business name:`,
+          error
+        );
+        decryptedName = "Unknown Business";
       }
 
       try {
         decryptedIndustry = await decryptValue(business.industryDesc, dek);
-        console.log(`[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? 'success' : 'failed'}`);
+        console.log(
+          `[getUserProfiles] Business industry decrypted: ${
+            decryptedIndustry ? "success" : "failed"
+          }`
+        );
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business industry:`, error);
+        console.error(
+          `[getUserProfiles] Error decrypting business industry:`,
+          error
+        );
         decryptedIndustry = null;
       }
 
       try {
-        decryptedBusinessLogo = await decryptValue(
-          business.businessLogo,
-          dek
+        decryptedBusinessLogo = await decryptValue(business.businessLogo, dek);
+        console.log(
+          `[getUserProfiles] Business logo decrypted: ${
+            decryptedBusinessLogo ? "success" : "failed"
+          }`
         );
-        console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business logo:`, error);
+        console.error(
+          `[getUserProfiles] Error decrypting business logo:`,
+          error
+        );
         decryptedBusinessLogo = null;
       }
 
