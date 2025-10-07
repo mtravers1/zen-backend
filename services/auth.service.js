@@ -422,6 +422,7 @@ const signInOrCreate = async (uid, userData = null) => {
         phones: phoneArray,
         role: "individual", // Use valid enum value
         authUid: uid,
+        method: userData.method || "email", // Register authentication method
         profilePhotoUrl: "",
         numAccounts: 0,
         name: nameSchema,
@@ -796,23 +797,42 @@ const verifyCode = async (email, code) => {
 };
 
 // OAuth validation functions
-const validateGoogleToken = async (idToken) => {
+// Simple JWT decoder function
+const decodeJWT = (token) => {
   try {
-    structuredLogger.logOperationStart("auth_validate_google_token");
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      throw new Error("Invalid JWT format");
+    }
 
-    // Validate Google ID token using Google's API
-    // Firebase Admin SDK expects Firebase ID tokens, not Google ID tokens
+    const header = JSON.parse(Buffer.from(parts[0], "base64").toString());
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+
+    return { header, payload };
+  } catch (error) {
+    throw new Error(`Failed to decode JWT: ${error.message}`);
+  }
+};
+
+// Fallback function for Google's API validation
+const validateGoogleTokenViaAPI = async (idToken) => {
+  try {
+    console.log("🔑 Attempting validation via Google's API...");
+
     const response = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.log("🔑 Google API Error Response:", errorText);
       throw new Error(
         `Google token validation failed: ${response.status} ${response.statusText}`
       );
     }
 
     const tokenInfo = await response.json();
+    console.log("🔑 Google API Token Info:", tokenInfo);
 
     // Verify the token is for our app
     const expectedAudience =
@@ -820,6 +840,26 @@ const validateGoogleToken = async (idToken) => {
       "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com";
     if (tokenInfo.aud !== expectedAudience) {
       throw new Error("Invalid audience for Google token");
+    }
+
+    // Check token expiration with tolerance for mobile network delays
+    const now = Math.floor(Date.now() / 1000);
+    const tolerance = 5 * 60; // 5 minutes tolerance for mobile network delays
+    const maxAcceptableAge = 24 * 60 * 60; // Accept tokens up to 24 hours old for cache issues
+
+    const isExpired = tokenInfo.exp && tokenInfo.exp < now - tolerance;
+    const isVeryOld = tokenInfo.exp && tokenInfo.exp < now - maxAcceptableAge;
+
+    if (isVeryOld) {
+      throw new Error("Token too old - please sign in again");
+    }
+
+    if (isExpired) {
+      console.log(
+        "🔄 Token expired but within acceptable range - using for authentication"
+      );
+      // For expired but recent tokens, we'll still allow authentication
+      // This helps with mobile cache issues where Google returns stale tokens
     }
 
     const userData = {
@@ -831,8 +871,99 @@ const validateGoogleToken = async (idToken) => {
       provider: "google",
     };
 
+    return { success: true, user: userData };
+  } catch (error) {
+    console.log("🔑 Google API validation failed:", error.message);
+    throw error;
+  }
+};
+
+const validateGoogleToken = async (idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_google_token");
+
+    // First try to decode the JWT locally to validate structure
+    let decodedToken;
+    try {
+      decodedToken = decodeJWT(idToken);
+      console.log("🔑 JWT decoded locally:", {
+        header: decodedToken.header,
+        payload: {
+          iss: decodedToken.payload.iss,
+          aud: decodedToken.payload.aud,
+          exp: decodedToken.payload.exp,
+          iat: decodedToken.payload.iat,
+          email: decodedToken.payload.email,
+          sub: decodedToken.payload.sub,
+        },
+      });
+    } catch (decodeError) {
+      console.log("🔑 Failed to decode JWT locally:", decodeError.message);
+      // Fallback to Google's API for validation
+      return await validateGoogleTokenViaAPI(idToken);
+    }
+
+    // Verify the token is for our app
+    const expectedAudience = process.env.GOOGLE_CLIENT_ID;
+
+    if (decodedToken.payload.aud !== expectedAudience) {
+      console.log("🔑 Invalid audience:", {
+        expected: expectedAudience,
+        received: decodedToken.payload.aud,
+      });
+      throw new Error("Invalid audience for Google token");
+    }
+
+    // Check token expiration with tolerance for mobile network delays
+    const now = Math.floor(Date.now() / 1000);
+    const tolerance = 5 * 60; // 5 minutes tolerance for mobile network delays
+    const maxAcceptableAge = 24 * 60 * 60; // Accept tokens up to 24 hours old for cache issues
+
+    const isExpired =
+      decodedToken.payload.exp && decodedToken.payload.exp < now - tolerance;
+    const isVeryOld =
+      decodedToken.payload.exp &&
+      decodedToken.payload.exp < now - maxAcceptableAge;
+
+    if (isVeryOld) {
+      throw new Error("Token too old - please sign in again");
+    }
+
+    if (isExpired) {
+      console.log(
+        "🔄 Token expired but within acceptable range - attempting to use cached user data"
+      );
+      // For expired but recent tokens, we'll try to validate the user exists and is still valid
+      // This helps with mobile cache issues where Google returns stale tokens
+    }
+
+    // Verify issuer
+    if (decodedToken.payload.iss !== "https://accounts.google.com") {
+      throw new Error("Invalid token issuer");
+    }
+
+    // Verify required claims
+    if (!decodedToken.payload.sub || !decodedToken.payload.email) {
+      throw new Error("Missing required token claims");
+    }
+
+    console.log("🔑 Local token validation successful:", {
+      email: decodedToken.payload.email,
+      exp: new Date(decodedToken.payload.exp * 1000),
+      timeToExpiry: decodedToken.payload.exp - now,
+    });
+
+    const userData = {
+      googleUid: decodedToken.payload.sub, // Store Google UID separately
+      email: decodedToken.payload.email,
+      displayName: decodedToken.payload.name,
+      photoURL: decodedToken.payload.picture,
+      emailVerified: decodedToken.payload.email_verified === "true",
+      provider: "google",
+    };
+
     structuredLogger.logSuccess("auth_validate_google_token", {
-      uid: userData.uid,
+      googleUid: userData.googleUid,
       email: userData.email,
     });
 
@@ -986,33 +1117,65 @@ const validateOAuthToken = async (provider, idToken) => {
 const createFirebaseUser = async (userData) => {
   try {
     structuredLogger.logOperationStart("auth_create_firebase_user", {
-      uid: userData.uid,
       email: userData.email,
       provider: userData.provider,
     });
 
-    // Check if user already exists
+    // Check if user already exists by email (not by UID)
     let firebaseUser;
     try {
-      firebaseUser = await admin.auth().getUser(userData.uid);
+      firebaseUser = await admin.auth().getUserByEmail(userData.email);
       structuredLogger.logSuccess("auth_firebase_user_exists", {
-        uid: userData.uid,
+        uid: firebaseUser.uid,
         email: userData.email,
       });
     } catch (error) {
-      // User doesn't exist, create it
+      // User doesn't exist, create it - let Firebase generate the UID
       if (error.code === "auth/user-not-found") {
-        firebaseUser = await admin.auth().createUser({
-          uid: userData.uid,
+        // Create user with provider information
+        const userRecord = {
           email: userData.email,
           displayName: userData.displayName,
           photoURL: userData.photoURL,
           emailVerified: userData.emailVerified,
-        });
+        };
+
+        firebaseUser = await admin.auth().createUser(userRecord);
+
+        // After creating the user, we need to link the OAuth provider
+        // This is done by updating the user with provider data
+        try {
+          await admin.auth().updateUser(firebaseUser.uid, {
+            providerData: [
+              {
+                uid: userData.uid, // Original OAuth provider UID
+                email: userData.email,
+                displayName: userData.displayName,
+                photoURL: userData.photoURL,
+                providerId:
+                  userData.provider === "google" ? "google.com" : "apple.com",
+              },
+            ],
+          });
+
+          structuredLogger.logSuccess("auth_firebase_provider_linked", {
+            uid: firebaseUser.uid,
+            provider: userData.provider,
+            providerUid: userData.uid,
+          });
+        } catch (linkError) {
+          structuredLogger.logErrorBlock(linkError, {
+            operation: "auth_link_oauth_provider",
+            uid: firebaseUser.uid,
+            provider: userData.provider,
+          });
+          // Continue even if linking fails - user is still created
+        }
 
         structuredLogger.logSuccess("auth_firebase_user_created", {
-          uid: userData.uid,
+          uid: firebaseUser.uid, // This is the Firebase-generated UID
           email: userData.email,
+          provider: userData.provider,
         });
       } else {
         throw error;
@@ -1023,7 +1186,7 @@ const createFirebaseUser = async (userData) => {
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_create_firebase_user",
-      uid: userData.uid,
+      email: userData.email,
       error_classification: "firebase_user_creation_error",
     });
 

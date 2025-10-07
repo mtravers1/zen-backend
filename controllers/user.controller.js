@@ -1,278 +1,260 @@
-import _ from 'underscore';
-import * as permissionHelper from '../lib/permissionHelper.js';
-import * as dataTableHelper from '../lib/dataTableHelper.js';
+import User from "../database/models/User.js";
+import { decryptValue, getUserDek } from "../database/encryption.js";
 
 /**
- * Search by id
+ * List all users for admin interface
  */
-function userByID(req, res, next, id) {
-    // TODO: Implement userByID logic
+const listUsers = async (req, res) => {
+  try {
+    console.log("[USER CONTROLLER] Listing all users");
 
-    // dbcontext.User.findOne({
-    //     _id: id,
-    //     deleted: false
-    // }).populate('role').populate('group').exec(function (error, user) {
-    //     if (error) {
-    //         res.status(400).send(error);
-    //     } else {
-    //         req.userById = user;
-    //         next();
-    //     }
-    // });
+    // Get all users from database
+    const users = await User.find({})
+      .select("-password")
+      .sort({ createdAt: -1 });
 
-    res.status(200).send("Success");
-};
+    console.log(`[USER CONTROLLER] Found ${users.length} users`);
 
-/**
- * Create a User
- */
-async function create(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
+    // Decrypt and format user data for display
+    const formattedUsers = [];
 
-    let user = req.body;
-    const roles = _.pluck(user.roles, 'id');
+    for (const user of users) {
+      try {
+        const dek = await getUserDek(user.authUid);
 
-    const newUser = new dbcontext.User(user);
-    newUser.save().then(function (user) {
-        user.setRoles(roles);
-        res.json(user);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- * Show the current User
- */
-async function read(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
-
-    let user = {};
-
-    if (req.userById) {
-        user = req.userById.toJSON();
-        delete user.password;
-    }
-    res.jsonp(user);
-};
-
-/**
- * Update a User
- */
-async function update(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
-
-    let user = req.userById;
-    delete req.body.userId;
-
-    if (user.password === '') {
-        delete req.body.password;
-    }
-
-    user = _.extend(user, req.body);
-
-    const role = req.body.roleId;
-
-    user.save(user).then(function (user) {
-        user.setRole(role).then(user => {
-            res.send(user);
-        }).catch(error => {
-            res.status(400).send(error);
-        });
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- * Delete a User
- */
-async function deleteUser(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
-
-    let user = req.userById;
-    user.deleted = true;
-
-    user.save(user).then(function (user) {
-        res.send(user);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- * List of Users
- */
-async function list(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
-
-    dbcontext.User.findAll({
-        where: {
-            deleted: false
-        },
-        order: [
-            ['code', 'ASC']
-        ],
-        include: [
-            {
-                model: dbcontext.role,
-                as: 'role'
-            },
-            {
-                model: dbcontext.Group,
-                as: 'group'
-            }
-        ],
-    }).then(function (users) {
-        _.each(users, function (user) {
-            user.password = '';
-        });
-        res.json(users);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- * List of Users for Table
- */
-async function tableList(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, "userModule");
-    if (!authorized) {
-        res.status(401).send("Unauthorized");
-        return;
-    }
-
-    const requestData = req.body;
-
-    const Sequelize = dbcontext.sequelize;
-
-    const dataTableParams = dataTableHelper.getDataTableFilterParams(dbcontext, 'User', requestData);
-
-    dbcontext.User.findAndCountAll({
-        where: Sequelize.and(
-            dataTableParams.filters.concat(
-                {deleted: false}
-            )
-        ),
-        include: [
-            {
-                model: dbcontext.role,
-                as: 'role'
-            },
-            {
-                model: dbcontext.Group,
-                as: 'group'
-            }
-        ],
-        order: dataTableParams.orderBy.concat(
-            ['code']
-        ),
-        offset: dataTableParams.offset,
-        limit: dataTableParams.numberOfRows
-    }).then(function (lengthData) {
-        dataTableHelper.addRowNumber(lengthData, dataTableParams);
-        _.each(lengthData.rows, function (user) {
-            user.password = '';
-        });
-        res.json({
-            lengthData: lengthData,
-        });
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- * Get Session User
- */
-function getMyUser(req, res) {
-    dbcontext.User.findOne({
-        where: {
-            id: req.user.userId,
-            deleted: false
-        },
-        include: [
-            {
-                model: dbcontext.role,
-                as: 'role'
-            },
-            {
-                model: dbcontext.Group,
-                as: 'group'
-            }
-        ],
-    }).then(function (user) {
-        user.password = '';
-        res.json(user);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
-};
-
-/**
- *  Get Permission Validation
- */
-
-async function checkUserPermission(req, res) {
-    const authorized = await permissionHelper.checkPermissions(req.user.userId, req.body.permissionName);
-    res.send(authorized);
-};
-
-function changePassword(req, res) {
-    const passwords = req.body;
-    dbcontext.User.findOne({
-        where: {
-            id: req.user.userId,
-            deleted: false
+        // Decrypt email
+        let email = "N/A";
+        if (user.email && user.email.length > 0) {
+          try {
+            email = await decryptValue(user.email[0].email, dek);
+          } catch (error) {
+            console.log(
+              `[USER CONTROLLER] Error decrypting email for user ${user._id}:`,
+              error.message
+            );
+            email = user.email[0].email; // Show encrypted if decryption fails
+          }
         }
-    }).then(function (user) {
-        user.authenticate(passwords.password).then(result => {
-            if (result) {
-                user.password = passwords.newPassword;
-                user.save().then(function (user) {
-                    res.send(user);
-                }).catch(function (error) {
-                    res.status(400).send(error);
-                });
-            } else {
-                res.status(401).send('No autorizado.');
+
+        // Decrypt name
+        let firstName = "N/A";
+        let lastName = "N/A";
+        if (user.name) {
+          try {
+            firstName = await decryptValue(user.name.firstName, dek);
+            if (user.name.lastName) {
+              lastName = await decryptValue(user.name.lastName, dek);
             }
+          } catch (error) {
+            console.log(
+              `[USER CONTROLLER] Error decrypting name for user ${user._id}:`,
+              error.message
+            );
+            firstName = user.name.firstName;
+            lastName = user.name.lastName || "";
+          }
+        }
+
+        formattedUsers.push({
+          _id: user._id,
+          email: email,
+          firstName: firstName,
+          lastName: lastName,
+          role: user.role,
+          method: user.method || "email",
+          authUid: user.authUid,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          account_type: user.account_type,
         });
-    }).catch(function (error) {
-        res.status(400).send(error);
-    });
+      } catch (error) {
+        console.error(
+          `[USER CONTROLLER] Error processing user ${user._id}:`,
+          error
+        );
+        // Add user with basic info if decryption fails
+        formattedUsers.push({
+          _id: user._id,
+          email: "Error decrypting",
+          firstName: "Error",
+          lastName: "Decrypting",
+          role: user.role,
+          method: user.method || "email",
+          authUid: user.authUid,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          account_type: user.account_type,
+        });
+      }
+    }
+
+    console.log(
+      `[USER CONTROLLER] Successfully formatted ${formattedUsers.length} users`
+    );
+    res.status(200).json(formattedUsers);
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error listing users:", error);
+    res.status(500).json({ error: error.message });
+  }
 };
 
-module.exports = {
-    list,
-    create,
-    tableList,
-    read,
-    update,
-    userByID,
-    deleteUser,
-    getMyUser,
-    checkUserPermission,
-    changePassword
+/**
+ * Get user by ID
+ */
+const getUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Decrypt user data for display
+    const dek = await getUserDek(user.authUid);
+
+    let email = "N/A";
+    if (user.email && user.email.length > 0) {
+      email = await decryptValue(user.email[0].email, dek);
+    }
+
+    let firstName = "N/A";
+    let lastName = "N/A";
+    if (user.name) {
+      firstName = await decryptValue(user.name.firstName, dek);
+      if (user.name.lastName) {
+        lastName = await decryptValue(user.name.lastName, dek);
+      }
+    }
+
+    const formattedUser = {
+      _id: user._id,
+      email: email,
+      firstName: firstName,
+      lastName: lastName,
+      role: user.role,
+      method: user.method || "email",
+      authUid: user.authUid,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+      account_type: user.account_type,
+    };
+
+    res.status(200).json(formattedUser);
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error getting user:", error);
+    res.status(500).json({ error: error.message });
+  }
 };
+
+/**
+ * Update user method/provider
+ */
+const updateUserMethod = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { method } = req.body;
+
+    if (!["google", "apple", "email"].includes(method)) {
+      return res.status(400).json({ error: "Invalid method" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    user.method = method;
+    await user.save();
+
+    console.log(
+      `[USER CONTROLLER] Updated method for user ${userId} to ${method}`
+    );
+
+    res.status(200).json({
+      _id: user._id,
+      method: user.method,
+      authUid: user.authUid,
+    });
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error updating user method:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Get current user session info (for compatibility)
+ */
+const getMyUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Decrypt user data for response
+    const dek = await getUserDek(user.authUid);
+
+    let email = "N/A";
+    if (user.email && user.email.length > 0) {
+      email = await decryptValue(user.email[0].email, dek);
+    }
+
+    let firstName = "N/A";
+    let lastName = "N/A";
+    if (user.name) {
+      firstName = await decryptValue(user.name.firstName, dek);
+      if (user.name.lastName) {
+        lastName = await decryptValue(user.name.lastName, dek);
+      }
+    }
+
+    const formattedUser = {
+      _id: user._id,
+      email: email,
+      firstName: firstName,
+      lastName: lastName,
+      role: user.role,
+      method: user.method || "email",
+      authUid: user.authUid,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+      account_type: user.account_type,
+    };
+
+    res.status(200).json(formattedUser);
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error getting current user:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Check user permission (for compatibility)
+ */
+const checkUserPermission = async (req, res) => {
+  try {
+    const { permissionName } = req.body;
+
+    // Use the existing permission service
+    const { checkPermission } = await import(
+      "../services/permissions.service.js"
+    );
+    const hasPermission = await checkPermission(req.user.email, permissionName);
+
+    res.status(200).json({ hasPermission });
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error checking permission:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const userController = {
+  listUsers,
+  getUserById,
+  updateUserMethod,
+  getMyUser, // ← Added for compatibility
+  checkUserPermission, // ← Added for compatibility
+};
+
+export default userController;

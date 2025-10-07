@@ -687,7 +687,7 @@ const checkOAuthValidation = async (req, res) => {
 
     // Generate Firebase custom token
     const tokenResult = await authService.generateFirebaseToken(
-      validationResult.user.uid
+      firebaseUserResult.user.uid
     );
 
     if (!tokenResult.success) {
@@ -700,7 +700,7 @@ const checkOAuthValidation = async (req, res) => {
 
     structuredLogger.logSuccess("auth_check_oauth_validation", {
       provider: provider,
-      uid: validationResult.user.uid,
+      uid: firebaseUserResult.user.uid,
       email: validationResult.user.email,
     });
 
@@ -783,15 +783,51 @@ const signInWithOAuth = async (req, res) => {
 
       firebaseUser = existingFirebaseUser;
 
-      // Log the correct Firebase UID being used
-      console.log("Using existing Firebase user with UID:", firebaseUser.uid);
-      console.log("Google UID from token:", validationResult.user.uid);
+      // Check if the OAuth provider is already linked to this Firebase user
+      const expectedProviderId =
+        provider === "google" ? "google.com" : "apple.com";
+      const isProviderLinked = firebaseUser.providerData?.some(
+        (providerInfo) => providerInfo.providerId === expectedProviderId
+      );
 
-      // Check if user exists in database
+      if (!isProviderLinked) {
+        // Link the OAuth provider to the existing Firebase user
+        try {
+          await admin.auth().updateUser(firebaseUser.uid, {
+            providerData: [
+              ...(firebaseUser.providerData || []),
+              {
+                uid: validationResult.user.uid, // Original OAuth provider UID
+                email: validationResult.user.email,
+                displayName: validationResult.user.displayName,
+                photoURL: validationResult.user.photoURL,
+                providerId: provider === "google" ? "google.com" : "apple.com",
+              },
+            ],
+          });
+
+          structuredLogger.logSuccess(
+            "auth_firebase_provider_linked_existing",
+            {
+              uid: firebaseUser.uid,
+              provider: provider,
+              providerUid: validationResult.user.uid,
+            }
+          );
+        } catch (linkError) {
+          structuredLogger.logErrorBlock(linkError, {
+            operation: "auth_link_oauth_provider_existing",
+            uid: firebaseUser.uid,
+            provider: provider,
+          });
+          // Continue even if linking fails
+        }
+      }
+
+      // Check if user exists in database using Firebase UID (not email hash)
       const User = (await import("../database/models/User.js")).default;
-      const emailHash = hashEmail(validationResult.user.email);
       const existingDbUser = await User.findOne({
-        emailHash: emailHash,
+        authUid: firebaseUser.uid, // Use Firebase UID for lookup
       });
 
       if (existingDbUser) {
@@ -812,13 +848,15 @@ const signInWithOAuth = async (req, res) => {
             validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
             "",
           photoUrl: validationResult.user.photoURL,
-          authUid: firebaseUser.uid,
+          authUid: firebaseUser.uid, // Use Firebase UID
           numAccounts: 0,
           role: "individual",
+          // Update last login time
+          lastLoginAt: new Date(),
         };
 
         signInResult = await authService.signInOrCreate(
-          firebaseUser.uid,
+          firebaseUser.uid, // Use Firebase UID
           userDataForSignIn
         );
 
@@ -837,7 +875,7 @@ const signInWithOAuth = async (req, res) => {
         email: validationResult.user.email,
       });
 
-      // Create Firebase user
+      // Create Firebase user (Firebase will generate the UID)
       const firebaseUserResult = await authService.createFirebaseUser(
         validationResult.user
       );
@@ -852,7 +890,7 @@ const signInWithOAuth = async (req, res) => {
 
       firebaseUser = firebaseUserResult.user;
 
-      // Create user in database
+      // Create user in database using Firebase-generated UID
       const userDataForSignUp = {
         email: validationResult.user.email,
         method: provider,
@@ -861,20 +899,24 @@ const signInWithOAuth = async (req, res) => {
           validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
           "",
         photoUrl: validationResult.user.photoURL,
-        authUid: firebaseUser.uid,
+        authUid: firebaseUser.uid, // Use Firebase-generated UID
         numAccounts: 0,
         role: "individual",
+        // Set creation and login times
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
       };
 
       signInResult = await authService.signInOrCreate(
-        firebaseUser.uid,
+        firebaseUser.uid, // Use Firebase-generated UID
         userDataForSignUp
       );
 
       structuredLogger.logSuccess("auth_oauth_signup_new_user", {
         email: validationResult.user.email,
         userId: signInResult.id,
-        firebaseUid: firebaseUser.uid,
+        firebaseUid: firebaseUser.uid, // Firebase-generated UID
+        oauthProviderUID: validationResult.user.uid, // Original OAuth UID
       });
     }
 
