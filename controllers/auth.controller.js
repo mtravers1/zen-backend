@@ -864,8 +864,27 @@ const signInWithOAuth = async (req, res) => {
       }
 
       if (existingDbUser) {
-        // User exists in both Firebase and database
-        signInResult = existingDbUser;
+        // User exists in both Firebase and database - use signInOrCreate to decrypt data
+        const userDataForSignIn = {
+          email: validationResult.user.email,
+          method: provider,
+          firstName: validationResult.user.displayName?.split(" ")[0] || "User",
+          lastName:
+            validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+            "",
+          photoUrl: validationResult.user.photoURL,
+          authUid: firebaseUser.uid, // Use Firebase UID
+          numAccounts: 0,
+          role: "individual",
+          // Update last login time
+          lastLoginAt: new Date(),
+        };
+
+        signInResult = await authService.signInOrCreate(
+          firebaseUser.uid, // Use Firebase UID
+          userDataForSignIn
+        );
+
         structuredLogger.logSuccess("auth_oauth_signin_existing_user", {
           email: validationResult.user.email,
           userId: existingDbUser._id,
