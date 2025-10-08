@@ -562,7 +562,16 @@ const signInOrCreate = async (uid, userData = null) => {
           : "decryption_error",
     });
     console.log("error in signin_or_create", error);
-    throw new Error(error);
+
+    // Provide more specific error information
+    if (error.message && error.message.includes("URL is required")) {
+      console.error(
+        "❌ Google Cloud Storage configuration error - check environment variables"
+      );
+      throw new Error("Storage configuration error - please contact support");
+    }
+
+    throw new Error(error.message || error);
   }
 };
 
