@@ -16,29 +16,6 @@ const USER_ENCRYPTION_KEY_BUCKET_NAME =
   process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
 
 console.log("USER_ENCRYPTION_KEY_BUCKET_NAME", USER_ENCRYPTION_KEY_BUCKET_NAME);
-
-// Validate required environment variables
-if (
-  !USER_ENCRYPTION_KEY_BUCKET_NAME ||
-  USER_ENCRYPTION_KEY_BUCKET_NAME === "undefined"
-) {
-  console.error(
-    "❌ USER_ENCRYPTION_KEY_BUCKET_NAME is not properly configured"
-  );
-  throw new Error(
-    "USER_ENCRYPTION_KEY_BUCKET_NAME environment variable is required"
-  );
-}
-
-if (!serviceAccountBase64) {
-  console.error("❌ STORAGE_SERVICE_ACCOUNT is not configured");
-  throw new Error("STORAGE_SERVICE_ACCOUNT environment variable is required");
-}
-
-if (!kmsServiceAccountBase64) {
-  console.error("❌ KMS_SERVICE_ACCOUNT is not configured");
-  throw new Error("KMS_SERVICE_ACCOUNT environment variable is required");
-}
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
   "base64"
@@ -71,65 +48,40 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
 const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
 
 async function generateAndStoreEncryptedDEK(uid) {
-  try {
-    if (!uid) {
-      throw new Error("UID is required for DEK generation");
-    }
+  const dek = crypto.randomBytes(32);
 
-    const dek = crypto.randomBytes(32);
+  const [encryptResponse] = await kmsClient.encrypt({
+    name: KEY_PATH,
+    plaintext: dek,
+  });
 
-    const [encryptResponse] = await kmsClient.encrypt({
-      name: KEY_PATH,
-      plaintext: dek,
-    });
+  const encryptedDEK = encryptResponse.ciphertext;
+  const file = storage
+    .bucket(BUCKET_NAME)
+    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+  await file.save(encryptedDEK);
 
-    const encryptedDEK = encryptResponse.ciphertext;
-    const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`;
+  // Cache the DEK
+  dekCache.set(uid, dek);
 
-    console.log(`Storing DEK for user ${uid} at path: ${filePath}`);
-
-    const file = storage.bucket(BUCKET_NAME).file(filePath);
-
-    await file.save(encryptedDEK);
-
-    // Cache the DEK
-    dekCache.set(uid, dek);
-
-    return dek;
-  } catch (error) {
-    console.error(`Error generating and storing DEK for user ${uid}:`, error);
-    throw new Error(`Failed to generate DEK: ${error.message}`);
-  }
+  return dek;
 }
 
 async function getDEKFromBucket(uid) {
-  try {
-    if (!uid) {
-      throw new Error("UID is required for DEK retrieval");
-    }
-
-    const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`;
-    console.log(`Retrieving DEK for user ${uid} from path: ${filePath}`);
-
-    const file = storage.bucket(BUCKET_NAME).file(filePath);
-
-    if (!(await file.exists())[0]) {
-      console.log(`DEK file not found for user ${uid}`);
-      return null;
-    }
-
-    const [encryptedDEK] = await file.download();
-
-    const [decryptResponse] = await kmsClient.decrypt({
-      name: KEY_PATH,
-      ciphertext: encryptedDEK,
-    });
-
-    return decryptResponse.plaintext;
-  } catch (error) {
-    console.error(`Error retrieving DEK for user ${uid}:`, error);
-    throw new Error(`Failed to retrieve DEK: ${error.message}`);
+  const file = storage
+    .bucket(BUCKET_NAME)
+    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+  if (!(await file.exists())[0]) {
+    return null;
   }
+  const [encryptedDEK] = await file.download();
+
+  const [decryptResponse] = await kmsClient.decrypt({
+    name: KEY_PATH,
+    ciphertext: encryptedDEK,
+  });
+
+  return decryptResponse.plaintext;
 }
 
 async function getUserDek(uid) {
