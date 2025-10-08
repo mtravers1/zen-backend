@@ -1,8 +1,47 @@
 import User from "../database/models/User.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
+import { GoogleAuth } from "google-auth-library";
 
 const APPLE_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
+
+// Load Google Play Service Account from environment variable
+let googlePlayAuth = null;
+if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
+  try {
+    const serviceAccountJson = Buffer.from(
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
+      "base64"
+    ).toString("utf8");
+    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    googlePlayAuth = new GoogleAuth({
+      credentials: serviceAccount,
+      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+    });
+    console.log("✅ Google Play authentication configured");
+  } catch (error) {
+    console.error("❌ Failed to load Google Play Service Account:", error);
+  }
+} else {
+  console.warn("⚠️ GOOGLE_PLAY_SERVICE_ACCOUNT not configured");
+}
+
+// Get access token for Google Play API
+const getGooglePlayAccessToken = async () => {
+  if (!googlePlayAuth) {
+    throw new Error("Google Play authentication not configured");
+  }
+
+  try {
+    const client = await googlePlayAuth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    return tokenResponse.token;
+  } catch (error) {
+    console.error("❌ Failed to get Google Play access token:", error);
+    throw new Error("Failed to authenticate with Google Play API");
+  }
+};
 
 const validatePayment = async (platform, receipt, uid) => {
   const user = await User.findOne({ authUid: uid });
@@ -113,22 +152,60 @@ const validateApple = async (receipt) => {
 };
 
 const validateAndroid = async (receipt) => {
-  const { packageName, productId, purchaseToken } = receipt;
-  const url = `https://play.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/products/${productId}/tokens/${purchaseToken}:validate`;
+  console.log("🤖 Validating Android receipt...");
+
+  // Parse the receipt JSON string
+  let parsedReceipt;
+  try {
+    parsedReceipt = typeof receipt === 'string' ? JSON.parse(receipt) : receipt;
+    console.log("📱 Parsed receipt:", parsedReceipt);
+  } catch (e) {
+    console.error("❌ Failed to parse receipt:", e);
+    throw new Error("Invalid receipt format");
+  }
+
+  const { packageName, productId, purchaseToken } = parsedReceipt;
+
+  if (!packageName || !productId || !purchaseToken) {
+    console.error("❌ Missing required fields:", { packageName, productId, purchaseToken });
+    throw new Error("Missing required receipt fields");
+  }
+
+  // Get OAuth2 access token
+  const accessToken = await getGooglePlayAccessToken();
+  console.log("🔑 Got Google Play access token");
+
+  // Google Play API v2 endpoint (recommended as of 2025)
+  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
+
+  console.log("🔗 Calling Google Play API v2:", url);
+
   const response = await fetch(url, {
-    method: "POST",
+    method: "GET",
     headers: {
-      Authorization: `Bearer ${process.env.GOOGLE_PLAY_API_KEY}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(receipt),
   });
 
   if (!response.ok) {
-    throw new Error("Failed to validate purchase");
+    const errorText = await response.text();
+    console.error("❌ Google Play API error:", response.status, errorText);
+    throw new Error(`Failed to validate purchase: ${response.status} - ${errorText}`);
   }
 
-  return await response.json();
+  const result = await response.json();
+  console.log("✅ Google Play validation result:", result);
+
+  // Transform Google Play v2 response to match expected format
+  // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
+  return {
+    status: 0,
+    latest_receipt_info: [{
+      product_id: result.lineItems?.[0]?.productId || productId,
+      expires_date_ms: result.lineItems?.[0]?.expiryTime ? new Date(result.lineItems[0].expiryTime).getTime() : Date.now() + 30 * 24 * 60 * 60 * 1000,
+    }]
+  };
 };
 
 const updateUserUUID = async (uuid, uid) => {

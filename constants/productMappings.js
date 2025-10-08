@@ -4,7 +4,7 @@
  *
  * DUAL-PLATFORM SUPPORT:
  * - iOS: Apple Store product IDs (com.zentavos.*)
- * - Android: Google Play Store product IDs (com.zentavos.android.*)
+ * - Android: Google Play Store product IDs (com.zentavos.zentavosdev.*)
  *
  * NOTE: When adding new plans or add-ons:
  * 1. Add the product ID mapping for BOTH platforms
