@@ -75,6 +75,7 @@ jobs:
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_PROD }}|g" .env
           sed -i -e "s|GOOGLE_CLIENT_ID\=.*|GOOGLE_CLIENT_ID\=${{ secrets.GOOGLE_CLIENT_ID_PROD }}|g" .env
+          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_PROD }}|g" .env
