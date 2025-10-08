@@ -9,15 +9,16 @@ dotenv.config();
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 /***
  * # **IMPORTANT**
- * # The bucket name where we store user encryption keys. 
+ * # The bucket name where we store user encryption keys.
  *  using the wrong bucket will lose all data for all users!
  * */
-const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME
+const USER_ENCRYPTION_KEY_BUCKET_NAME =
+  process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
 
 console.log("USER_ENCRYPTION_KEY_BUCKET_NAME", USER_ENCRYPTION_KEY_BUCKET_NAME);
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
-  "base64" 
+  "base64"
 ).toString("utf8");
 const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
@@ -169,7 +170,7 @@ async function decryptValue(cipherTextBase64, dek) {
     // Parse the decrypted JSON string and return the original value
     return JSON.parse(decrypted);
   } catch (e) {
-    return cipherTextBase64;
+    return cipherTextBase64; // Return original value if decryption fails
   }
 }
 

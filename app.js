@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import logger from "morgan";
 import createError from "http-errors";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
 import {
   structuredLoggingMiddleware,
@@ -41,6 +42,20 @@ app.use(express.json({ limit: "1mb" })); // Increased limit for iOS receipts
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
+// Rate limiting for brute force protection
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: "Too many requests from this IP, please try again later."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+
 // Apply structured logging middleware BEFORE authentication
 app.use(structuredLoggingMiddleware);
 
@@ -72,6 +87,24 @@ app.use((req, res, next) => {
     "/api/subscriptions/plans",
     "/api/ai/ping",
   ];
+
+  // Block known attack patterns immediately
+  const attackPatterns = [
+    "/api/v1/vpnportal",
+    "/api/v1/admin",
+    "/api/v1/login",
+    "/wp-admin",
+    "/admin",
+    "/phpmyadmin",
+  ];
+
+  const isAttackPattern = attackPatterns.some((pattern) =>
+    req.path.startsWith(pattern)
+  );
+  if (isAttackPattern) {
+    // Return 404 immediately for known attack patterns
+    return res.status(404).json({ error: "Not Found" });
+  }
 
   // Check if the current path should be excluded
   const shouldExclude =

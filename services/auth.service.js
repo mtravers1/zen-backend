@@ -537,7 +537,8 @@ const signInOrCreate = async (uid, userData = null) => {
 
     const retrievedUser = {
       id: user._id,
-      email: emails,
+      _id: user._id, // Also include _id for compatibility
+      email: emails[0]?.email || userData.email, // Return primary email as string for mobile compatibility
       phone: decryptedPhone,
       role: user.role,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -551,6 +552,14 @@ const signInOrCreate = async (uid, userData = null) => {
     structuredLogger.logSuccess("auth_service_signin_or_create", {
       user_id: uid,
     });
+
+    console.log("🔍 [DEBUG] signInOrCreate returning user data:", {
+      id: retrievedUser.id,
+      firstName: retrievedUser.name.firstName,
+      lastName: retrievedUser.name.lastName,
+      email: retrievedUser.email?.[0]?.email,
+    });
+
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {

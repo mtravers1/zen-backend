@@ -78,88 +78,77 @@ const addBusinesses = async (businessList, email, uid) => {
 };
 
 const getUserProfiles = async (email, uid) => {
-  console.log(`[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`);
-  
   try {
     const user = await User.findOne({
       authUid: uid,
     }).lean();
 
     if (!user) {
-      console.error(`[getUserProfiles] User not found for uid: ${uid}`);
       throw new Error("User not found");
     }
 
-    console.log(`[getUserProfiles] User found: ${user._id}`);
-
     const profiles = [];
     const dek = await getUserDek(uid);
-    
-    console.log(`[getUserProfiles] DEK obtained:`, {
-      hasDek: !!dek,
-      dekType: typeof dek,
-      dekLength: dek ? dek.length : 0
-    });
 
     // Decrypt user name fields with error handling
-    let decryptedFirstName, decryptedLastName, decryptedMiddleName, decryptedSuffix, decryptedPrefix;
-    
+    let decryptedFirstName,
+      decryptedLastName,
+      decryptedMiddleName,
+      decryptedSuffix,
+      decryptedPrefix;
+
     try {
       decryptedFirstName = await decryptValue(user.name.firstName, dek);
-      console.log(`[getUserProfiles] First name decrypted: ${decryptedFirstName ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting first name:`, error);
       decryptedFirstName = null;
     }
 
     try {
       decryptedLastName = await decryptValue(user.name.lastName, dek);
-      console.log(`[getUserProfiles] Last name decrypted: ${decryptedLastName ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting last name:`, error);
       decryptedLastName = null;
     }
 
     try {
       decryptedMiddleName = await decryptValue(user.name.middleName, dek);
-      console.log(`[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting middle name:`, error);
       decryptedMiddleName = null;
     }
 
     try {
       decryptedSuffix = await decryptValue(user.name.suffix, dek);
-      console.log(`[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting suffix:`, error);
       decryptedSuffix = null;
     }
 
     try {
       decryptedPrefix = await decryptValue(user.name.prefix, dek);
-      console.log(`[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting prefix:`, error);
       decryptedPrefix = null;
     }
 
     let decryptedPhotoUrl;
     try {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
-      console.log(`[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? 'success' : 'failed'}`);
     } catch (error) {
-      console.error(`[getUserProfiles] Error decrypting photo URL:`, error);
       decryptedPhotoUrl = null;
     }
 
     let name;
-    if (!decryptedFirstName && !decryptedLastName) {
+
+    // Check if decryption actually worked (decrypted value should be different from encrypted)
+    const firstNameDecrypted =
+      decryptedFirstName && decryptedFirstName !== user.name.firstName;
+    const lastNameDecrypted =
+      decryptedLastName && decryptedLastName !== user.name.lastName;
+
+    if (!firstNameDecrypted && !lastNameDecrypted) {
       name = email;
-      console.log(`[getUserProfiles] Using email as name: ${name}`);
     } else {
-      name = decryptedFirstName + " " + decryptedLastName;
-      console.log(`[getUserProfiles] Using decrypted name: ${name}`);
+      // Use successfully decrypted values
+      const firstName = firstNameDecrypted ? decryptedFirstName : "User";
+      const lastName = lastNameDecrypted ? decryptedLastName : "";
+      name = `${firstName} ${lastName}`.trim();
     }
 
     const decryptedEmail = await Promise.all(
@@ -216,34 +205,23 @@ const getUserProfiles = async (email, uid) => {
     }
 
     for (const business of businesses) {
-      console.log(`[getUserProfiles] Processing business: ${business._id}`);
-      
       let decryptedName, decryptedIndustry, decryptedBusinessLogo;
-      
+
       try {
         decryptedName = await decryptValue(business.name, dek);
-        console.log(`[getUserProfiles] Business name decrypted: ${decryptedName ? 'success' : 'failed'}`);
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business name:`, error);
-        decryptedName = 'Unknown Business';
+        decryptedName = "Unknown Business";
       }
 
       try {
         decryptedIndustry = await decryptValue(business.industryDesc, dek);
-        console.log(`[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? 'success' : 'failed'}`);
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business industry:`, error);
         decryptedIndustry = null;
       }
 
       try {
-        decryptedBusinessLogo = await decryptValue(
-          business.businessLogo,
-          dek
-        );
-        console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
+        decryptedBusinessLogo = await decryptValue(business.businessLogo, dek);
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business logo:`, error);
         decryptedBusinessLogo = null;
       }
 
