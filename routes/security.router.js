@@ -3,6 +3,7 @@ import {
   getSecurityStats,
   blacklistIP,
   removeFromBlacklist,
+  clearDevelopmentBlacklist,
 } from "../middlewares/routeValidation.js";
 
 const router = Router();
@@ -123,6 +124,29 @@ router.post("/emergency-stop", (req, res) => {
     });
   } catch (error) {
     console.error("Error in emergency stop:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * POST /security/clear-dev-blacklist
+ * Clears blacklist for development IPs (localhost, etc.)
+ */
+router.post("/clear-dev-blacklist", (req, res) => {
+  try {
+    const cleared = clearDevelopmentBlacklist();
+
+    res.json({
+      success: true,
+      message: `Cleared ${cleared} development IPs from blacklist`,
+      clearedCount: cleared,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error clearing development blacklist:", error);
     res.status(500).json({
       success: false,
       error: "Internal server error",

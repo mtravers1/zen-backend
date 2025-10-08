@@ -97,6 +97,7 @@ const VALID_ROUTES = new Set([
   "/api/security/stats",
   "/api/security/blacklist",
   "/api/security/emergency-stop",
+  "/api/security/clear-dev-blacklist",
 
   // Root routes
   "/",
@@ -206,9 +207,57 @@ export default function routeValidationMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   const path = req.path;
   const method = req.method;
+  const userAgent = req.get("User-Agent") || "";
 
-  // Check if IP is blacklisted
+  // Check if route is valid first
+  const isValid = isValidRoute(path);
+
+  // If route is invalid, handle separately from valid routes
+  if (!isValid) {
+    console.warn(`🚨 Invalid route access attempt: ${ip} -> ${method} ${path}`);
+    console.warn(`🚨 User-Agent: ${userAgent.substring(0, 100)}`);
+
+    // Apply strict rate limiting only to invalid routes
+    if (!checkRateLimit(ip, true)) {
+      console.warn(
+        `🚫 Rate limit exceeded for invalid routes: ${ip} -> ${method} ${path}`
+      );
+      return res.status(429).json({
+        error: "Too Many Requests",
+        message: "IP temporarily blocked due to suspicious activity",
+        retryAfter: 900, // 15 minutes
+      });
+    }
+
+    // Return 404 to not reveal information about API structure
+    return res.status(404).json({
+      error: "Not Found",
+      message: "The requested resource was not found",
+    });
+  }
+
+  // For valid routes, check blacklist with exceptions for legitimate apps
   if (isBlacklisted(ip)) {
+    // Check if this is a legitimate Zentavos app request
+    const isLegitimateApp =
+      userAgent.includes("Zentavos") ||
+      userAgent.includes("CFNetwork") ||
+      userAgent.includes("Darwin");
+
+    if (
+      isLegitimateApp &&
+      (path.startsWith("/api/auth/") ||
+        path.startsWith("/api/plaid/") ||
+        path.startsWith("/api/user/"))
+    ) {
+      console.log(
+        `✅ Allowing legitimate app request despite blacklist: ${ip} -> ${method} ${path}`
+      );
+      // Allow legitimate app requests to pass through
+      next();
+      return;
+    }
+
     console.warn(
       `🚫 Request blocked - IP blacklisted: ${ip} -> ${method} ${path}`
     );
@@ -219,29 +268,13 @@ export default function routeValidationMiddleware(req, res, next) {
     });
   }
 
-  // Check if route is valid
-  const isValid = isValidRoute(path);
-
-  // Check rate limiting
-  if (!checkRateLimit(ip, !isValid)) {
+  // Apply normal rate limiting for valid routes (more lenient)
+  if (!checkRateLimit(ip, false)) {
     console.warn(`🚫 Rate limit exceeded for IP: ${ip} -> ${method} ${path}`);
     return res.status(429).json({
       error: "Too Many Requests",
       message: "Rate limit exceeded",
       retryAfter: 60,
-    });
-  }
-
-  // If route is invalid, log and block
-  if (!isValid) {
-    console.warn(`🚨 Invalid route access attempt: ${ip} -> ${method} ${path}`);
-    console.warn(`🚨 User-Agent: ${req.headers["user-agent"]}`);
-    console.warn(`🚨 Headers: ${JSON.stringify(req.headers)}`);
-
-    // Return 404 to not reveal information about API structure
-    return res.status(404).json({
-      error: "Not Found",
-      message: "The requested resource was not found",
     });
   }
 
@@ -301,4 +334,21 @@ export function getSecurityStats() {
     maxRequestsPerWindow: MAX_REQUESTS_PER_WINDOW,
     maxInvalidRequests: MAX_INVALID_REQUESTS,
   };
+}
+
+/**
+ * Function to clear blacklist for localhost/development IPs
+ */
+export function clearDevelopmentBlacklist() {
+  const developmentIPs = ["::ffff:127.0.0.1", "127.0.0.1", "::1"];
+  let cleared = 0;
+
+  developmentIPs.forEach((ip) => {
+    if (suspiciousIPs.delete(ip)) {
+      cleared++;
+      console.log(`✅ Cleared development IP from blacklist: ${ip}`);
+    }
+  });
+
+  return cleared;
 }
