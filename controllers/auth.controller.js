@@ -824,11 +824,44 @@ const signInWithOAuth = async (req, res) => {
         }
       }
 
-      // Check if user exists in database using Firebase UID (not email hash)
+      // Check if user exists in database using Firebase UID or email hash
       const User = (await import("../database/models/User.js")).default;
-      const existingDbUser = await User.findOne({
+      let existingDbUser = await User.findOne({
         authUid: firebaseUser.uid, // Use Firebase UID for lookup
       });
+
+      // If not found by authUid, check by email hash (for cross-provider linking)
+      if (!existingDbUser) {
+        const emailHash = hashEmail(validationResult.user.email);
+        existingDbUser = await User.findOne({
+          emailHash: emailHash,
+        });
+
+        if (existingDbUser) {
+          console.log(
+            "🔄 Found existing user with same email but different authUid, linking providers..."
+          );
+
+          // Update the existing user's authUid to link the new OAuth provider
+          existingDbUser.authUid = firebaseUser.uid;
+          existingDbUser.lastLoginAt = new Date();
+
+          // Update method if different
+          if (provider && existingDbUser.method !== provider) {
+            existingDbUser.method = provider;
+          }
+
+          await existingDbUser.save();
+
+          structuredLogger.logSuccess("auth_oauth_provider_linked_controller", {
+            email: validationResult.user.email,
+            userId: existingDbUser._id,
+            oldAuthUid: existingDbUser.authUid,
+            newAuthUid: firebaseUser.uid,
+            provider: provider,
+          });
+        }
+      }
 
       if (existingDbUser) {
         // User exists in both Firebase and database
