@@ -443,16 +443,64 @@ const signInOrCreate = async (uid, userData = null) => {
       } catch (saveError) {
         // Handle unique constraint violations - user might have been created by another request
         if (saveError.code === 11000) {
-          // User already exists, try to find them
-          user = await User.findOne({
-            authUid: uid,
-          }).select("-password");
+          // Check if it's a duplicate emailHash error (user exists with same email but different authUid)
+          if (saveError.keyPattern && saveError.keyPattern.emailHash) {
+            console.log(
+              "🔄 Duplicate email detected, looking for existing user with same email..."
+            );
 
-          if (!user) {
-            // If we still can't find the user, re-throw the error
-            throw saveError;
+            // Find user by emailHash (same email, potentially different OAuth provider)
+            const emailHash = hashEmail(userData.email);
+            user = await User.findOne({
+              emailHash: emailHash,
+            }).select("-password");
+
+            if (user) {
+              console.log(
+                "✅ Found existing user with same email, updating authUid to link OAuth providers"
+              );
+
+              // Update the existing user's authUid to the new Firebase UID
+              // This allows the same user to sign in with different OAuth providers
+              user.authUid = uid;
+              user.lastLoginAt = new Date();
+
+              // Update the authentication method if it's different
+              if (userData.method && user.method !== userData.method) {
+                user.method = userData.method;
+              }
+
+              await user.save();
+
+              structuredLogger.logSuccess(
+                "auth_service_oauth_provider_linked",
+                {
+                  user_id: uid,
+                  existing_user_id: user._id,
+                  email: userData.email,
+                  new_method: userData.method,
+                  previous_method: user.method,
+                }
+              );
+            } else {
+              // If we still can't find the user by email, re-throw the error
+              console.log(
+                "❌ Could not find user by email hash, re-throwing error"
+              );
+              throw saveError;
+            }
+          } else {
+            // Try to find by authUid for other duplicate key errors
+            user = await User.findOne({
+              authUid: uid,
+            }).select("-password");
+
+            if (!user) {
+              // If we still can't find the user, re-throw the error
+              throw saveError;
+            }
+            // User exists, continue with normal flow
           }
-          // User exists, continue with normal flow
         } else {
           throw saveError;
         }
