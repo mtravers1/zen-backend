@@ -1025,9 +1025,27 @@ const validateAppleToken = async (idToken) => {
       }
 
       // Verify audience (should be your app's client ID)
+      // Use BUNDLEID from environment or fallback to APPLE_CLIENT_ID
       const expectedAudience =
-        process.env.APPLE_CLIENT_ID || "com.zentavos.mobile";
-      if (decoded.aud !== expectedAudience) {
+        process.env.BUNDLEID ||
+        process.env.APPLE_CLIENT_ID ||
+        "com.zentavos.mobile";
+
+      // Allow multiple valid audiences to handle environment mismatches
+      const validAudiences = [
+        "com.zentavos.mobile", // Production
+        "com.zentavos.zentavosuat", // UAT/Staging
+        "com.zentavos.zentavosdev", // Development
+      ];
+
+      if (!validAudiences.includes(decoded.aud)) {
+        console.log("🔑 Invalid Apple audience:", {
+          received: decoded.aud,
+          expected: expectedAudience,
+          bundleId: process.env.BUNDLEID,
+          environment: process.env.ENVIRONMENT,
+          validAudiences,
+        });
         throw new Error("Invalid Apple ID token - wrong audience");
       }
 
