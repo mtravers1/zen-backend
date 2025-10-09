@@ -4,6 +4,7 @@ import { emailValidation } from "../lib/mailer/mailer.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import { hashEmail } from "../database/encryption.js";
 import admin from "../lib/firebaseAdmin.js";
+import User from "../database/models/User.js";
 
 const own = async (req, res) => {
   const { uid } = req.user;
