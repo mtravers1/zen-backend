@@ -58,6 +58,7 @@ const VALID_ROUTES = new Set([
 
   // Business routes
   "/api/business",
+  "/api/business/", // GET/POST - getUserProfiles/addBusiness (with trailing slash)
   "/api/business/assign",
   "/api/business/unlink",
   "/api/business/assign-account",
@@ -70,10 +71,12 @@ const VALID_ROUTES = new Set([
 
   // Permissions routes
   "/api/permissions",
+  "/api/permissions/", // GET - permissions list (with trailing slash)
   "/api/permissions/check",
 
   // Trips routes
   "/api/trips",
+  "/api/trips/", // GET/POST - getFilteredTrips/createTrip (with trailing slash)
   "/api/trips/check-limit",
   "/api/trips/lastvehicle",
 
@@ -88,6 +91,7 @@ const VALID_ROUTES = new Set([
 
   // AI routes
   "/api/ai",
+  "/api/ai/", // POST - makeRequest (with trailing slash)
   "/api/ai/stream",
   "/api/ai/test",
   "/api/ai/requests",
@@ -111,6 +115,7 @@ const VALID_ROUTES = new Set([
 
   // Users routes
   "/api/users", // GET
+  "/api/users/", // GET - listUsers (with trailing slash)
   "/api/users/getMyUser", // GET
   "/api/users/checkPermission", // POST
 
@@ -122,7 +127,7 @@ const VALID_ROUTES = new Set([
 
   // Root routes
   "/",
-  "/favicon.ico"
+  "/favicon.ico",
 ]);
 
 // Valid route patterns (for dynamic routes)
