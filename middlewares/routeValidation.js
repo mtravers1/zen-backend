@@ -107,10 +107,6 @@ const VALID_ROUTES = new Set([
   "/api/subscriptions/update",
   "/api/subscriptions/cancel",
 
-  // Role routes
-  "/api/roles", // GET/POST
-  "/api/roles/table", // POST
-
   // Users routes
   "/api/users", // GET
   "/api/users/getMyUser", // GET
@@ -143,7 +139,6 @@ const VALID_ROUTE_PATTERNS = [
   /^\/api\/trips\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/assets\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
-  /^\/api\/roles\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/users\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/users\/[a-zA-Z0-9\-_]+\/method$/,
   /^\/api\/ai\/status\/[a-zA-Z0-9\-_]+$/,
