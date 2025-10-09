@@ -45,6 +45,9 @@ router.get("/test", (req, res) => {
 router.post("/test-existing-user", authController.testExistingUserLogin);
 
 // Test endpoint for encryption consistency
-router.post("/test-encryption-consistency", authController.testEncryptionConsistency);
+router.post(
+  "/test-encryption-consistency",
+  authController.testEncryptionConsistency
+);
 
 export default router;

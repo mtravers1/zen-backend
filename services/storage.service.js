@@ -11,6 +11,7 @@ const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
 const storage = new Storage({
   credentials: storageServiceAccount,
+  projectId: process.env.GCP_PROJECT_ID,
 });
 const bucketName = "zentavos-bucket";
 
@@ -61,8 +62,9 @@ const getStorageStatus = async (uid) => {
         },
         limits: {
           maxGB: limitGB,
-          usagePercentage: limitGB === -1 ? 0 : Math.min((totalUsageGB / limitGB) * 100, 100),
-        }
+          usagePercentage:
+            limitGB === -1 ? 0 : Math.min((totalUsageGB / limitGB) * 100, 100),
+        },
       };
     }
 
@@ -98,7 +100,7 @@ const getStorageStatus = async (uid) => {
       limits: {
         maxGB: limitGB,
         usagePercentage: parseFloat(usagePercentage.toFixed(1)),
-      }
+      },
     };
   } catch (error) {
     console.error("Error getting storage status:", error);

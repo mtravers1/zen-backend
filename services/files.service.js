@@ -11,6 +11,7 @@ const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
 const storage = new Storage({
   credentials: storageServiceAccount,
+  projectId: process.env.GCP_PROJECT_ID,
 });
 const bucketName = "zentavos-bucket";
 
