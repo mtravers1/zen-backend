@@ -35,6 +35,7 @@ const VALID_ROUTES = new Set([
   "/api/webhook/test",
 
   // Account routes
+  "/api/account",
   "/api/account/add-photo",
   "/api/account/get-photo",
   "/api/account/profile",
@@ -42,10 +43,10 @@ const VALID_ROUTES = new Set([
   "/api/account/delete",
 
   // Business routes
-  "/api/business/create",
-  "/api/business/list",
-  "/api/business/update",
-  "/api/business/delete",
+  "/api/business",
+  "/api/business/assign",
+  "/api/business/unlink",
+  "/api/business/assign-account",
 
   // Assets routes
   "/api/assets/list",
@@ -80,6 +81,8 @@ const VALID_ROUTES = new Set([
   "/api/payments/available-plans",
   "/api/payments/process",
   "/api/payments/history",
+  "/api/payments/very-receipt",
+  "/api/payments/update-user-uuid",
 
   // Subscriptions routes
   "/api/subscriptions/plans",
@@ -108,9 +111,11 @@ const VALID_ROUTES = new Set([
 const VALID_ROUTE_PATTERNS = [
   /^\/api\/account\/photo\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/files\/[a-zA-Z0-9\-_]+$/,
-  /^\/api\/business\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/business\/profile\/update\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/business\/profile\/delete\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/trips\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/assets\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
   /^\/api\/security\/blacklist\/[\d\.]+$/, // For DELETE /api/security/blacklist/:ip
 ];
 
