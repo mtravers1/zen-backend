@@ -47,6 +47,7 @@ const VALID_ROUTES = new Set([
 
   // Account routes
   "/api/account", // GET - getAllUserAccounts
+  "/api/account/", // POST - getAccounts (with trailing slash)
   "/api/account/add-account", // POST
   "/api/account/cash-flows", // POST
   "/api/account/cash-flows-weekly", // POST
@@ -121,7 +122,7 @@ const VALID_ROUTES = new Set([
 
   // Root routes
   "/",
-  "/favicon.ico",
+  "/favicon.ico"
 ]);
 
 // Valid route patterns (for dynamic routes)
