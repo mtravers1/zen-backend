@@ -102,35 +102,22 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
 );
 
 // DEK cache in memory
-const dekCache = new LimitedMap(1000); // Limit to 1000 DEKs
+const dekCache = new LimitedMap(1000);
 
 // Import User model for data checking
 import User from "./models/User.js";
 
-async function generateAndStoreEncryptedDEK(uid, forceRegenerate = false) {
+async function generateAndStoreEncryptedDEK(
+  bucketKey,
+  forceRegenerate = false
+) {
   console.log(
-    `🔑 Generating DEK for user: ${uid}, forceRegenerate: ${forceRegenerate}`
+    `🔑 Generating DEK for bucket key: ${bucketKey}, forceRegenerate: ${forceRegenerate}`
   );
-
-  // SAFETY CHECK: Never regenerate DEK if user has existing data unless explicitly forced
-  if (!forceRegenerate) {
-    const hasExistingData = await checkUserHasEncryptedData(uid);
-    if (hasExistingData) {
-      console.error(
-        `🚨 CRITICAL: Attempted to regenerate DEK for user ${uid} who has existing encrypted data!`
-      );
-      console.error(
-        `🚨 This would cause PERMANENT DATA LOSS. Aborting DEK generation.`
-      );
-      throw new Error(
-        `Cannot regenerate DEK for user ${uid}: User has existing encrypted data. Use forceRegenerate=true only after data backup.`
-      );
-    }
-  }
 
   // If force regenerate, create backup of old DEK first
   if (forceRegenerate) {
-    await backupExistingDEK(uid);
+    await backupExistingDEK(bucketKey);
   }
 
   const dek = crypto.randomBytes(32);
@@ -143,23 +130,23 @@ async function generateAndStoreEncryptedDEK(uid, forceRegenerate = false) {
   const encryptedDEK = encryptResponse.ciphertext;
   const file = storage
     .bucket(BUCKET_NAME)
-    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
 
   // Log the DEK replacement
-  console.log(`🔄 Saving new DEK for user: ${uid}`);
+  console.log(`🔄 Saving new DEK for bucket key: ${bucketKey}`);
   await file.save(encryptedDEK);
 
   // Cache the DEK
-  dekCache.set(uid, dek);
+  dekCache.set(bucketKey, dek);
 
-  console.log(`✅ New DEK generated and stored for user: ${uid}`);
+  console.log(`✅ New DEK generated and stored for bucket key: ${bucketKey}`);
   return dek;
 }
 
-async function getDEKFromBucket(uid) {
+async function getDEKFromBucket(bucketKey) {
   const file = storage
     .bucket(BUCKET_NAME)
-    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
   if (!(await file.exists())[0]) {
     return null;
   }
@@ -175,14 +162,32 @@ async function getDEKFromBucket(uid) {
   return Buffer.from(plaintext);
 }
 
-async function getUserDek(uid) {
+async function getUserDek(firebaseUid) {
   try {
-    console.log(`🔍 Getting DEK for user: ${uid}`);
+    console.log(`🔍 Getting DEK for Firebase UID: ${firebaseUid}`);
 
-    // Check in-memory cache first
-    if (dekCache.has(uid)) {
-      console.log(`✅ DEK found in cache for user: ${uid}`);
-      const cachedDek = dekCache.get(uid);
+    // Step 1: Find user in database by Firebase UID
+    const user = await User.findOne({ authUid: firebaseUid });
+
+    if (!user) {
+      console.error(
+        `❌ User not found in database for Firebase UID: ${firebaseUid}`
+      );
+      throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
+    }
+
+    console.log(
+      `✅ User found - ID: ${user._id}, Firebase UID: ${firebaseUid}`
+    );
+
+    // Step 2: Use user primary key as bucket key
+    const bucketKey = user._id.toString();
+    console.log(`🔑 Using user primary key as bucket key: ${bucketKey}`);
+
+    // Check in-memory cache first (using bucket key)
+    if (dekCache.has(bucketKey)) {
+      console.log(`✅ DEK found in cache for bucket key: ${bucketKey}`);
+      const cachedDek = dekCache.get(bucketKey);
       console.log(
         `🔍 Cached DEK length: ${
           cachedDek?.length
@@ -194,50 +199,47 @@ async function getUserDek(uid) {
         console.log(
           `🔄 Cached DEK is not a Buffer, clearing cache and fetching fresh`
         );
-        dekCache.delete(uid);
+        dekCache.delete(bucketKey);
       } else {
         return cachedDek;
       }
     }
 
-    console.log(`📦 Fetching DEK from bucket for user: ${uid}`);
-    let dek = await getDEKFromBucket(uid);
+    console.log(`📦 Fetching DEK from bucket for bucket key: ${bucketKey}`);
+    let dek = await getDEKFromBucket(bucketKey);
 
     if (!dek) {
-      console.log(`🔑 No DEK found for user: ${uid}`);
+      console.log(`🔑 No DEK found for bucket key: ${bucketKey}`);
+      console.log(
+        `🔄 Checking for legacy DEK using Firebase UID: ${firebaseUid}`
+      );
 
-      // CRITICAL SAFETY CHECK: Check if user has existing encrypted data
-      const hasExistingData = await checkUserHasEncryptedData(uid);
+      // Step 3: Check for legacy DEK using Firebase UID
+      const legacyDek = await getDEKFromBucket(firebaseUid);
 
-      if (hasExistingData) {
-        console.error(
-          `🚨 CRITICAL ERROR: User ${uid} has encrypted data but no DEK found!`
+      if (legacyDek) {
+        console.log(`✅ Found legacy DEK for Firebase UID: ${firebaseUid}`);
+        console.log(`🔄 Migrating to new bucket key: ${bucketKey}`);
+
+        // Copy the legacy DEK to new bucket key
+        await copyDEKToNewBucketKey(firebaseUid, bucketKey);
+
+        // Use the migrated DEK
+        dek = legacyDek;
+        dekCache.set(bucketKey, dek);
+
+        console.log(
+          `✅ DEK migrated from Firebase UID to primary key: ${firebaseUid} -> ${bucketKey}`
         );
-        console.error(`🚨 This indicates a serious data integrity issue.`);
-        console.error(`🚨 Attempting DEK recovery...`);
-
-        // Try to recover DEK from backup
-        dek = await tryRecoverDEKFromBackup(uid);
-
-        if (!dek) {
-          console.error(
-            `🚨 FATAL: Cannot recover DEK for user ${uid}. Data may be permanently lost.`
-          );
-          throw new Error(
-            `Critical DEK recovery failure for user ${uid}. Contact system administrator immediately.`
-          );
-        }
-
-        console.log(`✅ DEK recovered from backup for user: ${uid}`);
       } else {
         console.log(
-          `✅ New user detected, safe to generate new DEK for user: ${uid}`
+          `🔑 No legacy DEK found, generating new DEK for bucket key: ${bucketKey}`
         );
-        dek = await generateAndStoreEncryptedDEK(uid, false);
+        dek = await generateAndStoreEncryptedDEK(bucketKey, false);
       }
     } else {
-      console.log(`✅ DEK retrieved from bucket for user: ${uid}`);
-      dekCache.set(uid, dek); // Cache it once retrieved
+      console.log(`✅ DEK retrieved from bucket for bucket key: ${bucketKey}`);
+      dekCache.set(bucketKey, dek); // Cache it once retrieved
     }
 
     console.log(
@@ -247,7 +249,7 @@ async function getUserDek(uid) {
     );
     return dek;
   } catch (e) {
-    console.error(`❌ Error getting DEK for user ${uid}:`, e);
+    console.error(`❌ Error getting DEK for Firebase UID ${firebaseUid}:`, e);
     console.error("Stack trace:", e.stack);
 
     // Add more context to the error
@@ -361,58 +363,60 @@ function hashValue(value) {
 }
 
 /**
- * Check if user has existing encrypted data that would be lost if DEK is regenerated
+ * Copy DEK from legacy Firebase UID bucket key to new primary key bucket key
  */
-async function checkUserHasEncryptedData(uid) {
+async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
   try {
-    console.log(`🔍 Checking if user ${uid} has existing encrypted data...`);
+    console.log(
+      `📦 Copying DEK from legacy key ${legacyBucketKey} to new key ${newBucketKey}`
+    );
 
-    // Check if user exists in database
-    const user = await User.findOne({ authUid: uid });
+    const legacyFile = storage
+      .bucket(BUCKET_NAME)
+      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${legacyBucketKey}.key`);
 
-    if (!user) {
-      console.log(`✅ No user found for UID ${uid}, safe to generate new DEK`);
+    if (!(await legacyFile.exists())[0]) {
+      console.log(`❌ Legacy DEK file not found: ${legacyBucketKey}`);
       return false;
     }
 
-    // Check if user has encrypted fields that would indicate existing data
-    const hasEncryptedName =
-      user.name?.firstName && user.name.firstName !== "New";
-    const hasEncryptedEmail = user.email && user.email.length > 0;
-    const hasEncryptedPhone = user.phone && user.phone.length > 0;
+    const newFile = storage
+      .bucket(BUCKET_NAME)
+      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${newBucketKey}.key`);
 
-    const hasEncryptedData =
-      hasEncryptedName || hasEncryptedEmail || hasEncryptedPhone;
+    // Copy the legacy DEK to the new bucket key location
+    await legacyFile.copy(newFile);
 
-    console.log(`🔍 User ${uid} encrypted data check:`, {
-      hasUser: !!user,
-      hasEncryptedName,
-      hasEncryptedEmail,
-      hasEncryptedPhone,
-      hasEncryptedData,
-    });
+    console.log(`✅ DEK copied from ${legacyBucketKey} to ${newBucketKey}`);
+    console.log(`💾 Legacy DEK maintained as backup at ${legacyBucketKey}`);
 
-    return hasEncryptedData;
-  } catch (error) {
-    console.error(`❌ Error checking encrypted data for user ${uid}:`, error);
-    // In case of error, assume user has data to be safe
     return true;
+  } catch (error) {
+    console.error(
+      `❌ Error copying DEK from ${legacyBucketKey} to ${newBucketKey}:`,
+      error
+    );
+    throw new Error(
+      `Failed to copy DEK from ${legacyBucketKey} to ${newBucketKey}: ${error.message}`
+    );
   }
 }
 
 /**
  * Create backup of existing DEK before regenerating
  */
-async function backupExistingDEK(uid) {
+async function backupExistingDEK(bucketKey) {
   try {
-    console.log(`💾 Creating backup of existing DEK for user: ${uid}`);
+    console.log(
+      `💾 Creating backup of existing DEK for bucket key: ${bucketKey}`
+    );
 
     const originalFile = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
 
     if (!(await originalFile.exists())[0]) {
-      console.log(`ℹ️ No existing DEK to backup for user: ${uid}`);
+      console.log(`ℹ️ No existing DEK to backup for bucket key: ${bucketKey}`);
       return;
     }
 
@@ -420,17 +424,20 @@ async function backupExistingDEK(uid) {
     const backupFile = storage
       .bucket(BUCKET_NAME)
       .file(
-        `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${uid}_${timestamp}.key`
+        `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${bucketKey}_${timestamp}.key`
       );
 
     await originalFile.copy(backupFile);
     console.log(
-      `✅ DEK backup created for user ${uid}: ${uid}_${timestamp}.key`
+      `✅ DEK backup created for bucket key ${bucketKey}: ${bucketKey}_${timestamp}.key`
     );
   } catch (error) {
-    console.error(`❌ Error creating DEK backup for user ${uid}:`, error);
+    console.error(
+      `❌ Error creating DEK backup for bucket key ${bucketKey}:`,
+      error
+    );
     throw new Error(
-      `Failed to create DEK backup for user ${uid}: ${error.message}`
+      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`
     );
   }
 }
@@ -438,16 +445,18 @@ async function backupExistingDEK(uid) {
 /**
  * Try to recover DEK from backup files
  */
-async function tryRecoverDEKFromBackup(uid) {
+async function tryRecoverDEKFromBackup(bucketKey) {
   try {
-    console.log(`🔄 Attempting DEK recovery from backup for user: ${uid}`);
+    console.log(
+      `🔄 Attempting DEK recovery from backup for bucket key: ${bucketKey}`
+    );
 
     const [files] = await storage.bucket(BUCKET_NAME).getFiles({
-      prefix: `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${uid}_`,
+      prefix: `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${bucketKey}_`,
     });
 
     if (files.length === 0) {
-      console.log(`❌ No backup DEK files found for user: ${uid}`);
+      console.log(`❌ No backup DEK files found for bucket key: ${bucketKey}`);
       return null;
     }
 
@@ -478,12 +487,12 @@ async function tryRecoverDEKFromBackup(uid) {
         // Restore the recovered DEK as the current DEK
         const currentFile = storage
           .bucket(BUCKET_NAME)
-          .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${uid}.key`);
+          .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
 
         await currentFile.save(encryptedDEK);
-        dekCache.set(uid, dek);
+        dekCache.set(bucketKey, dek);
 
-        console.log(`✅ DEK restored for user: ${uid}`);
+        console.log(`✅ DEK restored for bucket key: ${bucketKey}`);
         return dek;
       } catch (error) {
         console.error(
@@ -494,10 +503,15 @@ async function tryRecoverDEKFromBackup(uid) {
       }
     }
 
-    console.error(`❌ All backup recovery attempts failed for user: ${uid}`);
+    console.error(
+      `❌ All backup recovery attempts failed for bucket key: ${bucketKey}`
+    );
     return null;
   } catch (error) {
-    console.error(`❌ Error during DEK recovery for user ${uid}:`, error);
+    console.error(
+      `❌ Error during DEK recovery for bucket key ${bucketKey}:`,
+      error
+    );
     return null;
   }
 }
@@ -508,7 +522,7 @@ export {
   getUserDek,
   hashEmail,
   hashValue,
-  checkUserHasEncryptedData,
+  copyDEKToNewBucketKey,
   backupExistingDEK,
   tryRecoverDEKFromBackup,
 };
