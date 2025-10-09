@@ -45,17 +45,14 @@ const VALID_ROUTES = new Set([
   "/api/webhook/plaid",
 
   // Account routes
-  "/api/account",
-  "/api/account/add-account",
-  "/api/account/cash-flows",
-  "/api/account/cash-flows-weekly",
-  "/api/account/cash-flows-by-plaidaccount",
-  "/api/account/transactions",
-  "/api/account/add-photo",
-  "/api/account/get-photo",
-  "/api/account/profile",
-  "/api/account/update",
-  "/api/account/delete",
+  "/api/account", // GET - getAllUserAccounts
+  "/api/account/add-account", // POST
+  "/api/account/cash-flows", // POST
+  "/api/account/cash-flows-weekly", // POST
+  "/api/account/cash-flows-by-plaidaccount", // POST
+  "/api/account/transactions", // GET
+  "/api/account/add-photo", // POST
+  "/api/account/get-photo", // POST
 
   // Business routes
   "/api/business",
@@ -111,10 +108,13 @@ const VALID_ROUTES = new Set([
   "/api/subscriptions/cancel",
 
   // Role routes
-  "/api/role/list",
-  "/api/role/create",
-  "/api/role/update",
-  "/api/role/delete",
+  "/api/roles", // GET/POST
+  "/api/roles/table", // POST
+
+  // Users routes
+  "/api/users", // GET
+  "/api/users/getMyUser", // GET
+  "/api/users/checkPermission", // POST
 
   // Security routes (admin only)
   "/api/security/stats",
@@ -143,6 +143,9 @@ const VALID_ROUTE_PATTERNS = [
   /^\/api\/trips\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/assets\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
+  /^\/api\/roles\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/users\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/users\/[a-zA-Z0-9\-_]+\/method$/,
   /^\/api\/ai\/status\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/ai\/cancel\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/security\/blacklist\/[\d\.]+$/, // For DELETE /api/security/blacklist/:ip
