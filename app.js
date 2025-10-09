@@ -10,6 +10,7 @@ import {
   errorHandlingMiddleware,
   cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
+import routeValidationMiddleware from "./middlewares/routeValidation.js";
 import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
@@ -58,6 +59,9 @@ app.use(limiter);
 
 // Apply structured logging middleware BEFORE authentication
 app.use(structuredLoggingMiddleware);
+
+// Apply route validation middleware FIRST to block invalid routes and attacks
+app.use(routeValidationMiddleware);
 
 // authentication
 app.use((req, res, next) => {
