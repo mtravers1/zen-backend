@@ -17,25 +17,40 @@ const VALID_ROUTES = new Set([
   "/api/auth/sendCode",
   "/api/auth/verifyCode",
   "/api/auth/resetPassword",
+  "/api/auth/test",
   "/api/auth/test-existing-user",
+  "/api/auth/test-encryption-consistency",
 
   // Info routes
   "/api/_info/version",
 
   // Plaid routes
-  "/api/plaid/institutions",
+  "/api/plaid/access",
+  "/api/plaid/public-token",
+  "/api/plaid/access-token",
+  "/api/plaid/repair-token",
   "/api/plaid/accounts",
-  "/api/plaid/link-token",
-  "/api/plaid/exchange-public-token",
-  "/api/plaid/transactions",
+  "/api/plaid/save-token",
+  "/api/plaid/check-institution-limit",
+  "/api/plaid/institutions-connected",
+  "/api/plaid/upfront-institution-status",
+  "/api/plaid/institution-update-token",
   "/api/plaid/balance",
+  "/api/plaid/institutions",
+  "/api/plaid/transactions",
+  "/api/plaid/detect-internal",
 
   // Webhook routes
+  "/api/webhook/health",
   "/api/webhook/plaid",
-  "/api/webhook/test",
 
   // Account routes
   "/api/account",
+  "/api/account/add-account",
+  "/api/account/cash-flows",
+  "/api/account/cash-flows-weekly",
+  "/api/account/cash-flows-by-plaidaccount",
+  "/api/account/transactions",
   "/api/account/add-photo",
   "/api/account/get-photo",
   "/api/account/profile",
@@ -49,31 +64,36 @@ const VALID_ROUTES = new Set([
   "/api/business/assign-account",
 
   // Assets routes
-  "/api/assets/list",
-  "/api/assets/create",
-  "/api/assets/update",
-  "/api/assets/delete",
+  "/api/assets/addAsset",
+  "/api/assets/getAssets",
+  "/api/assets/updateAsset",
+  "/api/assets/deleteAsset",
 
   // Permissions routes
-  "/api/permissions/list",
+  "/api/permissions",
   "/api/permissions/check",
 
   // Trips routes
-  "/api/trips/list",
-  "/api/trips/create",
-  "/api/trips/update",
-  "/api/trips/delete",
+  "/api/trips",
+  "/api/trips/check-limit",
+  "/api/trips/lastvehicle",
 
   // Files routes
-  "/api/files/upload",
-  "/api/files/download",
-  "/api/files/list",
-  "/api/files/delete",
+  "/api/files/addFile",
+  "/api/files/check-limit",
+  "/api/files/storage-status",
+  "/api/files/add-file",
+  "/api/files/get-file",
+  "/api/files/add-image",
+  "/api/files/delete-file",
 
   // AI routes
+  "/api/ai",
+  "/api/ai/stream",
+  "/api/ai/test",
+  "/api/ai/requests",
+  "/api/ai/health",
   "/api/ai/ping",
-  "/api/ai/chat",
-  "/api/ai/analyze",
 
   // Payments routes
   "/api/payments/webhook/android",
@@ -109,13 +129,22 @@ const VALID_ROUTES = new Set([
 
 // Valid route patterns (for dynamic routes)
 const VALID_ROUTE_PATTERNS = [
-  /^\/api\/account\/photo\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/auth\/[a-zA-Z0-9\-_]+$/, // For DELETE /api/auth/:uid
+  /^\/api\/auth\/recover-encryption-keys\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/account\/photo\/[a-zA-Z0-9\-_\.]+$/,
+  /^\/api\/account\/profile-transactions\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/account\/transactions\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/account\/details\/[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/files\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/files\/getFiles\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/files\/getFolders\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/business\/profile\/update\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/business\/profile\/delete\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/trips\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/assets\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
+  /^\/api\/ai\/status\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/ai\/cancel\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/security\/blacklist\/[\d\.]+$/, // For DELETE /api/security/blacklist/:ip
 ];
 
