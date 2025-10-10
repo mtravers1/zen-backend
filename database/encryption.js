@@ -385,20 +385,39 @@ async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
       .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${newBucketKey}.key`);
 
     // Copy the legacy DEK to the new bucket key location
-    await legacyFile.copy(newFile);
-
-    console.log(`✅ DEK copied from ${legacyBucketKey} to ${newBucketKey}`);
-    console.log(`💾 Legacy DEK maintained as backup at ${legacyBucketKey}`);
-
-    return true;
+    try {
+      await legacyFile.copy(newFile);
+      console.log(`✅ DEK copied from ${legacyBucketKey} to ${newBucketKey}`);
+      console.log(`💾 Legacy DEK maintained as backup at ${legacyBucketKey}`);
+      return true;
+    } catch (copyError) {
+      // Fallback strategy: download then save, to avoid transient SDK copy issues (e.g., Parse Error)
+      console.error(
+        `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`
+      );
+      try {
+        const [encryptedDEK] = await legacyFile.download();
+        await newFile.save(encryptedDEK);
+        console.log(
+          `✅ DEK copied via download+save from ${legacyBucketKey} to ${newBucketKey}`
+        );
+        return true;
+      } catch (fallbackError) {
+        console.error(
+          `❌ Fallback copy (download+save) failed from ${legacyBucketKey} to ${newBucketKey}:`,
+          fallbackError
+        );
+        // Do not throw to avoid hard-failing auth flow; return false so callers can proceed using legacy DEK
+        return false;
+      }
+    }
   } catch (error) {
     console.error(
       `❌ Error copying DEK from ${legacyBucketKey} to ${newBucketKey}:`,
       error
     );
-    throw new Error(
-      `Failed to copy DEK from ${legacyBucketKey} to ${newBucketKey}: ${error.message}`
-    );
+    // Do not throw here to prevent 500 on sign-in; allow caller to continue with legacy DEK
+    return false;
   }
 }
 
