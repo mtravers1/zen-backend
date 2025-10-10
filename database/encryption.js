@@ -535,10 +535,87 @@ async function tryRecoverDEKFromBackup(bucketKey) {
   }
 }
 
+/**
+ * Special function for signup flow - handles DEK creation/migration for new users
+ * Logic:
+ * 1. Check if DEK exists with Firebase UID
+ * 2. If exists, copy to database ID bucket key
+ * 3. If not exists, create new DEK with database ID bucket key
+ */
+async function getUserDekForSignup(firebaseUid, databaseId) {
+  try {
+    console.log(
+      `🔍 Getting DEK for signup - Firebase UID: ${firebaseUid}, Database ID: ${databaseId}`
+    );
+
+    const bucketKey = databaseId.toString();
+    console.log(`🔑 Using database ID as bucket key: ${bucketKey}`);
+
+    // Step 1: Check if DEK already exists with the database ID (shouldn't happen in signup, but safety check)
+    console.log(`📦 Checking for existing DEK with database ID: ${bucketKey}`);
+    let dek = await getDEKFromBucket(bucketKey);
+
+    if (dek) {
+      console.log(`✅ DEK already exists for database ID: ${bucketKey}`);
+      dekCache.set(bucketKey, dek);
+      return dek;
+    }
+
+    // Step 2: Check if DEK exists with Firebase UID (legacy/migration case)
+    console.log(`🔄 Checking for DEK with Firebase UID: ${firebaseUid}`);
+    const legacyDek = await getDEKFromBucket(firebaseUid);
+
+    if (legacyDek) {
+      console.log(`✅ Found DEK with Firebase UID: ${firebaseUid}`);
+      console.log(
+        `🔄 Copying DEK from Firebase UID to database ID: ${firebaseUid} -> ${bucketKey}`
+      );
+
+      // Copy the DEK from Firebase UID to database ID
+      const copySuccess = await copyDEKToNewBucketKey(firebaseUid, bucketKey);
+
+      if (copySuccess) {
+        console.log(
+          `✅ DEK successfully copied from Firebase UID to database ID: ${firebaseUid} -> ${bucketKey}`
+        );
+        dek = legacyDek;
+        dekCache.set(bucketKey, dek);
+      } else {
+        console.log(`⚠️ DEK copy failed, but will use legacy DEK for now`);
+        dek = legacyDek;
+        // Cache with both keys for compatibility
+        dekCache.set(bucketKey, dek);
+        dekCache.set(firebaseUid, dek);
+      }
+    } else {
+      // Step 3: No existing DEK found, create new one with database ID
+      console.log(
+        `🔑 No existing DEK found, creating new DEK for database ID: ${bucketKey}`
+      );
+      dek = await generateAndStoreEncryptedDEK(bucketKey, false);
+    }
+
+    console.log(
+      `🔍 Final DEK for signup - length: ${
+        dek?.length
+      }, type: ${typeof dek}, isBuffer: ${Buffer.isBuffer(dek)}`
+    );
+    return dek;
+  } catch (e) {
+    console.error(
+      `❌ Error getting DEK for signup - Firebase UID: ${firebaseUid}, Database ID: ${databaseId}:`,
+      e
+    );
+    console.error("Stack trace:", e.stack);
+    throw e;
+  }
+}
+
 export {
   encryptValue,
   decryptValue,
   getUserDek,
+  getUserDekForSignup,
   hashEmail,
   hashValue,
   copyDEKToNewBucketKey,

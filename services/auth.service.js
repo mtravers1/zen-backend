@@ -2,6 +2,7 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
+  getUserDekForSignup,
   hashEmail,
 } from "../database/encryption.js";
 import User from "../database/models/User.js";
@@ -117,13 +118,89 @@ const signUp = async (data) => {
       "Proceeding with user creation (existence checks done in controller)"
     );
 
-    // Step 3: Generate encryption keys with fallback
-    console.log("Generating encryption keys for new user:", uid);
+    // Step 3: Create user in database first (without encrypted data)
+    console.log("Creating user object for database save:", {
+      uid,
+      email: data.email,
+    });
+
+    // Create minimal user object first to get database ID
+    const tempUser = new User({
+      email: [
+        {
+          email: data.email.trim().toLowerCase(),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ], // Temporarily store unencrypted
+      phones: data.phone ? [{ phone: data.phone }] : [], // Temporarily store unencrypted
+      role: data.role || "individual",
+      authUid: data.authUid,
+      profilePhotoUrl: data.profilePhotoUrl || null,
+      numAccounts: data.numAccounts || 0,
+      name: {
+        firstName: data.firstName || "", // Temporarily store unencrypted
+        lastName: data.lastName || "", // Temporarily store unencrypted
+        prefix: data.prefix || null,
+        suffix: data.suffix || null,
+        middleName: data.middleName || "",
+      },
+      maritalStatus: data.maritalStatus || "single",
+      address:
+        data.address1 || data.city || data.state || data.zip || data.country
+          ? [
+              {
+                street: data.address1 || null,
+                city: data.city || null,
+                state: data.state || null,
+                postalCode: data.zip || null,
+                country: data.country || null,
+              },
+            ]
+          : [],
+      dateOfBirth: data.dob ? Date.parse(data.dob) : null,
+      occupation: data.occupation || null,
+      annualIncome: data.annualIncome || null,
+      encryptedSSN: data.ssn || null,
+      emailHash: hashEmail(data.email),
+    });
+
+    // Save user to database to get the database ID
+    try {
+      console.log("Saving user to database:", { uid, email: data.email });
+      await tempUser.save();
+      console.log("Successfully created new user:", {
+        uid,
+        userId: tempUser._id,
+      });
+    } catch (saveError) {
+      console.error("Error saving user to database:", saveError);
+      // Handle unique constraint violations
+      if (saveError.code === 11000) {
+        if (saveError.keyPattern && saveError.keyPattern.authUid) {
+          throw new Error("User already exists");
+        }
+        if (saveError.keyPattern && saveError.keyPattern.emailHash) {
+          throw new Error("User with this email already exists");
+        }
+        throw new Error("User already exists");
+      }
+      throw saveError;
+    }
+
+    // Step 4: Now handle DEK creation/migration using the database ID
+    console.log(
+      "Handling encryption keys for new user:",
+      uid,
+      "with database ID:",
+      tempUser._id
+    );
     let dek;
     try {
-      dek = await getUserDek(uid);
-      console.log("Generated DEK for new user:", {
+      dek = await getUserDekForSignup(uid, tempUser._id);
+      console.log("Generated/migrated DEK for new user:", {
         uid,
+        userId: tempUser._id,
         hasDek: !!dek,
         dekLength: dek?.length,
       });
@@ -135,7 +212,7 @@ const signUp = async (data) => {
       );
     }
 
-    // Step 4: Encrypt sensitive data with fallback to plain text
+    // Step 5: Encrypt sensitive data and update the user
     console.log("Starting data encryption for user:", uid);
     let encryptedEmail,
       encryptedFirstName,
@@ -193,14 +270,23 @@ const signUp = async (data) => {
 
     console.log("All data encrypted successfully for user:", uid);
 
-    // Create data schemas
-    const emailSchema = {
-      email: encryptedEmail,
-      emailType: "personal",
-      isPrimary: true,
-    };
+    // Update the user with encrypted data
+    console.log("Updating user with encrypted data:", {
+      uid,
+      userId: tempUser._id,
+      email: data.email,
+    });
 
-    const nameSchema = {
+    // Update the existing user object with encrypted data
+    tempUser.email = [
+      {
+        email: encryptedEmail,
+        emailType: "personal",
+        isPrimary: true,
+      },
+    ];
+
+    tempUser.name = {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
       prefix: data.prefix || null,
@@ -208,67 +294,40 @@ const signUp = async (data) => {
       middleName: encryptedMiddleName,
     };
 
-    const phoneNumbersSchema = {
-      phone: encryptedPhone,
-    };
+    if (data.phone) {
+      tempUser.phones = [
+        {
+          phone: encryptedPhone,
+        },
+      ];
+    }
 
-    // Only include phone if provided
-    const phoneArray = data.phone ? [phoneNumbersSchema] : [];
+    if (data.profilePhotoUrl) {
+      tempUser.profilePhotoUrl = encryptedPhotoUrl;
+    }
 
-    const addressSchema = {
-      street: data.address1 || null,
-      city: data.city || null,
-      state: data.state || null,
-      postalCode: data.zip || null,
-      country: data.country || null,
-    };
+    if (data.annualIncome) {
+      tempUser.annualIncome = encryptedAnnualIncome;
+    }
 
-    // Only include address if at least one field is provided
-    const addressArray =
-      data.address1 || data.city || data.state || data.zip || data.country
-        ? [addressSchema]
-        : [];
+    if (data.ssn) {
+      tempUser.encryptedSSN = encryptedSSn;
+    }
 
-    // Create the user with encrypted data
-    console.log("Creating user object for database save:", {
-      uid,
-      email: data.email,
-    });
-    const user = new User({
-      email: [emailSchema],
-      phones: phoneArray,
-      role: data.role || "individual",
-      authUid: data.authUid,
-      profilePhotoUrl: encryptedPhotoUrl,
-      numAccounts: data.numAccounts || 0,
-      name: nameSchema,
-      maritalStatus: data.maritalStatus || "single",
-      address: addressArray,
-      dateOfBirth: data.dob ? Date.parse(data.dob) : null,
-      occupation: data.occupation || null,
-      annualIncome: encryptedAnnualIncome,
-      encryptedSSN: encryptedSSn,
-      emailHash: hashEmail(data.email),
-    });
-
-    // Step 5: Save user to database with retry mechanism
+    // Save the updated user with encrypted data
     try {
-      console.log("Saving user to database:", { uid, email: data.email });
-      await user.save();
-      console.log("Successfully created new user:", { uid, userId: user._id });
-    } catch (saveError) {
-      console.error("Error saving user to database:", saveError);
-      // Handle unique constraint violations
-      if (saveError.code === 11000) {
-        if (saveError.keyPattern && saveError.keyPattern.authUid) {
-          throw new Error("User already exists");
-        }
-        if (saveError.keyPattern && saveError.keyPattern.emailHash) {
-          throw new Error("User with this email already exists");
-        }
-        throw new Error("User already exists");
-      }
-      throw saveError;
+      console.log("Saving encrypted user data to database:", {
+        uid,
+        userId: tempUser._id,
+      });
+      await tempUser.save();
+      console.log("Successfully updated user with encrypted data:", {
+        uid,
+        userId: tempUser._id,
+      });
+    } catch (updateError) {
+      console.error("Error updating user with encrypted data:", updateError);
+      throw updateError;
     }
 
     // Step 6: Prepare response data
@@ -277,23 +336,23 @@ const signUp = async (data) => {
     // For response, we can use the original data since we know it's correct
     // This avoids potential decryption issues in the response
     const retrievedUser = {
-      id: user._id,
-      _id: user._id, // Also include _id for compatibility
+      id: tempUser._id,
+      _id: tempUser._id, // Also include _id for compatibility
       email: data.email.trim().toLowerCase(), // Use original email for response
       phone: data.phone || null,
-      role: user.role,
+      role: tempUser.role,
       profilePhotoUrl: data.profilePhotoUrl || null,
       name: {
         firstName: data.firstName || "",
         lastName: data.lastName || "",
         middleName: data.middleName || "",
       },
-      token: generateJWTToken(user._id, data.email.trim().toLowerCase()), // Include JWT token
+      token: generateJWTToken(tempUser._id, data.email.trim().toLowerCase()), // Include JWT token
     };
 
     console.log("Sign-up process completed successfully for user:", {
       uid,
-      userId: user._id,
+      userId: tempUser._id,
     });
     return retrievedUser;
   } catch (error) {
