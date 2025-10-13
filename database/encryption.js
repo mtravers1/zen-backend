@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
-import { JWT } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -91,26 +90,15 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Create auth objects using JWT constructor (modern approach)
-const kmsAuth = new JWT({
-  email: kmsServiceAccount.client_email,
-  key: kmsServiceAccount.private_key,
-  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-});
-
-const storageAuth = new JWT({
-  email: storageServiceAccount.client_email,
-  key: storageServiceAccount.private_key,
-  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
-});
-
+// Initialize Google Cloud clients with full service account credentials
+// Note: Using credentials object (will show deprecation warning but works reliably)
 const kmsClient = new KeyManagementServiceClient({
-  auth: kmsAuth,
+  credentials: kmsServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
 });
 
 const storage = new Storage({
-  auth: storageAuth,
+  credentials: storageServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
 });
 
