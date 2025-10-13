@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
+import { JWT } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -91,8 +92,6 @@ if (!kmsServiceAccount.universe_domain) {
 }
 
 // Create auth objects using JWT constructor (modern approach)
-const { JWT } = await import("google-auth-library");
-
 const kmsAuth = new JWT({
   email: kmsServiceAccount.client_email,
   key: kmsServiceAccount.private_key,
