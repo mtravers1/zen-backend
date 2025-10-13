@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
-import { JWT } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -91,60 +90,63 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Initialize Google Cloud clients with JWT objects and fixed URLs
-console.log("🔧 Creating JWT auth objects with explicit URLs...");
+// Initialize Google Cloud clients
+console.log(
+  "🔧 Initializing Google Cloud clients with full service account objects..."
+);
 
-// Create JWT for KMS with all URLs explicitly set
-const kmsJWT = new JWT({
-  email: kmsServiceAccount.client_email,
-  key: kmsServiceAccount.private_key,
-  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-  // Explicitly set all OAuth URLs to avoid "URL is required" errors
-  subject: kmsServiceAccount.client_email,
-  additionalClaims: {},
-});
-
-// Manually set the URLs that are required
-kmsJWT.tokenUrl = "https://oauth2.googleapis.com/token";
-kmsJWT.gtoken = {
-  ...kmsJWT.gtoken,
-  key: kmsServiceAccount.private_key,
-  iss: kmsServiceAccount.client_email,
-  scope: "https://www.googleapis.com/auth/cloud-platform",
-  tokenUrl: "https://oauth2.googleapis.com/token",
+// Ensure all required fields are present in service accounts
+const completeStorageAccount = {
+  ...storageServiceAccount,
+  type: storageServiceAccount.type || "service_account",
+  token_uri:
+    storageServiceAccount.token_uri || "https://oauth2.googleapis.com/token",
+  auth_uri:
+    storageServiceAccount.auth_uri ||
+    "https://accounts.google.com/o/oauth2/auth",
+  auth_provider_x509_cert_url:
+    storageServiceAccount.auth_provider_x509_cert_url ||
+    "https://www.googleapis.com/oauth2/v1/certs",
 };
+
+const completeKmsAccount = {
+  ...kmsServiceAccount,
+  type: kmsServiceAccount.type || "service_account",
+  token_uri:
+    kmsServiceAccount.token_uri || "https://oauth2.googleapis.com/token",
+  auth_uri:
+    kmsServiceAccount.auth_uri || "https://accounts.google.com/o/oauth2/auth",
+  auth_provider_x509_cert_url:
+    kmsServiceAccount.auth_provider_x509_cert_url ||
+    "https://www.googleapis.com/oauth2/v1/certs",
+};
+
+console.log("📋 Service account validation:", {
+  storage: {
+    hasEmail: !!completeStorageAccount.client_email,
+    hasPrivateKey: !!completeStorageAccount.private_key,
+    hasTokenUri: !!completeStorageAccount.token_uri,
+    tokenUri: completeStorageAccount.token_uri,
+  },
+  kms: {
+    hasEmail: !!completeKmsAccount.client_email,
+    hasPrivateKey: !!completeKmsAccount.private_key,
+    hasTokenUri: !!completeKmsAccount.token_uri,
+    tokenUri: completeKmsAccount.token_uri,
+  },
+});
 
 const kmsClient = new KeyManagementServiceClient({
-  auth: kmsJWT,
+  credentials: completeKmsAccount,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ KMS client initialized with JWT");
+console.log("✅ KMS client initialized");
 
-// Create JWT for Storage with all URLs explicitly set
-const storageJWT = new JWT({
-  email: storageServiceAccount.client_email,
-  key: storageServiceAccount.private_key,
-  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
-  subject: storageServiceAccount.client_email,
-  additionalClaims: {},
-});
-
-// Manually set the URLs that are required
-storageJWT.tokenUrl = "https://oauth2.googleapis.com/token";
-storageJWT.gtoken = {
-  ...storageJWT.gtoken,
-  key: storageServiceAccount.private_key,
-  iss: storageServiceAccount.client_email,
-  scope: "https://www.googleapis.com/auth/devstorage.full_control",
-  tokenUrl: "https://oauth2.googleapis.com/token",
-};
-
-console.log("🔧 Initializing Storage client with JWT...");
 const storage = new Storage({
-  auth: storageJWT,
+  credentials: completeStorageAccount,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ Storage client initialized with JWT");
+console.log("✅ Storage client initialized");
 
 console.log("✅ Google Cloud clients initialized successfully");
 const BUCKET_NAME = "zentavos-bucket";
