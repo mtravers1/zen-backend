@@ -2,10 +2,8 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
+import { JWT } from "google-auth-library";
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-import os from "os";
 
 dotenv.config();
 
@@ -93,47 +91,60 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Initialize Google Cloud clients
-// For webpack compatibility, we need to use keyFilename instead of credentials object
-console.log("🔧 Initializing KMS client with credentials...");
+// Initialize Google Cloud clients with JWT objects and fixed URLs
+console.log("🔧 Creating JWT auth objects with explicit URLs...");
 
-// Create temporary key files for Google Cloud clients
-// This is needed because webpack bundles everything and the clients need file access
-const tempDir = os.tmpdir();
-const kmsKeyFile = path.join(tempDir, `kms-key-${Date.now()}.json`);
-const storageKeyFile = path.join(tempDir, `storage-key-${Date.now()}.json`);
+// Create JWT for KMS with all URLs explicitly set
+const kmsJWT = new JWT({
+  email: kmsServiceAccount.client_email,
+  key: kmsServiceAccount.private_key,
+  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+  // Explicitly set all OAuth URLs to avoid "URL is required" errors
+  subject: kmsServiceAccount.client_email,
+  additionalClaims: {},
+});
 
-console.log("📝 Writing temporary credential files...");
-fs.writeFileSync(kmsKeyFile, JSON.stringify(kmsServiceAccount, null, 2));
-fs.writeFileSync(
-  storageKeyFile,
-  JSON.stringify(storageServiceAccount, null, 2)
-);
-console.log("✅ Temporary credential files created");
+// Manually set the URLs that are required
+kmsJWT.tokenUrl = "https://oauth2.googleapis.com/token";
+kmsJWT.gtoken = {
+  ...kmsJWT.gtoken,
+  key: kmsServiceAccount.private_key,
+  iss: kmsServiceAccount.client_email,
+  scope: "https://www.googleapis.com/auth/cloud-platform",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+};
 
 const kmsClient = new KeyManagementServiceClient({
-  keyFilename: kmsKeyFile,
+  auth: kmsJWT,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ KMS client initialized");
+console.log("✅ KMS client initialized with JWT");
 
-console.log("🔧 Initializing Storage client...");
+// Create JWT for Storage with all URLs explicitly set
+const storageJWT = new JWT({
+  email: storageServiceAccount.client_email,
+  key: storageServiceAccount.private_key,
+  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
+  subject: storageServiceAccount.client_email,
+  additionalClaims: {},
+});
+
+// Manually set the URLs that are required
+storageJWT.tokenUrl = "https://oauth2.googleapis.com/token";
+storageJWT.gtoken = {
+  ...storageJWT.gtoken,
+  key: storageServiceAccount.private_key,
+  iss: storageServiceAccount.client_email,
+  scope: "https://www.googleapis.com/auth/devstorage.full_control",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+};
+
+console.log("🔧 Initializing Storage client with JWT...");
 const storage = new Storage({
-  keyFilename: storageKeyFile,
+  auth: storageJWT,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ Storage client initialized");
-
-// Clean up temp files on process exit
-process.on("exit", () => {
-  try {
-    if (fs.existsSync(kmsKeyFile)) fs.unlinkSync(kmsKeyFile);
-    if (fs.existsSync(storageKeyFile)) fs.unlinkSync(storageKeyFile);
-    console.log("🧹 Cleaned up temporary credential files");
-  } catch (err) {
-    console.warn("⚠️ Could not clean up temp files:", err.message);
-  }
-});
+console.log("✅ Storage client initialized with JWT");
 
 console.log("✅ Google Cloud clients initialized successfully");
 const BUCKET_NAME = "zentavos-bucket";
