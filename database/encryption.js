@@ -90,16 +90,29 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
+// Create auth objects using JWT constructor (modern approach)
+const { JWT } = await import("google-auth-library");
+
+const kmsAuth = new JWT({
+  email: kmsServiceAccount.client_email,
+  key: kmsServiceAccount.private_key,
+  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+});
+
+const storageAuth = new JWT({
+  email: storageServiceAccount.client_email,
+  key: storageServiceAccount.private_key,
+  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
+});
+
 const kmsClient = new KeyManagementServiceClient({
-  credentials: kmsServiceAccount,
+  auth: kmsAuth,
   projectId: process.env.GCP_PROJECT_ID,
 });
 
 const storage = new Storage({
-  credentials: storageServiceAccount,
+  auth: storageAuth,
   projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com",
-  useAuthWithCustomEndpoint: true,
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
