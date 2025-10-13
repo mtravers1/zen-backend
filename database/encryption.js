@@ -92,14 +92,34 @@ if (!kmsServiceAccount.universe_domain) {
 
 // Initialize Google Cloud clients with full service account credentials
 // Note: Using credentials object (will show deprecation warning but works reliably)
+console.log("🔧 Initializing KMS client with credentials...");
 const kmsClient = new KeyManagementServiceClient({
   credentials: kmsServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
 });
+console.log("✅ KMS client initialized");
+
+console.log("🔧 Initializing Storage client with credentials...");
+console.log("📦 Storage config:", {
+  projectId: process.env.GCP_PROJECT_ID,
+  clientEmail: storageServiceAccount.client_email,
+  hasPrivateKey: !!storageServiceAccount.private_key,
+  privateKeyLength: storageServiceAccount.private_key?.length,
+});
 
 const storage = new Storage({
-  credentials: storageServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
+  credentials: storageServiceAccount,
+  // Explicitly set API endpoint to ensure URL is available
+  apiEndpoint: "https://storage.googleapis.com",
+  // This is needed when using credentials with custom endpoint
+  useAuthWithCustomEndpoint: true,
+});
+console.log("✅ Storage client initialized");
+console.log("🔍 Storage client details:", {
+  projectId: storage.projectId,
+  hasAuthClient: !!storage.authClient,
+  apiEndpoint: storage.apiEndpoint,
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
@@ -131,20 +151,41 @@ async function generateAndStoreEncryptedDEK(
   }
 
   const dek = crypto.randomBytes(32);
+  console.log(`🔑 Generated DEK of length: ${dek.length}`);
 
+  console.log(`🔐 Encrypting DEK with KMS...`);
   const [encryptResponse] = await kmsClient.encrypt({
     name: KEY_PATH,
     plaintext: dek,
   });
+  console.log(`✅ DEK encrypted with KMS`);
 
   const encryptedDEK = encryptResponse.ciphertext;
-  const file = storage
-    .bucket(BUCKET_NAME)
-    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
+  const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
+  console.log(`📦 Storage details:`, {
+    bucketName: BUCKET_NAME,
+    filePath: filePath,
+    projectId: storage.projectId,
+    hasAuthClient: !!storage.authClient,
+  });
+
+  const file = storage.bucket(BUCKET_NAME).file(filePath);
 
   // Log the DEK replacement
-  console.log(`🔄 Saving new DEK for bucket key: ${bucketKey}`);
-  await file.save(encryptedDEK);
+  console.log(`🔄 Saving new DEK for bucket key: ${bucketKey} to ${filePath}`);
+
+  try {
+    await file.save(encryptedDEK);
+    console.log(`✅ DEK saved successfully to bucket`);
+  } catch (saveError) {
+    console.error(`❌ Failed to save DEK to bucket:`, saveError);
+    console.error(`❌ Error details:`, {
+      message: saveError.message,
+      code: saveError.code,
+      errors: saveError.errors,
+    });
+    throw saveError;
+  }
 
   // Cache the DEK
   dekCache.set(bucketKey, dek);
