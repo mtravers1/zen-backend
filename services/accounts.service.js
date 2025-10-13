@@ -28,10 +28,16 @@ const serviceAccountJsonString = Buffer.from(
 ).toString("utf8");
 const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
+// Ensure credentials have universe_domain field
+if (!storageServiceAccount.universe_domain) {
+  storageServiceAccount.universe_domain = "googleapis.com";
+}
+
 const storage = new Storage({
   credentials: storageServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
   apiEndpoint: "https://storage.googleapis.com",
+  useAuthWithCustomEndpoint: true,
 });
 const bucketName = "zentavos-bucket";
 

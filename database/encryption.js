@@ -82,6 +82,14 @@ console.log(
 );
 console.log("🔑 KMS Service Account Email:", kmsServiceAccount.client_email);
 
+// Ensure credentials have universe_domain field
+if (!storageServiceAccount.universe_domain) {
+  storageServiceAccount.universe_domain = "googleapis.com";
+}
+if (!kmsServiceAccount.universe_domain) {
+  kmsServiceAccount.universe_domain = "googleapis.com";
+}
+
 const kmsClient = new KeyManagementServiceClient({
   credentials: kmsServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
@@ -91,6 +99,7 @@ const storage = new Storage({
   credentials: storageServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
   apiEndpoint: "https://storage.googleapis.com",
+  useAuthWithCustomEndpoint: true,
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
