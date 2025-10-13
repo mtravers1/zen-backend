@@ -892,84 +892,38 @@ const signInWithOAuth = async (req, res) => {
           firebaseUid: firebaseUser.uid,
         });
       } else {
-        // User exists in Firebase but not in database - create database entry
-        const userDataForSignIn = {
+        // User exists in Firebase but not in database - Return 404 for Sign In
+        console.log("⚠️ User exists in Firebase but not in database:", {
           email: validationResult.user.email,
-          method: provider,
-          firstName: validationResult.user.displayName?.split(" ")[0] || "User",
-          lastName:
-            validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
-            "",
-          photoUrl: validationResult.user.photoURL,
-          authUid: firebaseUser.uid, // Use Firebase UID
-          numAccounts: 0,
-          role: "individual",
-          // Update last login time
-          lastLoginAt: new Date(),
-        };
+          firebaseUid: firebaseUser.uid,
+        });
 
-        signInResult = await authService.signInOrCreate(
-          firebaseUser.uid, // Use Firebase UID
-          userDataForSignIn
-        );
-
-        structuredLogger.logSuccess(
-          "auth_oauth_signin_firebase_user_created_db",
+        structuredLogger.logOperationStart(
+          "auth_oauth_firebase_exists_db_not_found",
           {
             email: validationResult.user.email,
-            userId: signInResult.id,
             firebaseUid: firebaseUser.uid,
           }
         );
+
+        return res.status(404).json({
+          success: false,
+          message: "User not found in database. Please complete registration.",
+          error: "USER_NOT_IN_DATABASE",
+          email: validationResult.user.email,
+        });
       }
     } else {
-      // User doesn't exist in Firebase - Sign Up flow
-      structuredLogger.logOperationStart("auth_oauth_signup_new_user", {
+      // User doesn't exist in Firebase - Return 404 for Sign In
+      structuredLogger.logOperationStart("auth_oauth_user_not_found", {
         email: validationResult.user.email,
       });
 
-      // Create Firebase user (Firebase will generate the UID)
-      const firebaseUserResult = await authService.createFirebaseUser(
-        validationResult.user
-      );
-
-      if (!firebaseUserResult.success) {
-        return res.status(500).json({
-          success: false,
-          message: "Failed to create Firebase user",
-          error: firebaseUserResult.error,
-        });
-      }
-
-      firebaseUser = firebaseUserResult.user;
-
-      // Create user in database using Firebase-generated UID
-      const userDataForSignUp = {
+      return res.status(404).json({
+        success: false,
+        message: "User not found. Please sign up first.",
+        error: "USER_NOT_FOUND",
         email: validationResult.user.email,
-        method: provider,
-        firstName: validationResult.user.displayName?.split(" ")[0] || "User",
-        lastName:
-          validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
-          "",
-        photoUrl: validationResult.user.photoURL,
-        authUid: firebaseUser.uid, // Use Firebase-generated UID
-        numAccounts: 0,
-        role: "individual",
-        // Set creation and login times
-        createdAt: new Date(),
-        lastLoginAt: new Date(),
-      };
-
-      signInResult = await authService.signInOrCreate(
-        firebaseUser.uid, // Use Firebase-generated UID
-        userDataForSignUp
-      );
-
-      structuredLogger.logSuccess("auth_oauth_signup_new_user", {
-        email: validationResult.user.email,
-        userId: signInResult.id,
-        firebaseUid: firebaseUser.uid, // Firebase-generated UID
-        oauthProviderUID: validationResult.user.uid, // Original OAuth UID
       });
     }
 
@@ -1020,6 +974,217 @@ const signInWithOAuth = async (req, res) => {
   }
 };
 
+const signUpWithOAuth = async (req, res) => {
+  try {
+    const { provider, idToken, accessToken, userData } = req.body;
+
+    if (!provider || (!idToken && !accessToken)) {
+      return res.status(400).json({
+        success: false,
+        message: "Provider and either idToken or accessToken are required",
+      });
+    }
+
+    structuredLogger.logOperationStart("auth_signup_oauth", {
+      provider: provider,
+      hasIdToken: !!idToken,
+      hasAccessToken: !!accessToken,
+      hasUserData: !!userData,
+    });
+
+    // Validate the OAuth token using the service
+    const validationResult = await authService.validateOAuthToken(
+      provider,
+      idToken
+    );
+
+    if (!validationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: "OAuth validation failed",
+        error: validationResult.error,
+      });
+    }
+
+    // Check if user already exists in Firebase
+    let existingFirebaseUser;
+    try {
+      existingFirebaseUser = await admin
+        .auth()
+        .getUserByEmail(validationResult.user.email);
+    } catch (error) {
+      // User doesn't exist in Firebase - this is expected for sign up
+      existingFirebaseUser = null;
+    }
+
+    // If user already exists in Firebase, check database
+    if (existingFirebaseUser) {
+      const User = (await import("../database/models/User.js")).default;
+      const existingDbUser = await User.findOne({
+        $or: [
+          { authUid: existingFirebaseUser.uid },
+          { emailHash: hashEmail(validationResult.user.email) },
+        ],
+      });
+
+      if (existingDbUser) {
+        // User already exists completely - return error
+        return res.status(409).json({
+          success: false,
+          message: "User already exists. Please sign in instead.",
+          error: "USER_ALREADY_EXISTS",
+          email: validationResult.user.email,
+        });
+      }
+
+      // User exists in Firebase but not in database - complete registration
+      structuredLogger.logOperationStart(
+        "auth_signup_oauth_complete_firebase_user",
+        {
+          email: validationResult.user.email,
+          firebaseUid: existingFirebaseUser.uid,
+        }
+      );
+
+      const userDataForSignUp = {
+        email: validationResult.user.email,
+        method: provider,
+        firstName:
+          userData?.firstName ||
+          validationResult.user.displayName?.split(" ")[0] ||
+          "User",
+        lastName:
+          userData?.lastName ||
+          validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+          "",
+        photoUrl: userData?.photoUrl || validationResult.user.photoURL,
+        authUid: existingFirebaseUser.uid,
+        numAccounts: 0,
+        role: userData?.role || "individual",
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      };
+
+      const signUpResult = await authService.signInOrCreate(
+        existingFirebaseUser.uid,
+        userDataForSignUp
+      );
+
+      // Generate Firebase custom token
+      const tokenResult = await authService.generateFirebaseToken(
+        existingFirebaseUser.uid
+      );
+
+      if (!tokenResult.success) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to generate Firebase token",
+          error: tokenResult.error,
+        });
+      }
+
+      structuredLogger.logSuccess("auth_signup_oauth_complete_firebase_user", {
+        email: validationResult.user.email,
+        userId: signUpResult.id,
+        firebaseUid: existingFirebaseUser.uid,
+      });
+
+      return res.status(201).json({
+        success: true,
+        user: signUpResult,
+        firebaseToken: tokenResult.token,
+        isNewUser: true,
+        message: "OAuth sign-up completed successfully",
+      });
+    }
+
+    // User doesn't exist in Firebase - Create new user
+    structuredLogger.logOperationStart("auth_signup_oauth_new_user", {
+      email: validationResult.user.email,
+    });
+
+    // Create Firebase user
+    const firebaseUserResult = await authService.createFirebaseUser(
+      validationResult.user
+    );
+
+    if (!firebaseUserResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create Firebase user",
+        error: firebaseUserResult.error,
+      });
+    }
+
+    const firebaseUser = firebaseUserResult.user;
+
+    // Create user in database
+    const userDataForSignUp = {
+      email: validationResult.user.email,
+      method: provider,
+      firstName:
+        userData?.firstName ||
+        validationResult.user.displayName?.split(" ")[0] ||
+        "User",
+      lastName:
+        userData?.lastName ||
+        validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+        "",
+      photoUrl: userData?.photoUrl || validationResult.user.photoURL,
+      authUid: firebaseUser.uid,
+      numAccounts: 0,
+      role: userData?.role || "individual",
+      createdAt: new Date(),
+      lastLoginAt: new Date(),
+    };
+
+    const signUpResult = await authService.signInOrCreate(
+      firebaseUser.uid,
+      userDataForSignUp
+    );
+
+    // Generate Firebase custom token
+    const tokenResult = await authService.generateFirebaseToken(
+      firebaseUser.uid
+    );
+
+    if (!tokenResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate Firebase token",
+        error: tokenResult.error,
+      });
+    }
+
+    structuredLogger.logSuccess("auth_signup_oauth_new_user", {
+      email: validationResult.user.email,
+      userId: signUpResult.id,
+      firebaseUid: firebaseUser.uid,
+      oauthProviderUID: validationResult.user.uid,
+    });
+
+    res.status(201).json({
+      success: true,
+      user: signUpResult,
+      firebaseToken: tokenResult.token,
+      isNewUser: true,
+      message: "OAuth sign-up successful",
+    });
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_signup_oauth",
+      provider: req.body.provider,
+      error_classification: "oauth_signup_error",
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "OAuth sign-up failed",
+      error: error.message,
+    });
+  }
+};
+
 const authController = {
   own,
   signUp,
@@ -1033,6 +1198,7 @@ const authController = {
   recoverEncryptionKeys,
   checkOAuthValidation,
   signInWithOAuth,
+  signUpWithOAuth,
   testExistingUserLogin,
   testEncryptionConsistency,
 };

@@ -424,80 +424,66 @@ const signInOrCreate = async (uid, userData = null) => {
         user_id: uid,
       });
 
-      // Create a basic user with minimal data
-      const dek = await getUserDek(uid);
+      // Step 1: Create user in database first (without encrypted data) to get database ID
+      console.log("Creating temp user object for database save:", {
+        uid,
+        email: userData.email,
+      });
 
-      const encryptedEmail = await encryptValue(
-        userData.email.trim().toLowerCase(),
-        dek
-      );
-
-      const emailSchema = {
-        email: encryptedEmail,
-        emailType: "personal",
-        isPrimary: true,
-      };
-
-      // For new users, we might only have email, so create minimal profile
-      const nameSchema = {
-        firstName: userData.firstName
-          ? await encryptValue(userData.firstName, dek)
-          : await encryptValue("New", dek),
-        lastName: userData.lastName
-          ? await encryptValue(userData.lastName, dek)
-          : await encryptValue("User", dek),
-        prefix: userData.prefix || null,
-        suffix: userData.suffix || null,
-        middleName: userData.middleName
-          ? await encryptValue(userData.middleName, dek)
-          : null,
-      };
-
-      const phoneNumbersSchema = {
-        phone: userData.phone ? await encryptValue(userData.phone, dek) : null,
-      };
-
-      const phoneArray = userData.phone ? [phoneNumbersSchema] : [];
-
-      const addressSchema = {
-        street: userData.address1 || null,
-        city: userData.city || null,
-        state: userData.state || null,
-        postalCode: userData.zip || null,
-        country: userData.country || null,
-      };
-
-      const addressArray =
-        userData.address1 ||
-        userData.city ||
-        userData.state ||
-        userData.zip ||
-        userData.country
-          ? [addressSchema]
-          : [];
-
-      user = new User({
-        email: [emailSchema],
-        phones: phoneArray,
-        role: "individual", // Use valid enum value
+      const tempUser = new User({
+        email: [
+          {
+            email: userData.email.trim().toLowerCase(), // Temporarily unencrypted
+            emailType: "personal",
+            isPrimary: true,
+          },
+        ],
+        phones: userData.phone ? [{ phone: userData.phone }] : [],
+        role: userData.role || "individual",
         authUid: uid,
-        method: userData.method || "email", // Register authentication method
-        profilePhotoUrl: "",
-        numAccounts: 0,
-        name: nameSchema,
-        maritalStatus: "single", // Use valid enum value
-        address: addressArray,
-        dateOfBirth: null,
+        method: userData.method || "email",
+        profilePhotoUrl: userData.photoUrl || "",
+        numAccounts: userData.numAccounts || 0,
+        name: {
+          firstName: userData.firstName || "New", // Temporarily unencrypted
+          lastName: userData.lastName || "User", // Temporarily unencrypted
+          prefix: userData.prefix || null,
+          suffix: userData.suffix || null,
+          middleName: userData.middleName || "",
+        },
+        maritalStatus: "single",
+        address:
+          userData.address1 ||
+          userData.city ||
+          userData.state ||
+          userData.zip ||
+          userData.country
+            ? [
+                {
+                  street: userData.address1 || null,
+                  city: userData.city || null,
+                  state: userData.state || null,
+                  postalCode: userData.zip || null,
+                  country: userData.country || null,
+                },
+              ]
+            : [],
+        dateOfBirth: userData.dob ? Date.parse(userData.dob) : null,
         occupation: null,
         annualIncome: null,
-        encryptedSSN: null, // Use correct field name
+        encryptedSSN: null,
         emailHash: hashEmail(userData.email),
       });
 
       try {
-        await user.save();
-        structuredLogger.logSuccess("auth_service_create_basic_user", {
-          user_id: uid,
+        console.log("Saving temp user to database:", {
+          uid,
+          email: userData.email,
+        });
+        await tempUser.save();
+        console.log("Successfully created new user:", {
+          uid,
+          userId: tempUser._id,
         });
       } catch (saveError) {
         // Handle unique constraint violations - user might have been created by another request
@@ -564,6 +550,110 @@ const signInOrCreate = async (uid, userData = null) => {
           throw saveError;
         }
       }
+
+      // Step 2: Now handle DEK creation/migration using the database ID
+      console.log(
+        "Handling encryption keys for new user:",
+        uid,
+        "with database ID:",
+        tempUser._id
+      );
+      let dek;
+      try {
+        dek = await getUserDekForSignup(uid, tempUser._id);
+        console.log("Generated/migrated DEK for new user:", {
+          uid,
+          userId: tempUser._id,
+          hasDek: !!dek,
+          dekLength: dek?.length,
+        });
+      } catch (dekError) {
+        console.error("Error generating DEK for user:", uid, dekError);
+        // DEK generation is critical - fail if it fails
+        throw new Error(
+          `Failed to generate encryption keys: ${dekError.message}`
+        );
+      }
+
+      // Step 3: Encrypt sensitive data and update the user
+      console.log("Starting data encryption for user:", uid);
+
+      const [
+        encryptedEmail,
+        encryptedFirstName,
+        encryptedLastName,
+        encryptedMiddleName,
+      ] = await Promise.all([
+        encryptValue(userData.email.trim().toLowerCase(), dek),
+        encryptValue(userData.firstName || "New", dek),
+        encryptValue(userData.lastName || "User", dek),
+        encryptValue(userData.middleName || "", dek),
+      ]);
+
+      // Encrypt optional fields
+      let encryptedPhone, encryptedPhotoUrl;
+      const optionalEncryptions = [];
+
+      if (userData.phone) {
+        optionalEncryptions.push(
+          encryptValue(userData.phone, dek).then((result) => ({
+            phone: result,
+          }))
+        );
+      }
+      if (userData.photoUrl) {
+        optionalEncryptions.push(
+          encryptValue(userData.photoUrl, dek).then((result) => ({
+            photoUrl: result,
+          }))
+        );
+      }
+
+      const optionalResults = await Promise.all(optionalEncryptions);
+      optionalResults.forEach((result) => {
+        if (result.phone) encryptedPhone = result.phone;
+        if (result.photoUrl) encryptedPhotoUrl = result.photoUrl;
+      });
+
+      console.log("All data encrypted successfully for user:", uid);
+
+      // Step 4: Update the user with encrypted data
+      console.log("Updating user with encrypted data:", {
+        uid,
+        userId: tempUser._id,
+        email: userData.email,
+      });
+
+      tempUser.email = [
+        {
+          email: encryptedEmail,
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+      tempUser.name.firstName = encryptedFirstName;
+      tempUser.name.lastName = encryptedLastName;
+      tempUser.name.middleName = encryptedMiddleName;
+      if (encryptedPhone) {
+        tempUser.phones = [{ phone: encryptedPhone }];
+      }
+      if (encryptedPhotoUrl) {
+        tempUser.profilePhotoUrl = encryptedPhotoUrl;
+      }
+
+      await tempUser.save();
+      console.log("User updated with encrypted data successfully:", {
+        uid,
+        userId: tempUser._id,
+      });
+
+      // Assign tempUser to user variable for the rest of the flow
+      user = tempUser;
+
+      structuredLogger.logSuccess("auth_service_create_basic_user", {
+        user_id: uid,
+        database_id: user._id,
+      });
     }
 
     // Now proceed with normal sign-in flow
