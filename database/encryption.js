@@ -3,6 +3,9 @@ import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 dotenv.config();
 
@@ -90,36 +93,46 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Initialize Google Cloud clients with full service account credentials
-// Note: Using credentials object (will show deprecation warning but works reliably)
+// Initialize Google Cloud clients
+// For webpack compatibility, we need to use keyFilename instead of credentials object
 console.log("🔧 Initializing KMS client with credentials...");
+
+// Create temporary key files for Google Cloud clients
+// This is needed because webpack bundles everything and the clients need file access
+const tempDir = os.tmpdir();
+const kmsKeyFile = path.join(tempDir, `kms-key-${Date.now()}.json`);
+const storageKeyFile = path.join(tempDir, `storage-key-${Date.now()}.json`);
+
+console.log("📝 Writing temporary credential files...");
+fs.writeFileSync(kmsKeyFile, JSON.stringify(kmsServiceAccount, null, 2));
+fs.writeFileSync(
+  storageKeyFile,
+  JSON.stringify(storageServiceAccount, null, 2)
+);
+console.log("✅ Temporary credential files created");
+
 const kmsClient = new KeyManagementServiceClient({
-  credentials: kmsServiceAccount,
+  keyFilename: kmsKeyFile,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
 
-console.log("🔧 Initializing Storage client with credentials...");
-console.log("📦 Storage config:", {
-  projectId: process.env.GCP_PROJECT_ID,
-  clientEmail: storageServiceAccount.client_email,
-  hasPrivateKey: !!storageServiceAccount.private_key,
-  privateKeyLength: storageServiceAccount.private_key?.length,
-});
-
+console.log("🔧 Initializing Storage client...");
 const storage = new Storage({
+  keyFilename: storageKeyFile,
   projectId: process.env.GCP_PROJECT_ID,
-  credentials: storageServiceAccount,
-  // Explicitly set API endpoint to ensure URL is available
-  apiEndpoint: "https://storage.googleapis.com",
-  // This is needed when using credentials with custom endpoint
-  useAuthWithCustomEndpoint: true,
 });
 console.log("✅ Storage client initialized");
-console.log("🔍 Storage client details:", {
-  projectId: storage.projectId,
-  hasAuthClient: !!storage.authClient,
-  apiEndpoint: storage.apiEndpoint,
+
+// Clean up temp files on process exit
+process.on("exit", () => {
+  try {
+    if (fs.existsSync(kmsKeyFile)) fs.unlinkSync(kmsKeyFile);
+    if (fs.existsSync(storageKeyFile)) fs.unlinkSync(storageKeyFile);
+    console.log("🧹 Cleaned up temporary credential files");
+  } catch (err) {
+    console.warn("⚠️ Could not clean up temp files:", err.message);
+  }
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
