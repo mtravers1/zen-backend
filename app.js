@@ -91,6 +91,7 @@ app.use((req, res, next) => {
     "/api/payments/available-plans",
     "/api/subscriptions/plans",
     "/api/ai/ping",
+    "/api/security/clear-dev-blacklist",
   ];
 
   // Block known attack patterns immediately

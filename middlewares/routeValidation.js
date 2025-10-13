@@ -10,6 +10,7 @@ const VALID_ROUTES = new Set([
   "/api/auth/signup",
   "/api/auth/signin",
   "/api/auth/signin-oauth",
+  "/api/auth/signup-oauth",
   "/api/auth/check-email",
   "/api/auth/check-email-firebase",
   "/api/auth/check-oauth-validation",
