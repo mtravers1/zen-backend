@@ -90,6 +90,7 @@ const kmsClient = new KeyManagementServiceClient({
 const storage = new Storage({
   credentials: storageServiceAccount,
   projectId: process.env.GCP_PROJECT_ID,
+  apiEndpoint: "https://storage.googleapis.com",
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
