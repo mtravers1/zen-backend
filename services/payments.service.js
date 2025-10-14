@@ -13,30 +13,15 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
       "base64"
     ).toString("utf8");
-
-    // Clean the JSON string to remove control characters
-    const cleanJson = serviceAccountJson
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove control characters
-      .replace(/\r\n/g, "\n") // Normalize line endings
-      .trim();
-
-    const serviceAccount = JSON.parse(cleanJson);
+    const serviceAccount = JSON.parse(serviceAccountJson);
 
     googlePlayAuth = new GoogleAuth({
-      auth: serviceAccount,
+      credentials: serviceAccount,
       scopes: ["https://www.googleapis.com/auth/androidpublisher"],
     });
     console.log("✅ Google Play authentication configured");
   } catch (error) {
     console.error("❌ Failed to load Google Play Service Account:", error);
-    console.error(
-      "❌ JSON length:",
-      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT?.length
-    );
-    console.error(
-      "❌ First 200 chars:",
-      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT?.substring(0, 200)
-    );
   }
 } else {
   console.warn("⚠️ GOOGLE_PLAY_SERVICE_ACCOUNT not configured");

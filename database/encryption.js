@@ -125,17 +125,17 @@ console.log("📋 Credentials validation:", {
   },
 });
 
-// Initialize KMS with auth object (new recommended way)
+// Initialize KMS with credentials
 const kmsClient = new KeyManagementServiceClient({
-  auth: kmsCredentials,
+  credentials: kmsCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
 
-// Initialize Storage with auth object (new recommended way)
+// Initialize Storage with credentials directly
 // The key fix is using resumable:false in file.save(), not JWT manipulation
 const storage = new Storage({
-  auth: storageCredentials,
+  credentials: storageCredentials,
   projectId: process.env.GCP_PROJECT_ID,
   apiEndpoint: "https://storage.googleapis.com",
 });
@@ -162,70 +162,6 @@ const dekCache = new LimitedMap(1000);
 // Import User model for data checking
 import User from "./models/User.js";
 
-// Diagnostic function to verify KMS configuration
-async function verifyKMSConfiguration() {
-  console.log(`🔧 Verifying KMS configuration...`);
-  console.log(`📦 Project ID: ${process.env.GCP_PROJECT_ID}`);
-  console.log(`🌍 Key Location: ${process.env.GCP_KEY_LOCATION}`);
-  console.log(`🔑 Key Ring: ${process.env.GCP_KEY_RING}`);
-  console.log(`🗝️ Key Name: ${process.env.GCP_KEY_NAME}`);
-  console.log(`🔗 Full Key Path: ${KEY_PATH}`);
-
-  try {
-    // Test specific key access only (less permissions required)
-    console.log(`🔍 Testing specific crypto key access...`);
-    const [cryptoKey] = await kmsClient.getCryptoKey({
-      name: KEY_PATH,
-    });
-
-    console.log(`✅ Crypto key accessible:`, {
-      name: cryptoKey.name,
-      purpose: cryptoKey.purpose,
-      versionTemplate: cryptoKey.versionTemplate,
-    });
-
-    // Test encryption/decryption with a small test
-    console.log(`🔍 Testing encryption/decryption with test data...`);
-    const testData = Buffer.from("test-dek-verification");
-
-    const [encryptResponse] = await kmsClient.encrypt({
-      name: KEY_PATH,
-      plaintext: testData,
-    });
-
-    const [decryptResponse] = await kmsClient.decrypt({
-      name: KEY_PATH,
-      ciphertext: encryptResponse.ciphertext,
-    });
-
-    if (!testData.equals(Buffer.from(decryptResponse.plaintext))) {
-      throw new Error(`Test encryption/decryption failed - data mismatch`);
-    }
-
-    console.log(`✅ KMS encryption/decryption test successful`);
-
-    return true;
-  } catch (kmsError) {
-    console.error(
-      `❌ KMS configuration verification failed:`,
-      kmsError.message
-    );
-    console.error(`❌ This may affect DEK operations`);
-    return false;
-  }
-}
-
-// Run KMS verification on startup
-verifyKMSConfiguration().then((success) => {
-  if (success) {
-    console.log(`✅ KMS configuration verified successfully`);
-  } else {
-    console.error(
-      `❌ KMS configuration verification failed - DEK operations may fail`
-    );
-  }
-});
-
 async function generateAndStoreEncryptedDEK(
   bucketKey,
   forceRegenerate = false
@@ -235,29 +171,17 @@ async function generateAndStoreEncryptedDEK(
     await backupExistingDEK(bucketKey);
   }
 
-  console.log(`🔐 Generating new DEK for bucket key: ${bucketKey}`);
-  console.log(`🔑 Using KMS Key Path: ${KEY_PATH}`);
-  console.log(`📦 Target bucket: ${BUCKET_NAME}`);
-
   const dek = crypto.randomBytes(32);
-  console.log(`✅ Generated 32-byte DEK: ${dek.length} bytes`);
 
   try {
-    console.log(`🔒 Encrypting DEK with KMS...`);
     const [encryptResponse] = await kmsClient.encrypt({
       name: KEY_PATH,
       plaintext: dek,
     });
 
     const encryptedDEK = encryptResponse.ciphertext;
-    console.log(`✅ DEK encrypted successfully: ${encryptedDEK.length} bytes`);
-
     const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
     const file = storage.bucket(BUCKET_NAME).file(filePath);
-
-    console.log(
-      `📤 Uploading encrypted DEK to: gs://${BUCKET_NAME}/${filePath}`
-    );
 
     // Use simple upload for small files (DEK is ~113 bytes)
     // This avoids the resumable upload endpoint that was causing "URL is required" error
@@ -267,66 +191,16 @@ async function generateAndStoreEncryptedDEK(
       metadata: {
         contentType: "application/octet-stream",
         cacheControl: "private, max-age=0",
-        customMetadata: {
-          dekVersion: "1.0",
-          generatedAt: new Date().toISOString(),
-          kmsKeyPath: KEY_PATH,
-          environment: process.env.NODE_ENV || "unknown",
-        },
       },
     });
-
-    console.log(`✅ DEK uploaded successfully to GCS`);
-
-    // CRITICAL: Verify the DEK can be decrypted immediately after upload
-    console.log(
-      `🔍 Verifying DEK integrity by attempting immediate decryption...`
-    );
-    try {
-      const [downloadedDEK] = await file.download();
-      console.log(`📥 Downloaded DEK from GCS: ${downloadedDEK.length} bytes`);
-
-      const [decryptResponse] = await kmsClient.decrypt({
-        name: KEY_PATH,
-        ciphertext: downloadedDEK,
-      });
-
-      const decryptedDEK = Buffer.from(decryptResponse.plaintext);
-      console.log(`🔓 Decrypted DEK from GCS: ${decryptedDEK.length} bytes`);
-
-      // Verify the decrypted DEK matches the original
-      if (!dek.equals(decryptedDEK)) {
-        throw new Error(
-          `DEK verification failed: original and decrypted DEKs do not match`
-        );
-      }
-
-      console.log(`✅ DEK integrity verified successfully`);
-    } catch (verifyError) {
-      console.error(`❌ DEK verification failed for bucket key: ${bucketKey}`);
-      console.error(`❌ Verification error: ${verifyError.message}`);
-
-      // Delete the corrupted DEK file
-      try {
-        await file.delete();
-        console.log(`🗑️ Deleted corrupted DEK file from GCS`);
-      } catch (deleteError) {
-        console.error(
-          `❌ Failed to delete corrupted DEK file: ${deleteError.message}`
-        );
-      }
-
-      throw new Error(`DEK verification failed: ${verifyError.message}`);
-    }
   } catch (saveError) {
     console.error(`❌ Failed to save DEK for bucket key: ${bucketKey}`);
     console.error(`❌ Error: ${saveError.message}`);
     throw saveError;
   }
 
-  // Cache the DEK only after successful verification
+  // Cache the DEK
   dekCache.set(bucketKey, dek);
-  console.log(`💾 DEK cached in memory for bucket key: ${bucketKey}`);
   return dek;
 }
 
@@ -342,47 +216,10 @@ async function getDEKFromBucket(bucketKey) {
     return null;
   }
 
-  console.log(`✅ DEK file exists, downloading and validating...`);
+  console.log(`✅ DEK file exists, downloading and decrypting...`);
 
   try {
-    // Get file metadata first to check for environment mismatch
-    const [metadata] = await file.getMetadata();
-    console.log(`📋 DEK file metadata:`, {
-      size: metadata.size,
-      created: metadata.timeCreated,
-      customMetadata: metadata.metadata || {},
-    });
-
-    // Check if DEK was created in different environment
-    const dekEnvironment = metadata.metadata?.environment;
-    const currentEnvironment = process.env.NODE_ENV || "unknown";
-
-    if (dekEnvironment && dekEnvironment !== currentEnvironment) {
-      console.warn(`⚠️ DEK environment mismatch!`);
-      console.warn(`⚠️ DEK environment: ${dekEnvironment}`);
-      console.warn(`⚠️ Current environment: ${currentEnvironment}`);
-      console.warn(`⚠️ This may cause decryption failures`);
-    }
-
-    // Check KMS key path compatibility
-    const dekKmsKeyPath = metadata.metadata?.kmsKeyPath;
-    if (dekKmsKeyPath && dekKmsKeyPath !== KEY_PATH) {
-      console.warn(`⚠️ DEK KMS key mismatch!`);
-      console.warn(`⚠️ DEK KMS key: ${dekKmsKeyPath}`);
-      console.warn(`⚠️ Current KMS key: ${KEY_PATH}`);
-      console.warn(`⚠️ This will cause decryption failures`);
-    }
-
     const [encryptedDEK] = await file.download();
-    console.log(`📥 Downloaded DEK: ${encryptedDEK.length} bytes`);
-
-    // Validate encrypted DEK size (should be ~113 bytes for 32-byte DEK)
-    if (encryptedDEK.length < 50 || encryptedDEK.length > 200) {
-      console.warn(`⚠️ DEK size suspicious: ${encryptedDEK.length} bytes`);
-      console.warn(`⚠️ Expected size: ~113 bytes for 32-byte DEK`);
-    }
-
-    console.log(`🔓 Attempting decryption with KMS key: ${KEY_PATH}`);
     const [decryptResponse] = await kmsClient.decrypt({
       name: KEY_PATH,
       ciphertext: encryptedDEK,
@@ -390,20 +227,8 @@ async function getDEKFromBucket(bucketKey) {
 
     // Ensure we return a proper Buffer
     const plaintext = decryptResponse.plaintext;
-    const dekBuffer = Buffer.from(plaintext);
-
-    // Validate decrypted DEK size
-    if (dekBuffer.length !== 32) {
-      console.error(
-        `❌ Invalid DEK size after decryption: ${dekBuffer.length} bytes`
-      );
-      console.error(`❌ Expected: 32 bytes`);
-      throw new Error(`Invalid DEK size: ${dekBuffer.length} bytes`);
-    }
-
     console.log(`✅ DEK decrypted successfully for bucket key: ${bucketKey}`);
-    console.log(`✅ DEK size validated: ${dekBuffer.length} bytes`);
-    return dekBuffer;
+    return Buffer.from(plaintext);
   } catch (decryptError) {
     // If decryption fails due to invalid ciphertext, the DEK might be:
     // 1. Encrypted with a different KMS key
@@ -413,24 +238,11 @@ async function getDEKFromBucket(bucketKey) {
       decryptError.message &&
       decryptError.message.includes("Decryption failed")
     ) {
-      console.error(`❌ DEK decryption failed for bucket key: ${bucketKey}`);
-      console.error(`❌ Error: ${decryptError.message}`);
-      console.error(`❌ KMS Key Path used: ${KEY_PATH}`);
-      console.error(
-        `❌ The DEK may have been encrypted with a different KMS key or is corrupted`
+      console.warn(`⚠️ DEK decryption failed for bucket key: ${bucketKey}`);
+      console.warn(`⚠️ Error: ${decryptError.message}`);
+      console.warn(
+        `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`
       );
-
-      // Get file metadata for debugging
-      try {
-        const [metadata] = await file.getMetadata();
-        console.error(`❌ DEK metadata:`, {
-          size: metadata.size,
-          created: metadata.timeCreated,
-          customMetadata: metadata.metadata || {},
-        });
-      } catch (metaError) {
-        console.error(`❌ Failed to get DEK metadata: ${metaError.message}`);
-      }
 
       // Return null to trigger DEK regeneration
       return null;
@@ -527,11 +339,7 @@ async function getUserDek(firebaseUid) {
         }
 
         // Generate new DEK (will overwrite the corrupted one)
-        console.log(`🔄 Regenerating DEK for Database ID: ${bucketKey}`);
         dek = await generateAndStoreEncryptedDEK(bucketKey, true);
-        console.log(
-          `✅ New DEK generated successfully for Database ID: ${bucketKey}`
-        );
       }
     } else {
       console.log(
@@ -543,7 +351,7 @@ async function getUserDek(firebaseUid) {
     return dek;
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for Firebase UID: ${firebaseUid} - ${e.message}`
+      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`
     );
     throw e;
   }
