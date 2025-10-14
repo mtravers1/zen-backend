@@ -206,35 +206,81 @@ async function generateAndStoreEncryptedDEK(
 
 async function getDEKFromBucket(bucketKey) {
   const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
+  console.log(`🔍 Looking for DEK at: gs://${BUCKET_NAME}/${filePath}`);
+
   const file = storage.bucket(BUCKET_NAME).file(filePath);
 
   const [exists] = await file.exists();
   if (!exists) {
+    console.log(`⚠️ DEK file not found for bucket key: ${bucketKey}`);
     return null;
   }
 
-  const [encryptedDEK] = await file.download();
-  const [decryptResponse] = await kmsClient.decrypt({
-    name: KEY_PATH,
-    ciphertext: encryptedDEK,
-  });
+  console.log(`✅ DEK file exists, downloading and decrypting...`);
 
-  // Ensure we return a proper Buffer
-  const plaintext = decryptResponse.plaintext;
-  return Buffer.from(plaintext);
+  try {
+    const [encryptedDEK] = await file.download();
+    const [decryptResponse] = await kmsClient.decrypt({
+      name: KEY_PATH,
+      ciphertext: encryptedDEK,
+    });
+
+    // Ensure we return a proper Buffer
+    const plaintext = decryptResponse.plaintext;
+    console.log(`✅ DEK decrypted successfully for bucket key: ${bucketKey}`);
+    return Buffer.from(plaintext);
+  } catch (decryptError) {
+    // If decryption fails due to invalid ciphertext, the DEK might be:
+    // 1. Encrypted with a different KMS key
+    // 2. Corrupted
+    // 3. From a different environment
+    if (
+      decryptError.message &&
+      decryptError.message.includes("Decryption failed")
+    ) {
+      console.warn(`⚠️ DEK decryption failed for bucket key: ${bucketKey}`);
+      console.warn(`⚠️ Error: ${decryptError.message}`);
+      console.warn(
+        `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`
+      );
+
+      // Return null to trigger DEK regeneration
+      return null;
+    }
+
+    // Re-throw other errors
+    throw decryptError;
+  }
 }
 
+/**
+ * DEK Retrieval Flow:
+ * STEP 1: User exists in Firebase (verified by caller)
+ * STEP 2: Find user in database using Firebase UID
+ * STEP 3: Get Database ID from user record
+ * STEP 4: Search for DEK using Database ID (PRIMARY)
+ * STEP 5: If not found, search using Firebase UID (FALLBACK for legacy data)
+ */
 async function getUserDek(firebaseUid) {
   try {
-    // Find user in database by Firebase UID
+    // STEP 1: Firebase user existence already verified by caller
+
+    // STEP 2: Find user in database by Firebase UID
+    console.log(
+      `🔍 [STEP 2] Looking up user in database with Firebase UID: ${firebaseUid}`
+    );
     const user = await User.findOne({ authUid: firebaseUid });
 
     if (!user) {
       throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
     }
 
-    // Use user primary key as bucket key
+    // STEP 3: Get Database ID from user record
     const bucketKey = user._id.toString();
+    console.log(`✅ [STEP 2] User found in database`);
+    console.log(
+      `🔑 [STEP 3] Database ID extracted: ${bucketKey} (will be used as PRIMARY bucket key)`
+    );
 
     // Check in-memory cache first
     if (dekCache.has(bucketKey)) {
@@ -247,30 +293,65 @@ async function getUserDek(firebaseUid) {
       }
     }
 
-    // Fetch from bucket with primary key
+    // STEP 4: Fetch DEK from bucket using Database ID (PRIMARY)
+    console.log(
+      `📦 [STEP 4 - PRIMARY] Searching for DEK with Database ID: ${bucketKey}`
+    );
     let dek = await getDEKFromBucket(bucketKey);
 
     if (!dek) {
-      // Check for legacy DEK with Firebase UID
+      console.warn(
+        `⚠️ [STEP 4] No valid DEK found with Database ID: ${bucketKey}`
+      );
+
+      // STEP 5: Fallback to Firebase UID (legacy support)
+      console.log(
+        `🔄 [STEP 5 - FALLBACK] Searching for DEK with Firebase UID: ${firebaseUid}`
+      );
       const legacyDek = await getDEKFromBucket(firebaseUid);
 
       if (legacyDek) {
+        console.log(
+          `✅ Found valid legacy DEK with Firebase UID: ${firebaseUid}, migrating to Database ID: ${bucketKey}`
+        );
         // Migrate to new bucket key
         await copyDEKToNewBucketKey(firebaseUid, bucketKey);
         dek = legacyDek;
         dekCache.set(bucketKey, dek);
       } else {
-        // Generate new DEK
-        dek = await generateAndStoreEncryptedDEK(bucketKey, false);
+        // No valid DEK found anywhere - regenerate
+        console.warn(
+          `⚠️ No valid DEK found, regenerating for user ${bucketKey}`
+        );
+        console.warn(
+          `⚠️ WARNING: User data encrypted with old DEK cannot be recovered!`
+        );
+
+        // Backup the corrupted DEK if it exists
+        const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
+        const file = storage.bucket(BUCKET_NAME).file(filePath);
+        const [exists] = await file.exists();
+
+        if (exists) {
+          const backupPath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/corrupted/${bucketKey}_${Date.now()}.key.backup`;
+          await file.copy(backupPath);
+          console.log(`📦 Backed up corrupted DEK to: ${backupPath}`);
+        }
+
+        // Generate new DEK (will overwrite the corrupted one)
+        dek = await generateAndStoreEncryptedDEK(bucketKey, true);
       }
     } else {
+      console.log(
+        `✅ [STEP 4] DEK found and valid with Database ID: ${bucketKey}`
+      );
       dekCache.set(bucketKey, dek);
     }
 
     return dek;
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for Firebase UID: ${firebaseUid} - ${e.message}`
+      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`
     );
     throw e;
   }
