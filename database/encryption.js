@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
-import { JWT } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -91,8 +90,8 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Create JWT clients manually with explicit configuration to avoid webpack bundling issues
-console.log("🔧 Creating manual JWT clients with explicit OAuth URLs...");
+// Initialize Google Cloud clients with direct credentials
+console.log("🔧 Initializing clients with direct credentials...");
 
 // Ensure service accounts have all required OAuth URLs
 const storageCredentials = {
@@ -126,50 +125,26 @@ console.log("📋 Credentials validation:", {
   },
 });
 
-// Create JWT client manually for Storage with explicit token URL
-console.log("🔑 Creating manual JWT client for Storage...");
-const storageJWT = new JWT({
-  email: storageCredentials.client_email,
-  key: storageCredentials.private_key,
-  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
-  subject: undefined,
-});
-
-// Force set the token URL explicitly
-storageJWT.gtoken = storageJWT.gtoken || {};
-storageJWT.gtoken.key = storageCredentials.private_key;
-storageJWT.gtoken.iss = storageCredentials.client_email;
-storageJWT.gtoken.scope =
-  "https://www.googleapis.com/auth/devstorage.full_control";
-storageJWT.gtoken.sub = undefined;
-
-console.log("✅ Manual JWT client created for Storage:", {
-  email: storageJWT.email,
-  hasKey: !!storageJWT.key,
-  scopes: storageJWT.scopes,
-  hasGtoken: !!storageJWT.gtoken,
-});
-
-// Initialize KMS with credentials (KMS works fine)
+// Initialize KMS with credentials
 const kmsClient = new KeyManagementServiceClient({
   credentials: kmsCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
 
-// Initialize Storage with manual JWT auth client
+// Initialize Storage with credentials directly
+// The key fix is using resumable:false in file.save(), not JWT manipulation
 const storage = new Storage({
-  authClient: storageJWT,
+  credentials: storageCredentials,
   projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com", // Force canonical endpoint
+  apiEndpoint: "https://storage.googleapis.com",
 });
-console.log("✅ Storage client initialized with manual JWT");
+console.log("✅ Storage client initialized with direct credentials");
 console.log("📦 Storage client details:", {
   projectId: storage.projectId,
   apiEndpoint: "https://storage.googleapis.com",
   hasAuthClient: !!storage.authClient,
   authClientType: storage.authClient?.constructor?.name,
-  authEmail: storage.authClient?.email,
 });
 
 console.log("✅ Google Cloud clients initialized successfully");
