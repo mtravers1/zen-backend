@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
+import { GoogleAuth } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -90,60 +91,61 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Initialize Google Cloud clients
-console.log(
-  "🔧 Initializing Google Cloud clients with full service account objects..."
-);
+// Initialize Google Cloud clients with GoogleAuth for better URL handling
+console.log("🔧 Creating GoogleAuth clients with explicit credentials...");
 
-// Ensure all required fields are present in service accounts
-const completeStorageAccount = {
+// Ensure service accounts have all required OAuth URLs
+const storageCredentials = {
   ...storageServiceAccount,
-  type: storageServiceAccount.type || "service_account",
-  token_uri:
-    storageServiceAccount.token_uri || "https://oauth2.googleapis.com/token",
-  auth_uri:
-    storageServiceAccount.auth_uri ||
-    "https://accounts.google.com/o/oauth2/auth",
-  auth_provider_x509_cert_url:
-    storageServiceAccount.auth_provider_x509_cert_url ||
-    "https://www.googleapis.com/oauth2/v1/certs",
+  type: "service_account",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
 };
 
-const completeKmsAccount = {
+const kmsCredentials = {
   ...kmsServiceAccount,
-  type: kmsServiceAccount.type || "service_account",
-  token_uri:
-    kmsServiceAccount.token_uri || "https://oauth2.googleapis.com/token",
-  auth_uri:
-    kmsServiceAccount.auth_uri || "https://accounts.google.com/o/oauth2/auth",
-  auth_provider_x509_cert_url:
-    kmsServiceAccount.auth_provider_x509_cert_url ||
-    "https://www.googleapis.com/oauth2/v1/certs",
+  type: "service_account",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
 };
 
-console.log("📋 Service account validation:", {
+console.log("📋 Credentials validation:", {
   storage: {
-    hasEmail: !!completeStorageAccount.client_email,
-    hasPrivateKey: !!completeStorageAccount.private_key,
-    hasTokenUri: !!completeStorageAccount.token_uri,
-    tokenUri: completeStorageAccount.token_uri,
+    hasEmail: !!storageCredentials.client_email,
+    hasPrivateKey: !!storageCredentials.private_key,
+    tokenUri: storageCredentials.token_uri,
   },
   kms: {
-    hasEmail: !!completeKmsAccount.client_email,
-    hasPrivateKey: !!completeKmsAccount.private_key,
-    hasTokenUri: !!completeKmsAccount.token_uri,
-    tokenUri: completeKmsAccount.token_uri,
+    hasEmail: !!kmsCredentials.client_email,
+    hasPrivateKey: !!kmsCredentials.private_key,
+    tokenUri: kmsCredentials.token_uri,
   },
 });
 
+// Create GoogleAuth instances
+const storageAuth = new GoogleAuth({
+  credentials: storageCredentials,
+  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
+});
+
+const kmsAuth = new GoogleAuth({
+  credentials: kmsCredentials,
+  scopes: ["https://www.googleapis.com/auth/cloudkms"],
+});
+
+console.log("✅ GoogleAuth instances created");
+
+// Initialize clients with GoogleAuth
 const kmsClient = new KeyManagementServiceClient({
-  credentials: completeKmsAccount,
+  authClient: kmsAuth,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
 
 const storage = new Storage({
-  credentials: completeStorageAccount,
+  authClient: storageAuth,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ Storage client initialized");
@@ -167,177 +169,240 @@ async function generateAndStoreEncryptedDEK(
   bucketKey,
   forceRegenerate = false
 ) {
-  console.log(
-    `🔑 Generating DEK for bucket key: ${bucketKey}, forceRegenerate: ${forceRegenerate}`
-  );
+  console.log(`\n========== STEP 1: Starting DEK Generation ==========`);
+  console.log(`🔑 [STEP 1.1] Bucket key: ${bucketKey}`);
+  console.log(`🔑 [STEP 1.2] Force regenerate: ${forceRegenerate}`);
 
   // If force regenerate, create backup of old DEK first
   if (forceRegenerate) {
+    console.log(`🔄 [STEP 1.3] Creating backup of existing DEK...`);
     await backupExistingDEK(bucketKey);
+    console.log(`✅ [STEP 1.3] Backup created`);
   }
 
+  console.log(`🔑 [STEP 2] Generating random DEK bytes...`);
   const dek = crypto.randomBytes(32);
-  console.log(`🔑 Generated DEK of length: ${dek.length}`);
+  console.log(`✅ [STEP 2] Generated DEK of length: ${dek.length} bytes`);
 
-  console.log(`🔐 Encrypting DEK with KMS...`);
-  const [encryptResponse] = await kmsClient.encrypt({
-    name: KEY_PATH,
-    plaintext: dek,
-  });
-  console.log(`✅ DEK encrypted with KMS`);
-
-  const encryptedDEK = encryptResponse.ciphertext;
-  const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
-  console.log(`📦 Storage details:`, {
-    bucketName: BUCKET_NAME,
-    filePath: filePath,
-    projectId: storage.projectId,
-    hasAuthClient: !!storage.authClient,
-  });
-
-  const file = storage.bucket(BUCKET_NAME).file(filePath);
-
-  // Log the DEK replacement
-  console.log(`🔄 Saving new DEK for bucket key: ${bucketKey} to ${filePath}`);
+  console.log(`🔐 [STEP 3] Encrypting DEK with KMS...`);
+  console.log(`🔐 [STEP 3.1] KMS KEY_PATH: ${KEY_PATH}`);
+  console.log(`🔐 [STEP 3.2] Calling kmsClient.encrypt...`);
 
   try {
-    await file.save(encryptedDEK);
-    console.log(`✅ DEK saved successfully to bucket`);
-  } catch (saveError) {
-    console.error(`❌ Failed to save DEK to bucket:`, saveError);
-    console.error(`❌ Error details:`, {
-      message: saveError.message,
-      code: saveError.code,
-      errors: saveError.errors,
+    const [encryptResponse] = await kmsClient.encrypt({
+      name: KEY_PATH,
+      plaintext: dek,
     });
+    console.log(`✅ [STEP 3] DEK encrypted with KMS successfully`);
+
+    const encryptedDEK = encryptResponse.ciphertext;
+    console.log(
+      `✅ [STEP 3.3] Encrypted DEK length: ${encryptedDEK.length} bytes`
+    );
+
+    const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
+    console.log(`\n========== STEP 4: Preparing to Save to Bucket ==========`);
+    console.log(`📦 [STEP 4.1] Bucket name: ${BUCKET_NAME}`);
+    console.log(`📦 [STEP 4.2] File path: ${filePath}`);
+    console.log(`📦 [STEP 4.3] Full path: gs://${BUCKET_NAME}/${filePath}`);
+    console.log(`📦 [STEP 4.4] Storage client details:`, {
+      projectId: storage.projectId,
+      hasAuthClient: !!storage.authClient,
+      authClientType: storage.authClient?.constructor?.name,
+    });
+
+    console.log(`📦 [STEP 4.5] Getting bucket object...`);
+    const bucket = storage.bucket(BUCKET_NAME);
+    console.log(`✅ [STEP 4.5] Bucket object retrieved`);
+
+    console.log(`📦 [STEP 4.6] Getting file object...`);
+    const file = bucket.file(filePath);
+    console.log(`✅ [STEP 4.6] File object retrieved`);
+
+    console.log(`\n========== STEP 5: Saving DEK to Bucket ==========`);
+    console.log(`🔄 [STEP 5.1] Starting file.save()...`);
+
+    await file.save(encryptedDEK);
+
+    console.log(`✅ [STEP 5] DEK saved successfully to bucket!`);
+  } catch (saveError) {
+    console.error(`\n========== ERROR in DEK Generation ==========`);
+    console.error(`❌ Failed at bucket save operation`);
+    console.error(`❌ Error name: ${saveError.name}`);
+    console.error(`❌ Error message: ${saveError.message}`);
+    console.error(`❌ Error code: ${saveError.code}`);
+    console.error(`❌ Error stack:`, saveError.stack);
+    console.error(`❌ Full error object:`, JSON.stringify(saveError, null, 2));
     throw saveError;
   }
 
   // Cache the DEK
+  console.log(`📦 [STEP 6] Caching DEK in memory...`);
   dekCache.set(bucketKey, dek);
+  console.log(`✅ [STEP 6] DEK cached`);
 
-  console.log(`✅ New DEK generated and stored for bucket key: ${bucketKey}`);
+  console.log(`✅ ========== DEK Generation Complete ==========\n`);
   return dek;
 }
 
 async function getDEKFromBucket(bucketKey) {
-  const file = storage
-    .bucket(BUCKET_NAME)
-    .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
-  if (!(await file.exists())[0]) {
+  console.log(`\n========== getDEKFromBucket: Starting ==========`);
+  console.log(`🔍 [GET DEK 1] Bucket key: ${bucketKey}`);
+
+  const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`;
+  console.log(`🔍 [GET DEK 2] File path: ${filePath}`);
+  console.log(`🔍 [GET DEK 3] Full path: gs://${BUCKET_NAME}/${filePath}`);
+
+  console.log(`📦 [GET DEK 4] Getting bucket object...`);
+  const bucket = storage.bucket(BUCKET_NAME);
+  console.log(`✅ [GET DEK 4] Bucket object retrieved`);
+
+  console.log(`📦 [GET DEK 5] Getting file object...`);
+  const file = bucket.file(filePath);
+  console.log(`✅ [GET DEK 5] File object retrieved`);
+
+  console.log(`🔍 [GET DEK 6] Checking if file exists...`);
+  const [exists] = await file.exists();
+  console.log(`✅ [GET DEK 6] File exists check completed: ${exists}`);
+
+  if (!exists) {
+    console.log(`⚠️ [GET DEK] File does not exist in bucket, returning null`);
     return null;
   }
-  const [encryptedDEK] = await file.download();
 
+  console.log(`📥 [GET DEK 7] Downloading encrypted DEK from bucket...`);
+  const [encryptedDEK] = await file.download();
+  console.log(
+    `✅ [GET DEK 7] Downloaded encrypted DEK, length: ${encryptedDEK.length} bytes`
+  );
+
+  console.log(`🔐 [GET DEK 8] Decrypting DEK with KMS...`);
   const [decryptResponse] = await kmsClient.decrypt({
     name: KEY_PATH,
     ciphertext: encryptedDEK,
   });
+  console.log(`✅ [GET DEK 8] DEK decrypted successfully`);
 
   // Ensure we return a proper Buffer
   const plaintext = decryptResponse.plaintext;
-  return Buffer.from(plaintext);
+  const dekBuffer = Buffer.from(plaintext);
+  console.log(
+    `✅ [GET DEK 9] Converted to Buffer, length: ${dekBuffer.length} bytes`
+  );
+  console.log(`✅ ========== getDEKFromBucket: Complete ==========\n`);
+
+  return dekBuffer;
 }
 
 async function getUserDek(firebaseUid) {
   try {
-    console.log(`🔍 Getting DEK for Firebase UID: ${firebaseUid}`);
+    console.log(`\n========== getUserDek: Starting ==========`);
+    console.log(`🔍 [USER DEK 1] Firebase UID: ${firebaseUid}`);
 
     // Step 1: Find user in database by Firebase UID
+    console.log(`📊 [USER DEK 2] Looking up user in database...`);
     const user = await User.findOne({ authUid: firebaseUid });
 
     if (!user) {
       console.error(
-        `❌ User not found in database for Firebase UID: ${firebaseUid}`
+        `❌ [USER DEK 2] User not found in database for Firebase UID: ${firebaseUid}`
       );
       throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
     }
 
-    console.log(
-      `✅ User found - ID: ${user._id}, Firebase UID: ${firebaseUid}`
-    );
+    console.log(`✅ [USER DEK 2] User found - DB ID: ${user._id}`);
 
     // Step 2: Use user primary key as bucket key
     const bucketKey = user._id.toString();
-    console.log(`🔑 Using user primary key as bucket key: ${bucketKey}`);
+    console.log(`🔑 [USER DEK 3] Using user DB ID as bucket key: ${bucketKey}`);
 
-    // Check in-memory cache first (using bucket key)
+    // Check in-memory cache first
+    console.log(`💾 [USER DEK 4] Checking cache...`);
     if (dekCache.has(bucketKey)) {
-      console.log(`✅ DEK found in cache for bucket key: ${bucketKey}`);
+      console.log(`✅ [USER DEK 4] DEK found in cache!`);
       const cachedDek = dekCache.get(bucketKey);
-      console.log(
-        `🔍 Cached DEK length: ${
-          cachedDek?.length
-        }, type: ${typeof cachedDek}, isBuffer: ${Buffer.isBuffer(cachedDek)}`
-      );
+      console.log(`🔍 [USER DEK 4.1] Cached DEK details:`, {
+        length: cachedDek?.length,
+        type: typeof cachedDek,
+        isBuffer: Buffer.isBuffer(cachedDek),
+      });
 
-      // If cached DEK is not a Buffer, clear cache and fetch fresh
       if (!Buffer.isBuffer(cachedDek)) {
         console.log(
-          `🔄 Cached DEK is not a Buffer, clearing cache and fetching fresh`
+          `🔄 [USER DEK 4.2] Cached DEK is not a Buffer, clearing cache`
         );
         dekCache.delete(bucketKey);
       } else {
+        console.log(
+          `✅ ========== getUserDek: Complete (from cache) ==========\n`
+        );
         return cachedDek;
       }
     }
+    console.log(`⚠️ [USER DEK 4] No valid DEK in cache`);
 
-    console.log(`📦 Fetching DEK from bucket for bucket key: ${bucketKey}`);
+    // Step 3: Fetch from bucket with primary key
+    console.log(`\n[USER DEK STEP 3] Fetching DEK from bucket...`);
+    console.log(`📦 [USER DEK 5] Fetching for bucket key: ${bucketKey}`);
     let dek = await getDEKFromBucket(bucketKey);
 
     if (!dek) {
-      console.log(`🔑 No DEK found for bucket key: ${bucketKey}`);
-      console.log(
-        `🔄 Checking for legacy DEK using Firebase UID: ${firebaseUid}`
-      );
+      console.log(`⚠️ [USER DEK STEP 3] No DEK found with primary key`);
 
-      // Step 3: Check for legacy DEK using Firebase UID
+      // Step 4: Check for legacy DEK with Firebase UID
+      console.log(`\n[USER DEK STEP 4] Checking for legacy DEK...`);
+      console.log(`🔄 [USER DEK 6] Looking for Firebase UID: ${firebaseUid}`);
       const legacyDek = await getDEKFromBucket(firebaseUid);
 
       if (legacyDek) {
-        console.log(`✅ Found legacy DEK for Firebase UID: ${firebaseUid}`);
-        console.log(`🔄 Migrating to new bucket key: ${bucketKey}`);
+        console.log(`✅ [USER DEK STEP 4] Found legacy DEK with Firebase UID`);
+        console.log(
+          `🔄 [USER DEK 7] Migrating to primary key: ${firebaseUid} -> ${bucketKey}`
+        );
 
-        // Copy the legacy DEK to new bucket key
         await copyDEKToNewBucketKey(firebaseUid, bucketKey);
+        console.log(`✅ [USER DEK 7] Migration complete`);
 
-        // Use the migrated DEK
         dek = legacyDek;
         dekCache.set(bucketKey, dek);
-
-        console.log(
-          `✅ DEK migrated from Firebase UID to primary key: ${firebaseUid} -> ${bucketKey}`
-        );
       } else {
+        console.log(`⚠️ [USER DEK STEP 4] No legacy DEK found either`);
+        console.log(`\n[USER DEK STEP 5] Generating new DEK...`);
         console.log(
-          `🔑 No legacy DEK found, generating new DEK for bucket key: ${bucketKey}`
+          `🔑 [USER DEK 8] Creating new DEK for bucket key: ${bucketKey}`
         );
         dek = await generateAndStoreEncryptedDEK(bucketKey, false);
+        console.log(`✅ [USER DEK STEP 5] New DEK generated`);
       }
     } else {
-      console.log(`✅ DEK retrieved from bucket for bucket key: ${bucketKey}`);
-      dekCache.set(bucketKey, dek); // Cache it once retrieved
+      console.log(`✅ [USER DEK STEP 3] DEK retrieved from bucket`);
+      dekCache.set(bucketKey, dek);
+      console.log(`✅ [USER DEK 9] DEK cached`);
     }
 
-    console.log(
-      `🔍 Final DEK length: ${
-        dek?.length
-      }, type: ${typeof dek}, isBuffer: ${Buffer.isBuffer(dek)}`
-    );
+    console.log(`🔍 [USER DEK 10] Final DEK validation:`, {
+      length: dek?.length,
+      type: typeof dek,
+      isBuffer: Buffer.isBuffer(dek),
+    });
+
+    console.log(`✅ ========== getUserDek: Complete ==========\n`);
     return dek;
   } catch (e) {
-    console.error(`❌ Error getting DEK for Firebase UID ${firebaseUid}:`, e);
-    console.error("Stack trace:", e.stack);
+    console.error(`\n========== ERROR in getUserDek ==========`);
+    console.error(`❌ Firebase UID: ${firebaseUid}`);
+    console.error(`❌ Error message: ${e.message}`);
+    console.error(`❌ Stack trace:`, e.stack);
 
-    // Add more context to the error
     if (e.message && e.message.includes("URL is required")) {
-      console.error("🚨 Google Cloud Storage URL configuration issue detected");
-      console.error("📋 Debug info:");
-      console.error("- Project ID:", process.env.GCP_PROJECT_ID);
-      console.error("- Bucket Name:", BUCKET_NAME);
       console.error(
-        "- Storage Service Account Email:",
-        storageServiceAccount?.client_email
+        `\n🚨 Google Cloud Storage URL configuration issue detected`
+      );
+      console.error(`📋 Debug info:`);
+      console.error(`- Project ID: ${process.env.GCP_PROJECT_ID}`);
+      console.error(`- Bucket Name: ${BUCKET_NAME}`);
+      console.error(
+        `- Storage Service Account Email: ${storageServiceAccount?.client_email}`
       );
     }
 
@@ -621,69 +686,92 @@ async function tryRecoverDEKFromBackup(bucketKey) {
  */
 async function getUserDekForSignup(firebaseUid, databaseId) {
   try {
-    console.log(
-      `🔍 Getting DEK for signup - Firebase UID: ${firebaseUid}, Database ID: ${databaseId}`
-    );
+    console.log(`\n========== getUserDekForSignup: Starting ==========`);
+    console.log(`🔍 [SIGNUP DEK 1] Firebase UID: ${firebaseUid}`);
+    console.log(`🔍 [SIGNUP DEK 2] Database ID: ${databaseId}`);
 
     const bucketKey = databaseId.toString();
-    console.log(`🔑 Using database ID as bucket key: ${bucketKey}`);
+    console.log(
+      `🔑 [SIGNUP DEK 3] Using database ID as bucket key: ${bucketKey}`
+    );
 
-    // Step 1: Check if DEK already exists with the database ID (shouldn't happen in signup, but safety check)
-    console.log(`📦 Checking for existing DEK with database ID: ${bucketKey}`);
+    // Step 1: Check if DEK already exists with the database ID
+    console.log(
+      `\n[SIGNUP DEK STEP 1] Checking for existing DEK with database ID...`
+    );
+    console.log(`📦 [SIGNUP DEK 4] Looking for: ${bucketKey}`);
     let dek = await getDEKFromBucket(bucketKey);
 
     if (dek) {
-      console.log(`✅ DEK already exists for database ID: ${bucketKey}`);
+      console.log(
+        `✅ [SIGNUP DEK STEP 1] DEK already exists for database ID: ${bucketKey}`
+      );
       dekCache.set(bucketKey, dek);
+      console.log(
+        `✅ ========== getUserDekForSignup: Complete (existing DEK) ==========\n`
+      );
       return dek;
     }
+    console.log(`⚠️ [SIGNUP DEK STEP 1] No DEK found with database ID`);
 
     // Step 2: Check if DEK exists with Firebase UID (legacy/migration case)
-    console.log(`🔄 Checking for DEK with Firebase UID: ${firebaseUid}`);
+    console.log(
+      `\n[SIGNUP DEK STEP 2] Checking for legacy DEK with Firebase UID...`
+    );
+    console.log(`🔄 [SIGNUP DEK 5] Looking for: ${firebaseUid}`);
     const legacyDek = await getDEKFromBucket(firebaseUid);
 
     if (legacyDek) {
-      console.log(`✅ Found DEK with Firebase UID: ${firebaseUid}`);
       console.log(
-        `🔄 Copying DEK from Firebase UID to database ID: ${firebaseUid} -> ${bucketKey}`
+        `✅ [SIGNUP DEK STEP 2] Found legacy DEK with Firebase UID: ${firebaseUid}`
+      );
+      console.log(
+        `🔄 [SIGNUP DEK 6] Copying DEK: ${firebaseUid} -> ${bucketKey}`
       );
 
-      // Copy the DEK from Firebase UID to database ID
       const copySuccess = await copyDEKToNewBucketKey(firebaseUid, bucketKey);
 
       if (copySuccess) {
-        console.log(
-          `✅ DEK successfully copied from Firebase UID to database ID: ${firebaseUid} -> ${bucketKey}`
-        );
+        console.log(`✅ [SIGNUP DEK 6] DEK copied successfully`);
         dek = legacyDek;
         dekCache.set(bucketKey, dek);
       } else {
-        console.log(`⚠️ DEK copy failed, but will use legacy DEK for now`);
+        console.log(`⚠️ [SIGNUP DEK 6] DEK copy failed, using legacy DEK`);
         dek = legacyDek;
-        // Cache with both keys for compatibility
         dekCache.set(bucketKey, dek);
         dekCache.set(firebaseUid, dek);
       }
-    } else {
-      // Step 3: No existing DEK found, create new one with database ID
       console.log(
-        `🔑 No existing DEK found, creating new DEK for database ID: ${bucketKey}`
+        `✅ ========== getUserDekForSignup: Complete (legacy DEK) ==========\n`
       );
-      dek = await generateAndStoreEncryptedDEK(bucketKey, false);
+      return dek;
     }
+    console.log(`⚠️ [SIGNUP DEK STEP 2] No legacy DEK found`);
+
+    // Step 3: No existing DEK found, create new one
+    console.log(`\n[SIGNUP DEK STEP 3] Creating new DEK...`);
+    console.log(
+      `🔑 [SIGNUP DEK 7] Calling generateAndStoreEncryptedDEK for: ${bucketKey}`
+    );
+    dek = await generateAndStoreEncryptedDEK(bucketKey, false);
+    console.log(`✅ [SIGNUP DEK STEP 3] New DEK created successfully`);
+
+    console.log(`🔍 [SIGNUP DEK 8] Final DEK validation:`, {
+      length: dek?.length,
+      type: typeof dek,
+      isBuffer: Buffer.isBuffer(dek),
+    });
 
     console.log(
-      `🔍 Final DEK for signup - length: ${
-        dek?.length
-      }, type: ${typeof dek}, isBuffer: ${Buffer.isBuffer(dek)}`
+      `✅ ========== getUserDekForSignup: Complete (new DEK) ==========\n`
     );
     return dek;
   } catch (e) {
-    console.error(
-      `❌ Error getting DEK for signup - Firebase UID: ${firebaseUid}, Database ID: ${databaseId}:`,
-      e
-    );
-    console.error("Stack trace:", e.stack);
+    console.error(`\n========== ERROR in getUserDekForSignup ==========`);
+    console.error(`❌ Firebase UID: ${firebaseUid}`);
+    console.error(`❌ Database ID: ${databaseId}`);
+    console.error(`❌ Error message: ${e.message}`);
+    console.error(`❌ Stack trace:`, e.stack);
     throw e;
   }
 }
