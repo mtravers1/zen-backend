@@ -262,6 +262,7 @@ async function getDEKFromBucket(bucketKey) {
  * STEP 5: If not found, search using Firebase UID (FALLBACK for legacy data)
  */
 async function getUserDek(firebaseUid) {
+  let user; // Declare user outside try-catch so it's accessible in catch block
   try {
     // STEP 1: Firebase user existence already verified by caller
 
@@ -269,7 +270,7 @@ async function getUserDek(firebaseUid) {
     console.log(
       `🔍 [STEP 2] Looking up user in database with Firebase UID: ${firebaseUid}`
     );
-    const user = await User.findOne({ authUid: firebaseUid });
+    user = await User.findOne({ authUid: firebaseUid });
 
     if (!user) {
       throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
