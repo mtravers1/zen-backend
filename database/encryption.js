@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
-import { GoogleAuth } from "google-auth-library";
 import crypto from "crypto";
 
 dotenv.config();
@@ -91,8 +90,10 @@ if (!kmsServiceAccount.universe_domain) {
   kmsServiceAccount.universe_domain = "googleapis.com";
 }
 
-// Initialize Google Cloud clients with GoogleAuth for better URL handling
-console.log("🔧 Creating GoogleAuth clients with explicit credentials...");
+// Initialize Google Cloud clients with direct credentials
+console.log(
+  "🔧 Initializing clients with direct service account credentials..."
+);
 
 // Ensure service accounts have all required OAuth URLs
 const storageCredentials = {
@@ -116,39 +117,34 @@ console.log("📋 Credentials validation:", {
     hasEmail: !!storageCredentials.client_email,
     hasPrivateKey: !!storageCredentials.private_key,
     tokenUri: storageCredentials.token_uri,
+    hasType: !!storageCredentials.type,
   },
   kms: {
     hasEmail: !!kmsCredentials.client_email,
     hasPrivateKey: !!kmsCredentials.private_key,
     tokenUri: kmsCredentials.token_uri,
+    hasType: !!kmsCredentials.type,
   },
 });
 
-// Create GoogleAuth instances
-const storageAuth = new GoogleAuth({
-  credentials: storageCredentials,
-  scopes: ["https://www.googleapis.com/auth/devstorage.full_control"],
-});
-
-const kmsAuth = new GoogleAuth({
-  credentials: kmsCredentials,
-  scopes: ["https://www.googleapis.com/auth/cloudkms"],
-});
-
-console.log("✅ GoogleAuth instances created");
-
-// Initialize clients with GoogleAuth
+// Initialize KMS client with credentials directly
 const kmsClient = new KeyManagementServiceClient({
-  authClient: kmsAuth,
+  credentials: kmsCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ KMS client initialized");
+console.log("✅ KMS client initialized with direct credentials");
 
+// Initialize Storage client with credentials directly
 const storage = new Storage({
-  authClient: storageAuth,
+  credentials: storageCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
-console.log("✅ Storage client initialized");
+console.log("✅ Storage client initialized with direct credentials");
+console.log("📦 Storage client details:", {
+  projectId: storage.projectId,
+  hasAuthClient: !!storage.authClient,
+  authClientType: storage.authClient?.constructor?.name,
+});
 
 console.log("✅ Google Cloud clients initialized successfully");
 const BUCKET_NAME = "zentavos-bucket";
