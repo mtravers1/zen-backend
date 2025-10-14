@@ -335,8 +335,32 @@ async function getUserDek(firebaseUid) {
 
         if (exists) {
           const backupPath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/corrupted/${bucketKey}_${Date.now()}.key.backup`;
-          await file.copy(backupPath);
-          console.log(`📦 Backed up corrupted DEK to: ${backupPath}`);
+          const backupFile = storage.bucket(BUCKET_NAME).file(backupPath);
+
+          try {
+            await file.copy(backupFile);
+            console.log(`📦 Backed up corrupted DEK to: ${backupPath}`);
+          } catch (copyError) {
+            // Fallback: download then save if direct copy fails
+            console.warn(
+              `⚠️ Direct copy failed (${copyError?.message}). Falling back to download+save...`
+            );
+            try {
+              const [encryptedDEK] = await file.download();
+              await backupFile.save(encryptedDEK, {
+                resumable: false,
+                validation: false,
+              });
+              console.log(
+                `📦 Backed up corrupted DEK via download+save to: ${backupPath}`
+              );
+            } catch (fallbackError) {
+              console.error(
+                `❌ Failed to backup corrupted DEK: ${fallbackError?.message}`
+              );
+              // Continue without backup - generating new DEK is more important
+            }
+          }
         }
 
         // Generate new DEK (will overwrite the corrupted one)
