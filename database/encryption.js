@@ -339,7 +339,9 @@ async function getUserDek(firebaseUid) {
         }
 
         // Generate new DEK (will overwrite the corrupted one)
+        console.log(`🔄 Regenerating DEK for Database ID: ${bucketKey}`);
         dek = await generateAndStoreEncryptedDEK(bucketKey, true);
+        console.log(`✅ New DEK generated successfully for Database ID: ${bucketKey}`);
       }
     } else {
       console.log(
@@ -351,7 +353,7 @@ async function getUserDek(firebaseUid) {
     return dek;
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`
+      `❌ Error getting DEK for Firebase UID: ${firebaseUid} - ${e.message}`
     );
     throw e;
   }
