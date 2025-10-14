@@ -13,15 +13,30 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
       "base64"
     ).toString("utf8");
-    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    // Clean the JSON string to remove control characters
+    const cleanJson = serviceAccountJson
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove control characters
+      .replace(/\r\n/g, "\n") // Normalize line endings
+      .trim();
+
+    const serviceAccount = JSON.parse(cleanJson);
 
     googlePlayAuth = new GoogleAuth({
-      credentials: serviceAccount,
+      auth: serviceAccount,
       scopes: ["https://www.googleapis.com/auth/androidpublisher"],
     });
     console.log("✅ Google Play authentication configured");
   } catch (error) {
     console.error("❌ Failed to load Google Play Service Account:", error);
+    console.error(
+      "❌ JSON length:",
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT?.length
+    );
+    console.error(
+      "❌ First 200 chars:",
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT?.substring(0, 200)
+    );
   }
 } else {
   console.warn("⚠️ GOOGLE_PLAY_SERVICE_ACCOUNT not configured");
@@ -157,7 +172,7 @@ const validateAndroid = async (receipt) => {
   // Parse the receipt JSON string
   let parsedReceipt;
   try {
-    parsedReceipt = typeof receipt === 'string' ? JSON.parse(receipt) : receipt;
+    parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
     console.log("📱 Parsed receipt:", parsedReceipt);
   } catch (e) {
     console.error("❌ Failed to parse receipt:", e);
@@ -167,7 +182,11 @@ const validateAndroid = async (receipt) => {
   const { packageName, productId, purchaseToken } = parsedReceipt;
 
   if (!packageName || !productId || !purchaseToken) {
-    console.error("❌ Missing required fields:", { packageName, productId, purchaseToken });
+    console.error("❌ Missing required fields:", {
+      packageName,
+      productId,
+      purchaseToken,
+    });
     throw new Error("Missing required receipt fields");
   }
 
@@ -191,7 +210,9 @@ const validateAndroid = async (receipt) => {
   if (!response.ok) {
     const errorText = await response.text();
     console.error("❌ Google Play API error:", response.status, errorText);
-    throw new Error(`Failed to validate purchase: ${response.status} - ${errorText}`);
+    throw new Error(
+      `Failed to validate purchase: ${response.status} - ${errorText}`
+    );
   }
 
   const result = await response.json();
@@ -201,10 +222,14 @@ const validateAndroid = async (receipt) => {
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
   return {
     status: 0,
-    latest_receipt_info: [{
-      product_id: result.lineItems?.[0]?.productId || productId,
-      expires_date_ms: result.lineItems?.[0]?.expiryTime ? new Date(result.lineItems[0].expiryTime).getTime() : Date.now() + 30 * 24 * 60 * 60 * 1000,
-    }]
+    latest_receipt_info: [
+      {
+        product_id: result.lineItems?.[0]?.productId || productId,
+        expires_date_ms: result.lineItems?.[0]?.expiryTime
+          ? new Date(result.lineItems[0].expiryTime).getTime()
+          : Date.now() + 30 * 24 * 60 * 60 * 1000,
+      },
+    ],
   };
 };
 
