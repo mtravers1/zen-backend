@@ -125,17 +125,17 @@ console.log("📋 Credentials validation:", {
   },
 });
 
-// Initialize KMS with credentials
+// Initialize KMS with auth object (new recommended way)
 const kmsClient = new KeyManagementServiceClient({
-  credentials: kmsCredentials,
+  auth: kmsCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
 
-// Initialize Storage with credentials directly
+// Initialize Storage with auth object (new recommended way)
 // The key fix is using resumable:false in file.save(), not JWT manipulation
 const storage = new Storage({
-  credentials: storageCredentials,
+  auth: storageCredentials,
   projectId: process.env.GCP_PROJECT_ID,
   apiEndpoint: "https://storage.googleapis.com",
 });
@@ -172,20 +172,8 @@ async function verifyKMSConfiguration() {
   console.log(`🔗 Full Key Path: ${KEY_PATH}`);
 
   try {
-    // Test KMS connectivity by listing key rings
-    console.log(`🔍 Testing KMS connectivity...`);
-    const [keyRings] = await kmsClient.listKeyRings({
-      parent: `projects/${process.env.GCP_PROJECT_ID}/locations/${process.env.GCP_KEY_LOCATION}`,
-    });
-
-    console.log(`✅ KMS connectivity verified`);
-    console.log(
-      `📋 Available key rings:`,
-      keyRings.map((kr) => kr.name)
-    );
-
-    // Test specific key access
-    console.log(`🔍 Testing specific key access...`);
+    // Test specific key access only (less permissions required)
+    console.log(`🔍 Testing specific crypto key access...`);
     const [cryptoKey] = await kmsClient.getCryptoKey({
       name: KEY_PATH,
     });
@@ -196,12 +184,33 @@ async function verifyKMSConfiguration() {
       versionTemplate: cryptoKey.versionTemplate,
     });
 
+    // Test encryption/decryption with a small test
+    console.log(`🔍 Testing encryption/decryption with test data...`);
+    const testData = Buffer.from("test-dek-verification");
+
+    const [encryptResponse] = await kmsClient.encrypt({
+      name: KEY_PATH,
+      plaintext: testData,
+    });
+
+    const [decryptResponse] = await kmsClient.decrypt({
+      name: KEY_PATH,
+      ciphertext: encryptResponse.ciphertext,
+    });
+
+    if (!testData.equals(Buffer.from(decryptResponse.plaintext))) {
+      throw new Error(`Test encryption/decryption failed - data mismatch`);
+    }
+
+    console.log(`✅ KMS encryption/decryption test successful`);
+
     return true;
   } catch (kmsError) {
     console.error(
       `❌ KMS configuration verification failed:`,
       kmsError.message
     );
+    console.error(`❌ This may affect DEK operations`);
     return false;
   }
 }
