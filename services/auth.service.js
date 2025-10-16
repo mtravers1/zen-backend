@@ -1041,10 +1041,19 @@ const validateGoogleTokenViaAPI = async (idToken) => {
     console.log("🔑 Google API Token Info:", tokenInfo);
 
     // Verify the token is for our app
-    const expectedAudience =
-      process.env.GOOGLE_CLIENT_ID ||
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com";
-    if (tokenInfo.aud !== expectedAudience) {
+    // Accept Web Client ID (primary) and platform-specific Client IDs for development
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
+      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
+    ].filter(Boolean);
+    
+    if (!validAudiences.includes(tokenInfo.aud)) {
+      console.log("🔑 Invalid audience:", {
+        expected: validAudiences,
+        received: tokenInfo.aud,
+      });
       throw new Error("Invalid audience for Google token");
     }
 
@@ -1110,11 +1119,17 @@ const validateGoogleToken = async (idToken) => {
     }
 
     // Verify the token is for our app
-    const expectedAudience = process.env.GOOGLE_CLIENT_ID;
+    // Accept Web Client ID (primary) and platform-specific Client IDs for development
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
+      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
+    ].filter(Boolean);
 
-    if (decodedToken.payload.aud !== expectedAudience) {
+    if (!validAudiences.includes(decodedToken.payload.aud)) {
       console.log("🔑 Invalid audience:", {
-        expected: expectedAudience,
+        expected: validAudiences,
         received: decodedToken.payload.aud,
       });
       throw new Error("Invalid audience for Google token");
