@@ -378,8 +378,19 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
   if (!access) {
     return;
   }
+  
+  // If uid is not provided, get it from the access token's userId
+  let firebaseUid = uid;
+  if (!firebaseUid) {
+    const user = await User.findById(access.userId);
+    if (!user) {
+      throw new Error(`User not found for access token with itemId: ${itemId}`);
+    }
+    firebaseUid = user.authUid;
+  }
+  
   const accessToken = access.accessToken;
-  const dek = await getUserDek(uid);
+  const dek = await getUserDek(firebaseUid);
   const decryptedToken = await decryptValue(accessToken, dek);
   return decryptedToken;
 };
