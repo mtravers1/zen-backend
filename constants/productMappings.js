@@ -38,8 +38,8 @@ export const PRODUCT_MAPPINGS = {
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
       "com.zentavos.zentavosdev.personal.plus1": "Personal+1",
       "com.zentavos.zentavosdev.founder.plus1": "Founder+1",
-      "com.zentavos.zentavosdev.entrepreneur.plus1": "Entrepreneur+1",
-      "com.zentavos.zentavosdev.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.zentavosdev.entrepreneur.p1": "Entrepreneur+1",
+      "com.zentavos.zentavosdev.entrepreneur.p2": "Entrepreneur+2",
       "com.zentavos.zentavosdev.tycoon.100gb": "Tycoon+100gb",
       // Tycoon is unlimited, no add-ons needed
     },
@@ -69,8 +69,8 @@ export const PRODUCT_MAPPINGS = {
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
       "com.zentavos.stg.personal.plus1": "Personal+1",
       "com.zentavos.stg.founder.plus1": "Founder+1",
-      "com.zentavos.stg.entrepreneur.plus1": "Entrepreneur+1",
-      "com.zentavos.stg.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.stg.entrepreneur.p1": "Entrepreneur+1",
+      "com.zentavos.stg.entrepreneur.p2": "Entrepreneur+2",
       "com.zentavos.stg.tycoon.100gb": "Tycoon+100gb",
     },
   },
@@ -98,8 +98,8 @@ export const PRODUCT_MAPPINGS = {
       // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
       "com.zentavos.mobile.personal.plus1": "Personal+1",
       "com.zentavos.mobile.founder.plus1": "Founder+1",
-      "com.zentavos.mobile.entrepreneur.plus1": "Entrepreneur+1",
-      "com.zentavos.mobile.entrepreneur.plus2": "Entrepreneur+2",
+      "com.zentavos.mobile.entrepreneur.p1": "Entrepreneur+1",
+      "com.zentavos.mobile.entrepreneur.p2": "Entrepreneur+2",
       "com.zentavos.mobile.tycoon.100gb": "Tycoon+100gb",
     },
   },
