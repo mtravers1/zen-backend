@@ -1,5 +1,5 @@
 import User from "../database/models/User.js";
-import { decryptValue, getUserDek } from "../database/encryption.js";
+import { decryptValue, getUserDek, encryptValue } from "../database/encryption.js";
 
 /**
  * List all users for admin interface
@@ -249,10 +249,77 @@ const checkUserPermission = async (req, res) => {
   }
 };
 
+/**
+ * Update user info (firstName, lastName, etc.)
+ */
+const updateUserInfo = async (req, res) => {
+  const { userId } = req.params;
+  const { firstName, lastName, middleName, prefix, suffix, photoUrl } = req.body;
+
+  try {
+    console.log("[USER CONTROLLER] Updating user info for:", userId);
+
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error("[USER CONTROLLER] User not found:", userId);
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Get DEK for encryption
+    const dek = await getUserDek(user.authUid);
+
+    // Build update object with encrypted values
+    const updateData = {};
+
+    if (firstName !== undefined) {
+      updateData["name.firstName"] = await encryptValue(firstName, dek);
+    }
+    if (lastName !== undefined) {
+      updateData["name.lastName"] = await encryptValue(lastName, dek);
+    }
+    if (middleName !== undefined) {
+      updateData["name.middleName"] = await encryptValue(middleName, dek);
+    }
+    if (prefix !== undefined) {
+      updateData["name.prefix"] = await encryptValue(prefix, dek);
+    }
+    if (suffix !== undefined) {
+      updateData["name.suffix"] = await encryptValue(suffix, dek);
+    }
+    if (photoUrl !== undefined) {
+      updateData.photoUrl = photoUrl; // photoUrl is not encrypted
+    }
+
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true } // Return updated document
+    ).select("-password");
+
+    console.log("[USER CONTROLLER] User info updated successfully:", userId);
+
+    res.status(200).json({
+      success: true,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error updating user info:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 const userController = {
   listUsers,
   getUserById,
   updateUserMethod,
+  updateUserInfo,
   getMyUser, // ← Added for compatibility
   checkUserPermission, // ← Added for compatibility
 };
