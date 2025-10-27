@@ -9,6 +9,3 @@ pm2 start ecosystem.config.js \
     --log-date-format 'YYYY-MM-DD HH:mm Z'
 
 pm2 save
-if ! pm2 logrotate -u zentavos; then
-    echo "pm2 logrotate failed; ensure logrotate is installed and configured" >&2
-fi
