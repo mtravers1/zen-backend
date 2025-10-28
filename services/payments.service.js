@@ -203,6 +203,27 @@ const validateAndroid = async (receipt) => {
   const result = await response.json();
   console.log("✅ Google Play validation result:", result);
 
+  // ACKNOWLEDGE the purchase if pending
+  if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
+    console.log("🔔 Acknowledging purchase...");
+    const acknowledgeUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
+
+    const ackResponse = await fetch(acknowledgeUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (ackResponse.ok) {
+      console.log("✅ Purchase acknowledged successfully");
+    } else {
+      const ackError = await ackResponse.text();
+      console.error("❌ Failed to acknowledge purchase:", ackResponse.status, ackError);
+    }
+  }
+
   // Transform Google Play v2 response to match expected format
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
   return {
