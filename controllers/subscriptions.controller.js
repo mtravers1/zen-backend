@@ -23,7 +23,7 @@ const isBusinessOwnerPlan = (planId) => {
 };
 
 // Get Product ID for a plan on a specific platform
-const getProductIdForPlan = (planId, platform) => {
+const getProductIdForPlan = (planId, platform, billingPeriod = "monthly") => {
   // Map NODE_ENV to productMappings keys
   const nodeEnv = process.env.ENVIRONMENT;
   const env = nodeEnv === "development" ? "dev" : nodeEnv;
@@ -33,10 +33,21 @@ const getProductIdForPlan = (planId, platform) => {
     return null;
   }
 
-  // Find the productId that maps to this planId
-  for (const [productId, mappedPlanId] of Object.entries(mappings)) {
-    if (mappedPlanId === planId) {
-      return productId;
+  // For iOS: search for .monthly or .yearly suffix
+  // For Android: return the base SKU (no suffix, uses base plans)
+  if (platform === "ios") {
+    const suffix = billingPeriod === "yearly" ? ".yearly" : ".monthly";
+    for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+      if (mappedPlanId === planId && productId.endsWith(suffix)) {
+        return productId;
+      }
+    }
+  } else {
+    // Android: return first match (base SKU)
+    for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+      if (mappedPlanId === planId) {
+        return productId;
+      }
     }
   }
 
@@ -144,7 +155,8 @@ const getAvailablePlans = async (req, res) => {
         pricing: {
           monthly: permissions[planId].pricing?.monthly || "TBD",
           annual: permissions[planId].pricing?.annual || "TBD",
-          sku: getProductIdForPlan(planId, platform),
+          sku: getProductIdForPlan(planId, platform, "monthly"),
+          skuAnnual: platform === "ios" ? getProductIdForPlan(planId, platform, "yearly") : null,
         },
         available: true,
       }));

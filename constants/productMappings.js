@@ -15,18 +15,31 @@
 export const PRODUCT_MAPPINGS = {
   dev: {
     ios: {
-      // Base subscription plans (EXIST in Apple Store)
-      "com.zentavos.personal": "Personal",
-      "com.zentavos.founder": "Founder",
-      "com.zentavos.entrepreneur": "Entrepreneur",
-      "com.zentavos.tycoon": "Tycoon",
+      // Base subscription plans - Monthly
+      "com.zentavos.personal.monthly": "Personal",
+      "com.zentavos.founder.monthly": "Founder",
+      "com.zentavos.entrepreneur.monthly": "Entrepreneur",
+      "com.zentavos.tycoon.monthly": "Tycoon",
 
-      // Add-on plans (EXIST in Apple Store Connect)
-      zentavos_dev_personal_1_institution: "Personal+1",
-      zentavos_dev_founder_1_institution: "Founder+1",
-      zentavos_dev_entrepreneur_1_institution: "Entrepreneur+1",
-      zentavos_dev_entrepreneur_2_institution: "Entrepreneur+2",
-      zentavos_dev_tycoon_100gb: "Tycoon+100gb",
+      // Base subscription plans - Yearly
+      "com.zentavos.personal.yearly": "Personal",
+      "com.zentavos.founder.yearly": "Founder",
+      "com.zentavos.entrepreneur.yearly": "Entrepreneur",
+      "com.zentavos.tycoon.yearly": "Tycoon",
+
+      // Add-on plans - Monthly
+      "com.zentavos.personal.plus1.monthly": "Personal+1",
+      "com.zentavos.founder.plus1.monthly": "Founder+1",
+      "com.zentavos.entrepreneur.plus1.monthly": "Entrepreneur+1",
+      "com.zentavos.entrepreneur.plus2.monthly": "Entrepreneur+2",
+      "com.zentavos.tycoon.plus100gb.monthly": "Tycoon+100gb",
+
+      // Add-on plans - Yearly
+      "com.zentavos.personal.plus1.yearly": "Personal+1",
+      "com.zentavos.founder.plus1.yearly": "Founder+1",
+      "com.zentavos.entrepreneur.plus1.yearly": "Entrepreneur+1",
+      "com.zentavos.entrepreneur.plus2.yearly": "Entrepreneur+2",
+      "com.zentavos.tycoon.plus100gb.yearly": "Tycoon+100gb",
     },
     android: {
       // Base subscription plans - NEED to be created in Google Play Store
