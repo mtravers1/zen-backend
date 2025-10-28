@@ -12,6 +12,9 @@ router.get("/:userId", userController.getUserById);
 /* PUT update user method/provider */
 router.put("/:userId/method", userController.updateUserMethod);
 
+/* PATCH update user info (firstName, lastName, etc.) */
+router.patch("/:userId", userController.updateUserInfo);
+
 /* GET current user session info (for compatibility) */
 router.get("/getMyUser", userController.getMyUser);
 
