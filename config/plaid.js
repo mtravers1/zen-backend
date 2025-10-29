@@ -32,6 +32,7 @@ function getPlaidClient() {
       plaidEnv = PlaidEnvironments.development;
       break;
     case "prod":
+    case "prod":
     case "uat": // Temporary fix. Please remove
       // Zentavos (production)
       plaidEnv = PlaidEnvironments.production;

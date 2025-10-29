@@ -8,8 +8,7 @@ import {
   AppStoreServerAPIClient,
   Environment,
 } from "@apple/app-store-server-library";
-import dotenv from "dotenv";
-dotenv.config();
+
 
 //Todo move to secret manager
 const PRIVATE_KEY_BASE64 = process.env.IAP_CERTIFICATE;

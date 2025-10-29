@@ -1,3 +1,4 @@
+import "./config/env.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -11,12 +12,9 @@ import {
   cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
-import dotenv from "dotenv";
 import "./lib/firebaseAdmin.js";
 import "./database/database.js";
 import router from "./routes/index.js";
-
-dotenv.config();
 
 const app = express();
 

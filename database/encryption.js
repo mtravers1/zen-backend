@@ -1,10 +1,7 @@
-import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
-
-dotenv.config();
 
 // Validate required environment variables
 const requiredEnvVars = [

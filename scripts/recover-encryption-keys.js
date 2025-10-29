@@ -5,10 +5,7 @@
  * Usage: node scripts/recover-encryption-keys.js <uid>
  */
 
-import dotenv from 'dotenv';
 import { checkEncryptionKeyHealth, recoverUserEncryptionKeys } from '../database/encryption.js';
-
-dotenv.config();
 
 async function main() {
   const uid = process.argv[2];

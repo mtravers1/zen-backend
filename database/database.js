@@ -1,8 +1,5 @@
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 
-dotenv.config();
-// import initialize from './datainit.js';
 
 const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
 
@@ -20,6 +17,7 @@ if (process.env.NODE_ENV !== 'test') {
     user: process.env.MONGODB_USER,
     pass: process.env.MONGODB_PASS,
     dbName: process.env.MONGODB_DB,
+    serverSelectionTimeoutMS: 300000,
   });
 
   mongoDBConnection = mongoose.connection;

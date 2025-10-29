@@ -12,7 +12,7 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
     const serviceAccountJson = Buffer.from(
       process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
       "base64"
-    ).toString("utf8");
+    ).toString("utf8").replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
     googlePlayAuth = new GoogleAuth({

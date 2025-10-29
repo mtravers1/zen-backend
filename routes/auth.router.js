@@ -1,10 +1,6 @@
 import { Router } from "express";
 import authController from "../controllers/auth.controller.js";
-import dotenv from "dotenv";
 import firebaseAuth from "../middlewares/firebaseAuth.js";
-
-dotenv.config();
-
 const router = Router();
 
 router.post("/signup", authController.signUp);
