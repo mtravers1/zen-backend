@@ -28,17 +28,16 @@ function getPlaidClient() {
       plaidEnv = PlaidEnvironments.sandbox;
       break;
     case "staging":
+    case "uat": // UAT should point to a non-production environment
       // Zentavos Dev
       plaidEnv = PlaidEnvironments.development;
       break;
     case "prod":
-    case "prod":
-    case "uat": // Temporary fix. Please remove
       // Zentavos (production)
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, development, staging, prod`);
+      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, development, staging, uat, prod`);
   }
 
   const plaidConfig = new Configuration({
