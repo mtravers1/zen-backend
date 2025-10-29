@@ -107,6 +107,7 @@ const VALID_ROUTES = new Set([
   "/api/payments/history",
   "/api/payments/very-receipt",
   "/api/payments/update-user-uuid",
+  "/api/payments/mock-upgrade",
 
   // Subscriptions routes
   "/api/subscriptions/plans",
