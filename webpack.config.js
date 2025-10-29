@@ -49,6 +49,7 @@ export default {
         { from: "services/", to: "./services/", noErrorOnMissing: true },
         { from: "lib/", to: "./lib/", noErrorOnMissing: true },
         { from: "bin/", to: "./bin/", noErrorOnMissing: true },
+        { from: "app.js", to: "." },
       ],
     }),
     new webpack.WatchIgnorePlugin({
