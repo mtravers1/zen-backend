@@ -395,45 +395,32 @@ const signInOrCreate = async (uid, userData = null) => {
     structuredLogger.logOperationStart("auth_service_signin_or_create", {
       user_id: uid,
     });
-    console.log("uid", uid);
-    console.log("userData", userData);
 
-    let user = await User.findOne({
-      authUid: uid,
-    }).select("-password");
+    let user = await User.findOne({ authUid: uid }).select("-password");
 
-    console.log("User lookup result:", { found: !!user, uid });
+    if (!user && userData && userData.email) {
+      const emailHash = hashEmail(userData.email);
+      user = await User.findOne({ emailHash }).select("-password");
+      if (user) {
+        console.log(
+          "Found existing user with same email, linking authUid to existing account."
+        );
+        user.authUid = uid;
+        await user.save();
+      }
+    }
 
     if (!user) {
-      // User doesn't exist, create a basic user profile
-      console.log("User not found, creating new user with data:", userData);
-
       if (!userData) {
-        const error = new Error(
+        throw new Error(
           "User not found and no user data provided for creation"
         );
-        structuredLogger.logErrorBlock(error, {
-          operation: "auth_service_signin_or_create",
-          user_id: uid,
-          error_classification: "missing_user_data",
-        });
-        throw error;
       }
-
-      structuredLogger.logOperationStart("auth_service_create_basic_user", {
-        user_id: uid,
-      });
-
-      // Step 1: Create user in database first (without encrypted data) to get database ID
-      console.log("Creating temp user object for database save:", {
-        uid,
-        email: userData.email,
-      });
 
       const tempUser = new User({
         email: [
           {
-            email: userData.email.trim().toLowerCase(), // Temporarily unencrypted
+            email: userData.email.trim().toLowerCase(),
             emailType: "personal",
             isPrimary: true,
           },
@@ -445,138 +432,19 @@ const signInOrCreate = async (uid, userData = null) => {
         profilePhotoUrl: userData.photoUrl || "",
         numAccounts: userData.numAccounts || 0,
         name: {
-          firstName: userData.firstName || "New", // Temporarily unencrypted
-          lastName: userData.lastName || "User", // Temporarily unencrypted
+          firstName: userData.firstName || "New",
+          lastName: userData.lastName || "User",
           prefix: userData.prefix || null,
           suffix: userData.suffix || null,
           middleName: userData.middleName || "",
         },
-        maritalStatus: "single",
-        address:
-          userData.address1 ||
-          userData.city ||
-          userData.state ||
-          userData.zip ||
-          userData.country
-            ? [
-                {
-                  street: userData.address1 || null,
-                  city: userData.city || null,
-                  state: userData.state || null,
-                  postalCode: userData.zip || null,
-                  country: userData.country || null,
-                },
-              ]
-            : [],
-        dateOfBirth: userData.dob ? Date.parse(userData.dob) : null,
-        occupation: null,
-        annualIncome: null,
-        encryptedSSN: null,
         emailHash: hashEmail(userData.email),
       });
 
-      try {
-        console.log("Saving temp user to database:", {
-          uid,
-          email: userData.email,
-        });
-        await tempUser.save();
-        console.log("Successfully created new user:", {
-          uid,
-          userId: tempUser._id,
-        });
-      } catch (saveError) {
-        // Handle unique constraint violations - user might have been created by another request
-        if (saveError.code === 11000) {
-          // Check if it's a duplicate emailHash error (user exists with same email but different authUid)
-          if (saveError.keyPattern && saveError.keyPattern.emailHash) {
-            console.log(
-              "🔄 Duplicate email detected, looking for existing user with same email..."
-            );
+      await tempUser.save();
+      user = tempUser;
 
-            // Find user by emailHash (same email, potentially different OAuth provider)
-            const emailHash = hashEmail(userData.email);
-            user = await User.findOne({
-              emailHash: emailHash,
-            }).select("-password");
-
-            if (user) {
-              console.log(
-                "✅ Found existing user with same email, updating authUid to link OAuth providers"
-              );
-
-              // Update the existing user's authUid to the new Firebase UID
-              // This allows the same user to sign in with different OAuth providers
-              user.authUid = uid;
-              user.lastLoginAt = new Date();
-
-              // Update the authentication method if it's different
-              if (userData.method && user.method !== userData.method) {
-                user.method = userData.method;
-              }
-
-              await user.save();
-
-              structuredLogger.logSuccess(
-                "auth_service_oauth_provider_linked",
-                {
-                  user_id: uid,
-                  existing_user_id: user._id,
-                  email: userData.email,
-                  new_method: userData.method,
-                  previous_method: user.method,
-                }
-              );
-            } else {
-              // If we still can't find the user by email, re-throw the error
-              console.log(
-                "❌ Could not find user by email hash, re-throwing error"
-              );
-              throw saveError;
-            }
-          } else {
-            // Try to find by authUid for other duplicate key errors
-            user = await User.findOne({
-              authUid: uid,
-            }).select("-password");
-
-            if (!user) {
-              // If we still can't find the user, re-throw the error
-              throw saveError;
-            }
-            // User exists, continue with normal flow
-          }
-        } else {
-          throw saveError;
-        }
-      }
-
-      // Step 2: Now handle DEK creation/migration using the database ID
-      console.log(
-        "Handling encryption keys for new user:",
-        uid,
-        "with database ID:",
-        tempUser._id
-      );
-      let dek;
-      try {
-        dek = await getUserDekForSignup(uid, tempUser._id);
-        console.log("Generated/migrated DEK for new user:", {
-          uid,
-          userId: tempUser._id,
-          hasDek: !!dek,
-          dekLength: dek?.length,
-        });
-      } catch (dekError) {
-        console.error("Error generating DEK for user:", uid, dekError);
-        // DEK generation is critical - fail if it fails
-        throw new Error(
-          `Failed to generate encryption keys: ${dekError.message}`
-        );
-      }
-
-      // Step 3: Encrypt sensitive data and update the user
-      console.log("Starting data encryption for user:", uid);
+      const dek = await getUserDekForSignup(uid, user._id);
 
       const [
         encryptedEmail,
@@ -590,76 +458,34 @@ const signInOrCreate = async (uid, userData = null) => {
         encryptValue(userData.middleName || "", dek),
       ]);
 
-      // Encrypt optional fields
       let encryptedPhone, encryptedPhotoUrl;
-      const optionalEncryptions = [];
-
       if (userData.phone) {
-        optionalEncryptions.push(
-          encryptValue(userData.phone, dek).then((result) => ({
-            phone: result,
-          }))
-        );
+        encryptedPhone = await encryptValue(userData.phone, dek);
       }
       if (userData.photoUrl) {
-        optionalEncryptions.push(
-          encryptValue(userData.photoUrl, dek).then((result) => ({
-            photoUrl: result,
-          }))
-        );
+        encryptedPhotoUrl = await encryptValue(userData.photoUrl, dek);
       }
 
-      const optionalResults = await Promise.all(optionalEncryptions);
-      optionalResults.forEach((result) => {
-        if (result.phone) encryptedPhone = result.phone;
-        if (result.photoUrl) encryptedPhotoUrl = result.photoUrl;
-      });
-
-      console.log("All data encrypted successfully for user:", uid);
-
-      // Step 4: Update the user with encrypted data
-      console.log("Updating user with encrypted data:", {
-        uid,
-        userId: tempUser._id,
-        email: userData.email,
-      });
-
-      tempUser.email = [
+      user.email = [
         {
           email: encryptedEmail,
           emailType: "personal",
           isPrimary: true,
         },
       ];
-      tempUser.name.firstName = encryptedFirstName;
-      tempUser.name.lastName = encryptedLastName;
-      tempUser.name.middleName = encryptedMiddleName;
+      user.name.firstName = encryptedFirstName;
+      user.name.lastName = encryptedLastName;
+      user.name.middleName = encryptedMiddleName;
       if (encryptedPhone) {
-        tempUser.phones = [{ phone: encryptedPhone }];
+        user.phones = [{ phone: encryptedPhone }];
       }
       if (encryptedPhotoUrl) {
-        tempUser.profilePhotoUrl = encryptedPhotoUrl;
+        user.profilePhotoUrl = encryptedPhotoUrl;
       }
 
-      await tempUser.save();
-      console.log("User updated with encrypted data successfully:", {
-        uid,
-        userId: tempUser._id,
-      });
-
-      // Assign tempUser to user variable for the rest of the flow
-      user = tempUser;
-
-      structuredLogger.logSuccess("auth_service_create_basic_user", {
-        user_id: uid,
-        database_id: user._id,
-      });
+      await user.save();
     }
 
-    // Now proceed with normal sign-in flow
-    structuredLogger.logOperationStart("auth_service_decrypt_user_data", {
-      user_id: uid,
-    });
     const dek = await getUserDek(uid);
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
@@ -686,8 +512,8 @@ const signInOrCreate = async (uid, userData = null) => {
 
     const retrievedUser = {
       id: user._id,
-      _id: user._id, // Also include _id for compatibility
-      email: emails[0]?.email || userData.email, // Return primary email as string for mobile compatibility
+      _id: user._id,
+      email: emails[0]?.email || userData.email,
       phone: decryptedPhone,
       role: user.role,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -698,29 +524,14 @@ const signInOrCreate = async (uid, userData = null) => {
       },
     };
 
-    structuredLogger.logSuccess("auth_service_signin_or_create", {
-      user_id: uid,
-    });
-
-    console.log("🔍 [DEBUG] signInOrCreate returning user data:", {
-      id: retrievedUser.id,
-      firstName: retrievedUser.name.firstName,
-      lastName: retrievedUser.name.lastName,
-      email: retrievedUser.email?.[0]?.email,
-    });
-
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_service_signin_or_create",
       user_id: uid,
-      error_classification:
-        error.message === "User not found"
-          ? "user_not_found"
-          : "decryption_error",
+      error_classification: "signin_or_create_failed",
     });
-    console.log("error in signin_or_create", error);
-    throw new Error(error);
+    throw error;
   }
 };
 
@@ -1375,9 +1186,12 @@ const createFirebaseUser = async (userData) => {
         const userRecord = {
           email: userData.email,
           displayName: userData.displayName,
-          photoURL: userData.photoURL,
           emailVerified: userData.emailVerified,
         };
+
+        if (userData.photoURL && userData.photoURL.startsWith('http')) {
+          userRecord.photoURL = userData.photoURL;
+        }
 
         firebaseUser = await admin.auth().createUser(userRecord);
 
