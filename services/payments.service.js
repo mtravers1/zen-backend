@@ -245,9 +245,16 @@ const updateUserUUID = async (uuid, uid) => {
   await user.save();
 };
 
+const mockUpgrade = async (uid) => {
+  const user = await User.findOne({ authUid: uid });
+  user.account_type = "Founder";
+  await user.save();
+};
+
 const paymentService = {
   validatePayment,
   updateUserUUID,
+  mockUpgrade,
 };
 
 export default paymentService;

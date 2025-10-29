@@ -296,11 +296,23 @@ const getAvailablePlans = async (req, res) => {
   }
 };
 
+const mockUpgrade = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    await paymentService.mockUpgrade(uid);
+    res.status(200).json({ success: true, message: "User upgraded successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const paymentsController = {
   verifyReceipts,
   weebhookAndroid,
   weebhookApple,
   updateUserUUID,
   getAvailablePlans,
+  mockUpgrade,
 };
 export default paymentsController;
