@@ -7,16 +7,8 @@ const __dirname = path.dirname(__filename);
 
 console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
 
-let envPath;
-if (process.env.NODE_ENV === 'production') {
-  envPath = path.resolve(__dirname, '../.env/.env.prod');
-} else if (process.env.NODE_ENV === 'staging') {
-  envPath = path.resolve(__dirname, '../.env/.env.staging');
-} else if (process.env.NODE_ENV === 'development') {
-  envPath = path.resolve(__dirname, '../.env/.env.development');
-} else {
-  envPath = path.resolve(__dirname, '../.env/.env.local');
-}
+// Always load the .env file from the project root
+const envPath = path.resolve(__dirname, '../.env');
 
 console.log(`Attempting to load env file from: ${envPath}`);
 const result = dotenv.config({ path: envPath });
