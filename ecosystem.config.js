@@ -5,10 +5,19 @@
 module.exports = {
     apps: [
         {
-            name: "dev",
+            name: "local",
             script: "./index.js",
             watch: true,
             node_args: "--env-file=.env/.env.local",
+            error_file: "/var/log/zentavos/api-error.log",
+            out_file: "/var/log/zentavos/api-out.log",
+            log_date_format: "YYYY-MM-DD HH:mm Z",
+        },
+        {
+            name: "dev",
+            script: "./index.js",
+            watch: true,
+            node_args: "--env-file=.env/.env.development",
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
