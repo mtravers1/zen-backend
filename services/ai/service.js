@@ -18,9 +18,7 @@ import tripService from "../trips.service.js";
 // import aiController from "../../controllers/ai.controller.js";
 import { getUserDek } from "../../database/encryption.js";
 import User from "../../database/models/User.js";
-import dotenv from "dotenv";
 import Groq from "groq-sdk";
-dotenv.config();
 
 class AIService {
   constructor() {

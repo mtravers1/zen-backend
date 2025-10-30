@@ -5,10 +5,19 @@
 module.exports = {
     apps: [
         {
+            name: "local",
+            script: "./index.js",
+            watch: true,
+            node_args: "--env-file=.env/.env.local",
+            error_file: "/var/log/zentavos/api-error.log",
+            out_file: "/var/log/zentavos/api-out.log",
+            log_date_format: "YYYY-MM-DD HH:mm Z",
+        },
+        {
             name: "dev",
             script: "./index.js",
             watch: true,
-            node_args: "--env-file=.env",
+            node_args: "--env-file=.env/.env.development",
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -16,8 +25,8 @@ module.exports = {
         {
             name: "stg",
             script: "./index.js",
-            watch: true,
-            node_args: "--env-file=.env",
+            watch: false,
+            node_args: "--env-file=.env/.env.staging",
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -25,8 +34,8 @@ module.exports = {
         {
             name: "prod",
             script: "./index.js",
-            watch: true,
-            node_args: "--env-file=.env",
+            watch: false,
+            node_args: "--env-file=.env/.env.prod",
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",

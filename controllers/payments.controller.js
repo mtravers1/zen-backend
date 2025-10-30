@@ -8,8 +8,7 @@ import {
   AppStoreServerAPIClient,
   Environment,
 } from "@apple/app-store-server-library";
-import dotenv from "dotenv";
-dotenv.config();
+
 
 //Todo move to secret manager
 const PRIVATE_KEY_BASE64 = process.env.IAP_CERTIFICATE;
@@ -410,11 +409,23 @@ const getAvailablePlans = async (req, res) => {
   }
 };
 
+const mockUpgrade = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    await paymentService.mockUpgrade(uid);
+    res.status(200).json({ success: true, message: "User upgraded successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const paymentsController = {
   verifyReceipts,
   weebhookAndroid,
   weebhookApple,
   updateUserUUID,
   getAvailablePlans,
+  mockUpgrade,
 };
 export default paymentsController;

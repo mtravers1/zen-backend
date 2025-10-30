@@ -8,6 +8,58 @@ if (!structuredLogger) {
 const SENSITIVE_RESPONSE_HEADERS = ['authorization', 'cookie', 'x-api-key'];
 const MAX_RESPONSE_BODY_LENGTH = 1000; // make configurable if needed
 
+const maskAuthorizationHeader = (authorization) => {
+  const authorizationString = (() => {
+    if (typeof authorization === 'string') {
+      return authorization;
+    }
+
+    if (Array.isArray(authorization)) {
+      const firstString = authorization.find((value) => typeof value === 'string' && value.trim().length > 0);
+      return firstString ?? '';
+    }
+
+    if (authorization && typeof authorization === 'object') {
+      const possibleValue = authorization.value ?? authorization.token ?? authorization.authorization;
+      return typeof possibleValue === 'string' ? possibleValue : '';
+    }
+
+    return '';
+  })();
+
+  if (authorizationString.trim().length === 0) {
+    return '[MASKED]';
+  }
+
+  const segments = authorizationString.trim().split(/\s+/u);
+  if (segments.length === 1) {
+    const token = segments[0];
+    const lastFour = token.slice(-4);
+    return `***${lastFour}`;
+  }
+
+  const [scheme, ...rest] = segments;
+  const token = rest.join(' ');
+  const lastFour = token.slice(-4);
+  return `${scheme} ***${lastFour}`;
+};
+
+const sanitizeRequestHeaders = (headers) => {
+  if (!headers) {
+    return {};
+  }
+  if (typeof headers !== 'object') {
+    return headers;
+  }
+
+  return Object.entries(headers).reduce((acc, [key, value]) => {
+    acc[key] = key.toLowerCase() === 'authorization'
+      ? maskAuthorizationHeader(value)
+      : value;
+    return acc;
+  }, {});
+};
+
 function sanitizeHeaders(headers) {
   try {
     if (!headers || typeof headers !== 'object') {
@@ -79,7 +131,8 @@ export const structuredLoggingMiddleware = (req, res, next) => {
   console.log(`[REQUEST ${requestId}] URL: ${req.url}`);
   console.log(`[REQUEST ${requestId}] IP: ${req.ip}`);
   console.log(`[REQUEST ${requestId}] User Agent: ${req.headers['user-agent']}`);
-  console.log(`[REQUEST ${requestId}] Headers:`, Object.keys(req.headers));
+  console.log(`[REQUEST ${requestId}] Headers Keys:`, Object.keys(req.headers));
+  console.log(`[REQUEST ${requestId}] Headers Sanitized:`, sanitizeRequestHeaders(req.headers));
   console.log(`[REQUEST ${requestId}] Has Authorization: ${!!req.headers.authorization}`);
   console.log(`[REQUEST ${requestId}] Authorization Type: ${req.headers.authorization ? req.headers.authorization.split(' ')[0] : 'none'}`);
   console.log(`[REQUEST ${requestId}] Content-Type: ${req.headers['content-type']}`);

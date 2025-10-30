@@ -25,4 +25,4 @@ const userRoleSchema = new Schema({
 
 const UserRole = model('UserRole', userRoleSchema);
 
-module.exports = UserRole;
+export default UserRole;

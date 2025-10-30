@@ -26,7 +26,8 @@ const createLinkToken = async (
   uid,
   screen,
   mode,
-  access_token
+  access_token,
+  plaidEnvironment
 ) => {
   return await structuredLogger.withContext(
     "create_link_token",
@@ -98,7 +99,7 @@ const createLinkToken = async (
       if (accessToken) {
         plaidRequest.access_token = accessToken;
       }
-      const plaidClient = getPlaidClient();
+      const plaidClient = getPlaidClient(plaidEnvironment);
       const response = await plaidClient
         .linkTokenCreate(plaidRequest)
         .catch((error) => {

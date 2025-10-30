@@ -1,10 +1,7 @@
-import dotenv from "dotenv";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
-
-dotenv.config();
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -511,7 +508,7 @@ async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
       );
       try {
         const [encryptedDEK] = await legacyFile.download();
-        await newFile.save(encryptedDEK);
+        await newFile.save(encryptedDEK, { resumable: false });
         console.log(
           `✅ DEK copied via download+save from ${legacyBucketKey} to ${newBucketKey}`
         );
@@ -560,7 +557,25 @@ async function backupExistingDEK(bucketKey) {
         `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${bucketKey}_${timestamp}.key`
       );
 
-    await originalFile.copy(backupFile);
+    try {
+      await originalFile.copy(backupFile);
+    } catch (copyError) {
+      console.warn(
+        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`
+      );
+      try {
+        const [encryptedDEK] = await originalFile.download();
+        await backupFile.save(encryptedDEK, { resumable: false });
+      } catch (fallbackError) {
+        console.error(
+          `❌ Fallback backup (download+save) failed for bucket key ${bucketKey}:`,
+          fallbackError
+        );
+        throw new Error(
+          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`
+        );
+      }
+    }
     console.log(
       `✅ DEK backup created for bucket key ${bucketKey}: ${bucketKey}_${timestamp}.key`
     );

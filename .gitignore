@@ -77,3 +77,8 @@ scripts/user-limits-report.js
 routes/dev.router.js
 
 .cursor/*
+
+# Service account keys
+ServiceAccountKey.json
+../zentavos-476023-2f9c773dcbb8.json
+config/zentavos-d6c79-24978c4e7fff.json
