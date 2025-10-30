@@ -42,9 +42,11 @@ app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
 // Rate limiting for brute force protection
+const isProduction = process.env.NODE_ENV === 'production';
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: isProduction ? 100 : 1000, // Limit each IP to 100 requests per windowMs in production, 1000 otherwise
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
