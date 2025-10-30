@@ -38,6 +38,8 @@ jobs:
             ztv-
       - name: Install dependencies
         run: npm ci
+      - name: Create dummy .env file
+        run: touch .env
       - name: Build backend
         run: npm run build
       - name: Replace environment variables
@@ -80,8 +82,15 @@ jobs:
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV }}|g" .env
           sed -i -e "/\"type\"\:.*/d" package.json
-          printf "%s" "${{ secrets.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY_DEV }}" > ServiceAccountKey.json
           cd ..
+      - name: Create ServiceAccountKey.json
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            fs.writeFileSync('dist/ServiceAccountKey.json', process.env.SERVICE_ACCOUNT_KEY);
+          env:
+            SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY_DEV }}
       - name: VPN config
         env:
           OVPN_CONFIG: ${{ secrets.OVPN_CONFIG }}
@@ -114,6 +123,7 @@ jobs:
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ vars.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
+            npm ci
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
           EOF
