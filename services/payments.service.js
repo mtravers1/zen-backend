@@ -282,7 +282,7 @@ const updateUserUUID = async (uuid, uid) => {
 // Get subscription details from Google Play API
 const getSubscriptionDetails = async (purchaseToken) => {
   try {
-    const packageName = "com.zentavos.zentavosdev"; // TODO: Get from env
+    const packageName = process.env.ANDROID_PACKAGE_NAME || "com.zentavos.zentavosdev";
     const accessToken = await getGooglePlayAccessToken();
 
     const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
