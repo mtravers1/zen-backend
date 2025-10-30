@@ -81,6 +81,16 @@ jobs:
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_PROD }}|g" .env
           sed -i -e "/\"type\"\:.*/d" package.json
           cd ..
+
+      - name: Create ServiceAccountKey.json
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            fs.writeFileSync('dist/ServiceAccountKey.json', process.env.SERVICE_ACCOUNT_KEY);
+        env:
+          SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY_PROD }}
+          
       - name: VPN config
         env:
           OVPN_CONFIG: ${{ secrets.OVPN_CONFIG }}
