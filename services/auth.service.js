@@ -136,6 +136,7 @@ const signUp = async (data) => {
       phones: data.phone ? [{ phone: data.phone }] : [], // Temporarily store unencrypted
       role: data.role || "individual",
       authUid: data.authUid,
+      account_type: "Free", // Default to Free plan
       profilePhotoUrl: data.profilePhotoUrl || null,
       numAccounts: data.numAccounts || 0,
       name: {
@@ -341,6 +342,7 @@ const signUp = async (data) => {
       email: data.email.trim().toLowerCase(), // Use original email for response
       phone: data.phone || null,
       role: tempUser.role,
+      account_type: tempUser.account_type,
       profilePhotoUrl: data.profilePhotoUrl || null,
       name: {
         firstName: data.firstName || "",
@@ -510,12 +512,19 @@ const signInOrCreate = async (uid, userData = null) => {
       })
     );
 
+    // Ensure account_type exists
+    if (!user.account_type) {
+      user.account_type = "Free";
+      await user.save();
+    }
+
     const retrievedUser = {
       id: user._id,
       _id: user._id,
       email: emails[0]?.email || userData.email,
       phone: decryptedPhone,
       role: user.role,
+      account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,
@@ -1421,6 +1430,12 @@ const signIn = async (email, password) => {
       ];
     }
 
+    // Ensure account_type exists
+    if (!user.account_type) {
+      user.account_type = "Free";
+      await user.save();
+    }
+
     // Generate JWT token for the user
     const token = generateJWTToken(user._id, normalizedEmail);
 
@@ -1430,6 +1445,7 @@ const signIn = async (email, password) => {
       email: emails[0]?.email || normalizedEmail, // Return primary email as string for mobile compatibility
       phone: decryptedPhone,
       role: user.role,
+      account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,
