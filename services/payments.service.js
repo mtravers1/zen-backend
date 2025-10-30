@@ -47,17 +47,26 @@ const validatePayment = async (platform, receipt, uid) => {
   const user = await User.findOne({ authUid: uid });
   try {
     let result;
+    let parsedReceipt = null;
 
     if (platform === "ios") {
       result = await validateApple(receipt);
     } else if (platform === "android") {
+      // Parse receipt to extract purchaseToken
+      parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
       result = await validateAndroid(receipt);
     } else {
       return { message: "Invalid platform" };
     }
 
     if (result.status === 0) {
-      await updateUserSubscription(user._id.toString(), result, platform);
+      await updateUserSubscription(
+        user._id.toString(),
+        result,
+        platform,
+        platform === "android" ? parsedReceipt?.purchaseToken : null,
+        platform === "android" ? result.fullDetails : null
+      );
       return { message: "Valid receipt" };
     } else {
       return { message: "Invalid receipt" };
@@ -68,7 +77,7 @@ const validatePayment = async (platform, receipt, uid) => {
   }
 };
 
-const updateUserSubscription = async (userId, data, platform) => {
+const updateUserSubscription = async (userId, data, platform, purchaseToken = null, subscriptionDetails = null) => {
   try {
     const productId = data.latest_receipt_info[0].product_id;
     const expiresDateMs = data.latest_receipt_info[0].expires_date_ms;
@@ -105,6 +114,23 @@ const updateUserSubscription = async (userId, data, platform) => {
 
     // Update user subscription info
     user.account_type = planName;
+
+    // Store subscription metadata for RTDN tracking
+    if (purchaseToken && platform === "android") {
+      const expiryTime = subscriptionDetails?.lineItems?.[0]?.expiryTime || new Date(parseInt(expiresDateMs)).toISOString();
+      const autoRenewing = subscriptionDetails?.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled !== false;
+
+      user.subscription_metadata = {
+        purchaseToken,
+        productId,
+        expiryTime,
+        autoRenewing,
+        state: "active",
+        lastUpdated: new Date().toISOString(),
+      };
+
+      console.log(`📝 Stored subscription metadata for RTDN tracking`);
+    }
 
     // Save user
     await user.save();
@@ -202,11 +228,17 @@ const validateAndroid = async (receipt) => {
 
   const result = await response.json();
   console.log("✅ Google Play validation result:", result);
+  console.log("🔍 [DETAILED] Full Google Play Response:", JSON.stringify(result, null, 2));
 
   // ACKNOWLEDGE the purchase if pending
   if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
     console.log("🔔 Acknowledging purchase...");
+    // Use correct acknowledgement endpoint as per official docs:
+    // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions/acknowledge
     const acknowledgeUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
+
+    console.log(`🔗 Acknowledgement URL: ${acknowledgeUrl}`);
+    console.log(`🔗 ProductId: ${productId}, Token: ${purchaseToken}`);
 
     const ackResponse = await fetch(acknowledgeUrl, {
       method: "POST",
@@ -221,6 +253,7 @@ const validateAndroid = async (receipt) => {
     } else {
       const ackError = await ackResponse.text();
       console.error("❌ Failed to acknowledge purchase:", ackResponse.status, ackError);
+      console.error(`❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`);
     }
   }
 
@@ -236,6 +269,7 @@ const validateAndroid = async (receipt) => {
           : Date.now() + 30 * 24 * 60 * 60 * 1000,
       },
     ],
+    fullDetails: result, // Include full details for subscription_metadata
   };
 };
 
@@ -245,16 +279,156 @@ const updateUserUUID = async (uuid, uid) => {
   await user.save();
 };
 
-const mockUpgrade = async (uid) => {
-  const user = await User.findOne({ authUid: uid });
-  user.account_type = "Founder";
-  await user.save();
+// Get subscription details from Google Play API
+const getSubscriptionDetails = async (purchaseToken) => {
+  try {
+    const packageName = process.env.ANDROID_PACKAGE_NAME || "com.zentavos.zentavosdev";
+    const accessToken = await getGooglePlayAccessToken();
+
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Failed to get subscription details:", response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error("❌ Error getting subscription details:", error);
+    return null;
+  }
+};
+
+// Update user subscription from RTDN notification
+const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => {
+  try {
+    console.log(`📝 [RTDN] Updating user from state: ${state}`);
+
+    // Find user by purchaseToken stored in subscription_metadata
+    let user = await User.findOne({
+      "subscription_metadata.purchaseToken": purchaseToken,
+    });
+
+    // Fallback: If RTDN arrives before /very-receipt, find by productId + recent update
+    if (!user) {
+      console.warn(`⚠️ [RTDN] User not found by purchaseToken, trying fallback...`);
+      const productId = subscriptionDetails.lineItems?.[0]?.productId;
+
+      if (productId) {
+        // Find users updated in last 5 minutes with this product
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        user = await User.findOne({
+          "subscription_metadata.productId": productId,
+          "subscription_metadata.lastUpdated": { $gte: fiveMinutesAgo },
+        }).sort({ "subscription_metadata.lastUpdated": -1 });
+
+        if (user) {
+          console.log(`✅ [RTDN] Found user by fallback (productId + recent update)`);
+          // Update purchaseToken now that we have it
+          user.subscription_metadata.purchaseToken = purchaseToken;
+        }
+      }
+    }
+
+    if (!user) {
+      console.warn(`⚠️ [RTDN] User not found for purchaseToken: ${purchaseToken.substring(0, 20)}...`);
+      return;
+    }
+
+    console.log(`👤 [RTDN] Found user: ${user._id}`);
+
+    // Get environment and platform mappings
+    const nodeEnv = process.env.ENVIRONMENT;
+    const environment = nodeEnv === "development" ? "dev" : nodeEnv;
+
+    const productId = subscriptionDetails.lineItems?.[0]?.productId;
+    const expiryTime = subscriptionDetails.lineItems?.[0]?.expiryTime;
+    const autoRenewing = subscriptionDetails.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled || false;
+
+    // Map productId to plan name
+    const planMappings = PRODUCT_MAPPINGS[environment]?.android;
+    const planName = planMappings?.[productId] || "Free";
+
+    console.log(`📦 [RTDN] Product: ${productId} → Plan: ${planName}`);
+
+    // Handle different subscription states
+    switch (state) {
+      case "purchased":
+      case "renewed":
+      case "recovered":
+      case "restarted":
+        // Activate subscription
+        user.account_type = planName;
+        user.subscription_metadata = {
+          purchaseToken,
+          productId,
+          expiryTime,
+          autoRenewing,
+          state: "active",
+          lastUpdated: new Date().toISOString(),
+        };
+        break;
+
+      case "canceled":
+        // Mark as canceled but keep access until expiry
+        user.subscription_metadata = {
+          ...user.subscription_metadata,
+          state: "canceled",
+          autoRenewing: false,
+          lastUpdated: new Date().toISOString(),
+        };
+        // Don't change account_type yet - user still has access
+        break;
+
+      case "expired":
+      case "revoked":
+        // Downgrade to Free
+        user.account_type = "Free";
+        user.subscription_metadata = {
+          ...user.subscription_metadata,
+          state: state,
+          lastUpdated: new Date().toISOString(),
+        };
+        break;
+
+      case "paused":
+      case "on_hold":
+      case "grace_period":
+        // Keep current plan but mark state
+        user.subscription_metadata = {
+          ...user.subscription_metadata,
+          state: state,
+          lastUpdated: new Date().toISOString(),
+        };
+        break;
+
+      default:
+        console.warn(`⚠️ [RTDN] Unhandled state: ${state}`);
+    }
+
+    await user.save();
+    console.log(`✅ [RTDN] User ${user._id} updated successfully`);
+  } catch (error) {
+    console.error(`❌ [RTDN] Error updating user:`, error);
+    throw error;
+  }
 };
 
 const paymentService = {
   validatePayment,
   updateUserUUID,
-  mockUpgrade,
+  getSubscriptionDetails,
+  updateUserFromRTDN,
 };
 
 export default paymentService;
