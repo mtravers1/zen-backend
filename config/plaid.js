@@ -1,43 +1,25 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
-let plaidClient = null;
+const plaidClients = {};
 
-function getPlaidClient() {
-  if (plaidClient) {
-    return plaidClient;
-  }
-  
-/***
- * # **IMPORTANT**
- * # The bucket name where we store user encryption keys. 
- *  using the wrong bucket will lose all data for all users!
- * */
-  const USER_ENCRYPTION_KEY_BUCKET_NAME = process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
-  if (!USER_ENCRYPTION_KEY_BUCKET_NAME) {
-    throw new Error('USER_ENCRYPTION_KEY_BUCKET_NAME environment variable is required');
+function getPlaidClient(plaidEnvironment = 'development') { // default to development
+  if (plaidClients[plaidEnvironment]) {
+    return plaidClients[plaidEnvironment];
   }
 
   let plaidEnv;
-  console.log("USER_ENCRYPTION_KEY_BUCKET_NAME", USER_ENCRYPTION_KEY_BUCKET_NAME);
-
-  // Improved USER_ENCRYPTION_KEY_BUCKET_NAME configuration with correct Plaid project mappings
-  switch (USER_ENCRYPTION_KEY_BUCKET_NAME.toLowerCase()) {
-    case "dev":
-    case "development":
-      // Zentavos Dev Sandbox
+  switch (plaidEnvironment.toLowerCase()) {
+    case "sandbox":
       plaidEnv = PlaidEnvironments.sandbox;
       break;
-    case "staging":
-    case "uat": // UAT should point to a non-production environment
-      // Zentavos Dev
+    case "development":
       plaidEnv = PlaidEnvironments.development;
       break;
-    case "prod":
-      // Zentavos (production)
+    case "production":
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown environment: ${USER_ENCRYPTION_KEY_BUCKET_NAME}. Must be one of: dev, development, staging, uat, prod`);
+      throw new Error(`Unknown Plaid environment: ${plaidEnvironment}`);
   }
 
   const plaidConfig = new Configuration({
@@ -47,13 +29,13 @@ function getPlaidClient() {
         "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID,
         "PLAID-SECRET": process.env.PLAID_SECRET,
       },
-      // Add timeout configuration
       timeout: 30000, // 30 seconds
     },
   });
 
-  plaidClient = new PlaidApi(plaidConfig);
-  return plaidClient;
+  const client = new PlaidApi(plaidConfig);
+  plaidClients[plaidEnvironment] = client;
+  return client;
 }
 
 export default getPlaidClient;
