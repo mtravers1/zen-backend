@@ -858,12 +858,9 @@ const validateGoogleTokenViaAPI = async (idToken) => {
     }
 
     const tokenInfo = await response.json();
-    console.log("🔑 Google API Token Info:", tokenInfo);
-
-    // Verify the token is for our app
-    // Accept Web Client ID (primary) and platform-specific Client IDs for development
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
+      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
       "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
@@ -942,6 +939,7 @@ const validateGoogleToken = async (idToken) => {
     // Accept Web Client ID (primary) and platform-specific Client IDs for development
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
+      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
       "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
