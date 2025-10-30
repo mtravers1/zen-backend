@@ -80,6 +80,7 @@ jobs:
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV }}|g" .env
           sed -i -e "/\"type\"\:.*/d" package.json
+          printf "%s" "${{ secrets.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY_DEV }}" > ServiceAccountKey.json
           cd ..
       - name: VPN config
         env:
