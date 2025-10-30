@@ -62,11 +62,8 @@ const updateUserUUID = async (req, res) => {
 
 const weebhookAndroid = async (req, res) => {
   try {
-    console.log("🔔 [RTDN] Received Google Play notification");
-
     // Validate Pub/Sub message structure
     if (!req.body.message) {
-      console.error("❌ [RTDN] Invalid payload: missing message");
       return res.status(400).send("Bad Request");
     }
 
@@ -74,14 +71,14 @@ const weebhookAndroid = async (req, res) => {
 
     // Decode base64 Pub/Sub data
     const decodedData = Buffer.from(message.data, "base64").toString("utf-8");
-    console.log("📦 [RTDN] Decoded data:", decodedData);
 
     const notification = JSON.parse(decodedData);
-    console.log("📬 [RTDN] Parsed notification:", JSON.stringify(notification, null, 2));
 
     // Handle subscription notifications
     if (notification.subscriptionNotification) {
-      await handleSubscriptionNotification(notification.subscriptionNotification);
+      await handleSubscriptionNotification(
+        notification.subscriptionNotification
+      );
     }
     // Handle one-time product notifications
     else if (notification.oneTimeProductNotification) {
@@ -94,31 +91,21 @@ const weebhookAndroid = async (req, res) => {
     // Handle test notifications
     else if (notification.testNotification) {
       console.log("🧪 [RTDN] Test notification received successfully");
-    }
-    else {
+    } else {
       console.warn("⚠️ [RTDN] Unknown notification type");
     }
 
-    // Always respond 200 OK to acknowledge receipt
     res.status(200).send("OK");
   } catch (error) {
-    console.error("❌ [RTDN] Error processing notification:", error);
-    // Still return 200 to prevent Pub/Sub retries
     res.status(200).send("OK");
   }
 };
 
 // Helper function to handle subscription notifications
 const handleSubscriptionNotification = async (subscriptionNotification) => {
-  const { notificationType, purchaseToken, subscriptionId } = subscriptionNotification;
+  const { notificationType, purchaseToken, subscriptionId } =
+    subscriptionNotification;
 
-  console.log(`🔔 [RTDN] Subscription notification type: ${notificationType}`);
-  console.log(`🔔 [RTDN] Purchase token: ${purchaseToken}`);
-  console.log(`🔔 [RTDN] Subscription ID: ${subscriptionId}`);
-  console.log(`🔍 [RTDN] FULL NOTIFICATION OBJECT:`, JSON.stringify(subscriptionNotification, null, 2));
-
-  // Map notification types to actions
-  // Reference: https://developer.android.com/google/play/billing/rtdn-reference
   switch (notificationType) {
     case 1: // SUBSCRIPTION_RECOVERED
       console.log("♻️ [RTDN] Subscription recovered from account hold");
@@ -131,7 +118,9 @@ const handleSubscriptionNotification = async (subscriptionNotification) => {
       break;
 
     case 3: // SUBSCRIPTION_CANCELED
-      console.log("❌ [RTDN] Subscription canceled (but still valid until expiry)");
+      console.log(
+        "❌ [RTDN] Subscription canceled (but still valid until expiry)"
+      );
       await updateSubscriptionState(purchaseToken, "canceled");
       break;
 
@@ -192,18 +181,19 @@ const handleSubscriptionNotification = async (subscriptionNotification) => {
 // Helper function to update subscription state in database
 const updateSubscriptionState = async (purchaseToken, state) => {
   try {
-    console.log(`🔄 [RTDN] Updating subscription state: ${state} for token: ${purchaseToken.substring(0, 20)}...`);
-
     // Call Google Play API to get full subscription details
-    const subscriptionDetails = await paymentService.getSubscriptionDetails(purchaseToken);
+    const subscriptionDetails = await paymentService.getSubscriptionDetails(
+      purchaseToken
+    );
 
-    if (!subscriptionDetails) {
-      console.error("❌ [RTDN] Failed to get subscription details from Google");
-      return;
-    }
+    if (!subscriptionDetails) return;
 
     // Update user based on subscription state
-    await paymentService.updateUserFromRTDN(purchaseToken, state, subscriptionDetails);
+    await paymentService.updateUserFromRTDN(
+      purchaseToken,
+      state,
+      subscriptionDetails
+    );
 
     console.log(`✅ [RTDN] Successfully updated subscription state: ${state}`);
   } catch (error) {
@@ -218,49 +208,43 @@ const weebhookApple = async (req, res) => {
   const { notificationType } = payload.payload;
   const user = await User.findOne({ id_uuid: payload.appAccountToken });
   if (!user) return res.status(200).send("OK");
+
+  const productId = payload.signedTransactionInfo.productId;
+  const nodeEnv = process.env.ENVIRONMENT;
+  const env = nodeEnv === "development" ? "dev" : nodeEnv;
+  const planMappings = PRODUCT_MAPPINGS[env]?.ios;
+  const planName = planMappings?.[productId];
+
   switch (notificationType) {
     case "SUBSCRIBED":
-      switch (payload.signedTransactionInfo.productId) {
-        case "test1":
-          user.account_type = "Personal";
-          await user.save();
-          break;
-        case "test2":
-          user.account_type = "Founder";
-          await user.save();
-          break;
-        case "test3":
-          user.account_type = "Entrepreneur";
-          await user.save();
-          break;
-        default:
-          break;
+      if (planName) {
+        user.account_type = planName;
+        await user.save();
+        console.log(`✅ [iOS] User subscribed to ${planName}`);
       }
       break;
-    case "CANCEL":
+
+    case "DID_CHANGE_RENEWAL_STATUS":
+      console.log("⚠️ [iOS] Subscription canceled but still valid until expiry");
+      break;
+
+    case "DID_RENEW":
+      if (planName) {
+        user.account_type = planName;
+        await user.save();
+        console.log(`✅ [iOS] Subscription renewed: ${planName}`);
+      }
+      break;
+
+    case "EXPIRED":
+    case "GRACE_PERIOD_EXPIRED":
       user.account_type = "Free";
       await user.save();
+      console.log("✅ [iOS] Subscription expired, user set to Free");
       break;
-    case "DID_RENEW":
-      switch (payload.signedTransactionInfo.productId) {
-        case "test1":
-          user.account_type = "Personal";
-          await user.save();
-          break;
-        case "test2":
-          user.account_type = "Founder";
-          await user.save();
-          break;
-        case "test3":
-          user.account_type = "Entrepreneur";
-          await user.save();
-          break;
-        default:
-          break;
-      }
-      break;
+
     default:
-      console.log("Unknown notification type");
+      console.log(`⚠️ [iOS] Unknown notification type: ${notificationType}`);
       break;
   }
   res.status(200).send("OK");
