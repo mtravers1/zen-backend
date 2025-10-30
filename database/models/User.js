@@ -176,6 +176,10 @@ const userSchema = new Schema({
   account_type: {
     type: String,
   },
+  subscription_metadata: {
+    type: Object,
+    default: null,
+  },
 });
 
 const User = model("User", userSchema);
