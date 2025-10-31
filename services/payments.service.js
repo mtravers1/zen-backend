@@ -1,6 +1,7 @@
 import User from "../database/models/User.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
 import { GoogleAuth } from "google-auth-library";
+import { normalizeEnvironment } from "../utils/environment.js";
 
 const APPLE_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
@@ -86,9 +87,8 @@ const updateUserSubscription = async (userId, data, platform, purchaseToken = nu
       `Updating user ${userId} to plan ${productId} valid until ${expiresDateMs}`
     );
 
-    // Get environment from NODE_ENV or default to 'dev'
-    const nodeEnv = process.env.ENVIRONMENT;
-    const environment = nodeEnv === "development" ? "dev" : nodeEnv;
+    // Get normalized environment from NODE_ENV
+    const environment = normalizeEnvironment();
 
     // Get plan name from product mappings
     const planMappings = PRODUCT_MAPPINGS[environment]?.[platform];
@@ -347,9 +347,8 @@ const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => 
 
     console.log(`👤 [RTDN] Found user: ${user._id}`);
 
-    // Get environment and platform mappings
-    const nodeEnv = process.env.ENVIRONMENT;
-    const environment = nodeEnv === "development" ? "dev" : nodeEnv;
+    // Get normalized environment from NODE_ENV
+    const environment = normalizeEnvironment();
 
     const productId = subscriptionDetails.lineItems?.[0]?.productId;
     const expiryTime = subscriptionDetails.lineItems?.[0]?.expiryTime;
