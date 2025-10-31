@@ -33,13 +33,24 @@ const getProductIdForPlan = (planId, platform, billingPeriod = "monthly") => {
     return null;
   }
 
-  // For iOS: search for .monthly or .yearly suffix
+  // For iOS:
+  //   - Monthly: no suffix (base SKU)
+  //   - Yearly: .yearly suffix
   // For Android: return the base SKU (no suffix, uses base plans)
   if (platform === "ios") {
-    const suffix = billingPeriod === "yearly" ? ".yearly" : ".monthly";
-    for (const [productId, mappedPlanId] of Object.entries(mappings)) {
-      if (mappedPlanId === planId && productId.endsWith(suffix)) {
-        return productId;
+    if (billingPeriod === "yearly") {
+      // Search for SKUs with .yearly suffix
+      for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+        if (mappedPlanId === planId && productId.endsWith(".yearly")) {
+          return productId;
+        }
+      }
+    } else {
+      // Monthly: search for SKUs WITHOUT .yearly suffix
+      for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+        if (mappedPlanId === planId && !productId.endsWith(".yearly")) {
+          return productId;
+        }
       }
     }
   } else {
