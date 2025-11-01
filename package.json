@@ -11,7 +11,7 @@
     "start:prod": "cross-env NODE_ENV=production node ./bin/www",
     "mongodb": "docker-compose up",
     "build": "webpack --config webpack.config.js",
-    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "author": "",
   "license": "ISC",
