@@ -538,8 +538,8 @@ const signInOrCreate = async (uid, userData = null) => {
 
       structuredLogger.logOperationStart('auth_service_create_basic_user', { user_id: uid });
 
-      // Create a basic user with minimal data
-      const dek = await getUserDek(uid);
+      const databaseId = new mongoose.Types.ObjectId();
+      const dek = await getUserDekForSignup(uid, databaseId);
 
       const encryptedEmail = await encryptValue(
         userData.email.trim().toLowerCase(),
@@ -580,6 +580,7 @@ const signInOrCreate = async (uid, userData = null) => {
         : [];
 
       user = new User({
+        _id: databaseId,
         email: [emailSchema],
         phones: phoneArray,
         role: "individual", // Use valid enum value

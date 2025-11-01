@@ -42,111 +42,36 @@ if (process.env.NODE_ENV === 'test') {
     }),
   };
 } else {
-  // Validate required environment variables
-  const requiredEnvVars = [
-    "STORAGE_SERVICE_ACCOUNT",
-    "KMS_SERVICE_ACCOUNT",
-    "GCP_PROJECT_ID",
-    "GCP_KEY_LOCATION",
-    "GCP_KEY_RING",
-    "GCP_KEY_NAME",
-  ];
+  // IMPORTANT: KMS is bypassed in this configuration.
+  // The DEK (Data Encryption Key) will be stored unencrypted in the GCS bucket.
+  // This is a security risk. Ensure bucket permissions are strictly controlled.
+  console.warn('⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.');
 
-  for (const envVar of requiredEnvVars) {
-    if (!process.env[envVar]) {
-      throw new Error(`Missing required environment variable: ${envVar}`);
-    }
-  }
-
-  const storageServiceAccountVar = process.env.STORAGE_SERVICE_ACCOUNT;
-  const kmsServiceAccountVar = process.env.KMS_SERVICE_ACCOUNT;
-
-  const storageServiceAccount = {
-    project_id: process.env.GCP_PROJECT_ID,
-    private_key: storageServiceAccountVar,
-    client_email: 'test',
-  };
-
-  const kmsServiceAccount = {
-    project_id: process.env.GCP_PROJECT_ID,
-    private_key: kmsServiceAccountVar,
-    client_email: 'test',
-  };
-
-  console.log("🔐 Initializing Google Cloud clients...");
-  console.log("📦 Project ID:", process.env.GCP_PROJECT_ID);
-  console.log(
-    "🗝️ Storage Service Account Email:",
-    storageServiceAccount.client_email
-  );
-  console.log("🔑 KMS Service Account Email:", kmsServiceAccount.client_email);
-
-  // Ensure credentials have universe_domain field
-  if (!storageServiceAccount.universe_domain) {
-    storageServiceAccount.universe_domain = "googleapis.com";
-  }
-  if (!kmsServiceAccount.universe_domain) {
-    kmsServiceAccount.universe_domain = "googleapis.com";
-  }
-
-  // Initialize Google Cloud clients with direct credentials
-  console.log("🔧 Initializing clients with direct credentials...");
-
-  // Ensure service accounts have all required OAuth URLs
-  const storageCredentials = {
-    ...storageServiceAccount,
-    type: "service_account",
-    token_uri: "https://oauth2.googleapis.com/token",
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  };
-
-  const kmsCredentials = {
-    ...kmsServiceAccount,
-    type: "service_account",
-    token_uri: "https://oauth2.googleapis.com/token",
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  };
-
-  console.log("📋 Credentials validation:", {
-    storage: {
-      hasEmail: !!storageCredentials.client_email,
-      hasPrivateKey: !!storageCredentials.private_key,
-      tokenUri: storageCredentials.token_uri,
-      hasType: !!storageCredentials.type,
+  kmsClient = {
+    encrypt: async ({ plaintext }) => {
+      console.log('KMS mock: encrypt (passthrough)');
+      return [{ ciphertext: plaintext }];
     },
-    kms: {
-      hasEmail: !!kmsCredentials.client_email,
-      hasPrivateKey: !!kmsCredentials.private_key,
-      tokenUri: kmsCredentials.token_uri,
-      hasType: !!kmsCredentials.type,
+    decrypt: async ({ ciphertext }) => {
+      console.log('KMS mock: decrypt (passthrough)');
+      return [{ plaintext: ciphertext }];
     },
-  });
+    cryptoKeyPath: () => 'dummy-kms-path',
+  };
+  console.log('✅ KMS client mocked (passthrough)');
 
-  // Initialize KMS with credentials
-  kmsClient = new KeyManagementServiceClient({
-    credentials: kmsCredentials,
-    projectId: process.env.GCP_PROJECT_ID,
-  });
-  console.log("✅ KMS client initialized");
+  // Initialize Storage client
+  const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
+  if (!storageServiceAccountB64) {
+    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
+  }
+  const storageCredentials = JSON.parse(Buffer.from(storageServiceAccountB64, 'base64').toString('utf-8'));
 
-  // Initialize Storage with credentials directly
-  // The key fix is using resumable:false in file.save(), not JWT manipulation
   storage = new Storage({
     credentials: storageCredentials,
     projectId: process.env.GCP_PROJECT_ID,
-    apiEndpoint: "https://storage.googleapis.com",
   });
-  console.log("✅ Storage client initialized with direct credentials");
-  console.log("📦 Storage client details:", {
-    projectId: storage.projectId,
-    apiEndpoint: "https://storage.googleapis.com",
-    hasAuthClient: !!storage.authClient,
-    authClientType: storage.authClient?.constructor?.name,
-  });
-
-  console.log("✅ Google Cloud clients initialized successfully");
+  console.log("✅ Storage client initialized");
 }
 const BUCKET_NAME = "zentavos-bucket";
 const KEY_PATH = kmsClient.cryptoKeyPath(
