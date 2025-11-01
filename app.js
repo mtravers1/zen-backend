@@ -16,6 +16,19 @@ import "./lib/firebaseAdmin.js";
 import "./database/database.js";
 import router from "./routes/index.js";
 
+// Check for critical environment variables
+if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
+  console.error("CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.");
+  process.exit(1);
+}
+
+const expectedBucketName = process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'staging' ? 'staging' : null;
+
+if (expectedBucketName && process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName) {
+  console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.NODE_ENV} environment. Exiting.`);
+  process.exit(1);
+}
+
 const app = express();
 
 // database initialization
