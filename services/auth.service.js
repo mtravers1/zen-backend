@@ -214,6 +214,109 @@ const deleteFirebaseUser = async (uid) => {
 };
 
 
+const validateAppleToken = async (idToken) => {                                                                                                                                                                            
+  try {                                                                                                                                                                                                                    
+    structuredLogger.logOperationStart("auth_validate_apple_token");                                                                                                                                                       
+                                                                                                                                                                                                                           
+    // First try to verify as Firebase token                                                                                                                                                                               
+    try {                                                                                                                                                                                                                  
+      const decodedToken = await admin.auth().verifyIdToken(idToken);                                                                                                                                                      
+                                                                                                                                                                                                                           
+      const userData = {                                                                                                                                                                                                   
+        uid: decodedToken.uid,                                                                                                                                                                                             
+        email: decodedToken.email,                                                                                                                                                                                         
+        displayName: decodedToken.name,                                                                                                                                                                                    
+        photoURL: decodedToken.picture,                                                                                                                                                                                    
+        emailVerified: decodedToken.email_verified,                                                                                                                                                                        
+        provider: "apple",                                                                                                                                                                                                 
+      };                                                                                                                                                                                                                   
+                                                                                                                                                                                                                           
+      structuredLogger.logSuccess("auth_validate_apple_token_firebase", {                                                                                                                                                  
+        uid: userData.uid,                                                                                                                                                                                                 
+        email: userData.email,                                                                                                                                                                                             
+      });                                                                                                                                                                                                                  
+                                                                                                                                                                                                                           
+      return { success: true, user: userData };                                                                                                                                                                            
+    } catch (firebaseError) {                                                                                                                                                                                              
+      // If it's not a Firebase token, decode the Apple JWT                                                                                                                                                                
+      structuredLogger.logOperationStart("auth_validate_apple_token_jwt");                                                                                                                                                 
+                                                                                                                                                                                                                           
+      const decoded = jwt.decode(idToken);                                                                                                                                                                                 
+                                                                                                                                                                                                                           
+      if (!decoded) {                                                                                                                                                                                                      
+        throw new Error("Invalid Apple ID token - cannot decode JWT");                                                                                                                                                     
+      }                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+      // Basic validation of Apple JWT structure                                                                                                                                                                           
+      if (!decoded.sub || !decoded.iss || !decoded.aud) {                                                                                                                                                                  
+        throw new Error("Invalid Apple ID token - missing required claims");                                                                                                                                               
+      }                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+      // Verify issuer (should be Apple)                                                                                                                                                                                   
+      if (decoded.iss !== "https://appleid.apple.com") {                                                                                                                                                                   
+        throw new Error("Invalid Apple ID token - wrong issuer");                                                                                                                                                          
+      }                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+      // Verify audience (should be your app's client ID)                                                                                                                                                                  
+      // Use BUNDLEID from environment or fallback to APPLE_CLIENT_ID                                                                                                                                                      
+      const expectedAudience =                                                                                                                                                                                             
+        process.env.BUNDLEID ||                                                                                                                                                                                            
+        process.env.APPLE_CLIENT_ID ||                                                                                                                                                                                     
+        "com.zentavos.mobile";                                                                                                                                                                                             
+                                                                                                                                                                                                                           
+      // Allow multiple valid audiences to handle environment mismatches                                                                                                                                                   
+      const validAudiences = [                                                                                                                                                                                             
+        "com.zentavos.mobile", // Production                                                                                                                                                                               
+        "com.zentavos.zentavosuat", // UAT/Staging                                                                                                                                                                         
+        "com.zentavos.zentavosdev", // Development                                                                                                                                                                         
+      ];                                                                                                                                                                                                                   
+                                                                                                                                                                                                                           
+      if (!validAudiences.includes(decoded.aud)) {                                                                                                                                                                         
+        console.log("🔑 Invalid Apple audience:", {                                                                                                                                                                         
+          received: decoded.aud,                                                                                                                                                                                           
+          expected: expectedAudience,                                                                                                                                                                                      
+          bundleId: process.env.BUNDLEID,                                                                                                                                                                                  
+          environment: process.env.ENVIRONMENT,                                                                                                                                                                            
+          validAudiences,                                                                                                                                                                                                  
+        });                                                                                                                                                                                                                
+        throw new Error("Invalid Apple ID token - wrong audience");                                                                                                                                                        
+      }                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+      // Check token expiration                                                                                                                                                                                            
+      const now = Math.floor(Date.now() / 1000);                                                                                                                                                                           
+      if (decoded.exp && decoded.exp < now) {                                                                                                                                                                              
+        throw new Error("Invalid Apple ID token - token expired");                                                                                                                                                         
+      }                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+      const userData = {                                                                                                                                                                                                   
+        uid: `apple_${decoded.sub}`,                                                                                                                                                                                       
+        email: decoded.email || null,                                                                                                                                                                                      
+        displayName: decoded.name || "Apple User",                                                                                                                                                                         
+        photoURL: null,                                                                                                                                                                                                    
+        emailVerified: true,                                                                                                                                                                                               
+        provider: "apple",                                                                                                                                                                                                 
+      };                                                                                                                                                                                                                   
+                                                                                                                                                                                                                           
+      structuredLogger.logSuccess("auth_validate_apple_token_jwt", {                                                                                                                                                       
+        uid: userData.uid,                                                                                                                                                                                                 
+        email: userData.email,                                                                                                                                                                                             
+      });                                                                                                                                                                                                                  
+                                                                                                                                                                                                                           
+      return { success: true, user: userData };                                                                                                                                                                            
+    }                                                                                                                                                                                                                      
+  } catch (error) {                                                                                                                                                                                                        
+    structuredLogger.logErrorBlock(error, {                                                                                                                                                                                
+      operation: "auth_validate_apple_token",                                                                                                                                                                              
+      error_classification: "apple_token_validation_error",                                                                                                                                                                
+    });                                                                                                                                                                                                                    
+                                                                                                                                                                                                                           
+    return {                                                                                                                                                                                                               
+      success: false,                                                                                                                                                                                                      
+      error: error.message || "Apple token validation failed",                                                                                                                                                             
+    };                                                                                                                                                                                                                     
+  }                                                                                                                                                                                                                        
+};
+
 const validateGoogleToken = async (idToken) => {                                                                                                                                                                           
   try {                                                                                                                                                                                                                    
     structuredLogger.logOperationStart("auth_validate_google_token");                                                                                                                                                      
@@ -374,11 +477,12 @@ const validateOAuthToken = async (provider, idToken) => {
 
 export default {
   validateOAuthToken,
+  validateAppleToken,
   signUp,
   signIn,
   signInOrCreate,
   signInWithUid,
-  createFirebaseUserWithEmailPassword, // Correct name is now exported
+  createFirebaseUser: createFirebaseUserWithEmailPassword,
   verifyEmail,
   sendVerificationEmail,
   changePassword,
