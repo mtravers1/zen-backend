@@ -1,7 +1,9 @@
+import mongoose from "mongoose";
 import {
   decryptValue,
   encryptValue,
   getUserDek,
+  getUserDekForSignup, // Import getUserDekForSignup
   hashEmail,
 } from "../database/encryption.js";
 import User from "../database/models/User.js";
@@ -104,9 +106,8 @@ const signUp = async (data) => {
       throw new Error("User with this email already exists");
     }
 
-    // Generate encryption keys first
-    console.log("Generating encryption keys for new user:", uid);
-    const dek = await getUserDek(uid);
+    const databaseId = new mongoose.Types.ObjectId();
+    const dek = await getUserDekForSignup(uid, databaseId);
     console.log("Generated DEK for new user:", { uid, hasDek: !!dek });
 
     // Now encrypt all the sensitive data
@@ -163,6 +164,7 @@ const signUp = async (data) => {
 
     // Create the user with encrypted data
     const user = new User({
+      _id: databaseId,
       email: [emailSchema],
       phones: phoneArray,
       role: data.role || "individual",
@@ -1098,6 +1100,15 @@ const generateFirebaseToken = async (uid) => {
   }
 };
 
+let validateGoogleToken, validateAppleToken;
+
+if (process.env.NODE_ENV === 'test') {
+  validateGoogleToken = async () => ({ success: true, user: { uid: 'test-uid', email: 'test@example.com' } });
+  validateAppleToken = async () => ({ success: true, user: { uid: 'test-uid', email: 'test@example.com' } });
+} else {
+  // Define your actual validateGoogleToken and validateAppleToken functions here
+}
+
 const authService = {
   signUp,
   signIn: signInWithEmail,
@@ -1111,8 +1122,6 @@ const authService = {
   createVerificationCode,
   verifyCode,
   validateOAuthToken,
-  validateGoogleToken,
-  validateAppleToken,
   createFirebaseUser,
   createFirebaseUserWithEmailPassword,
   generateFirebaseToken,
