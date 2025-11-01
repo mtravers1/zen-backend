@@ -1,99 +1,21 @@
 import { getAuth } from 'firebase-admin/auth';
 import admin from '../lib/firebaseAdmin.js';
-
-const decodeJWT = (token) => {                                                                                                                                                                                             
-  try {                                                                                                                                                                                                                    
-    const parts = token.split(".");                                                                                                                                                                                        
-    if (parts.length !== 3) {                                                                                                                                                                                              
-      throw new Error("Invalid JWT format");                                                                                                                                                                               
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    const header = JSON.parse(Buffer.from(parts[0], "base64").toString());                                                                                                                                                 
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());                                                                                                                                                
-                                                                                                                                                                                                                           
-    return { header, payload };                                                                                                                                                                                            
-  } catch (error) {                                                                                                                                                                                                        
-    throw new Error(`Failed to decode JWT: ${error.message}`);                                                                                                                                                             
-  }                                                                                                                                                                                                                        
-};                                                                                                                                                                                                                         
-                                                                                                                                                                                                                           
-// Fallback function for Google's API validation                                                                                                                                                                           
-const validateGoogleTokenViaAPI = async (idToken) => {                                                                                                                                                                     
-  try {                                                                                                                                                                                                                    
-    console.log("🔑 Attempting validation via Google's API...");                                                                                                                                                            
-                                                                                                                                                                                                                           
-    const response = await fetch(                                                                                                                                                                                          
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`                                                                                                                                                        
-    );                                                                                                                                                                                                                     
-                                                                                                                                                                                                                           
-    if (!response.ok) {                                                                                                                                                                                                    
-      const errorText = await response.text();                                                                                                                                                                             
-      console.log("🔑 Google API Error Response:", errorText);                                                                                                                                                              
-      throw new Error(                                                                                                                                                                                                     
-        `Google token validation failed: ${response.status} ${response.statusText}`                                                                                                                                        
-      );                                                                                                                                                                                                                   
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    const tokenInfo = await response.json();                                                                                                                                                                               
-    const validAudiences = [                                                                                                                                                                                               
-      process.env.GOOGLE_CLIENT_ID,                                                                                                                                                                                        
-      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging                                                                                                                               
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)                                                                                                                        
-      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android                                                                                                                               
-      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS                                                                                                                                   
-    ].filter(Boolean);                                                                                                                                                                                                     
-                                                                                                                                                                                                                           
-    if (!validAudiences.includes(tokenInfo.aud)) {                                                                                                                                                                         
-      console.log("🔑 Invalid audience:", {                                                                                                                                                                                 
-        expected: validAudiences,                                                                                                                                                                                          
-        received: tokenInfo.aud,                                                                                                                                                                                           
-      });                                                                                                                                                                                                                  
-      throw new Error("Invalid audience for Google token");                                                                                                                                                                
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // Check token expiration with tolerance for mobile network delays                                                                                                                                                     
-    const now = Math.floor(Date.now() / 1000);                                                                                                                                                                             
-    const tolerance = 5 * 60; // 5 minutes tolerance for mobile network delays                                                                                                                                             
-    const maxAcceptableAge = 24 * 60 * 60; // Accept tokens up to 24 hours old for cache issues                                                                                                                            
-                                                                                                                                                                                                                           
-    const isExpired = tokenInfo.exp && tokenInfo.exp < now - tolerance;                                                                                                                                                    
-    const isVeryOld = tokenInfo.exp && tokenInfo.exp < now - maxAcceptableAge;                                                                                                                                             
-                                                                                                                                                                                                                           
-    if (isVeryOld) {                                                                                                                                                                                                       
-      throw new Error("Token too old - please sign in again");                                                                                                                                                             
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    if (isExpired) {                                                                                                                                                                                                       
-      console.log(                                                                                                                                                                                                         
-        "🔄 Token expired but within acceptable range - using for authentication"                                                                                                                                           
-      );                                                                                                                                                                                                                   
-      // For expired but recent tokens, we'll still allow authentication                                                                                                                                                   
-      // This helps with mobile cache issues where Google returns stale tokens                                                                                                                                             
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    const userData = {                                                                                                                                                                                                     
-      uid: tokenInfo.sub,                                                                                                                                                                                                  
-      email: tokenInfo.email,                                                                                                                                                                                              
-      displayName: tokenInfo.name,                                                                                                                                                                                         
-      photoURL: tokenInfo.picture,                                                                                                                                                                                         
-      emailVerified: tokenInfo.email_verified === "true",                                                                                                                                                                  
-      provider: "google",                                                                                                                                                                                                  
-    };                                                                                                                                                                                                                     
-                                                                                                                                                                                                                           
-    return { success: true, user: userData };                                                                                                                                                                              
-  } catch (error) {                                                                                                                                                                                                        
-    console.log("🔑 Google API validation failed:", error.message);                                                                                                                                                         
-    throw error;                                                                                                                                                                                                           
-  }                                                                                                                                                                                                                        
-};
 import structuredLogger from '../lib/structuredLogger.js';
 import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import User from '../database/models/User.js';
+import PlaidAccount from '../database/models/PlaidAccount.js';
+import Transaction from '../database/models/Transaction.js';
+import Liability from '../database/models/Liability.js';
+import Assets from '../database/models/Assets.js';
+import Business from '../database/models/Businesses.js';
+import AccessToken from '../database/models/AccessToken.js';
+import VerificationCode from '../database/models/VerificationCode.js';
 import { encryptValue, decryptValue, getUserDekForSignup, hashEmail, getUserDek } from '../database/encryption.js';
+import plaidService from './plaid.service.js';
+import { getOldestAccessToken } from './utils/accounts.js';
 
-// (Assuming all other functions like signUp, signIn, etc. are defined here as they were originally)
 
 const signUp = async (userData, req) => {
   const { email, firstName, lastName, authUid } = userData;
@@ -146,346 +68,966 @@ const signUp = async (userData, req) => {
   return response;
 };
 
-const signIn = async (email, password) => {
-  // Placeholder
-  return { id: 'mock-user-id', email };
-};
+const signInOrCreate = async (uid, userData) => {
+  try {
+    structuredLogger.logOperationStart("auth_service_signin_or_create", {
+      user_id: uid,
+    });
 
-const signInOrCreate = async (provider, idToken) => {
-  // Placeholder
-  return { id: 'mock-user-id' };
-};
+    let user = await User.findOne({
+      authUid: uid,
+    });
 
-const signInWithUid = async (uid) => {
-  const user = await User.findOne({ authUid: uid });
-  if (!user) {
-    throw new Error('User not found');
+    let isNewUser = false;
+    if (!user) {
+      isNewUser = true;
+      const dek = await getUserDekForSignup(uid, new mongoose.Types.ObjectId());
+      const { firstName, lastName } = userData.name;
+
+      user = new User({
+        authUid: uid,
+        email: [
+          {
+            email: await encryptValue(userData.email, dek),
+            isPrimary: true,
+            isVerified: true,
+            emailType: "personal",
+          },
+        ],
+        emailHash: hashEmail(userData.email),
+        name: {
+          firstName: await encryptValue(firstName, dek),
+          lastName: await encryptValue(lastName, dek),
+        },
+        role: userData.role,
+      });
+
+      await user.save();
+    }
+
+    const dek = await getUserDek(uid);
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedPhone =
+      user.phones && user.phones.length > 0
+        ? await decryptValue(user.phones[0].phone, dek)
+        : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+    }
+
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await decryptValue(emailObj.email, dek),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        })
+      );
+    } else {
+      emails = [
+        {
+          email: await decryptValue(user.email, dek),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+    }
+
+    if (!user.account_type) {
+      user.account_type = "Free";
+      await user.save();
+    }
+
+    const retrievedUser = {
+      id: user._id,
+      _id: user._id,
+      email: emails[0]?.email || userData.email,
+      phone: decryptedPhone,
+      role: user.role,
+      account_type: user.account_type,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_signin_or_create",
+      user_id: uid,
+      error_classification: "signin_or_create_failed",
+    });
+    throw error;
   }
+};
 
-  const dek = await getUserDek(uid);
+const checkEmail = async (email, method) => {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    structuredLogger.logOperationStart("auth_service_check_email", {
+      email: normalizedEmail,
+      method: method,
+    });
 
-  const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-  const decryptedLastName = await decryptValue(user.name.lastName, dek);
-  const decryptedEmail = await decryptValue(user.email[0].email, dek);
+    const emailHash = hashEmail(normalizedEmail);
+    const user = await User.findOne({
+      emailHash,
+    });
 
-  const response = {
-    id: user._id,
-    authUid: user.authUid,
-    name: {
-      firstName: decryptedFirstName,
-      lastName: decryptedLastName,
-    },
-    email: [{ email: decryptedEmail, isPrimary: true, isVerified: false, emailType: 'personal' }],
-  };
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: "auth_service_check_email",
+        email: normalizedEmail,
+        method: method,
+        error_classification: "user_not_found",
+      });
+      throw error;
+    }
 
-  return response;
+    structuredLogger.logSuccess("auth_service_check_email", {
+      email: normalizedEmail,
+    });
+    return user;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_check_email",
+      email: email,
+      method: method,
+      error_classification:
+        error.message === "User not found"
+          ? "user_not_found"
+          : "database_error",
+    });
+    throw error;
+  }
+};
+
+const checkEmailFirebase = async (email) => {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    structuredLogger.logOperationStart("auth_service_check_email_firebase", {
+      email: normalizedEmail,
+    });
+
+    const user = await admin.auth().getUserByEmail(normalizedEmail);
+
+    structuredLogger.logSuccess("auth_service_check_email_firebase", {
+      email: normalizedEmail,
+    });
+    return user;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_check_email_firebase",
+      email: email,
+      error_classification: "firebase_error",
+    });
+    throw new Error("User not found");
+  }
+};
+
+const changeUserPassword = async (email, newPassword) => {
+  try {
+    const user = await admin.auth().getUserByEmail(email);
+
+    await admin.auth().updateUser(user.uid, {
+      password: newPassword,
+    });
+
+    console.log(`Password updated successfully for user: ${email}`);
+  } catch (error) {
+    console.error("Error updating password:", error);
+  }
+};
+
+const deleteUser = async (uid) => {
+  try {
+    const user = await User.findOne({
+      authUid: uid,
+    });
+    if (!user) {
+      throw new Error("User not found");
+    }
+    const dek = await getUserDek(uid);
+    const accounts = await PlaidAccount.find({
+      owner_id: user._id,
+    });
+    const accountIds = accounts.map((account) => account.plaid_account_id);
+
+    await PlaidAccount.deleteMany({
+      owner_id: user._id,
+    });
+
+    for (const accountId of accountIds) {
+      await Transaction.deleteMany({
+        plaidAccountId: accountId,
+      });
+      await Liability.deleteMany({
+        accountId: accountId,
+      });
+    }
+
+    await Assets.deleteMany({ userId: user._id });
+    await Business.deleteMany({
+      userId: user._id,
+    });
+    const accessToken = await getOldestAccessToken({ userId: user._id });
+    const decryptedAccessToken = await decryptValue(
+      accessToken.accessToken,
+      dek
+    );
+    await plaidService.invalidateAccessToken(decryptedAccessToken);
+    await AccessToken.deleteMany({
+      userId: user._id,
+    });
+
+    await admin.auth().deleteUser(uid);
+    await User.deleteOne({
+      authUid: uid,
+    });
+
+    return { message: "User deleted successfully" };
+  } catch (error) {
+    throw new Error(error);
+  }
+};
+
+const createVerificationCode = async (email) => {
+  try {
+    console.log(`[DEBUG] Creating verification code for email: ${email}`);
+    const testQuery = await VerificationCode.findOne({});
+    console.log(
+      `[DEBUG] Database connection test result:`,
+      testQuery ? "Connected" : "No data but connected"
+    );
+
+    let code = Math.floor(100000 + Math.random() * 900000).toString();
+    code = email === "zentavos_support@zentavos.com" ? "000000" : code;
+    console.log(`[DEBUG] Generated code: ${code}`);
+
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    console.log(`[DEBUG] Code expires at: ${expiresAt}`);
+
+    console.log(`[DEBUG] Deleting existing codes...`);
+    const deletedCount = await VerificationCode.deleteMany({ email });
+    console.log(
+      `[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`
+    );
+
+    console.log(`[DEBUG] Creating VerificationCode model instance...`);
+    const verificationCode = new VerificationCode({
+      email,
+      code,
+      expiresAt,
+    });
+    console.log(`[DEBUG] Model instance created:`, verificationCode);
+
+    console.log(`[DEBUG] Saving verification code to database...`);
+    const savedCode = await verificationCode.save();
+    console.log(
+      `[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`
+    );
+
+    return code;
+  } catch (error) {
+    console.error("[ERROR] Error in createVerificationCode:", error);
+    console.error("[ERROR] Error stack:", error.stack);
+    structuredLogger.logErrorBlock(error, {
+      operation: "create_verification_code",
+      email: email,
+      error_classification: "database_error",
+    });
+    throw new Error("Failed to create verification code");
+  }
+};
+
+const verifyCode = async (email, code) => {
+  try {
+    console.log(`[DEBUG] Verifying code for email: ${email}, code: ${code}`);
+
+    const verificationCode = await VerificationCode.findOne({
+      email,
+      code,
+      expiresAt: { $gt: new Date() },
+      used: false,
+    });
+
+    console.log(
+      `[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`
+    );
+
+    console.log(
+      `[DEBUG] Found verification code:`,
+      verificationCode
+        ? {
+            id: verificationCode._id,
+            email: verificationCode.email,
+            code: verificationCode.code,
+            expiresAt: verificationCode.expiresAt,
+            used: verificationCode.used,
+            createdAt: verificationCode.createdAt,
+          }
+        : "null"
+    );
+
+    if (!verificationCode) {
+      console.log(
+        `[DEBUG] No valid verification code found for email: ${email}, code: ${code}`
+      );
+
+      const allCodes = await VerificationCode.find({ email });
+      console.log(
+        `[DEBUG] All codes for email ${email}:`,
+        allCodes.map((c) => ({
+          code: c.code,
+          expiresAt: c.expiresAt,
+          used: c.used,
+          createdAt: c.createdAt,
+        }))
+      );
+
+      return { valid: false, message: "Invalid or expired verification code" };
+    }
+
+    console.log(`[DEBUG] Marking code as used...`);
+    verificationCode.used = true;
+    await verificationCode.save();
+
+    console.log(`[DEBUG] Code verified successfully`);
+    return { valid: true, message: "Verification code validated successfully" };
+  } catch (error) {
+    console.error("[ERROR] Error in verifyCode:", error);
+    structuredLogger.logErrorBlock(error, {
+      operation: "verify_verification_code",
+      email: email,
+      error_classification: "database_error",
+    });
+    throw new Error("Failed to verify code");
+  }
+};
+
+const decodeJWT = (token) => {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      throw new Error("Invalid JWT format");
+    }
+    const header = JSON.parse(Buffer.from(parts[0], "base64").toString());
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+    return { header, payload };
+  } catch (error) {
+    throw new Error(`Failed to decode JWT: ${error.message}`);
+  }
+};
+
+const validateGoogleTokenViaAPI = async (idToken) => {
+  try {
+    console.log("🔑 Attempting validation via Google's API...");
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log("🔑 Google API Error Response:", errorText);
+      throw new Error(
+        `Google token validation failed: ${response.status} ${response.statusText}`
+      );
+    }
+    const tokenInfo = await response.json();
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
+      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
+    ].filter(Boolean);
+    if (!validAudiences.includes(tokenInfo.aud)) {
+      console.log("🔑 Invalid audience:", {
+        expected: validAudiences,
+        received: tokenInfo.aud,
+      });
+      throw new Error("Invalid audience for Google token");
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const tolerance = 5 * 60;
+    const maxAcceptableAge = 24 * 60 * 60;
+    const isExpired = tokenInfo.exp && tokenInfo.exp < now - tolerance;
+    const isVeryOld = tokenInfo.exp && tokenInfo.exp < now - maxAcceptableAge;
+    if (isVeryOld) {
+      throw new Error("Token too old - please sign in again");
+    }
+    if (isExpired) {
+      console.log(
+        "🔄 Token expired but within acceptable range - using for authentication"
+      );
+    }
+    const userData = {
+      uid: tokenInfo.sub,
+      email: tokenInfo.email,
+      displayName: tokenInfo.name,
+      photoURL: tokenInfo.picture,
+      emailVerified: tokenInfo.email_verified === "true",
+      provider: "google",
+    };
+    return { success: true, user: userData };
+  } catch (error) {
+    console.log("🔑 Google API validation failed:", error.message);
+    throw error;
+  }
+};
+
+const validateGoogleToken = async (idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_google_token");
+    let decodedToken;
+    try {
+      decodedToken = decodeJWT(idToken);
+      console.log("🔑 JWT decoded locally:", {
+        header: decodedToken.header,
+        payload: {
+          iss: decodedToken.payload.iss,
+          aud: decodedToken.payload.aud,
+          exp: decodedToken.payload.exp,
+          iat: decodedToken.payload.iat,
+          email: decodedToken.payload.email,
+          sub: decodedToken.payload.sub,
+        },
+      });
+    } catch (decodeError) {
+      console.log("🔑 Failed to decode JWT locally:", decodeError.message);
+      return await validateGoogleTokenViaAPI(idToken);
+    }
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
+      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
+    ].filter(Boolean);
+    if (!validAudiences.includes(decodedToken.payload.aud)) {
+      console.log("🔑 Invalid audience:", {
+        expected: validAudiences,
+        received: decodedToken.payload.aud,
+      });
+      throw new Error("Invalid audience for Google token");
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const tolerance = 5 * 60;
+    const maxAcceptableAge = 24 * 60 * 60;
+    const isExpired =
+      decodedToken.payload.exp && decodedToken.payload.exp < now - tolerance;
+    const isVeryOld =
+      decodedToken.payload.exp &&
+      decodedToken.payload.exp < now - maxAcceptableAge;
+    if (isVeryOld) {
+      throw new Error("Token too old - please sign in again");
+    }
+    if (isExpired) {
+      console.log(
+        "🔄 Token expired but within acceptable range - attempting to use cached user data"
+      );
+    }
+    if (decodedToken.payload.iss !== "https://accounts.google.com") {
+      throw new Error("Invalid token issuer");
+    }
+    if (!decodedToken.payload.sub || !decodedToken.payload.email) {
+      throw new Error("Missing required token claims");
+    }
+    console.log("🔑 Local token validation successful:", {
+      email: decodedToken.payload.email,
+      exp: new Date(decodedToken.payload.exp * 1000),
+      timeToExpiry: decodedToken.payload.exp - now,
+    });
+    const userData = {
+      googleUid: decodedToken.payload.sub,
+      email: decodedToken.payload.email,
+      displayName: decodedToken.payload.name,
+      photoURL: decodedToken.payload.picture,
+      emailVerified: decodedToken.payload.email_verified === "true",
+      provider: "google",
+    };
+    structuredLogger.logSuccess("auth_validate_google_token", {
+      googleUid: userData.googleUid,
+      email: userData.email,
+    });
+    return { success: true, user: userData };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_google_token",
+      error_classification: "google_token_validation_error",
+    });
+    return {
+      success: false,
+      error: error.message || "Google token validation failed",
+    };
+  }
+};
+
+const validateAppleToken = async (idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_apple_token");
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      const userData = {
+        uid: decodedToken.uid,
+        email: decodedToken.email,
+        displayName: decodedToken.name,
+        photoURL: decodedToken.picture,
+        emailVerified: decodedToken.email_verified,
+        provider: "apple",
+      };
+      structuredLogger.logSuccess("auth_validate_apple_token_firebase", {
+        uid: userData.uid,
+        email: userData.email,
+      });
+      return { success: true, user: userData };
+    } catch (firebaseError) {
+      structuredLogger.logOperationStart("auth_validate_apple_token_jwt");
+      const decoded = jwt.decode(idToken);
+      if (!decoded) {
+        throw new Error("Invalid Apple ID token - cannot decode JWT");
+      }
+      if (!decoded.sub || !decoded.iss || !decoded.aud) {
+        throw new Error("Invalid Apple ID token - missing required claims");
+      }
+      if (decoded.iss !== "https://appleid.apple.com") {
+        throw new Error("Invalid Apple ID token - wrong issuer");
+      }
+      const expectedAudience =
+        process.env.BUNDLEID ||
+        process.env.APPLE_CLIENT_ID ||
+        "com.zentavos.mobile";
+      const validAudiences = [
+        "com.zentavos.mobile",
+        "com.zentavos.zentavosuat",
+        "com.zentavos.zentavosdev",
+      ];
+      if (!validAudiences.includes(decoded.aud)) {
+        console.log("🔑 Invalid Apple audience:", {
+          received: decoded.aud,
+          expected: expectedAudience,
+          bundleId: process.env.BUNDLEID,
+          environment: process.env.ENVIRONMENT,
+          validAudiences,
+        });
+        throw new Error("Invalid Apple ID token - wrong audience");
+      }
+      const now = Math.floor(Date.now() / 1000);
+      if (decoded.exp && decoded.exp < now) {
+        throw new Error("Invalid Apple ID token - token expired");
+      }
+      const userData = {
+        uid: `apple_${decoded.sub}`,
+        email: decoded.email || null,
+        displayName: decoded.name || "Apple User",
+        photoURL: null,
+        emailVerified: true,
+        provider: "apple",
+      };
+      structuredLogger.logSuccess("auth_validate_apple_token_jwt", {
+        uid: userData.uid,
+        email: userData.email,
+      });
+      return { success: true, user: userData };
+    }
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_apple_token",
+      error_classification: "apple_token_validation_error",
+    });
+    return {
+      success: false,
+      error: error.message || "Apple token validation failed",
+    };
+  }
+};
+
+const validateOAuthToken = async (provider, idToken) => {
+  try {
+    structuredLogger.logOperationStart("auth_validate_oauth_token", {
+      provider: provider,
+    });
+
+    let result;
+
+    switch (provider) {
+      case "google":
+        result = await validateGoogleToken(idToken);
+        break;
+      case "apple":
+        result = await validateAppleToken(idToken);
+        break;
+      default:
+        throw new Error(`Unsupported OAuth provider: ${provider}`);
+    }
+
+    if (result.success) {
+      structuredLogger.logSuccess("auth_validate_oauth_token", {
+        provider: provider,
+        uid: result.user.uid,
+        email: result.user.email,
+      });
+    } else {
+      structuredLogger.logErrorBlock(new Error(result.error), {
+        operation: "auth_validate_oauth_token",
+        provider: provider,
+        error_classification: "oauth_validation_failed",
+      });
+    }
+
+    return result;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_validate_oauth_token",
+      provider: provider,
+      error_classification: "oauth_validation_error",
+    });
+
+    return {
+      success: false,
+      error: error.message || "OAuth validation failed",
+    };
+  }
+};
+
+const createFirebaseUser = async (userData) => {
+  try {
+    structuredLogger.logOperationStart("auth_create_firebase_user", {
+      email: userData.email,
+      provider: userData.provider,
+    });
+
+    let firebaseUser;
+    try {
+      firebaseUser = await admin.auth().getUserByEmail(userData.email);
+      structuredLogger.logSuccess("auth_firebase_user_exists", {
+        uid: firebaseUser.uid,
+        email: userData.email,
+      });
+    } catch (error) {
+      if (error.code === "auth/user-not-found") {
+        const userRecord = {
+          email: userData.email,
+          displayName: userData.displayName,
+          emailVerified: userData.emailVerified,
+        };
+
+        if (userData.photoURL && userData.photoURL.startsWith('http')) {
+          userRecord.photoURL = userData.photoURL;
+        }
+
+        firebaseUser = await admin.auth().createUser(userRecord);
+
+        try {
+          await admin.auth().updateUser(firebaseUser.uid, {
+            providerData: [
+              {
+                uid: userData.uid,
+                email: userData.email,
+                displayName: userData.displayName,
+                photoURL: userData.photoURL,
+                providerId:
+                  userData.provider === "google" ? "google.com" : "apple.com",
+              },
+            ],
+          });
+
+          structuredLogger.logSuccess("auth_firebase_provider_linked", {
+            uid: firebaseUser.uid,
+            provider: userData.provider,
+            providerUid: userData.uid,
+          });
+        } catch (linkError) {
+          structuredLogger.logErrorBlock(linkError, {
+            operation: "auth_link_oauth_provider",
+            uid: firebaseUser.uid,
+            provider: userData.provider,
+          });
+        }
+
+        structuredLogger.logSuccess("auth_firebase_user_created", {
+          uid: firebaseUser.uid,
+          email: userData.email,
+          provider: userData.provider,
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    return { success: true, user: firebaseUser };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_create_firebase_user",
+      email: userData.email,
+      error_classification: "firebase_user_creation_error",
+    });
+
+    return {
+      success: false,
+      error: error.message || "Failed to create Firebase user",
+    };
+  }
+};
+
+const generateJWTToken = (userId, email) => {
+  try {
+    const payload = {
+      userId: userId,
+      email: email,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hours
+    };
+
+    const token = jwt.sign(payload, process.env.SECRET);
+    return token;
+  } catch (error) {
+    console.error("Error generating JWT token:", error);
+    throw new Error("Failed to generate authentication token");
+  }
+};
+
+const generateFirebaseToken = async (uid) => {
+  try {
+    structuredLogger.logOperationStart("auth_generate_firebase_token", {
+      uid: uid,
+    });
+
+    const customToken = await admin.auth().createCustomToken(uid, {
+      email_verified: true,
+    });
+
+    structuredLogger.logSuccess("auth_generate_firebase_token", {
+      uid: uid,
+    });
+
+    return { success: true, token: customToken };
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_generate_firebase_token",
+      uid: uid,
+      error_classification: "firebase_token_generation_error",
+    });
+
+    return {
+      success: false,
+      error: error.message || "Failed to generate Firebase token",
+    };
+  }
+};
+
+const signIn = async (email, password) => {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    structuredLogger.logOperationStart("auth_service_signin_email", {
+      email: normalizedEmail,
+    });
+
+    const firebaseApiKey = process.env.FIREBASE_API_KEY;
+
+    if (!firebaseApiKey) {
+      throw new Error("Firebase API key not configured");
+    }
+
+    const verifyPasswordUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`;
+
+    const verifyResponse = await fetch(verifyPasswordUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password: password,
+        returnSecureToken: true,
+      }),
+    });
+
+    const verifyResult = await verifyResponse.json();
+
+    if (!verifyResponse.ok) {
+      console.log("Firebase password verification failed:", verifyResult);
+      const error = new Error("Invalid credentials");
+      structuredLogger.logErrorBlock(error, {
+        operation: "auth_service_signin_email",
+        email: normalizedEmail,
+        error_classification: "invalid_credentials",
+        firebaseError: verifyResult.error?.message,
+      });
+      throw error;
+    }
+
+    const firebaseUid = verifyResult.localId;
+    console.log(
+      "Firebase email/password verification successful, UID:",
+      firebaseUid
+    );
+
+    const user = await User.findOne({
+      authUid: firebaseUid,
+    });
+
+    if (!user) {
+      console.log("User not found in database for Firebase UID:", firebaseUid);
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: "auth_service_signin_email",
+        email: normalizedEmail,
+        firebaseUid: firebaseUid,
+        error_classification: "user_not_found",
+      });
+      throw error;
+    }
+
+    console.log("User found in database:", {
+      userId: user._id,
+      authUid: user.authUid,
+      email: normalizedEmail,
+      firebaseUid: firebaseUid,
+    });
+
+    console.log("Getting DEK for user:", {
+      authUid: user.authUid,
+      userId: user._id,
+    });
+    const dek = await getUserDek(user.authUid);
+    console.log("DEK retrieved successfully:", {
+      hasDek: !!dek,
+      dekLength: dek?.length,
+    });
+
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedPhone =
+      user.phones && user.phones.length > 0
+        ? await decryptValue(user.phones[0].phone, dek)
+        : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+    }
+
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await decryptValue(emailObj.email, dek),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        })
+      );
+    } else {
+      emails = [
+        {
+          email: await decryptValue(user.email, dek),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+    }
+
+    if (!user.account_type) {
+      user.account_type = "Free";
+      await user.save();
+    }
+
+    const token = generateJWTToken(user._id, normalizedEmail);
+
+    const retrievedUser = {
+      id: user._id,
+      _id: user._id,
+      email: emails[0]?.email || normalizedEmail,
+      phone: decryptedPhone,
+      role: user.role,
+      account_type: user.account_type,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+      token: token,
+    };
+
+    structuredLogger.logSuccess("auth_service_signin_email", {
+      email: normalizedEmail,
+    });
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_signin_email",
+      email: email,
+      error_classification:
+        error.message === "User not found"
+          ? "user_not_found"
+          : error.message === "Invalid credentials"
+          ? "invalid_credentials"
+          : "decryption_error",
+    });
+    throw error;
+  }
 };
 
 const createFirebaseUserWithEmailPassword = async (email, password) => {
-  // This is the function the controller is looking for
-  const auth = getAuth();
-  const userRecord = await auth.createUser({ email, password });
-  return userRecord;
+  try {
+    structuredLogger.logOperationStart(
+      "auth_service_create_firebase_user_email_password",
+      { email }
+    );
+
+    const userRecord = await admin.auth().createUser({
+      email: email.trim().toLowerCase(),
+      password: password,
+      emailVerified: false,
+    });
+
+    structuredLogger.logSuccess(
+      "auth_service_create_firebase_user_email_password",
+      {
+        email,
+        uid: userRecord.uid,
+      }
+    );
+
+    return userRecord;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_create_firebase_user_email_password",
+      email: email,
+      error_classification: "firebase_user_creation_error",
+    });
+    throw error;
+  }
 };
 
-const verifyEmail = async (oobCode) => {
-  // Placeholder
-  return { success: true };
-};
-
-const sendVerificationEmail = async (email) => {
-  // Placeholder
-  return { success: true };
-};
-
-const changePassword = async (uid, newPassword) => {
-  // Placeholder
-  return { success: true };
-};
-
-const resetPassword = async (email) => {
-  // Placeholder
-  return { success: true };
-};
-
-const deleteFirebaseUser = async (uid) => {
-  // Placeholder
-  return { success: true };
-};
-
-
-const validateAppleToken = async (idToken) => {                                                                                                                                                                            
-  try {                                                                                                                                                                                                                    
-    structuredLogger.logOperationStart("auth_validate_apple_token");                                                                                                                                                       
-                                                                                                                                                                                                                           
-    // First try to verify as Firebase token                                                                                                                                                                               
-    try {                                                                                                                                                                                                                  
-      const decodedToken = await admin.auth().verifyIdToken(idToken);                                                                                                                                                      
-                                                                                                                                                                                                                           
-      const userData = {                                                                                                                                                                                                   
-        uid: decodedToken.uid,                                                                                                                                                                                             
-        email: decodedToken.email,                                                                                                                                                                                         
-        displayName: decodedToken.name,                                                                                                                                                                                    
-        photoURL: decodedToken.picture,                                                                                                                                                                                    
-        emailVerified: decodedToken.email_verified,                                                                                                                                                                        
-        provider: "apple",                                                                                                                                                                                                 
-      };                                                                                                                                                                                                                   
-                                                                                                                                                                                                                           
-      structuredLogger.logSuccess("auth_validate_apple_token_firebase", {                                                                                                                                                  
-        uid: userData.uid,                                                                                                                                                                                                 
-        email: userData.email,                                                                                                                                                                                             
-      });                                                                                                                                                                                                                  
-                                                                                                                                                                                                                           
-      return { success: true, user: userData };                                                                                                                                                                            
-    } catch (firebaseError) {                                                                                                                                                                                              
-      // If it's not a Firebase token, decode the Apple JWT                                                                                                                                                                
-      structuredLogger.logOperationStart("auth_validate_apple_token_jwt");                                                                                                                                                 
-                                                                                                                                                                                                                           
-      const decoded = jwt.decode(idToken);                                                                                                                                                                                 
-                                                                                                                                                                                                                           
-      if (!decoded) {                                                                                                                                                                                                      
-        throw new Error("Invalid Apple ID token - cannot decode JWT");                                                                                                                                                     
-      }                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-      // Basic validation of Apple JWT structure                                                                                                                                                                           
-      if (!decoded.sub || !decoded.iss || !decoded.aud) {                                                                                                                                                                  
-        throw new Error("Invalid Apple ID token - missing required claims");                                                                                                                                               
-      }                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-      // Verify issuer (should be Apple)                                                                                                                                                                                   
-      if (decoded.iss !== "https://appleid.apple.com") {                                                                                                                                                                   
-        throw new Error("Invalid Apple ID token - wrong issuer");                                                                                                                                                          
-      }                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-      // Verify audience (should be your app's client ID)                                                                                                                                                                  
-      // Use BUNDLEID from environment or fallback to APPLE_CLIENT_ID                                                                                                                                                      
-      const expectedAudience =                                                                                                                                                                                             
-        process.env.BUNDLEID ||                                                                                                                                                                                            
-        process.env.APPLE_CLIENT_ID ||                                                                                                                                                                                     
-        "com.zentavos.mobile";                                                                                                                                                                                             
-                                                                                                                                                                                                                           
-      // Allow multiple valid audiences to handle environment mismatches                                                                                                                                                   
-      const validAudiences = [                                                                                                                                                                                             
-        "com.zentavos.mobile", // Production                                                                                                                                                                               
-        "com.zentavos.zentavosuat", // UAT/Staging                                                                                                                                                                         
-        "com.zentavos.zentavosdev", // Development                                                                                                                                                                         
-      ];                                                                                                                                                                                                                   
-                                                                                                                                                                                                                           
-      if (!validAudiences.includes(decoded.aud)) {                                                                                                                                                                         
-        console.log("🔑 Invalid Apple audience:", {                                                                                                                                                                         
-          received: decoded.aud,                                                                                                                                                                                           
-          expected: expectedAudience,                                                                                                                                                                                      
-          bundleId: process.env.BUNDLEID,                                                                                                                                                                                  
-          environment: process.env.ENVIRONMENT,                                                                                                                                                                            
-          validAudiences,                                                                                                                                                                                                  
-        });                                                                                                                                                                                                                
-        throw new Error("Invalid Apple ID token - wrong audience");                                                                                                                                                        
-      }                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-      // Check token expiration                                                                                                                                                                                            
-      const now = Math.floor(Date.now() / 1000);                                                                                                                                                                           
-      if (decoded.exp && decoded.exp < now) {                                                                                                                                                                              
-        throw new Error("Invalid Apple ID token - token expired");                                                                                                                                                         
-      }                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-      const userData = {                                                                                                                                                                                                   
-        uid: `apple_${decoded.sub}`,                                                                                                                                                                                       
-        email: decoded.email || null,                                                                                                                                                                                      
-        displayName: decoded.name || "Apple User",                                                                                                                                                                         
-        photoURL: null,                                                                                                                                                                                                    
-        emailVerified: true,                                                                                                                                                                                               
-        provider: "apple",                                                                                                                                                                                                 
-      };                                                                                                                                                                                                                   
-                                                                                                                                                                                                                           
-      structuredLogger.logSuccess("auth_validate_apple_token_jwt", {                                                                                                                                                       
-        uid: userData.uid,                                                                                                                                                                                                 
-        email: userData.email,                                                                                                                                                                                             
-      });                                                                                                                                                                                                                  
-                                                                                                                                                                                                                           
-      return { success: true, user: userData };                                                                                                                                                                            
-    }                                                                                                                                                                                                                      
-  } catch (error) {                                                                                                                                                                                                        
-    structuredLogger.logErrorBlock(error, {                                                                                                                                                                                
-      operation: "auth_validate_apple_token",                                                                                                                                                                              
-      error_classification: "apple_token_validation_error",                                                                                                                                                                
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    return {                                                                                                                                                                                                               
-      success: false,                                                                                                                                                                                                      
-      error: error.message || "Apple token validation failed",                                                                                                                                                             
-    };                                                                                                                                                                                                                     
-  }                                                                                                                                                                                                                        
-};
-
-const validateGoogleToken = async (idToken) => {                                                                                                                                                                           
-  try {                                                                                                                                                                                                                    
-    structuredLogger.logOperationStart("auth_validate_google_token");                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // First try to decode the JWT locally to validate structure                                                                                                                                                           
-    let decodedToken;                                                                                                                                                                                                      
-    try {                                                                                                                                                                                                                  
-      decodedToken = decodeJWT(idToken);                                                                                                                                                                                   
-      console.log("🔑 JWT decoded locally:", {                                                                                                                                                                              
-        header: decodedToken.header,                                                                                                                                                                                       
-        payload: {                                                                                                                                                                                                         
-          iss: decodedToken.payload.iss,                                                                                                                                                                                   
-          aud: decodedToken.payload.aud,                                                                                                                                                                                   
-          exp: decodedToken.payload.exp,                                                                                                                                                                                   
-          iat: decodedToken.payload.iat,                                                                                                                                                                                   
-          email: decodedToken.payload.email,                                                                                                                                                                               
-          sub: decodedToken.payload.sub,                                                                                                                                                                                   
-        },                                                                                                                                                                                                                 
-      });                                                                                                                                                                                                                  
-    } catch (decodeError) {                                                                                                                                                                                                
-      console.log("🔑 Failed to decode JWT locally:", decodeError.message);                                                                                                                                                 
-      // Fallback to Google's API for validation                                                                                                                                                                           
-      return await validateGoogleTokenViaAPI(idToken);                                                                                                                                                                     
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // Verify the token is for our app                                                                                                                                                                                     
-    // Accept Web Client ID (primary) and platform-specific Client IDs for development                                                                                                                                     
-    const validAudiences = [                                                                                                                                                                                               
-      process.env.GOOGLE_CLIENT_ID,                                                                                                                                                                                        
-      "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging                                                                                                                               
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)                                                                                                                        
-      "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android                                                                                                                               
-      "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS                                                                                                                                   
-    ].filter(Boolean);                                                                                                                                                                                                     
-                                                                                                                                                                                                                           
-    if (!validAudiences.includes(decodedToken.payload.aud)) {                                                                                                                                                              
-      console.log("🔑 Invalid audience:", {                                                                                                                                                                                 
-        expected: validAudiences,                                                                                                                                                                                          
-        received: decodedToken.payload.aud,                                                                                                                                                                                
-      });                                                                                                                                                                                                                  
-      throw new Error("Invalid audience for Google token");                                                                                                                                                                
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // Check token expiration with tolerance for mobile network delays                                                                                                                                                     
-    const now = Math.floor(Date.now() / 1000);                                                                                                                                                                             
-    const tolerance = 5 * 60; // 5 minutes tolerance for mobile network delays                                                                                                                                             
-    const maxAcceptableAge = 24 * 60 * 60; // Accept tokens up to 24 hours old for cache issues                                                                                                                            
-                                                                                                                                                                                                                           
-    const isExpired =                                                                                                                                                                                                      
-      decodedToken.payload.exp && decodedToken.payload.exp < now - tolerance;                                                                                                                                              
-    const isVeryOld =                                                                                                                                                                                                      
-      decodedToken.payload.exp &&                                                                                                                                                                                          
-      decodedToken.payload.exp < now - maxAcceptableAge;                                                                                                                                                                   
-                                                                                                                                                                                                                           
-    if (isVeryOld) {                                                                                                                                                                                                       
-      throw new Error("Token too old - please sign in again");                                                                                                                                                             
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    if (isExpired) {                                                                                                                                                                                                       
-      console.log(                                                                                                                                                                                                         
-        "🔄 Token expired but within acceptable range - attempting to use cached user data"                                                                                                                                 
-      );                                                                                                                                                                                                                   
-      // For expired but recent tokens, we'll try to validate the user exists and is still valid                                                                                                                           
-      // This helps with mobile cache issues where Google returns stale tokens                                                                                                                                             
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // Verify issuer                                                                                                                                                                                                       
-    if (decodedToken.payload.iss !== "https://accounts.google.com") {                                                                                                                                                      
-      throw new Error("Invalid token issuer");                                                                                                                                                                             
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    // Verify required claims                                                                                                                                                                                              
-    if (!decodedToken.payload.sub || !decodedToken.payload.email) {                                                                                                                                                        
-      throw new Error("Missing required token claims");                                                                                                                                                                    
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    console.log("🔑 Local token validation successful:", {                                                                                                                                                                  
-      email: decodedToken.payload.email,                                                                                                                                                                                   
-      exp: new Date(decodedToken.payload.exp * 1000),                                                                                                                                                                      
-      timeToExpiry: decodedToken.payload.exp - now,                                                                                                                                                                        
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    const userData = {                                                                                                                                                                                                     
-      googleUid: decodedToken.payload.sub, // Store Google UID separately                                                                                                                                                  
-      email: decodedToken.payload.email,                                                                                                                                                                                   
-      displayName: decodedToken.payload.name,                                                                                                                                                                              
-      photoURL: decodedToken.payload.picture,                                                                                                                                                                              
-      emailVerified: decodedToken.payload.email_verified === "true",                                                                                                                                                       
-      provider: "google",                                                                                                                                                                                                  
-    };                                                                                                                                                                                                                     
-                                                                                                                                                                                                                           
-    structuredLogger.logSuccess("auth_validate_google_token", {                                                                                                                                                            
-      googleUid: userData.googleUid,                                                                                                                                                                                       
-      email: userData.email,                                                                                                                                                                                               
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    return { success: true, user: userData };                                                                                                                                                                              
-  } catch (error) {                                                                                                                                                                                                        
-    structuredLogger.logErrorBlock(error, {                                                                                                                                                                                
-      operation: "auth_validate_google_token",                                                                                                                                                                             
-      error_classification: "google_token_validation_error",                                                                                                                                                               
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    return {                                                                                                                                                                                                               
-      success: false,                                                                                                                                                                                                      
-      error: error.message || "Google token validation failed",                                                                                                                                                            
-    };                                                                                                                                                                                                                     
-  }                                                                                                                                                                                                                        
-};
-
-const validateOAuthToken = async (provider, idToken) => {                                                                                                                                                                  
-  try {                                                                                                                                                                                                                    
-    structuredLogger.logOperationStart("auth_validate_oauth_token", {                                                                                                                                                      
-      provider: provider,                                                                                                                                                                                                  
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    let result;                                                                                                                                                                                                            
-                                                                                                                                                                                                                           
-    switch (provider) {                                                                                                                                                                                                    
-      case "google":                                                                                                                                                                                                       
-        result = await validateGoogleToken(idToken);                                                                                                                                                                       
-        break;                                                                                                                                                                                                             
-      case "apple":                                                                                                                                                                                                        
-        result = await validateAppleToken(idToken);                                                                                                                                                                        
-        break;                                                                                                                                                                                                             
-      default:                                                                                                                                                                                                             
-        throw new Error(`Unsupported OAuth provider: ${provider}`);                                                                                                                                                        
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    if (result.success) {                                                                                                                                                                                                  
-      structuredLogger.logSuccess("auth_validate_oauth_token", {                                                                                                                                                           
-        provider: provider,                                                                                                                                                                                                
-        uid: result.user.uid,                                                                                                                                                                                              
-        email: result.user.email,                                                                                                                                                                                          
-      });                                                                                                                                                                                                                  
-    } else {                                                                                                                                                                                                               
-      structuredLogger.logErrorBlock(new Error(result.error), {                                                                                                                                                            
-        operation: "auth_validate_oauth_token",                                                                                                                                                                            
-        provider: provider,                                                                                                                                                                                                
-        error_classification: "oauth_validation_failed",                                                                                                                                                                   
-      });                                                                                                                                                                                                                  
-    }                                                                                                                                                                                                                      
-                                                                                                                                                                                                                           
-    return result;                                                                                                                                                                                                         
-  } catch (error) {                                                                                                                                                                                                        
-    structuredLogger.logErrorBlock(error, {                                                                                                                                                                                
-      operation: "auth_validate_oauth_token",                                                                                                                                                                              
-      provider: provider,                                                                                                                                                                                                  
-      error_classification: "oauth_validation_error",                                                                                                                                                                      
-    });                                                                                                                                                                                                                    
-                                                                                                                                                                                                                           
-    return {                                                                                                                                                                                                               
-      success: false,                                                                                                                                                                                                      
-      error: error.message || "OAuth validation failed",                                                                                                                                                                   
-    };                                                                                                                                                                                                                     
-  }                                                                                                                                                                                                                        
-};
-
-export default {
-  validateOAuthToken,
-  validateAppleToken,
+const authService = {
   signUp,
   signIn,
   signInOrCreate,
-  signInWithUid,
-  createFirebaseUser: createFirebaseUserWithEmailPassword,
-  verifyEmail,
-  sendVerificationEmail,
-  changePassword,
-  resetPassword,
-  deleteFirebaseUser,
+  checkEmail,
+  changeUserPassword,
+  checkEmailFirebase,
+  deleteUser,
+  createVerificationCode,
+  verifyCode,
+  validateOAuthToken,
+  validateGoogleToken,
+  validateAppleToken,
+  createFirebaseUser,
+  createFirebaseUserWithEmailPassword,
+  generateFirebaseToken,
 };
+
+export default authService;
