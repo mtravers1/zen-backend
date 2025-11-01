@@ -60,7 +60,7 @@ const signUp = async (userData, req) => {
   const response = {
     id: newUser._id,
     authUid: newUser.authUid,
-n    name: {
+    name: {
       firstName: firstName,
       lastName: lastName,
       middleName: userData.middleName || null,
