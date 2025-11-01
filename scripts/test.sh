@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export $(grep -v '^#' .env.test | xargs)
+export $(grep -v '^#' .env.test | grep '=' | xargs)
 echo "FIREBASE_API_KEY: $FIREBASE_API_KEY"
 
 export USER_ENCRYPTION_KEY_BUCKET_NAME=test-bucket
