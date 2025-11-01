@@ -2,25 +2,41 @@ import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
 import { Storage } from "@google-cloud/storage";
 
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const serviceAccountJsonString = Buffer.from(
-  serviceAccountBase64,
-  "base64"
-).toString("utf8");
-const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+let storage;
+let bucketName;
 
-// Ensure credentials have universe_domain field
-if (!storageServiceAccount.universe_domain) {
-  storageServiceAccount.universe_domain = "googleapis.com";
+if (process.env.NODE_ENV !== 'test') {
+  const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
+  const serviceAccountJsonString = Buffer.from(
+    serviceAccountBase64,
+    "base64"
+  ).toString("utf8");
+  const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+
+  // Ensure credentials have universe_domain field
+  if (!storageServiceAccount.universe_domain) {
+    storageServiceAccount.universe_domain = "googleapis.com";
+  }
+
+  storage = new Storage({
+    credentials: storageServiceAccount,
+    projectId: process.env.GCP_PROJECT_ID,
+    apiEndpoint: "https://storage.googleapis.com",
+    useAuthWithCustomEndpoint: true,
+  });
+  bucketName = "zentavos-bucket";
+} else {
+  // Mock Storage for test environment
+  storage = {
+    bucket: () => ({
+      file: () => ({
+        getSignedUrl: () => ['http://mock-signed-url.com'],
+        delete: () => {},
+      }),
+    }),
+  };
+  bucketName = "test-bucket";
 }
-
-const storage = new Storage({
-  credentials: storageServiceAccount,
-  projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com",
-  useAuthWithCustomEndpoint: true,
-});
-const bucketName = "zentavos-bucket";
 
 const addFile = async (data, uid) => {
   const user = await User.findOne({ authUid: uid });
