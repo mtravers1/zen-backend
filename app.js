@@ -22,7 +22,7 @@ if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
   process.exit(1);
 }
 
-const expectedBucketName = process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'staging' ? 'staging' : null;
+const expectedBucketName = process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'staging' ? 'staging' : process.env.NODE_ENV === 'development' ? 'dev' : null;
 
 if (expectedBucketName && process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName) {
   console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.NODE_ENV} environment. Exiting.`);

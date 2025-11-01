@@ -120,6 +120,7 @@ jobs:
       - name: Restart API service
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+            export NODE_ENV=production &&
             cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
