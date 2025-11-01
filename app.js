@@ -16,16 +16,21 @@ import "./lib/firebaseAdmin.js";
 import "./database/database.js";
 import router from "./routes/index.js";
 
+
+console.log(`The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`);
+console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
+console.log(`USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`);
+
 // Check for critical environment variables
 if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
   console.error("CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.");
   process.exit(1);
 }
 
-const expectedBucketName = process.env.NODE_ENV === 'production' ? 'prod' : process.env.NODE_ENV === 'staging' ? 'staging' : process.env.NODE_ENV === 'development' ? 'dev' : null;
+const expectedBucketName = process.env.ENVIRONMENT === 'production' ? 'prod' : process.env.ENVIRONMENT === 'staging' ? 'staging' : process.env.ENVIRONMENT === 'development' ? 'dev' : null;
 
 if (expectedBucketName && process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName) {
-  console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.NODE_ENV} environment. Exiting.`);
+  console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`);
   process.exit(1);
 }
 
