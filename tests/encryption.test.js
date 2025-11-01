@@ -30,7 +30,7 @@ describe('Data Encryption', () => {
       firstName: 'John',
       lastName: 'Doe',
       authUid: 'test-uid',
-    });
+    }, { headers: {} });
   });
 
   it('should encrypt user data on creation and decrypt on retrieval', async () => {
