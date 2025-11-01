@@ -21,25 +21,43 @@ import {
 } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const serviceAccountJsonString = Buffer.from(
-  serviceAccountBase64,
-  "base64"
-).toString("utf8");
-const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+let storage;
+let bucketName;
 
-// Ensure credentials have universe_domain field
-if (!storageServiceAccount.universe_domain) {
-  storageServiceAccount.universe_domain = "googleapis.com";
+if (process.env.NODE_ENV !== 'test') {
+  const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
+  if (!serviceAccountBase64) {
+    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
+  }
+  const serviceAccountJsonString = Buffer.from(
+    serviceAccountBase64,
+    "base64"
+  ).toString("utf8");
+  const storageServiceAccount = JSON.parse(serviceAccountJsonString);
+
+  // Ensure credentials have universe_domain field
+  if (!storageServiceAccount.universe_domain) {
+    storageServiceAccount.universe_domain = "googleapis.com";
+  }
+
+  storage = new Storage({
+    credentials: storageServiceAccount,
+    projectId: process.env.GCP_PROJECT_ID,
+    apiEndpoint: "https://storage.googleapis.com",
+    useAuthWithCustomEndpoint: true,
+  });
+  bucketName = "zentavos-bucket";
+} else {
+  // Mock Storage for test environment
+  storage = {
+    bucket: () => ({
+      file: () => ({
+        getSignedUrl: () => ['http://mock-signed-url.com'],
+      }),
+    }),
+  };
+  bucketName = "test-bucket";
 }
-
-const storage = new Storage({
-  credentials: storageServiceAccount,
-  projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com",
-  useAuthWithCustomEndpoint: true,
-});
-const bucketName = "zentavos-bucket";
 
 const addAccount = async (accessToken, email, uid) => {
   return await structuredLogger.withContext(

@@ -82,3 +82,8 @@ routes/dev.router.js
 ServiceAccountKey.json
 ../zentavos-476023-2f9c773dcbb8.json
 config/zentavos-d6c79-24978c4e7fff.json
+
+# Added by Gemini
+private.pem
+tests/service-accounts/
+tests/jest.setup.js

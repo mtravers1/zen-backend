@@ -39,6 +39,18 @@ Zentavos Backend is the server-side application that powers the Zentavos platfor
     cp .env.sample .env
     ```
 
+## Environment Variables
+
+The application requires several environment variables to be set. These are stored in a `.env` file in the root of the project. A `.env.sample` file is provided as a template.
+
+### **IMPORTANT**: `USER_ENCRYPTION_KEY_BUCKET_NAME`
+
+This variable specifies the name of the Google Cloud Storage bucket where the user data encryption keys are stored. This is a critical setting.
+
+**WARNING**: Using the wrong bucket name will result in the inability to decrypt user data, which is equivalent to **PERMANENT DATA LOSS**.
+
+Ensure that this variable is set correctly in all environments (`development`, `staging`, and `production`).
+
 ### Running the Application
 1. Start the mongodb server
     ```sh
