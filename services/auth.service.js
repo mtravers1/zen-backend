@@ -71,7 +71,7 @@ const own = async (uid) => {
   return retrievedUser;
 };
 
-const signUp = async (data) => {
+const signUp = async (data, req) => {
   try {
     // Validate required fields
     if (!data.email || !data.firstName || !data.lastName || !data.authUid) {
@@ -228,7 +228,17 @@ const signUp = async (data) => {
       },
     };
 
-    return retrievedUser;
+    const apiVersion = req.headers['x-api-version'];
+
+    if (apiVersion === '2') {
+      return retrievedUser;
+    } else {
+      // Legacy response
+      return {
+        ...retrievedUser,
+        email: retrievedUser.email[0].email,
+      };
+    }
   } catch (error) {
     console.log("error in signup", error);
 

@@ -103,7 +103,7 @@ const signUp = async (req, res) => {
       has_phone: !!data.phone,
       authUid: authUid,
     });
-    const user = await authService.signUp(data);
+    const user = await authService.signUp(data, req);
     structuredLogger.logSuccess("auth_signup", {
       email: data.email,
       userId: user.id,
