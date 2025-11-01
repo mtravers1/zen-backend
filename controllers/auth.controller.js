@@ -113,28 +113,20 @@ const signUp = async (req, res) => {
     // Generate Firebase custom token for the new user
     const tokenResult = await authService.generateFirebaseToken(authUid);
 
-    if (!tokenResult.success) {
-      // If token generation fails, log it and send an error response
+    if (tokenResult.success) {
+      // Add the token to the user object
+      user.firebaseToken = tokenResult.token;
+    } else {
+      // Log an error if token generation fails, but don't block the response
       structuredLogger.logErrorBlock(new Error(tokenResult.error), {
         operation: "auth_signup_token_generation",
         email: data.email,
         authUid: authUid,
         error_classification: "token_generation_error",
       });
-      return res.status(500).json({
-        success: false,
-        message: "User created, but failed to generate authentication token.",
-        error: tokenResult.error,
-      });
     }
 
-    // Send user and token back to the client
-    res.status(201).json({
-      success: true,
-      user: user,
-      firebaseToken: tokenResult.token,
-      message: "User created successfully",
-    });
+    res.status(201).send(user);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_signup",
