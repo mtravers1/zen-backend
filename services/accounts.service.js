@@ -26,6 +26,9 @@ let bucketName;
 
 if (process.env.NODE_ENV !== 'test') {
   const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
+  if (!serviceAccountBase64) {
+    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
+  }
   const serviceAccountJsonString = Buffer.from(
     serviceAccountBase64,
     "base64"
