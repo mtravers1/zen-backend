@@ -2514,6 +2514,7 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
+  getOldestAccessToken,
 };
 
 export default accountsService;

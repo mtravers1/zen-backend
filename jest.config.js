@@ -1,9 +1,10 @@
 export default {
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\.{1,2}/.*)\.js$': '$1',
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  // Use setupFiles to ensure the environment is configured before any other code runs.
+  setupFiles: ['<rootDir>/tests/jest.setup.js'],
   testMatch: [
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/tests/**/*.spec.js'
@@ -22,5 +23,4 @@ export default {
   transformIgnorePatterns: [
     'node_modules/(?!(mongodb-memory-server|jose)/)'
   ],
-  setupFiles: ['<rootDir>/tests/jest.setup.js']
-}; 
+};
