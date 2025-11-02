@@ -1016,6 +1016,84 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
   }
 };
 
+const own = async (uid) => {
+  try {
+    structuredLogger.logOperationStart("auth_service_own", { user_id: uid });
+
+    const user = await User.findOne({ authUid: uid });
+
+    if (!user) {
+      const error = new Error("User not found");
+      structuredLogger.logErrorBlock(error, {
+        operation: "auth_service_own",
+        user_id: uid,
+        error_classification: "user_not_found",
+      });
+      throw error;
+    }
+
+    const dek = await getUserDek(uid);
+
+    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
+    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
+    const decryptedPhone =
+      user.phones && user.phones.length > 0
+        ? await decryptValue(user.phones[0].phone, dek)
+        : null;
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+    }
+
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await decryptValue(emailObj.email, dek),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        })
+      );
+    } else {
+      emails = [
+        {
+          email: await decryptValue(user.email, dek),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+    }
+
+    const retrievedUser = {
+      id: user._id,
+      _id: user._id,
+      email: emails[0]?.email,
+      phone: decryptedPhone,
+      role: user.role,
+      account_type: user.account_type,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
+    structuredLogger.logSuccess("auth_service_own", { user_id: uid });
+    return retrievedUser;
+  } catch (error) {
+    structuredLogger.logErrorBlock(error, {
+      operation: "auth_service_own",
+      user_id: uid,
+      error_classification: "user_retrieval_error",
+    });
+    throw error;
+  }
+};
+
 const authService = {
   signUp,
   signIn,
@@ -1032,6 +1110,7 @@ const authService = {
   createFirebaseUser,
   createFirebaseUserWithEmailPassword,
   generateFirebaseToken,
+  own,
 };
 
 export default authService;
