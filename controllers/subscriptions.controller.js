@@ -1,5 +1,6 @@
 import permissions from "../config/permissions.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
+import { normalizeEnvironment } from "../utils/environment.js";
 
 const formatPlanName = (planId) => {
   return planId
@@ -24,22 +25,32 @@ const isBusinessOwnerPlan = (planId) => {
 
 // Get Product ID for a plan on a specific platform
 const getProductIdForPlan = (planId, platform, billingPeriod = "monthly") => {
-  // Map NODE_ENV to productMappings keys
-  const nodeEnv = process.env.ENVIRONMENT;
-  const env = nodeEnv === "development" ? "dev" : nodeEnv;
+  // Get normalized environment from NODE_ENV
+  const env = normalizeEnvironment();
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
 
   if (!mappings) {
     return null;
   }
 
-  // For iOS: search for .monthly or .yearly suffix
+  // For iOS:
+  //   - Monthly: no suffix (base SKU)
+  //   - Yearly: .yearly suffix
   // For Android: return the base SKU (no suffix, uses base plans)
   if (platform === "ios") {
-    const suffix = billingPeriod === "yearly" ? ".yearly" : ".monthly";
-    for (const [productId, mappedPlanId] of Object.entries(mappings)) {
-      if (mappedPlanId === planId && productId.endsWith(suffix)) {
-        return productId;
+    if (billingPeriod === "yearly") {
+      // Search for SKUs with .yearly suffix
+      for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+        if (mappedPlanId === planId && productId.endsWith(".yearly")) {
+          return productId;
+        }
+      }
+    } else {
+      // Monthly: search for SKUs WITHOUT .yearly suffix
+      for (const [productId, mappedPlanId] of Object.entries(mappings)) {
+        if (mappedPlanId === planId && !productId.endsWith(".yearly")) {
+          return productId;
+        }
       }
     }
   } else {

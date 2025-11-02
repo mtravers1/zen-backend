@@ -15,7 +15,7 @@ const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { isAndroid, accountId, screen, mode, access_token } = req.body;
+    const { isAndroid, accountId, screen, mode, access_token, plaidEnvironment } = req.body;
 
     const linkToken = await structuredLogger.withContext(
       "createLinkToken",
@@ -23,7 +23,7 @@ const createLinkToken = async (req, res) => {
         user_id: uid,
         email,
         request_id: requestId,
-        metadata: { isAndroid, accountId, screen },
+        metadata: { isAndroid, accountId, screen, plaidEnvironment },
       },
       async () => {
         return await plaidService.createLinkToken(
@@ -33,21 +33,37 @@ const createLinkToken = async (req, res) => {
           uid,
           screen,
           mode,
-          access_token
+          access_token,
+          plaidEnvironment
         );
       }
     );
 
     res.status(200).send({ linkToken });
   } catch (error) {
+    // Log the detailed error
     structuredLogger.logErrorBlock(error, {
       operation: "createLinkToken",
       user_id: req.user?.uid,
       request_id: requestId,
-      request: structuredLogger.requestContext.get(requestId)?.request,
-      response: { statusCode: 500, body: { message: error.message } },
+      plaid_error_data: error.response?.data, // Log Plaid's specific error response
     });
 
+    // Check if this is a Plaid API error and forward a more specific error message
+    if (error.response && error.response.data) {
+      const plaidError = error.response.data;
+      return res.status(error.response.status || 500).json({
+        message: "A Plaid API error occurred.",
+        plaid_error: {
+          error_code: plaidError.error_code,
+          error_message: plaidError.error_message,
+          error_type: plaidError.error_type,
+          request_id: plaidError.request_id,
+        },
+      });
+    }
+
+    // Fallback for non-Plaid errors
     res.status(500).send({ message: error.message });
   }
 };

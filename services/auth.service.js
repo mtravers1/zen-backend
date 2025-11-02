@@ -46,10 +46,12 @@ const signUp = async (userData, req) => {
     name: {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
+      middleName: userData.middleName ? await encryptValue(userData.middleName, dek) : null,
     },
     email: [{ email: encryptedEmail, isPrimary: true, isVerified: false, emailType: 'personal' }],
     emailHash: hashEmail(email),
-    role: 'individual'
+    role: 'individual',
+    profilePhotoUrl: userData.profilePhotoUrl ? await encryptValue(userData.profilePhotoUrl, dek) : null,
   });
 
   await newUser.save();
@@ -61,8 +63,10 @@ const signUp = async (userData, req) => {
     name: {
       firstName: firstName,
       lastName: lastName,
+      middleName: userData.middleName || null,
     },
     email: [{ email: email, isPrimary: true, isVerified: false }],
+    profilePhotoUrl: userData.profilePhotoUrl || null,
   };
 
   return response;
@@ -108,7 +112,7 @@ const signInOrCreate = async (uid, userData) => {
     const dek = await getUserDek(uid);
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
         ? await decryptValue(user.phones[0].phone, dek)
@@ -907,7 +911,7 @@ const signIn = async (email, password) => {
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = await decryptValue(user.name.middleName, dek);
+    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
         ? await decryptValue(user.phones[0].phone, dek)

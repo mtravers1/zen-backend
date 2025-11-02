@@ -9,15 +9,6 @@ export default {
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/tests/**/*.spec.js'
   ],
-  collectCoverageFrom: [
-    'services/**/*.js',
-    'controllers/**/*.js',
-    'routes/**/*.js',
-    '!**/node_modules/**',
-    '!**/tests/**'
-  ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 30000,
   verbose: true,
   transformIgnorePatterns: [

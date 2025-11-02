@@ -15,40 +15,40 @@
 export const PRODUCT_MAPPINGS = {
   dev: {
     ios: {
-      // Base subscription plans - Monthly
-      "com.zentavos.personal.monthly": "Personal",
-      "com.zentavos.founder.monthly": "Founder",
-      "com.zentavos.entrepreneur.monthly": "Entrepreneur",
-      "com.zentavos.tycoon.monthly": "Tycoon",
+      // Base subscription plans - Monthly (no suffix)
+      "com.zentavos.dev.personal": "Personal",
+      "com.zentavos.dev.founder": "Founder",
+      "com.zentavos.dev.entrepreneur": "Entrepreneur",
+      "com.zentavos.dev.tycoon": "Tycoon",
 
-      // Base subscription plans - Yearly
-      "com.zentavos.personal.yearly": "Personal",
-      "com.zentavos.founder.yearly": "Founder",
-      "com.zentavos.entrepreneur.yearly": "Entrepreneur",
-      "com.zentavos.tycoon.yearly": "Tycoon",
+      // Base subscription plans - Yearly (.yearly suffix)
+      "com.zentavos.dev.personal.yearly": "Personal",
+      "com.zentavos.dev.founder.yearly": "Founder",
+      "com.zentavos.dev.entrepreneur.yearly": "Entrepreneur",
+      "com.zentavos.dev.tycoon.yearly": "Tycoon",
 
-      // Add-on plans - Monthly
-      "com.zentavos.personal.plus1.monthly": "Personal+1",
-      "com.zentavos.founder.plus1.monthly": "Founder+1",
-      "com.zentavos.entrepreneur.plus1.monthly": "Entrepreneur+1",
-      "com.zentavos.entrepreneur.plus2.monthly": "Entrepreneur+2",
-      "com.zentavos.tycoon.plus100gb.monthly": "Tycoon+100gb",
+      // Add-on plans - Monthly (no suffix)
+      "com.zentavos.dev.personal.1.institution": "Personal+1",
+      "com.zentavos.dev.founder.1.institution": "Founder+1",
+      "com.zentavos.dev.entrepreneur.1.institution": "Entrepreneur+1",
+      "com.zentavos.dev.entrepreneur.2.institution": "Entrepreneur+2",
+      "com.zentavos.dev.tycoon.100.gb": "Tycoon+100gb",
 
-      // Add-on plans - Yearly
-      "com.zentavos.personal.plus1.yearly": "Personal+1",
-      "com.zentavos.founder.plus1.yearly": "Founder+1",
-      "com.zentavos.entrepreneur.plus1.yearly": "Entrepreneur+1",
-      "com.zentavos.entrepreneur.plus2.yearly": "Entrepreneur+2",
-      "com.zentavos.tycoon.plus100gb.yearly": "Tycoon+100gb",
+      // Add-on plans - Yearly (.yearly suffix)
+      "com.zentavos.dev.personal.1.institution.yearly": "Personal+1",
+      "com.zentavos.dev.founder.1.institution.yearly": "Founder+1",
+      "com.zentavos.dev.entrepreneur.1.institution.yearly": "Entrepreneur+1",
+      "com.zentavos.dev.entrepreneur.2.institution.yearly": "Entrepreneur+2",
+      "com.zentavos.dev.tycoon.100.gb.yearly": "Tycoon+100gb",
     },
     android: {
-      // Base subscription plans - NEED to be created in Google Play Store
+      // Base subscription plans
       "com.zentavos.zentavosdev.personal": "Personal",
       "com.zentavos.zentavosdev.founder": "Founder",
       "com.zentavos.zentavosdev.entrepreneur": "Entrepreneur",
       "com.zentavos.zentavosdev.tycoon": "Tycoon",
 
-      // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
+      // Add-on plans +1 institution ($3 extra)
       "com.zentavos.zentavosdev.personal.plus1": "Personal+1",
       "com.zentavos.zentavosdev.founder.plus1": "Founder+1",
       "com.zentavos.zentavosdev.entrepreneur.p1": "Entrepreneur+1",
@@ -59,27 +59,40 @@ export const PRODUCT_MAPPINGS = {
   },
   stg: {
     ios: {
-      // Base subscription plans (EXIST in Apple Store)
+      // Base subscription plans - Monthly (no suffix)
       "com.zentavos.stg.personal": "Personal",
       "com.zentavos.stg.founder": "Founder",
       "com.zentavos.stg.entrepreneur": "Entrepreneur",
       "com.zentavos.stg.tycoon": "Tycoon",
 
-      // Add-on plans +1 institution ($3 extra) - NEED to be created in Apple Store
-      zentavos_stg_personal_1_institution: "Personal+1",
-      zentavos_stg_founder_1_institution: "Founder+1",
-      zentavos_stg_entrepreneur_1_institution: "Entrepreneur+1",
-      zentavos_stg_entrepreneur_2_institution: "Entrepreneur+2",
-      zentavos_stg_tycoon_100gb: "Tycoon+100gb",
+      // Base subscription plans - Yearly (.yearly suffix)
+      "com.zentavos.stg.personal.yearly": "Personal",
+      "com.zentavos.stg.founder.yearly": "Founder",
+      "com.zentavos.stg.entrepreneur.yearly": "Entrepreneur",
+      "com.zentavos.stg.tycoon.yearly": "Tycoon",
+
+      // Add-on plans - Monthly (no suffix)
+      "com.zentavos.stg.personal.1.institution": "Personal+1",
+      "com.zentavos.stg.founder.1.institution": "Founder+1",
+      "com.zentavos.stg.entrepreneur.1.institution": "Entrepreneur+1",
+      "com.zentavos.stg.entrepreneur.2.institution": "Entrepreneur+2",
+      "com.zentavos.stg.tycoon.100.gb": "Tycoon+100gb",
+
+      // Add-on plans - Yearly (.yearly suffix)
+      "com.zentavos.stg.personal.1.institution.yearly": "Personal+1",
+      "com.zentavos.stg.founder.1.institution.yearly": "Founder+1",
+      "com.zentavos.stg.entrepreneur.1.institution.yearly": "Entrepreneur+1",
+      "com.zentavos.stg.entrepreneur.2.institution.yearly": "Entrepreneur+2",
+      "com.zentavos.stg.tycoon.100.gb.yearly": "Tycoon+100gb",
     },
     android: {
-      // Base subscription plans - NEED to be created in Google Play Store
+      // Base subscription plans
       "com.zentavos.stg.personal": "Personal",
       "com.zentavos.stg.founder": "Founder",
       "com.zentavos.stg.entrepreneur": "Entrepreneur",
       "com.zentavos.stg.tycoon": "Tycoon",
 
-      // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
+      // Add-on plans +1 institution ($3 extra)
       "com.zentavos.stg.personal.plus1": "Personal+1",
       "com.zentavos.stg.founder.plus1": "Founder+1",
       "com.zentavos.stg.entrepreneur.p1": "Entrepreneur+1",
@@ -89,26 +102,40 @@ export const PRODUCT_MAPPINGS = {
   },
   prod: {
     ios: {
-      // Base subscription plans (EXIST in Apple Store)
+      // Base subscription plans - Monthly (no suffix)
       "com.zentavos.sub.personal": "Personal",
       "com.zentavos.sub.founder": "Founder",
       "com.zentavos.sub.entrepreneur": "Entrepreneur",
       "com.zentavos.sub.tycoon": "Tycoon",
 
-      zentavos_prod_personal_1_institution: "Personal+1",
-      zentavos_prod_founder_1_institution: "Founder+1",
-      zentavos_prod_entrepreneur_1_institution: "Entrepreneur+1",
-      zentavos_prod_entrepreneur_2_institution: "Entrepreneur+2",
-      zentavos_prod_tycoon_100gb: "Tycoon+100gb",
+      // Base subscription plans - Yearly (.yearly suffix)
+      "com.zentavos.sub.personal.yearly": "Personal",
+      "com.zentavos.sub.founder.yearly": "Founder",
+      "com.zentavos.sub.entrepreneur.yearly": "Entrepreneur",
+      "com.zentavos.sub.tycoon.yearly": "Tycoon",
+
+      // Add-on plans - Monthly (no suffix)
+      "com.zentavos.sub.personal.1.institution": "Personal+1",
+      "com.zentavos.sub.founder.1.institution": "Founder+1",
+      "com.zentavos.sub.entrepreneur.1.institution": "Entrepreneur+1",
+      "com.zentavos.sub.entrepreneur.2.institution": "Entrepreneur+2",
+      "com.zentavos.sub.tycoon.100.gb": "Tycoon+100gb",
+
+      // Add-on plans - Yearly (.yearly suffix)
+      "com.zentavos.sub.personal.1.institution.yearly": "Personal+1",
+      "com.zentavos.sub.founder.1.institution.yearly": "Founder+1",
+      "com.zentavos.sub.entrepreneur.1.institution.yearly": "Entrepreneur+1",
+      "com.zentavos.sub.entrepreneur.2.institution.yearly": "Entrepreneur+2",
+      "com.zentavos.sub.tycoon.100.gb.yearly": "Tycoon+100gb",
     },
     android: {
-      // Base subscription plans - NEED to be created in Google Play Store
+      // Base subscription plans
       "com.zentavos.mobile.personal": "Personal",
       "com.zentavos.mobile.founder": "Founder",
       "com.zentavos.mobile.entrepreneur": "Entrepreneur",
       "com.zentavos.mobile.tycoon": "Tycoon",
 
-      // Add-on plans +1 institution ($3 extra) - NEED to be created in Google Play Store
+      // Add-on plans +1 institution ($3 extra)
       "com.zentavos.mobile.personal.plus1": "Personal+1",
       "com.zentavos.mobile.founder.plus1": "Founder+1",
       "com.zentavos.mobile.entrepreneur.p1": "Entrepreneur+1",

@@ -8,6 +8,7 @@ import {
   AppStoreServerAPIClient,
   Environment,
 } from "@apple/app-store-server-library";
+import { normalizeEnvironment } from "../utils/environment.js";
 
 
 //Todo move to secret manager
@@ -209,8 +210,7 @@ const weebhookApple = async (req, res) => {
   if (!user) return res.status(200).send("OK");
 
   const productId = payload.signedTransactionInfo.productId;
-  const nodeEnv = process.env.ENVIRONMENT;
-  const env = nodeEnv === "development" ? "dev" : nodeEnv;
+  const env = normalizeEnvironment();
   const planMappings = PRODUCT_MAPPINGS[env]?.ios;
   const planName = planMappings?.[productId];
 
@@ -327,9 +327,8 @@ const isBusinessOwnerPlan = (planId) => {
 
 // Get Product ID for a plan on a specific platform
 const getProductIdForPlan = (planId, platform) => {
-  // Map NODE_ENV to productMappings keys
-  const nodeEnv = process.env.ENVIRONMENT;
-  const env = nodeEnv === "development" ? "dev" : nodeEnv;
+  // Get normalized environment
+  const env = normalizeEnvironment();
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
 
   console.log(
