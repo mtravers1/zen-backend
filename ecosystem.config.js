@@ -19,7 +19,7 @@ module.exports = {
             watch: true,
             node_args: "--env-file=.env",
             env: {
-                PLAID_ENV: "sandbox",
+                PLAID_ENV: "development",
             },
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
