@@ -18,6 +18,9 @@ module.exports = {
             script: "./index.js",
             watch: true,
             node_args: "--env-file=.env",
+            env: {
+                PLAID_ENV: "development",
+            },
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -27,6 +30,9 @@ module.exports = {
             script: "./index.js",
             watch: false,
             node_args: "--env-file=.env",
+            env: {
+                PLAID_ENV: "production",
+            },
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -36,6 +42,9 @@ module.exports = {
             script: "./index.js",
             watch: false,
             node_args: "--env-file=.env",
+            env: {
+                PLAID_ENV: "production",
+            },
             error_file: "/var/log/zentavos/api-error.log",
             out_file: "/var/log/zentavos/api-out.log",
             log_date_format: "YYYY-MM-DD HH:mm Z",
