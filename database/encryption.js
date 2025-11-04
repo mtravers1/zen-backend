@@ -88,7 +88,10 @@ if (process.env.NODE_ENV === "test") {
   });
   console.log("✅ Storage client initialized");
 }
-const BUCKET_NAME = "zentavos-bucket";
+const BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+if (!BUCKET_NAME) {
+  throw new Error('CRITICAL: GCS_BUCKET_NAME environment variable is not set.');
+}
 const KEY_PATH = kmsClient.cryptoKeyPath(
   process.env.GCP_PROJECT_ID,
   process.env.GCP_KEY_LOCATION,
@@ -112,9 +115,6 @@ async function generateAndStoreEncryptedDEK(
     await backupExistingDEK(bucketKey);
   }
 
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
-
   console.log(`✨ Generating new DEK for bucket key: ${bucketKey}`);
   const dek = crypto.randomBytes(32);
   const version = Date.now();
@@ -126,7 +126,7 @@ async function generateAndStoreEncryptedDEK(
     });
 
     const encryptedDEK = encryptResponse.ciphertext;
-    const filePath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}_v${version}.key`;
+    const filePath = `keys/${bucketKey}_v${version}.key`;
     const file = storage.bucket(BUCKET_NAME).file(filePath);
 
     // Use simple upload for small files (DEK is ~113 bytes)
@@ -158,9 +158,7 @@ async function generateAndStoreEncryptedDEK(
 }
 
 async function getDEKFromBucket(bucketKey) {
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
-  const prefix = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}`;
+  const prefix = `keys/${bucketKey}`;
   console.log(`🔍 Looking for DEKs with prefix: gs://${BUCKET_NAME}/${prefix}`);
 
   const [files] = await storage.bucket(BUCKET_NAME).getFiles({ prefix });
@@ -411,8 +409,6 @@ function hashValue(value) {
  * Copy DEK from legacy Firebase UID bucket key to new primary key bucket key
  */
 async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
   try {
     console.log(
       `📦 Copying DEK from legacy key ${legacyBucketKey} to new key ${newBucketKey}`,
@@ -420,7 +416,7 @@ async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
 
     const legacyFile = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${legacyBucketKey}.key`);
+      .file(`keys/${legacyBucketKey}.key`);
 
     if (!(await legacyFile.exists())[0]) {
       console.log(`❌ Legacy DEK file not found: ${legacyBucketKey}`);
@@ -430,9 +426,7 @@ async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
     const version = Date.now();
     const newFile = storage
       .bucket(BUCKET_NAME)
-      .file(
-        `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${newBucketKey}_v${version}.key`,
-      );
+      .file(`keys/${newBucketKey}_v${version}.key`);
 
     // Copy the legacy DEK to the new bucket key location
     try {
@@ -475,8 +469,6 @@ async function copyDEKToNewBucketKey(legacyBucketKey, newBucketKey) {
  * Create backup of existing DEK before regenerating
  */
 async function backupExistingDEK(bucketKey) {
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
   try {
     console.log(
       `💾 Creating backup of existing DEK for bucket key: ${bucketKey}`,
@@ -484,7 +476,7 @@ async function backupExistingDEK(bucketKey) {
 
     const originalFile = storage
       .bucket(BUCKET_NAME)
-      .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
+      .file(`keys/${bucketKey}.key`);
 
     if (!(await originalFile.exists())[0]) {
       console.log(`ℹ️ No existing DEK to backup for bucket key: ${bucketKey}`);
@@ -495,7 +487,7 @@ async function backupExistingDEK(bucketKey) {
     const backupFile = storage
       .bucket(BUCKET_NAME)
       .file(
-        `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${bucketKey}_${timestamp}.key`,
+        `keys/backups/${bucketKey}_${timestamp}.key`
       );
 
     try {
@@ -538,15 +530,13 @@ async function backupExistingDEK(bucketKey) {
  * Try to recover DEK from backup files
  */
 async function tryRecoverDEKFromBackup(bucketKey) {
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
   try {
     console.log(
       `🔄 Attempting DEK recovery from backup for bucket key: ${bucketKey}`,
     );
 
     const [files] = await storage.bucket(BUCKET_NAME).getFiles({
-      prefix: `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/backups/${bucketKey}_`,
+      prefix: `keys/backups/${bucketKey}_`,
     });
 
     if (files.length === 0) {
@@ -581,7 +571,7 @@ async function tryRecoverDEKFromBackup(bucketKey) {
         // Restore the recovered DEK as the current DEK
         const currentFile = storage
           .bucket(BUCKET_NAME)
-          .file(`keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/${bucketKey}.key`);
+          .file(`keys/${bucketKey}.key`);
 
         await currentFile.save(encryptedDEK);
         dekCache.set(bucketKey, dek);
@@ -658,11 +648,9 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
 }
 
 async function moveDEKToDeadLetterQueue(file) {
-  const USER_ENCRYPTION_KEY_BUCKET_NAME =
-    process.env.USER_ENCRYPTION_KEY_BUCKET_NAME;
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const deadLetterPath = `keys/${USER_ENCRYPTION_KEY_BUCKET_NAME}/dead-letter/${file.name}_${timestamp}`;
+    const deadLetterPath = `keys/dead-letter/${file.name}_${timestamp}`;
     const deadLetterFile = storage.bucket(BUCKET_NAME).file(deadLetterPath);
 
     await file.move(deadLetterFile);
