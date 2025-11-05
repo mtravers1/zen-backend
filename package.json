@@ -2,7 +2,7 @@
   "name": "zentavos-backend",
   "version": "2.0.1",
   "main": "app.js",
-  "type": "module",
+
   "scripts": {
     "run-build": "cd dist && node ./index.js",
     "start": "nodemon --inspect ./bin/www",
