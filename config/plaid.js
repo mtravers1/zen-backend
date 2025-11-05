@@ -16,7 +16,7 @@ function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV || 'development
       plaidEnv = PlaidEnvironments.sandbox;
       break;
     case "development":
-      plaidEnv = PlaidEnvironments.development;
+      plaidEnv = PlaidEnvironments.sandbox;
       break;
     case "staging":
       plaidEnv = PlaidEnvironments.production;
