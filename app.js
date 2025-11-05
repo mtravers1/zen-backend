@@ -1,4 +1,5 @@
 
+import "./config/env.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
