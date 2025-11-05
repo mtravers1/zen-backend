@@ -20,7 +20,7 @@ export const toolFunctions = (context) => ({
    */
   getUserInfo: async ({ uid }) => {
     try {
-      const user = await authService.own(uid);
+      const user = await authService.getOwnUserProfile(uid);
       if (!user) {
         return { message: "No user information available", data: null };
       }

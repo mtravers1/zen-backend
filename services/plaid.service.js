@@ -441,7 +441,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 
   if (newAccountsBalances) {
     const bulkOps = [];
-    const safeEncrypt = createSafeEncrypt();
+    const safeEncrypt = createSafeEncrypt(uid);
     for (const account of newAccountsBalances.data.accounts) {
       const accountBalance = account.balances;
       const accountType = account.type;

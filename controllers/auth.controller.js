@@ -9,13 +9,13 @@ import User from "../database/models/User.js";
 const getOwnUserProfile = async (req, res) => {
   const { uid } = req.user;
   try {
-    structuredLogger.logOperationStart("auth_own", { user_id: uid });
+    structuredLogger.logOperationStart("auth_get_own_user_profile", { user_id: uid });
     const user = await authService.getOwnUserProfile(uid);
-    structuredLogger.logSuccess("auth_own", { user_id: uid });
+    structuredLogger.logSuccess("auth_get_own_user_profile", { user_id: uid });
     res.status(200).send(user);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_own",
+      operation: "auth_get_own_user_profile",
       user_id: uid,
       error_classification: "authentication_error",
     });

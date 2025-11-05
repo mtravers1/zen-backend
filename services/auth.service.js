@@ -1099,14 +1099,14 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
 
 const getOwnUserProfile = async (uid) => {
   try {
-    structuredLogger.logOperationStart("auth_service_own", { user_id: uid });
+    structuredLogger.logOperationStart("auth_service_get_own_user_profile", { user_id: uid });
 
     const user = await User.findOne({ authUid: uid });
 
     if (!user) {
       const error = new Error("User not found");
       structuredLogger.logErrorBlock(error, {
-        operation: "auth_service_own",
+        operation: "auth_service_get_own_user_profile",
         user_id: uid,
         error_classification: "user_not_found",
       });
@@ -1187,11 +1187,11 @@ const getOwnUserProfile = async (uid) => {
       },
     };
 
-    structuredLogger.logSuccess("auth_service_own", { user_id: uid });
+    structuredLogger.logSuccess("auth_service_get_own_user_profile", { user_id: uid });
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_service_own",
+      operation: "auth_service_get_own_user_profile",
       user_id: uid,
       error_classification: "user_retrieval_error",
     });
