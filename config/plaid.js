@@ -12,6 +12,7 @@ function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV || 'development
 
   switch (lowerCaseEnv) {
     case "local":
+    case "sandbox":
       plaidEnv = PlaidEnvironments.sandbox;
       break;
     case "development":
@@ -24,7 +25,7 @@ function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV || 'development
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown Plaid environment: ${plaidEnvironment}. Must be one of: local, development, staging, production`);
+      throw new Error(`Unknown Plaid environment: ${plaidEnvironment}. Must be one of: local, sandbox, development, staging, production`);
   }
 
   const plaidConfig = new Configuration({
