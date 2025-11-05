@@ -11,7 +11,7 @@ function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV) {
     return plaidClients[plaidEnvironment];
   }
 
-  const lowerCaseEnv = plaidEnvironment.toLowerCase();
+  const lowerCaseEnv = plaidEnvironment.toLowerCase().trim();
 
   // This object maps the application's environment names to the corresponding Plaid API environments.
   const plaidEnvMap = {
