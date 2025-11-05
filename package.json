@@ -11,7 +11,7 @@
     "start:prod": "cross-env NODE_ENV=production node ./bin/www",
     "mongodb": "docker-compose up",
     "build": "webpack --config webpack.config.js",
-    "test": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "cross-env NODE_ENV=test ALLOW_DEK_REGENERATION=true DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/.bin/jest"
   },
   "author": "",
   "license": "ISC",
