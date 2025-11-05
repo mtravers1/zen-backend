@@ -4,6 +4,14 @@ import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
 
+class DecryptionError extends Error {
+  constructor(message, errorCode) {
+    super(message);
+    this.name = "DecryptionError";
+    this.errorCode = errorCode;
+  }
+}
+
 // Validate required environment variables
 const requiredEnvVars = [
   "STORAGE_SERVICE_ACCOUNT",
@@ -677,4 +685,5 @@ export {
   backupExistingDEK,
   tryRecoverDEKFromBackup,
   moveDEKToDeadLetterQueue,
+  DecryptionError,
 };

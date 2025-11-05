@@ -124,29 +124,13 @@ const getAccessToken = async (req, res) => {
 
     res.status(200).send(accessToken);
   } catch (error) {
-    // Log the detailed error
     structuredLogger.logErrorBlock(error, {
       operation: "getAccessToken",
-      user_id: req.user?.uid,
       request_id: requestId,
-      plaid_error_data: error.response?.data, // Log Plaid's specific error response
+      request: structuredLogger.requestContext.get(requestId)?.request,
+      response: { statusCode: 500, body: { message: error.message } },
     });
 
-    // Check if this is a Plaid API error and forward a more specific error message
-    if (error.response && error.response.data) {
-      const plaidError = error.response.data;
-      return res.status(error.response.status || 500).json({
-        message: "A Plaid API error occurred.",
-        plaid_error: {
-          error_code: plaidError.error_code,
-          error_message: plaidError.error_message,
-          error_type: plaidError.error_type,
-          request_id: plaidError.request_id,
-        },
-      });
-    }
-
-    // Fallback for non-Plaid errors
     res.status(500).send({ message: error.message });
   }
 };

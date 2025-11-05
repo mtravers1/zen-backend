@@ -1,7 +1,7 @@
 export default {
   testEnvironment: "node",
   moduleNameMapper: {
-    "^(\.{1,2}/.*)\.(c|m)?js$": "$1",
+    "^(\\.{1,2}/.*)\\.(c|m)?js$": "$1",
   },
   // Use setupFiles to ensure the environment is configured before any other code runs.
   setupFiles: ["<rootDir>/tests/setup.js"],

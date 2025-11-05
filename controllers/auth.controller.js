@@ -6,11 +6,11 @@ import { hashEmail } from "../database/encryption.js";
 import admin from "../lib/firebaseAdmin.js";
 import User from "../database/models/User.js";
 
-const own = async (req, res) => {
+const getOwnUserProfile = async (req, res) => {
   const { uid } = req.user;
   try {
     structuredLogger.logOperationStart("auth_own", { user_id: uid });
-    const user = await authService.own(uid);
+    const user = await authService.getOwnUserProfile(uid);
     structuredLogger.logSuccess("auth_own", { user_id: uid });
     res.status(200).send(user);
   } catch (error) {
@@ -1211,7 +1211,7 @@ const signUpWithOAuth = async (req, res) => {
 };
 
 const authController = {
-  own,
+  getOwnUserProfile,
   signUp,
   signIn,
   checkEmail,

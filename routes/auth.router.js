@@ -10,7 +10,7 @@ router.post("/signup-oauth", authController.signUpWithOAuth);
 router.post("/check-email-firebase", authController.checkEmailFirebase);
 router.post("/check-email", authController.checkEmail);
 router.post("/check-oauth-validation", authController.checkOAuthValidation);
-router.get("/own", authController.own);
+router.get("/me", authController.getOwnUserProfile);
 router.post("/sendCode", authController.sendCode);
 router.post("/verifyCode", authController.verifyCode);
 router.post("/resetPassword", authController.resetPassword);
