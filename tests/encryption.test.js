@@ -42,7 +42,7 @@ describe('Data Encryption', () => {
     expect(user.name.lastName).not.toBe('Doe');
     expect(user.email[0].email).not.toBe('test@example.com');
 
-    const retrievedUser = await authService.signInWithUid('test-uid');
+    const retrievedUser = await authService.getOwnUserProfile('test-uid');
 
     // Check that the data is decrypted on retrieval
     expect(retrievedUser.name.firstName).toBe('John');
