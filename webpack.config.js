@@ -47,6 +47,7 @@ export default {
         { from: "routes/", to: "./routes/", noErrorOnMissing: true },
         { from: "controllers/", to: "./controllers/", noErrorOnMissing: true },
         { from: "services/", to: "./services/", noErrorOnMissing: true },
+        { from: "utils/", to: "./utils/", noErrorOnMissing: true },
         { from: "lib/", to: "./lib/", noErrorOnMissing: true },
         { from: "bin/", to: "./bin/", noErrorOnMissing: true },
         { from: "app.js", to: "." },
