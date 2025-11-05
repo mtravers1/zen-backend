@@ -2,37 +2,29 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 const plaidClients = {};
 
-function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV) {
-  console.log(`[Plaid Config] Raw PLAID_ENV from process.env: '${process.env.PLAID_ENV}'`);
-  console.log(`[Plaid Config] plaidEnvironment (after default): '${plaidEnvironment}'`);
-
-  if (!plaidEnvironment) {
-    throw new Error('PLAID_ENV is not set. Please set it to one of: local, development, staging, production');
-  }
-
+function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV || 'development') { // default to development
   if (plaidClients[plaidEnvironment]) {
     return plaidClients[plaidEnvironment];
   }
 
-  const lowerCaseEnv = plaidEnvironment.toLowerCase().trim();
-  console.log(`[Plaid Config] lowerCaseEnv (trimmed): '${lowerCaseEnv}'`);
+  let plaidEnv;
+  const lowerCaseEnv = plaidEnvironment.toLowerCase();
 
-  // This object maps the application's environment names to the corresponding Plaid API environments.
-  const plaidEnvMap = {
-    // 'local' environment uses Plaid's 'sandbox' for development and testing purposes.
-    local: PlaidEnvironments.sandbox,
-    // 'development' environment maps to Plaid's 'development' environment.
-    development: PlaidEnvironments.development,
-    // 'staging' environment uses Plaid's 'production' environment but should be connected to a "Limited Production" environment.
-    staging: PlaidEnvironments.production,
-    // 'production' environment maps to Plaid's 'production' environment for live user data.
-    production: PlaidEnvironments.production,
-  };
-
-  const plaidEnv = plaidEnvMap[lowerCaseEnv];
-
-  if (!plaidEnv) {
-    throw new Error(`Unknown Plaid environment: ${plaidEnvironment}. Must be one of: ${Object.keys(plaidEnvMap).join(', ')}`);
+  switch (lowerCaseEnv) {
+    case "local":
+      plaidEnv = PlaidEnvironments.sandbox;
+      break;
+    case "development":
+      plaidEnv = PlaidEnvironments.development;
+      break;
+    case "staging":
+      plaidEnv = PlaidEnvironments.production;
+      break;
+    case "production":
+      plaidEnv = PlaidEnvironments.production;
+      break;
+    default:
+      throw new Error(`Unknown Plaid environment: ${plaidEnvironment}. Must be one of: local, development, staging, production`);
   }
 
   const plaidConfig = new Configuration({
