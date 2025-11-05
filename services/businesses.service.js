@@ -154,12 +154,18 @@ const getUserProfiles = async (email, uid) => {
     }
 
     let name;
-    if (!decryptedFirstName && !decryptedLastName) {
+
+    // Check if decryption actually worked (decrypted value should be different from encrypted)
+    const firstNameDecrypted = decryptedFirstName && decryptedFirstName !== user.name.firstName;
+    const lastNameDecrypted = decryptedLastName && decryptedLastName !== user.name.lastName;
+
+    if (!firstNameDecrypted && !lastNameDecrypted) {
       name = email;
-      console.log(`[getUserProfiles] Using email as name: ${name}`);
     } else {
-      name = decryptedFirstName + " " + decryptedLastName;
-      console.log(`[getUserProfiles] Using decrypted name: ${name}`);
+      // Use successfully decrypted values
+      const firstName = firstNameDecrypted ? decryptedFirstName : "User";
+      const lastName = lastNameDecrypted ? decryptedLastName : "";
+      name = `${firstName} ${lastName}`.trim();
     }
 
     const decryptedEmail = await Promise.all(
