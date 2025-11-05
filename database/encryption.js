@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from "fs";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
@@ -7,24 +7,28 @@ import crypto from "crypto";
 class DecryptionError extends Error {
   constructor(message) {
     super(message);
-    this.name = 'DecryptionError';
+    this.name = "DecryptionError";
   }
 }
 
 // Validate required environment variables
-const requiredEnvVars = [
-  "STORAGE_SERVICE_ACCOUNT",
-  "GCP_PROJECT_ID",
-];
+const requiredEnvVars = ["STORAGE_SERVICE_ACCOUNT", "GCP_PROJECT_ID"];
 
 // Only require KMS variables if KMS is not bypassed
-if (process.env.KMS_BYPASS !== 'true') {
-  requiredEnvVars.push("KMS_SERVICE_ACCOUNT", "GCP_KEY_LOCATION", "GCP_KEY_RING", "GCP_KEY_NAME");
+if (process.env.KMS_BYPASS !== "true") {
+  requiredEnvVars.push(
+    "KMS_SERVICE_ACCOUNT",
+    "GCP_KEY_LOCATION",
+    "GCP_KEY_RING",
+    "GCP_KEY_NAME",
+  );
 }
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    console.warn(`⚠️ WARNING: Environment variable ${envVar} is not set. This may cause issues.`);
+    console.warn(
+      `⚠️ WARNING: Environment variable ${envVar} is not set. This may cause issues.`,
+    );
   }
 }
 
@@ -35,29 +39,41 @@ let storageCredentials = null; // Initialize to null
 const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
 let loadedFromEnv = false;
 
-if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== '') {
+if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== "") {
   try {
-    storageCredentials = JSON.parse(Buffer.from(storageServiceAccountB64, 'base64').toString('utf-8'));
+    storageCredentials = JSON.parse(
+      Buffer.from(storageServiceAccountB64, "base64").toString("utf-8"),
+    );
     console.log("✅ Storage credentials loaded from environment variable.");
     loadedFromEnv = true;
   } catch (error) {
-    console.warn("⚠️ WARNING: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Attempting fallback for test environment.");
+    console.warn(
+      "⚠️ WARNING: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Attempting fallback for test environment.",
+    );
     // Do not throw here, allow fallback
   }
 }
 
-if (!loadedFromEnv && process.env.NODE_ENV === 'test') {
+if (!loadedFromEnv && process.env.NODE_ENV === "test") {
   try {
-    storageCredentials = JSON.parse(fs.readFileSync('./storage_service_account.json', 'utf-8'));
-    console.log("✅ Storage credentials loaded from storage_service_account.json file for test environment.");
+    storageCredentials = JSON.parse(
+      fs.readFileSync("./storage_service_account.json", "utf-8"),
+    );
+    console.log(
+      "✅ Storage credentials loaded from storage_service_account.json file for test environment.",
+    );
   } catch (error) {
-    console.error("❌ CRITICAL: Failed to load storage_service_account.json for test environment. Ensure the file exists and is valid JSON.");
+    console.error(
+      "❌ CRITICAL: Failed to load storage_service_account.json for test environment. Ensure the file exists and is valid JSON.",
+    );
     throw error;
   }
 }
 
 if (!storageCredentials) {
-  throw new Error("❌ CRITICAL: Storage credentials could not be loaded. Ensure STORAGE_SERVICE_ACCOUNT environment variable is set and valid, or storage_service_account.json exists in test environment.");
+  throw new Error(
+    "❌ CRITICAL: Storage credentials could not be loaded. Ensure STORAGE_SERVICE_ACCOUNT environment variable is set and valid, or storage_service_account.json exists in test environment.",
+  );
 }
 
 storage = new Storage({
@@ -66,35 +82,40 @@ storage = new Storage({
 });
 console.log("✅ Storage client initialized");
 
-if (process.env.KMS_BYPASS === 'true') {
-  console.warn('⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.');
+if (process.env.KMS_BYPASS === "true") {
+  console.warn(
+    "⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.",
+  );
   kmsClient = {
     encrypt: async ({ plaintext }) => {
-      console.log('KMS mock: encrypt (passthrough)');
+      console.log("KMS mock: encrypt (passthrough)");
       return [{ ciphertext: plaintext }];
     },
     decrypt: async ({ ciphertext }) => {
-      console.log('KMS mock: decrypt (passthrough)');
+      console.log("KMS mock: decrypt (passthrough)");
       return [{ plaintext: ciphertext }];
     },
-    cryptoKeyPath: () => 'dummy-kms-path',
+    cryptoKeyPath: () => "dummy-kms-path",
   };
-  console.log('✅ KMS client mocked (passthrough)');
+  console.log("✅ KMS client mocked (passthrough)");
 } else {
   kmsClient = new KeyManagementServiceClient({
     credentials: storageCredentials, // KMS uses the same credentials as Storage
     projectId: process.env.GCP_PROJECT_ID,
   });
-  console.log('✅ KMS client initialized');
+  console.log("✅ KMS client initialized");
 }
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
-const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME || 'zentavos-bucket'; // Fallback to hardcoded if not set
+const LEGACY_GCS_BUCKET_NAME =
+  process.env.LEGACY_GCS_BUCKET_NAME || "zentavos-bucket"; // Fallback to hardcoded if not set
 
 async function getBucket(bucketName) {
   const targetBucketName = bucketName || GCS_BUCKET_NAME;
   if (!targetBucketName) {
-    console.warn('⚠️ CRITICAL: GCS_BUCKET_NAME environment variable is not set. Using legacy bucket.');
+    console.warn(
+      "⚠️ CRITICAL: GCS_BUCKET_NAME environment variable is not set. Using legacy bucket.",
+    );
     return storage.bucket(LEGACY_GCS_BUCKET_NAME);
   }
 
@@ -104,11 +125,15 @@ async function getBucket(bucketName) {
     if (exists) {
       return bucket;
     } else {
-      console.warn(`⚠️ GCS bucket "${targetBucketName}" does not exist or is not accessible. Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}".`);
+      console.warn(
+        `⚠️ GCS bucket "${targetBucketName}" does not exist or is not accessible. Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}".`,
+      );
       return storage.bucket(LEGACY_GCS_BUCKET_NAME);
     }
   } catch (error) {
-    console.warn(`⚠️ Failed to check for GCS bucket "${targetBucketName}". Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}". Error: ${error.message}`);
+    console.warn(
+      `⚠️ Failed to check for GCS bucket "${targetBucketName}". Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}". Error: ${error.message}`,
+    );
     return storage.bucket(LEGACY_GCS_BUCKET_NAME);
   }
 }
@@ -117,7 +142,7 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
   process.env.GCP_PROJECT_ID,
   process.env.GCP_KEY_LOCATION,
   process.env.GCP_KEY_RING,
-  process.env.GCP_KEY_NAME
+  process.env.GCP_KEY_NAME,
 );
 
 // DEK cache in memory
@@ -130,10 +155,10 @@ import User from "./models/User.js";
 async function generateAndStoreEncryptedDEK(
   bucketKey,
   forceRegenerate = false,
-  targetBucket = null // Allow specifying target bucket for migration
+  targetBucket = null, // Allow specifying target bucket for migration
 ) {
   // Check for regeneration safeguard
-  if (process.env.ALLOW_DEK_REGENERATION !== 'true' && !forceRegenerate) {
+  if (process.env.ALLOW_DEK_REGENERATION !== "true" && !forceRegenerate) {
     const errorMessage = `CRITICAL: DEK regeneration attempted for user ${bucketKey} but ALLOW_DEK_REGENERATION is not 'true'. Aborting to prevent data loss.`;
     console.error(`❌ ${errorMessage}`);
     throw new Error(errorMessage);
@@ -156,7 +181,7 @@ async function generateAndStoreEncryptedDEK(
 
     const encryptedDEK = encryptResponse.ciphertext;
     const filePath = `keys/${bucketKey}_v${version}.key`;
-    const bucket = targetBucket || await getBucket();
+    const bucket = targetBucket || (await getBucket());
     const file = bucket.file(filePath);
 
     // Use simple upload for small files (DEK is ~113 bytes)
@@ -194,11 +219,15 @@ async function getDEKFromBucket(bucketKey, bucket) {
   const [files] = await bucket.getFiles({ prefix });
 
   if (files.length === 0) {
-    console.log(`⚠️ DEK files not found for bucket key: ${bucketKey} in bucket ${bucket.name}`);
+    console.log(
+      `⚠️ DEK files not found for bucket key: ${bucketKey} in bucket ${bucket.name}`,
+    );
     return [];
   }
 
-  console.log(`✅ ${files.length} DEK file(s) found, downloading and decrypting...`);
+  console.log(
+    `✅ ${files.length} DEK file(s) found, downloading and decrypting...`,
+  );
 
   const deks = [];
   for (const file of files) {
@@ -220,7 +249,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
         console.warn(`⚠️ DEK decryption failed for file: ${file.name}`);
         console.warn(`⚠️ Error: ${decryptError.message}`);
         console.warn(
-          `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`
+          `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`,
         );
 
         // Move failing DEK to dead-letter queue
@@ -251,7 +280,9 @@ async function getUserDek(firebaseUid) {
   let user;
   try {
     // Step 1: Starting DEK retrieval process and checking for cached DEK
-    console.log(`[Step 1] 🕵️‍♂️ Starting DEK retrieval for Firebase UID: ${firebaseUid}`);
+    console.log(
+      `[Step 1] 🕵️‍♂️ Starting DEK retrieval for Firebase UID: ${firebaseUid}`,
+    );
 
     // Step 2: Find user in database by Firebase UID
     console.log(`🔍 [Step 2] Looking up user in database...`);
@@ -267,7 +298,9 @@ async function getUserDek(firebaseUid) {
     if (dekCache.has(bucketKey)) {
       const cachedDeks = dekCache.get(bucketKey);
       if (Array.isArray(cachedDeks) && cachedDeks.length > 0) {
-        console.log(`✅ [Step 1] DEK(s) retrieved from cache for bucket key: ${bucketKey}`);
+        console.log(
+          `✅ [Step 1] DEK(s) retrieved from cache for bucket key: ${bucketKey}`,
+        );
         return cachedDeks;
       }
       dekCache.delete(bucketKey);
@@ -279,38 +312,66 @@ async function getUserDek(firebaseUid) {
 
     // Step 4: If not found, search in the legacy GCS bucket
     if (deks.length === 0 && currentBucket.name !== LEGACY_GCS_BUCKET_NAME) {
-      console.warn(`⚠️ [Step 4] No valid DEK found in primary bucket. Checking legacy bucket...`);
+      console.warn(
+        `⚠️ [Step 4] No valid DEK found in primary bucket. Checking legacy bucket...`,
+      );
       const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
       const legacyDeks = await getDEKFromBucket(bucketKey, legacyBucket);
 
       if (legacyDeks.length > 0) {
         // Step 5: If found in legacy, migrate the DEK to the primary bucket
-        console.log(`✅ [Step 5] Found legacy DEK. Migrating to primary bucket...`);
+        console.log(
+          `✅ [Step 5] Found legacy DEK. Migrating to primary bucket...`,
+        );
         await copyDEKToNewBucketKey(bucketKey, legacyBucket, currentBucket);
         deks = legacyDeks;
         dekCache.set(bucketKey, deks);
       } else {
         // Try legacy Firebase UID if no DEK found with DB ID in either bucket
-        console.warn(`⚠️ [Step 4] No valid DEK found with Database ID in legacy bucket. Trying legacy Firebase UID...`);
-        const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
+        console.warn(
+          `⚠️ [Step 4] No valid DEK found with Database ID in legacy bucket. Trying legacy Firebase UID...`,
+        );
+        const legacyFirebaseUidDeks = await getDEKFromBucket(
+          firebaseUid,
+          legacyBucket,
+        );
 
         if (legacyFirebaseUidDeks.length > 0) {
           // Step 5: If found in legacy, migrate the DEK to the primary bucket
-          console.log(`✅ [Step 5] Found legacy DEK with Firebase UID. Migrating to primary bucket with Database ID...`);
-          await copyDEKToNewBucketKey(firebaseUid, legacyBucket, currentBucket, bucketKey); // Pass new bucketKey for target
+          console.log(
+            `✅ [Step 5] Found legacy DEK with Firebase UID. Migrating to primary bucket with Database ID...`,
+          );
+          await copyDEKToNewBucketKey(
+            firebaseUid,
+            legacyBucket,
+            currentBucket,
+            bucketKey,
+          ); // Pass new bucketKey for target
           deks = legacyFirebaseUidDeks;
           dekCache.set(bucketKey, deks);
         } else {
           // Step 6: If not found anywhere, regenerate the DEK
-          console.warn(`⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`);
-          const newDek = await generateAndStoreEncryptedDEK(bucketKey, false, currentBucket);
+          console.warn(
+            `⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`,
+          );
+          const newDek = await generateAndStoreEncryptedDEK(
+            bucketKey,
+            false,
+            currentBucket,
+          );
           deks = [newDek];
         }
       }
     } else if (deks.length === 0) {
       // Step 6: If not found anywhere, regenerate the DEK
-      console.warn(`⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`);
-      const newDek = await generateAndStoreEncryptedDEK(bucketKey, false, currentBucket);
+      console.warn(
+        `⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`,
+      );
+      const newDek = await generateAndStoreEncryptedDEK(
+        bucketKey,
+        false,
+        currentBucket,
+      );
       deks = [newDek];
     } else {
       console.log(`✅ [Step 3] DEK found in primary bucket.`);
@@ -319,7 +380,9 @@ async function getUserDek(firebaseUid) {
 
     return deks;
   } catch (e) {
-    console.error(`❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`);
+    console.error(
+      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`,
+    );
     throw e;
   }
 }
@@ -391,7 +454,7 @@ async function decryptValue(cipherTextBase64, deks) {
       return JSON.parse(decrypted);
     } catch (e) {
       console.warn(
-        `⚠️ Decryption failed with one of the keys. Trying next key...`
+        `⚠️ Decryption failed with one of the keys. Trying next key...`,
       );
     }
   }
@@ -401,10 +464,13 @@ async function decryptValue(cipherTextBase64, deks) {
       typeof cipherTextBase64 === "string"
         ? cipherTextBase64.substring(0, 50)
         : cipherTextBase64
-    }...`
+    }...`,
   );
   console.error(`❌ All decryption attempts failed.`);
-  throw new DecryptionError("All decryption attempts failed.", "ALL_DEK_FAILED");
+  throw new DecryptionError(
+    "All decryption attempts failed.",
+    "ALL_DEK_FAILED",
+  );
 }
 
 function hashEmail(email) {
@@ -426,44 +492,55 @@ function hashValue(value) {
 /**
  * Copy DEK from legacy Firebase UID bucket key to new primary key bucket key
  */
-async function copyDEKToNewBucketKey(sourceKey, sourceBucket, targetBucket, targetKey = null) {
+async function copyDEKToNewBucketKey(
+  sourceKey,
+  sourceBucket,
+  targetBucket,
+  targetKey = null,
+) {
   try {
     const finalTargetKey = targetKey || sourceKey;
     console.log(
-      `📦 Copying DEK from source key ${sourceKey} in bucket ${sourceBucket.name} to target key ${finalTargetKey} in bucket ${targetBucket.name}`
+      `📦 Copying DEK from source key ${sourceKey} in bucket ${sourceBucket.name} to target key ${finalTargetKey} in bucket ${targetBucket.name}`,
     );
 
     const sourceFile = sourceBucket.file(`keys/${sourceKey}.key`);
 
     if (!(await sourceFile.exists())[0]) {
-      console.log(`❌ Source DEK file not found: ${sourceKey} in bucket ${sourceBucket.name}`);
+      console.log(
+        `❌ Source DEK file not found: ${sourceKey} in bucket ${sourceBucket.name}`,
+      );
       return false;
     }
 
     const version = Date.now();
-    const targetFile = targetBucket.file(`keys/${finalTargetKey}_v${version}.key`);
+    const targetFile = targetBucket.file(
+      `keys/${finalTargetKey}_v${version}.key`,
+    );
 
     // Copy the DEK to the new bucket key location
     try {
       await sourceFile.copy(targetFile);
-      console.log(`✅ DEK copied from ${sourceFile.name} to ${targetFile.name}`);
+      console.log(
+        `✅ DEK copied from ${sourceFile.name} to ${targetFile.name}`,
+      );
       return true;
     } catch (copyError) {
       // Fallback strategy: download then save, to avoid transient SDK copy issues (e.g., Parse Error)
       console.error(
-        `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`
+        `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`,
       );
       try {
         const [encryptedDEK] = await sourceFile.download();
         await targetFile.save(encryptedDEK, { resumable: false });
         console.log(
-          `✅ DEK copied via download+save from ${sourceFile.name} to ${targetFile.name}`
+          `✅ DEK copied via download+save from ${sourceFile.name} to ${targetFile.name}`,
         );
         return true;
       } catch (fallbackError) {
         console.error(
           `❌ Fallback copy (download+save) failed from ${sourceKey} to ${finalTargetKey}:`,
-          fallbackError
+          fallbackError,
         );
         // Do not throw to avoid hard-failing auth flow; return false so callers can proceed using legacy DEK
         return false;
@@ -472,7 +549,7 @@ async function copyDEKToNewBucketKey(sourceKey, sourceBucket, targetBucket, targ
   } catch (error) {
     console.error(
       `❌ Error copying DEK from ${sourceKey} to ${targetKey}:`,
-      error
+      error,
     );
     // Do not throw here to prevent 500 on sign-in; allow caller to continue with legacy DEK
     return false;
@@ -485,53 +562,55 @@ async function copyDEKToNewBucketKey(sourceKey, sourceBucket, targetBucket, targ
 async function backupExistingDEK(bucketKey, currentBucket) {
   try {
     console.log(
-      `💾 Creating backup of existing DEK for bucket key: ${bucketKey} in bucket ${currentBucket.name}`
+      `💾 Creating backup of existing DEK for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
     );
 
     const originalFile = currentBucket.file(`keys/${bucketKey}.key`);
 
     if (!(await originalFile.exists())[0]) {
-      console.log(`ℹ️ No existing DEK to backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`);
+      console.log(
+        `ℹ️ No existing DEK to backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
+      );
       return;
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupFile = currentBucket.file(
-      `keys/backups/${bucketKey}_${timestamp}.key`
+      `keys/backups/${bucketKey}_${timestamp}.key`,
     );
 
     try {
       await originalFile.copy(backupFile);
       console.log(
-        `✅ DEK backup created for bucket key ${bucketKey}: ${backupFile.name}`
+        `✅ DEK backup created for bucket key ${bucketKey}: ${backupFile.name}`,
       );
     } catch (copyError) {
       console.warn(
-        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`
+        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`,
       );
       try {
         const [encryptedDEK] = await originalFile.download();
         await backupFile.save(encryptedDEK, { resumable: false });
         console.log(
-          `✅ DEK backup created via download+save for bucket key ${bucketKey}: ${backupFile.name}`
+          `✅ DEK backup created via download+save for bucket key ${bucketKey}: ${backupFile.name}`,
         );
       } catch (fallbackError) {
         console.error(
           `❌ Fallback backup (download+save) failed for bucket key ${bucketKey}:`,
-          fallbackError
+          fallbackError,
         );
         throw new Error(
-          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`
+          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`,
         );
       }
     }
   } catch (error) {
     console.error(
       `❌ Error creating DEK backup for bucket key ${bucketKey}:`,
-      error
+      error,
     );
     throw new Error(
-      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`
+      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`,
     );
   }
 }
@@ -542,7 +621,7 @@ async function backupExistingDEK(bucketKey, currentBucket) {
 async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
   try {
     console.log(
-      `🔄 Attempting DEK recovery from backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`
+      `🔄 Attempting DEK recovery from backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
     );
 
     const [files] = await currentBucket.getFiles({
@@ -550,14 +629,16 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
     });
 
     if (files.length === 0) {
-      console.log(`❌ No backup DEK files found for bucket key: ${bucketKey} in bucket ${currentBucket.name}`);
+      console.log(
+        `❌ No backup DEK files found for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
+      );
       return null;
     }
 
     // Sort by creation time (newest first) and try each backup
     files.sort(
       (a, b) =>
-        new Date(b.metadata.timeCreated) - new Date(a.metadata.timeCreated)
+        new Date(b.metadata.timeCreated) - new Date(a.metadata.timeCreated),
     );
 
     for (const backupFile of files) {
@@ -575,7 +656,7 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
         const dek = Buffer.from(plaintext);
 
         console.log(
-          `✅ Successfully recovered DEK from backup: ${backupFile.name}`
+          `✅ Successfully recovered DEK from backup: ${backupFile.name}`,
         );
 
         // Restore the recovered DEK as the current DEK
@@ -584,25 +665,27 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
         await currentFile.save(encryptedDEK);
         dekCache.set(bucketKey, dek);
 
-        console.log(`✅ DEK restored for bucket key: ${bucketKey} in bucket ${currentBucket.name}`);
+        console.log(
+          `✅ DEK restored for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
+        );
         return dek;
       } catch (error) {
         console.error(
           `❌ Failed to recover from backup ${backupFile.name}:`,
-          error
+          error,
         );
         continue;
       }
     }
 
     console.error(
-      `❌ All backup recovery attempts failed for bucket key: ${bucketKey} in bucket ${currentBucket.name}`
+      `❌ All backup recovery attempts failed for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
     );
     return null;
   } catch (error) {
     console.error(
       `❌ Error during DEK recovery for bucket key ${bucketKey}:`,
-      error
+      error,
     );
     return null;
   }
@@ -630,17 +713,27 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
     }
 
     // Check if DEK exists with Firebase UID in the legacy bucket (legacy/migration case)
-    const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
+    const legacyFirebaseUidDeks = await getDEKFromBucket(
+      firebaseUid,
+      legacyBucket,
+    );
 
     if (legacyFirebaseUidDeks.length > 0) {
-      const copySuccess = await copyDEKToNewBucketKey(firebaseUid, legacyBucket, currentBucket, bucketKey);
+      const copySuccess = await copyDEKToNewBucketKey(
+        firebaseUid,
+        legacyBucket,
+        currentBucket,
+        bucketKey,
+      );
 
       if (copySuccess) {
         deks = legacyFirebaseUidDeks;
         dekCache.set(bucketKey, deks);
       } else {
         // If copy failed, still use the legacy DEK but log a warning
-        console.warn(`⚠️ Failed to copy legacy DEK for Firebase UID: ${firebaseUid} to new bucket. Proceeding with legacy DEK.`);
+        console.warn(
+          `⚠️ Failed to copy legacy DEK for Firebase UID: ${firebaseUid} to new bucket. Proceeding with legacy DEK.`,
+        );
         deks = legacyFirebaseUidDeks;
         dekCache.set(bucketKey, deks);
         dekCache.set(firebaseUid, deks); // Cache under both keys for robustness
@@ -649,11 +742,15 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
     }
 
     // No existing DEK found anywhere - create new one (with safeguard)
-    const newDek = await generateAndStoreEncryptedDEK(bucketKey, false, currentBucket);
+    const newDek = await generateAndStoreEncryptedDEK(
+      bucketKey,
+      false,
+      currentBucket,
+    );
     return [newDek];
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`
+      `❌ Error getting DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`,
     );
     throw e;
   }
@@ -668,7 +765,9 @@ async function moveDEKToDeadLetterQueue(file, bucket) {
     await file.move(deadLetterFile);
     console.log(`Moved failing DEK to dead-letter queue: ${deadLetterPath}`);
   } catch (error) {
-    console.error(`Failed to move failing DEK to dead-letter queue: ${error.message}`);
+    console.error(
+      `Failed to move failing DEK to dead-letter queue: ${error.message}`,
+    );
   }
 }
 
