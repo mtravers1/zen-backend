@@ -5,9 +5,10 @@ import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
 
 class DecryptionError extends Error {
-  constructor(message) {
+  constructor(message, errorCode) {
     super(message);
-    this.name = "DecryptionError";
+    this.name = 'DecryptionError';
+    this.errorCode = errorCode;
   }
 }
 
