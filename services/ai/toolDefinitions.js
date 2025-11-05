@@ -20,7 +20,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getCashFlows",
-      description: "Get cash flow summary including income, expenses, and net worth for the current profile",
+      description:
+        "Get cash flow summary including income, expenses, and net worth for the current profile",
       parameters: {
         type: "object",
         properties: {
@@ -34,7 +35,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getNetWorth",
-      description: "Calculate and return the current net worth (assets - liabilities) including cash balances, investments, and debts",
+      description:
+        "Calculate and return the current net worth (assets - liabilities) including cash balances, investments, and debts",
       parameters: {
         type: "object",
         properties: {
@@ -48,7 +50,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getProfiles",
-      description: "Get all user profiles (personal and business) with basic information",
+      description:
+        "Get all user profiles (personal and business) with basic information",
       parameters: {
         type: "object",
         properties: {
@@ -62,7 +65,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getProfileTransactions",
-      description: "Get transactions for the current profile, optionally filtered by date, amount, merchant, or account",
+      description:
+        "Get transactions for the current profile, optionally filtered by date, amount, merchant, or account",
       parameters: {
         type: "object",
         properties: {
@@ -71,13 +75,36 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
-              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
-              minAmount: { type: "number", description: "Minimum transaction amount" },
-              maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Merchant name to search for" },
-              accountId: { type: "string", description: "Specific account ID to filter by" },
-              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
+              startDate: {
+                type: "string",
+                format: "date",
+                description: "Start date (YYYY-MM-DD)",
+              },
+              endDate: {
+                type: "string",
+                format: "date",
+                description: "End date (YYYY-MM-DD)",
+              },
+              minAmount: {
+                type: "number",
+                description: "Minimum transaction amount",
+              },
+              maxAmount: {
+                type: "number",
+                description: "Maximum transaction amount",
+              },
+              merchantIncludes: {
+                type: "string",
+                description: "Merchant name to search for",
+              },
+              accountId: {
+                type: "string",
+                description: "Specific account ID to filter by",
+              },
+              isInvestment: {
+                type: "boolean",
+                description: "Filter investment transactions only",
+              },
             },
           },
         },
@@ -89,7 +116,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAllTransactions",
-      description: "Get all transactions across all profiles, optionally filtered by date, amount, merchant, or account",
+      description:
+        "Get all transactions across all profiles, optionally filtered by date, amount, merchant, or account",
       parameters: {
         type: "object",
         properties: {
@@ -98,13 +126,36 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
-              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
-              minAmount: { type: "number", description: "Minimum transaction amount" },
-              maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Merchant name to search for" },
-              accountId: { type: "string", description: "Specific account ID to filter by" },
-              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
+              startDate: {
+                type: "string",
+                format: "date",
+                description: "Start date (YYYY-MM-DD)",
+              },
+              endDate: {
+                type: "string",
+                format: "date",
+                description: "End date (YYYY-MM-DD)",
+              },
+              minAmount: {
+                type: "number",
+                description: "Minimum transaction amount",
+              },
+              maxAmount: {
+                type: "number",
+                description: "Maximum transaction amount",
+              },
+              merchantIncludes: {
+                type: "string",
+                description: "Merchant name to search for",
+              },
+              accountId: {
+                type: "string",
+                description: "Specific account ID to filter by",
+              },
+              isInvestment: {
+                type: "boolean",
+                description: "Filter investment transactions only",
+              },
             },
           },
         },
@@ -116,7 +167,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountsByProfile",
-      description: "Get accounts for the current profile, optionally filtered by type (savings, checking, credit, investment) or other criteria",
+      description:
+        "Get accounts for the current profile, optionally filtered by type (savings, checking, credit, investment) or other criteria",
       parameters: {
         type: "object",
         properties: {
@@ -125,22 +177,31 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine account results",
             properties: {
-              accountType: { 
-                type: "string", 
-                description: "Filter by account type (e.g., 'savings', 'checking', 'credit', 'investment')",
-                enum: ["savings", "checking", "credit", "investment", "loan", "depository"]
+              accountType: {
+                type: "string",
+                description:
+                  "Filter by account type (e.g., 'savings', 'checking', 'credit', 'investment')",
+                enum: [
+                  "savings",
+                  "checking",
+                  "credit",
+                  "investment",
+                  "loan",
+                  "depository",
+                ],
               },
-              accountSubtype: { 
-                type: "string", 
-                description: "Filter by account subtype (e.g., 'savings', 'checking')" 
+              accountSubtype: {
+                type: "string",
+                description:
+                  "Filter by account subtype (e.g., 'savings', 'checking')",
               },
-              institutionName: { 
-                type: "string", 
-                description: "Filter by institution name" 
+              institutionName: {
+                type: "string",
+                description: "Filter by institution name",
               },
-              nameIncludes: { 
-                type: "string", 
-                description: "Filter accounts whose name contains this text" 
+              nameIncludes: {
+                type: "string",
+                description: "Filter accounts whose name contains this text",
               },
             },
           },
@@ -153,7 +214,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAllUserAccounts",
-      description: "Get all accounts across all profiles with balances and account details",
+      description:
+        "Get all accounts across all profiles with balances and account details",
       parameters: {
         type: "object",
         properties: {
@@ -162,10 +224,23 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine account results",
             properties: {
-              institutionName: { type: "string", description: "Bank or institution name" },
-              accountType: { type: "string", description: "Account type (checking, savings, investment, loan)" },
-              accountSubtype: { type: "string", description: "Account subtype (e.g., investment, loan)" },
-              nameIncludes: { type: "string", description: "Partial account name to search for" },
+              institutionName: {
+                type: "string",
+                description: "Bank or institution name",
+              },
+              accountType: {
+                type: "string",
+                description:
+                  "Account type (checking, savings, investment, loan)",
+              },
+              accountSubtype: {
+                type: "string",
+                description: "Account subtype (e.g., investment, loan)",
+              },
+              nameIncludes: {
+                type: "string",
+                description: "Partial account name to search for",
+              },
             },
           },
         },
@@ -177,7 +252,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getCashFlowsWeekly",
-      description: "Get weekly cash flow data including income, expenses, and trends",
+      description:
+        "Get weekly cash flow data including income, expenses, and trends",
       parameters: {
         type: "object",
         properties: {
@@ -191,7 +267,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountTransactions",
-      description: "Get transactions for a specific account, optionally filtered by date, amount, or merchant",
+      description:
+        "Get transactions for a specific account, optionally filtered by date, amount, or merchant",
       parameters: {
         type: "object",
         properties: {
@@ -201,13 +278,36 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional filters to refine transaction results",
             properties: {
-              startDate: { type: "string", format: "date", description: "Start date (YYYY-MM-DD)" },
-              endDate: { type: "string", format: "date", description: "End date (YYYY-MM-DD)" },
-              minAmount: { type: "number", description: "Minimum transaction amount" },
-              maxAmount: { type: "number", description: "Maximum transaction amount" },
-              merchantIncludes: { type: "string", description: "Merchant name to search for" },
-              accountId: { type: "string", description: "Specific account ID to filter by" },
-              isInvestment: { type: "boolean", description: "Filter investment transactions only" },
+              startDate: {
+                type: "string",
+                format: "date",
+                description: "Start date (YYYY-MM-DD)",
+              },
+              endDate: {
+                type: "string",
+                format: "date",
+                description: "End date (YYYY-MM-DD)",
+              },
+              minAmount: {
+                type: "number",
+                description: "Minimum transaction amount",
+              },
+              maxAmount: {
+                type: "number",
+                description: "Maximum transaction amount",
+              },
+              merchantIncludes: {
+                type: "string",
+                description: "Merchant name to search for",
+              },
+              accountId: {
+                type: "string",
+                description: "Specific account ID to filter by",
+              },
+              isInvestment: {
+                type: "boolean",
+                description: "Filter investment transactions only",
+              },
             },
           },
         },
@@ -219,7 +319,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAssets",
-      description: "Get all financial assets including real estate, investments, vehicles, and other valuable items",
+      description:
+        "Get all financial assets including real estate, investments, vehicles, and other valuable items",
       parameters: {
         type: "object",
         properties: {
@@ -233,7 +334,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getTrips",
-      description: "Get all business and personal trips with details like date, distance, purpose, and expenses",
+      description:
+        "Get all business and personal trips with details like date, distance, purpose, and expenses",
       parameters: {
         type: "object",
         properties: {
@@ -242,13 +344,34 @@ export const toolDefinitions = [
             type: "object",
             description: "Optional query filters for trips",
             properties: {
-              profileId: { type: "string", description: "Filter by specific profile" },
-              userId: { type: "string", description: "Filter by specific user" },
-              vehicleId: { type: "string", description: "Filter by specific vehicle" },
-              minMiles: { type: "number", description: "Minimum trip distance in miles" },
-              maxMiles: { type: "number", description: "Maximum trip distance in miles" },
-              dateRange: { type: "string", description: "Date range filter (YYYY-MM-DD < YYYY-MM-DD)" },
-              search: { type: "string", description: "Search term for trip purpose or notes" },
+              profileId: {
+                type: "string",
+                description: "Filter by specific profile",
+              },
+              userId: {
+                type: "string",
+                description: "Filter by specific user",
+              },
+              vehicleId: {
+                type: "string",
+                description: "Filter by specific vehicle",
+              },
+              minMiles: {
+                type: "number",
+                description: "Minimum trip distance in miles",
+              },
+              maxMiles: {
+                type: "number",
+                description: "Maximum trip distance in miles",
+              },
+              dateRange: {
+                type: "string",
+                description: "Date range filter (YYYY-MM-DD < YYYY-MM-DD)",
+              },
+              search: {
+                type: "string",
+                description: "Search term for trip purpose or notes",
+              },
             },
           },
         },
@@ -260,7 +383,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getAccountsBreakdown",
-      description: "Get detailed breakdown of accounts by type (checking, savings, credit, etc.) with descriptions and balances",
+      description:
+        "Get detailed breakdown of accounts by type (checking, savings, credit, etc.) with descriptions and balances",
       parameters: {
         type: "object",
         properties: {
@@ -274,17 +398,20 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getTaxFormsHelp",
-      description: "Get comprehensive help and information about US tax forms (W-2, 1099), banking forms, and mortgage applications. This tool provides detailed explanations, required fields, and tips for filling out common US financial forms.",
+      description:
+        "Get comprehensive help and information about US tax forms (W-2, 1099), banking forms, and mortgage applications. This tool provides detailed explanations, required fields, and tips for filling out common US financial forms.",
       parameters: {
         type: "object",
         properties: {
-          formType: { 
-            type: "string", 
-            description: "Type of form to get help with (e.g., 'W-2', '1099', 'bank', 'mortgage', or leave empty for general help)" 
+          formType: {
+            type: "string",
+            description:
+              "Type of form to get help with (e.g., 'W-2', '1099', 'bank', 'mortgage', or leave empty for general help)",
           },
-          question: { 
-            type: "string", 
-            description: "Specific question about the form (e.g., 'How do I fill out a 1099 form for freelance income?')" 
+          question: {
+            type: "string",
+            description:
+              "Specific question about the form (e.g., 'How do I fill out a 1099 form for freelance income?')",
           },
         },
         required: [],
@@ -295,17 +422,20 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getFinancialKnowledge",
-      description: "Get general financial education and tax guidance on topics like tax deadlines, deductions, investments, credit management, and retirement planning. This tool provides educational content without requiring personal financial data.",
+      description:
+        "Get general financial education and tax guidance on topics like tax deadlines, deductions, investments, credit management, and retirement planning. This tool provides educational content without requiring personal financial data.",
       parameters: {
         type: "object",
         properties: {
-          topic: { 
-            type: "string", 
-            description: "Financial topic area (e.g., 'tax_deadlines', 'deductions', 'investments', 'credit', 'retirement', or leave empty for general help)" 
+          topic: {
+            type: "string",
+            description:
+              "Financial topic area (e.g., 'tax_deadlines', 'deductions', 'investments', 'credit', 'retirement', or leave empty for general help)",
           },
-          question: { 
-            type: "string", 
-            description: "Specific question about the financial topic (e.g., 'What are the tax filing deadlines for 2024?')" 
+          question: {
+            type: "string",
+            description:
+              "Specific question about the financial topic (e.g., 'What are the tax filing deadlines for 2024?')",
           },
         },
         required: [],
@@ -316,12 +446,16 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getFiles",
-      description: "Get all files for the user profile with details like type, folder, and metadata. Use this when users ask about their files, documents, or file count.",
+      description:
+        "Get all files for the user profile with details like type, folder, and metadata. Use this when users ask about their files, documents, or file count.",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
-          profileId: { type: "string", description: "Profile ID to get files for" }
+          profileId: {
+            type: "string",
+            description: "Profile ID to get files for",
+          },
         },
         required: ["uid", "profileId"],
       },
@@ -331,15 +465,19 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getFileSummary",
-      description: "Get a summary of files including count, types, folders, and recent files. Use this when users ask about file statistics or overview.",
+      description:
+        "Get a summary of files including count, types, folders, and recent files. Use this when users ask about file statistics or overview.",
       parameters: {
         type: "object",
         properties: {
           uid: { type: "string", description: "User ID" },
-          profileId: { type: "string", description: "Profile ID to get file summary for" }
+          profileId: {
+            type: "string",
+            description: "Profile ID to get file summary for",
+          },
         },
         required: ["uid", "profileId"],
       },
     },
   },
-]; 
+];

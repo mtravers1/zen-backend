@@ -54,7 +54,7 @@ const updateAsset = async (data, uid) => {
       info: data.info,
       updatedAt: new Date(),
     },
-    { new: true }
+    { new: true },
   );
 
   if (!asset) throw new Error("Asset not found or unauthorized");

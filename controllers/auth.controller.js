@@ -64,7 +64,7 @@ const signUp = async (req, res) => {
       const firebaseUser =
         await authService.createFirebaseUserWithEmailPassword(
           data.email,
-          data.password
+          data.password,
         );
       authUid = firebaseUser.uid;
     }
@@ -89,7 +89,7 @@ const signUp = async (req, res) => {
       if (uid) {
         const canCreateBusiness = await permissionsService.canPerformAction(
           uid,
-          "business_owner_signup"
+          "business_owner_signup",
         );
 
         if (!canCreateBusiness.success) {
@@ -281,7 +281,7 @@ const sendCode = async (req, res) => {
     // Normalize email to lowercase for consistency
     const normalizedEmail = email.trim().toLowerCase();
     console.log(
-      `[DEBUG] sendCode called for email: ${email} (normalized: ${normalizedEmail})`
+      `[DEBUG] sendCode called for email: ${email} (normalized: ${normalizedEmail})`,
     );
     structuredLogger.logOperationStart("auth_send_code", {
       email: normalizedEmail,
@@ -307,7 +307,7 @@ const sendCode = async (req, res) => {
 
     structuredLogger.logSuccess("auth_send_code", { email: normalizedEmail });
     console.log(
-      `[DEBUG] sendCode completed successfully for email: ${normalizedEmail}`
+      `[DEBUG] sendCode completed successfully for email: ${normalizedEmail}`,
     );
     res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
@@ -687,7 +687,7 @@ const checkOAuthValidation = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -700,7 +700,7 @@ const checkOAuthValidation = async (req, res) => {
 
     // Create or get Firebase user
     const firebaseUserResult = await authService.createFirebaseUser(
-      validationResult.user
+      validationResult.user,
     );
 
     if (!firebaseUserResult.success) {
@@ -713,7 +713,7 @@ const checkOAuthValidation = async (req, res) => {
 
     // Generate Firebase custom token
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUserResult.user.uid
+      firebaseUserResult.user.uid,
     );
 
     if (!tokenResult.success) {
@@ -772,7 +772,7 @@ const signInWithOAuth = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -804,7 +804,7 @@ const signInWithOAuth = async (req, res) => {
         {
           email: validationResult.user.email,
           firebaseUid: existingFirebaseUser.uid,
-        }
+        },
       );
 
       firebaseUser = existingFirebaseUser;
@@ -813,7 +813,7 @@ const signInWithOAuth = async (req, res) => {
       const expectedProviderId =
         provider === "google" ? "google.com" : "apple.com";
       const isProviderLinked = firebaseUser.providerData?.some(
-        (providerInfo) => providerInfo.providerId === expectedProviderId
+        (providerInfo) => providerInfo.providerId === expectedProviderId,
       );
 
       if (!isProviderLinked) {
@@ -838,7 +838,7 @@ const signInWithOAuth = async (req, res) => {
               uid: firebaseUser.uid,
               provider: provider,
               providerUid: validationResult.user.uid,
-            }
+            },
           );
         } catch (linkError) {
           structuredLogger.logErrorBlock(linkError, {
@@ -865,7 +865,7 @@ const signInWithOAuth = async (req, res) => {
 
         if (existingDbUser) {
           console.log(
-            "🔄 Found existing user with same email but different authUid, linking providers..."
+            "🔄 Found existing user with same email but different authUid, linking providers...",
           );
 
           // Update the existing user's authUid to link the new OAuth provider
@@ -908,7 +908,7 @@ const signInWithOAuth = async (req, res) => {
 
         signInResult = await authService.signInOrCreate(
           firebaseUser.uid, // Use Firebase UID
-          userDataForSignIn
+          userDataForSignIn,
         );
 
         structuredLogger.logSuccess("auth_oauth_signin_existing_user", {
@@ -928,7 +928,7 @@ const signInWithOAuth = async (req, res) => {
           {
             email: validationResult.user.email,
             firebaseUid: firebaseUser.uid,
-          }
+          },
         );
 
         return res.status(404).json({
@@ -955,7 +955,7 @@ const signInWithOAuth = async (req, res) => {
     // Generate Firebase custom token for authentication
     // Both existing and new users need custom tokens for API authentication
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUser.uid
+      firebaseUser.uid,
     );
 
     if (!tokenResult.success) {
@@ -1020,7 +1020,7 @@ const signUpWithOAuth = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -1068,7 +1068,7 @@ const signUpWithOAuth = async (req, res) => {
         {
           email: validationResult.user.email,
           firebaseUid: existingFirebaseUser.uid,
-        }
+        },
       );
 
       const userDataForSignUp = {
@@ -1092,12 +1092,12 @@ const signUpWithOAuth = async (req, res) => {
 
       const signUpResult = await authService.signInOrCreate(
         existingFirebaseUser.uid,
-        userDataForSignUp
+        userDataForSignUp,
       );
 
       // Generate Firebase custom token
       const tokenResult = await authService.generateFirebaseToken(
-        existingFirebaseUser.uid
+        existingFirebaseUser.uid,
       );
 
       if (!tokenResult.success) {
@@ -1130,7 +1130,7 @@ const signUpWithOAuth = async (req, res) => {
 
     // Create Firebase user
     const firebaseUserResult = await authService.createFirebaseUser(
-      validationResult.user
+      validationResult.user,
     );
 
     if (!firebaseUserResult.success) {
@@ -1165,12 +1165,12 @@ const signUpWithOAuth = async (req, res) => {
 
     const signUpResult = await authService.signInOrCreate(
       firebaseUser.uid,
-      userDataForSignUp
+      userDataForSignUp,
     );
 
     // Generate Firebase custom token
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUser.uid
+      firebaseUser.uid,
     );
 
     if (!tokenResult.success) {

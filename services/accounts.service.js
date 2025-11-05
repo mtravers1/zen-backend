@@ -24,14 +24,16 @@ import structuredLogger from "../lib/structuredLogger.js";
 let storage;
 let bucketName;
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== "test") {
   const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
   if (!serviceAccountBase64) {
-    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
+    throw new Error(
+      "CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.",
+    );
   }
   const serviceAccountJsonString = Buffer.from(
     serviceAccountBase64,
-    "base64"
+    "base64",
   ).toString("utf8");
   const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
@@ -52,7 +54,7 @@ if (process.env.NODE_ENV !== 'test') {
   storage = {
     bucket: () => ({
       file: () => ({
-        getSignedUrl: () => ['http://mock-signed-url.com'],
+        getSignedUrl: () => ["http://mock-signed-url.com"],
       }),
     }),
   };
@@ -73,9 +75,8 @@ const addAccount = async (accessToken, email, uid) => {
       }
       const userId = user._id.toString();
       const userType = user.role;
-      const accountsResponse = await plaidService.getAccountsWithAccessToken(
-        accessToken
-      );
+      const accountsResponse =
+        await plaidService.getAccountsWithAccessToken(accessToken);
 
       const accounts = accountsResponse.accounts;
       const institutionId = accountsResponse.item.institution_id;
@@ -89,7 +90,7 @@ const addAccount = async (accessToken, email, uid) => {
       for (let account of accounts) {
         const hashAccountName = hashValue(account.name);
         const hashAccountInstitutionId = hashValue(
-          accountsResponse.item.institution_id
+          accountsResponse.item.institution_id,
         );
         const hashAccountMask = hashValue(account.mask);
 
@@ -116,7 +117,7 @@ const addAccount = async (accessToken, email, uid) => {
         if (account.official_name) {
           encriptedOfficialName = await encryptValue(
             account.official_name,
-            dek
+            dek,
           );
         }
 
@@ -126,7 +127,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         const encriptedInstitutionName = await encryptValue(
           institutionName,
-          dek
+          dek,
         );
 
         let encriptedCurrentBalance;
@@ -136,14 +137,14 @@ const addAccount = async (accessToken, email, uid) => {
           if (account.balances.current) {
             encriptedCurrentBalance = await encryptValue(
               account.balances.current,
-              dek
+              dek,
             );
           }
 
           if (account.balances.available) {
             encriptedAvailableBalance = await encryptValue(
               account.balances.available,
-              dek
+              dek,
             );
           }
         }
@@ -184,7 +185,7 @@ const addAccount = async (accessToken, email, uid) => {
       const responseExistingAccounts = await Promise.all(
         existingAccounts.map(async (ec) => {
           return { id: ec.id, name: await decryptValue(ec.account_name, dek) };
-        })
+        }),
       );
 
       let transactionsResponse;
@@ -197,7 +198,7 @@ const addAccount = async (accessToken, email, uid) => {
         } catch (error) {
           console.error(
             "Error fetching transactions:",
-            error.response?.data || error
+            error.response?.data || error,
           );
         }
       }
@@ -206,12 +207,12 @@ const addAccount = async (accessToken, email, uid) => {
         try {
           investmentTransactionsResponse =
             await plaidService.getInvestmentTransactionsWithAccessToken(
-              accessToken
+              accessToken,
             );
         } catch (error) {
           console.error(
             "Error fetching investment transactions:",
-            error.response?.data || error
+            error.response?.data || error,
           );
         }
       }
@@ -223,7 +224,7 @@ const addAccount = async (accessToken, email, uid) => {
         } catch (error) {
           console.error(
             "Error fetching liabilities:",
-            error.response?.data || error
+            error.response?.data || error,
           );
         }
       }
@@ -257,7 +258,7 @@ const addAccount = async (accessToken, email, uid) => {
           continue;
         }
         const account = savedAccounts.find(
-          (account) => account.plaid_account_id === transaction.account_id
+          (account) => account.plaid_account_id === transaction.account_id,
         );
 
         if (!account) {
@@ -290,7 +291,7 @@ const addAccount = async (accessToken, email, uid) => {
         if (transaction.transaction_code) {
           transactionCode = await encryptValue(
             transaction.transaction_code,
-            dek
+            dek,
           );
         }
         let encryptedAccountType;
@@ -331,7 +332,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         const accountType = accountTypes[transaction.account_id];
         const account = savedAccounts.find(
-          (account) => account.plaid_account_id === transaction.account_id
+          (account) => account.plaid_account_id === transaction.account_id,
         );
 
         const encryptedAmount = await encryptValue(transaction.amount, dek);
@@ -386,49 +387,49 @@ const addAccount = async (accessToken, email, uid) => {
                 //if accountid is not in savedaccounts, then skip
                 if (
                   !savedAccounts.find(
-                    (account) => account.plaid_account_id === item.account_id
+                    (account) => account.plaid_account_id === item.account_id,
                   )
                 )
                   return;
 
                 const encryptedAccountNumber = await encryptValue(
                   item.account_number,
-                  dek
+                  dek,
                 );
 
                 const encryptedLastPaymentAmount = await encryptValue(
                   item.last_payment_amount,
-                  dek
+                  dek,
                 );
 
                 const encryptedLastPaymentDate = await encryptValue(
                   item.last_payment_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedNextPaymentDueDate = await encryptValue(
                   item.next_payment_due_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedMinimumPaymentAmount = await encryptValue(
                   item.minimum_payment_amount,
-                  dek
+                  dek,
                 );
 
                 const encryptedLastStatementBalance = await encryptValue(
                   item.last_statement_balance,
-                  dek
+                  dek,
                 );
 
                 const encryptedLastStatementIssueDate = await encryptValue(
                   item.last_statement_issue_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedIsOverdue = await encryptValue(
                   item.is_overdue,
-                  dek
+                  dek,
                 );
 
                 const encryptedAprs = item.aprs
@@ -436,66 +437,66 @@ const addAccount = async (accessToken, email, uid) => {
                       item.aprs.map(async (apr) => ({
                         aprPercentage: await encryptValue(
                           apr.apr_percentage,
-                          dek
+                          dek,
                         ),
                         aprType: await encryptValue(apr.apr_type, dek),
                         balanceSubjectToApr: await encryptValue(
                           apr.balance_subject_to_apr,
-                          dek
+                          dek,
                         ),
                         interestChargeAmount: await encryptValue(
                           apr.interest_charge_amount,
-                          dek
+                          dek,
                         ),
-                      }))
+                      })),
                     )
                   : undefined;
 
                 const encryptedLoanTypeDescription = await encryptValue(
                   item.loan_type_description,
-                  dek
+                  dek,
                 );
 
                 const encryptedLoanTerm = await encryptValue(
                   item.loan_term,
-                  dek
+                  dek,
                 );
 
                 const encryptedMaturityDate = await encryptValue(
                   item.maturity_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedNextMonthlyPayment = await encryptValue(
                   item.next_monthly_payment,
-                  dek
+                  dek,
                 );
 
                 const encryptedOriginationDate = await encryptValue(
                   item.origination_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedOriginationPrincipalAmount = await encryptValue(
                   item.origination_principal_amount,
-                  dek
+                  dek,
                 );
 
                 const encryptedPastDueAmount = await encryptValue(
                   item.past_due_amount,
-                  dek
+                  dek,
                 );
 
                 const encryptedEscrowBalance = await encryptValue(
                   item.escrow_balance,
-                  dek
+                  dek,
                 );
 
                 const encryptedHasPmi = await encryptValue(item.has_pmi, dek);
 
                 const encryptedHasPrepaymentPenalty = await encryptValue(
                   item.has_prepayment_penalty,
-                  dek
+                  dek,
                 );
                 let encryptedPropertyAddress;
                 if (item.property_address) {
@@ -503,19 +504,19 @@ const addAccount = async (accessToken, email, uid) => {
                     city: await encryptValue(item.property_address?.city, dek),
                     country: await encryptValue(
                       item.property_address?.country,
-                      dek
+                      dek,
                     ),
                     postalCode: await encryptValue(
                       item.property_address?.postal_code,
-                      dek
+                      dek,
                     ),
                     region: await encryptValue(
                       item.property_address?.region,
-                      dek
+                      dek,
                     ),
                     street: await encryptValue(
                       item.property_address?.street,
-                      dek
+                      dek,
                     ),
                   };
                 }
@@ -525,7 +526,7 @@ const addAccount = async (accessToken, email, uid) => {
                   const encryptedInterestRate = {
                     percentage: await encryptValue(
                       item.interest_rate?.percentage,
-                      dek
+                      dek,
                     ),
                     type: await encryptValue(item.interest_rate?.type, dek),
                   };
@@ -533,49 +534,49 @@ const addAccount = async (accessToken, email, uid) => {
 
                 const encryptedDisbursementDates = await encryptValue(
                   item.disbursement_dates,
-                  dek
+                  dek,
                 );
 
                 const encryptedExpectedPayoffDate = await encryptValue(
                   item.expected_payoff_date,
-                  dek
+                  dek,
                 );
 
                 const encryptedGuarantor = await encryptValue(
                   item.guarantor,
-                  dek
+                  dek,
                 );
 
                 const encryptedInterestRatePercentage = await encryptValue(
                   item.interest_rate_percentage,
-                  dek
+                  dek,
                 );
 
                 const encryptedLoanName = await encryptValue(
                   item.loan_name,
-                  dek
+                  dek,
                 );
                 let encryptedLoanStatus;
                 if (item.loan_status) {
                   encryptedLoanStatus = {
                     endDate: await encryptValue(
                       item.loan_status?.end_date,
-                      dek
+                      dek,
                     ),
                     type: await encryptValue(item.loan_status?.type, dek),
                   };
                 }
                 const encryptedOutstandingInterestAmount = await encryptValue(
                   item.outstanding_interest_amount,
-                  dek
+                  dek,
                 );
                 const encryptedPaymentReferenceNumber = await encryptValue(
                   item.payment_reference_number,
-                  dek
+                  dek,
                 );
                 const encryptedPslfStatus = await encryptValue(
                   item.pslf_status,
-                  dek
+                  dek,
                 );
                 let encryptedRepaymentPlan;
                 if (item.repayment_plan) {
@@ -583,13 +584,13 @@ const addAccount = async (accessToken, email, uid) => {
                     type: await encryptValue(item.repayment_plan?.type, dek),
                     description: await encryptValue(
                       item.repayment_plan?.description,
-                      dek
+                      dek,
                     ),
                   };
                 }
                 const encryptedSequenceNumber = await encryptValue(
                   item.sequence_number,
-                  dek
+                  dek,
                 );
                 let encryptedServicerAddress;
                 if (item.servicer_address)
@@ -597,28 +598,28 @@ const addAccount = async (accessToken, email, uid) => {
                     city: await encryptValue(item.servicer_address?.city, dek),
                     country: await encryptValue(
                       item.servicer_address?.country,
-                      dek
+                      dek,
                     ),
                     postalCode: await encryptValue(
                       item.servicer_address?.postal_code,
-                      dek
+                      dek,
                     ),
                     region: await encryptValue(
                       item.servicer_address?.region,
-                      dek
+                      dek,
                     ),
                     street: await encryptValue(
                       item.servicer_address?.street,
-                      dek
+                      dek,
                     ),
                   };
                 const encryptedYtdInterestPaid = await encryptValue(
                   item.ytd_interest_paid,
-                  dek
+                  dek,
                 );
                 const encryptedYtdPrincipalPaid = await encryptValue(
                   item.ytd_principal_paid,
-                  dek
+                  dek,
                 );
 
                 const liability = new Liability({
@@ -673,13 +674,12 @@ const addAccount = async (accessToken, email, uid) => {
                 await liability.save();
               });
             }
-          }
+          },
         );
       }
 
-      const internalTransfers = await plaidService.detectInternalTransfers(
-        transactions
-      );
+      const internalTransfers =
+        await plaidService.detectInternalTransfers(transactions);
 
       for (const internalTransaction of internalTransfers) {
         const transactionId = internalTransaction.transactionId;
@@ -713,7 +713,7 @@ const addAccount = async (accessToken, email, uid) => {
       });
 
       return { savedAccounts, existingAccounts: responseExistingAccounts };
-    }
+    },
   );
 };
 
@@ -728,7 +728,7 @@ const removeAccount = async (accountId, email) => {
 
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
   user.plaidAccounts = plaidAccounts.filter(
-    (id) => id.toString() !== account._id.toString()
+    (id) => id.toString() !== account._id.toString(),
   );
 
   await user.save();
@@ -757,33 +757,33 @@ const getAccounts = async (profile, uid) => {
       for (const plaidAccount of plaidAccountsResponse) {
         const decryptedCurrentBalance = await decryptValue(
           plaidAccount.currentBalance,
-          dek
+          dek,
         );
         const decryptedAvailableBalance = await decryptValue(
           plaidAccount.availableBalance,
-          dek
+          dek,
         );
         const decryptedAccountType = await decryptValue(
           plaidAccount.account_type,
-          dek
+          dek,
         );
         const decryptedAccountSubtype = await decryptValue(
           plaidAccount.account_subtype,
-          dek
+          dek,
         );
         const decryptedAccountName = await decryptValue(
           plaidAccount.account_name,
-          dek
+          dek,
         );
         const decryptedAccountOfficialName = await decryptValue(
           plaidAccount.account_official_name,
-          dek
+          dek,
         );
         const decryptedMask = await decryptValue(plaidAccount.mask, dek);
 
         const decryptedInstitutionName = await decryptValue(
           plaidAccount.institution_name,
-          dek
+          dek,
         );
 
         plaidAccounts.push({
@@ -800,19 +800,19 @@ const getAccounts = async (profile, uid) => {
       }
 
       const depositoryAccounts = plaidAccounts.filter(
-        (account) => account.account_type === "depository"
+        (account) => account.account_type === "depository",
       );
       const creditAccounts = plaidAccounts.filter(
-        (account) => account.account_type === "credit"
+        (account) => account.account_type === "credit",
       );
       const investmentAccounts = plaidAccounts.filter(
-        (account) => account.account_type === "investment"
+        (account) => account.account_type === "investment",
       );
       const loanAccounts = plaidAccounts.filter(
-        (account) => account.account_type === "loan"
+        (account) => account.account_type === "loan",
       );
       const otherAccounts = plaidAccounts.filter(
-        (account) => account.account_type === "other"
+        (account) => account.account_type === "other",
       );
       structuredLogger.logSuccess("get_accounts_completed", {
         uid,
@@ -832,7 +832,7 @@ const getAccounts = async (profile, uid) => {
         loanAccounts,
         otherAccounts,
       };
-    }
+    },
   );
 };
 
@@ -867,34 +867,34 @@ const getAllUserAccounts = async (email, uid) => {
       for (const plaidAccount of accountsResponse) {
         const decryptedCurrentBalance = await decryptValue(
           plaidAccount.currentBalance,
-          dek
+          dek,
         );
         const decryptedAvailableBalance = await decryptValue(
           plaidAccount.availableBalance,
-          dek
+          dek,
         );
         const decryptedAccountType = await decryptValue(
           plaidAccount.account_type,
-          dek
+          dek,
         );
         const decryptedAccountSubtype = await decryptValue(
           plaidAccount.account_subtype,
-          dek
+          dek,
         );
 
         const decryptedAccountName = await decryptValue(
           plaidAccount.account_name,
-          dek
+          dek,
         );
         const decryptedAccountOfficialName = await decryptValue(
           plaidAccount.account_official_name,
-          dek
+          dek,
         );
         const decryptedMask = await decryptValue(plaidAccount.mask, dek);
 
         const decryptedInstitutionName = await decryptValue(
           plaidAccount.institution_name,
-          dek
+          dek,
         );
 
         accounts.push({
@@ -916,13 +916,13 @@ const getAllUserAccounts = async (email, uid) => {
       });
 
       return accounts;
-    }
+    },
   );
 };
 const calculateCashFlowsWeekly = async (
   depositoryTransactions,
   creditTransactions,
-  allTransactions
+  allTransactions,
 ) => {
   const groupedTransactions = groupByWeek([
     ...depositoryTransactions,
@@ -934,7 +934,7 @@ const calculateCashFlowsWeekly = async (
 
 const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   plaidAccounts,
-  uid
+  uid,
 ) => {
   const dek = await getUserDek(uid);
 
@@ -1006,7 +1006,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
       const decryptedAmount = await decryptValue(transaction.amount, dek);
       const decryptedAccountType = await decryptValue(
         transaction.accountType,
-        dek
+        dek,
       );
 
       transactions.push({
@@ -1019,13 +1019,13 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
     allTransactions.push(...transactions);
     depositoryTransactions.push(
       ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "depository"
-      )
+        (transaction) => plaidAccount.account_type === "depository",
+      ),
     );
     creditTransactions.push(
       ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "credit"
-      )
+        (transaction) => plaidAccount.account_type === "credit",
+      ),
     );
   }
   return { depositoryTransactions, creditTransactions, allTransactions };
@@ -1047,19 +1047,19 @@ const getCashFlows = async (profile, uid) => {
       for (const plaidAccount of plaidAccountsResponse) {
         const decryptedCurrentBalance = await decryptValue(
           plaidAccount.currentBalance,
-          dek
+          dek,
         );
         const decryptedAvailableBalance = await decryptValue(
           plaidAccount.availableBalance,
-          dek
+          dek,
         );
         const decryptedAccountType = await decryptValue(
           plaidAccount.account_type,
-          dek
+          dek,
         );
         const decryptedAccountSubtype = await decryptValue(
           plaidAccount.account_subtype,
-          dek
+          dek,
         );
         plaidAccounts.push({
           ...plaidAccount,
@@ -1152,7 +1152,7 @@ const getCashFlows = async (profile, uid) => {
           const decryptedAmount = await decryptValue(transaction.amount, dek);
           const decryptedAccountType = await decryptValue(
             transaction.accountType,
-            dek
+            dek,
           );
 
           transactions.push({
@@ -1196,27 +1196,27 @@ const getCashFlows = async (profile, uid) => {
       });
 
       const filteredTxns = internalTxns.filter(
-        (txn) => !toRemove.has(String(txn._id))
+        (txn) => !toRemove.has(String(txn._id)),
       );
 
       const filteredOutIds = new Set(
-        filteredTxns.map((txn) => String(txn._id))
+        filteredTxns.map((txn) => String(txn._id)),
       );
 
       const cleanDepositoryTxns = depositoryTransactions.filter(
-        (txn) => !filteredOutIds.has(String(txn._id))
+        (txn) => !filteredOutIds.has(String(txn._id)),
       );
 
       const cleanCreditTxns = creditTransactions.filter(
-        (txn) => !filteredOutIds.has(String(txn._id))
+        (txn) => !filteredOutIds.has(String(txn._id)),
       );
 
       const cleanInvestmentTxns = investmentTransactions.filter(
-        (txn) => !filteredOutIds.has(String(txn._id))
+        (txn) => !filteredOutIds.has(String(txn._id)),
       );
 
       const cleanLoanTxns = loanTransactions.filter(
-        (txn) => !filteredOutIds.has(String(txn._id))
+        (txn) => !filteredOutIds.has(String(txn._id)),
       );
 
       const depositoryDepositsAmount = cleanDepositoryTxns
@@ -1236,16 +1236,16 @@ const getCashFlows = async (profile, uid) => {
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const depositoryDepositTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount < 0
+        (transaction) => transaction.amount < 0,
       );
       const depositoryWithdrawTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount > 0
+        (transaction) => transaction.amount > 0,
       );
       const creditDepositTransactions = cleanCreditTxns.filter(
-        (transaction) => transaction.amount < 0
+        (transaction) => transaction.amount < 0,
       );
       const creditWithdrawTransactions = cleanCreditTxns.filter(
-        (transaction) => transaction.amount > 0
+        (transaction) => transaction.amount > 0,
       );
 
       /// Calculate current cash flow
@@ -1345,7 +1345,7 @@ const getCashFlows = async (profile, uid) => {
 
       const assets = await assetsService.getAssets(uid);
       const profileAssets = assets.filter(
-        (asset) => asset.profileId === profile.id.toString()
+        (asset) => asset.profileId === profile.id.toString(),
       );
       let totalAssets = 0;
       for (const asset of profileAssets) {
@@ -1365,7 +1365,7 @@ const getCashFlows = async (profile, uid) => {
 
       if (currentCashFlow < 0) {
         cashRunway = Math.floor(
-          (totalCashBalance / (averageDailyIncome - averageDailySpend)) * -1
+          (totalCashBalance / (averageDailyIncome - averageDailySpend)) * -1,
         );
         advice =
           Math.ceil(((averageDailySpend - averageDailyIncome) * 1.05) / 10) *
@@ -1422,10 +1422,10 @@ const getCashFlows = async (profile, uid) => {
       let index = 0;
       for (const weekTransactions of categorizedTransactionByWeek) {
         const weekDepositoryTransactions = weekTransactions.filter(
-          (transaction) => transaction.accountType === "depository"
+          (transaction) => transaction.accountType === "depository",
         );
         const weekCreditTransactions = weekTransactions.filter(
-          (transaction) => transaction.accountType === "credit"
+          (transaction) => transaction.accountType === "credit",
         );
         const depositoryDepositsAmount = weekDepositoryTransactions
           .filter((transaction) => transaction.amount < 0)
@@ -1492,14 +1492,14 @@ const getCashFlows = async (profile, uid) => {
         averageDailyNet,
         weeklyCashFlow,
       };
-    }
+    },
   );
 };
 
 const getTransactions = async (
   accounts,
   uid,
-  pagination = { paginate: false }
+  pagination = { paginate: false },
 ) => {
   return await structuredLogger.withContext(
     "get_transactions",
@@ -1518,7 +1518,7 @@ const getTransactions = async (
 
         const decryptedInstitutionName = await decryptValue(
           plaidAccount.institution_name,
-          dek
+          dek,
         );
         const transactions = [];
 
@@ -1527,7 +1527,7 @@ const getTransactions = async (
           const decryptedName = await decryptValue(transaction.name, dek);
           const decryptedAccountType = await decryptValue(
             transaction.accountType,
-            dek
+            dek,
           );
 
           let decryptedMerchantName;
@@ -1535,12 +1535,12 @@ const getTransactions = async (
           if (transaction.merchant) {
             decryptedMerchantName = await decryptValue(
               transaction.merchant.name,
-              dek
+              dek,
             );
 
             decryptedMerchantMerchantName = await decryptValue(
               transaction.merchant.merchantName,
-              dek
+              dek,
             );
           }
 
@@ -1553,12 +1553,12 @@ const getTransactions = async (
           const decryptedSubtype = await decryptValue(transaction.subtype, dek);
           const decryptedQuantity = await decryptValue(
             transaction.quantity,
-            dek
+            dek,
           );
 
           const decryptedSecurityId = await decryptValue(
             transaction.securityId,
-            dek
+            dek,
           );
 
           transactions.push({
@@ -1588,7 +1588,7 @@ const getTransactions = async (
       }
 
       const sortedTransactions = allTransactions.sort(
-        (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+        (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate),
       );
 
       // Apply pagination if requested
@@ -1611,14 +1611,14 @@ const getTransactions = async (
       }
 
       return sortedTransactions;
-    }
+    },
   );
 };
 
 const getUserTransactions = async (
   email,
   uid,
-  pagination = { paginate: false }
+  pagination = { paginate: false },
 ) => {
   const user = await User.findOne({ authUid: uid })
     .populate("plaidAccounts")
@@ -1651,7 +1651,7 @@ const getProfileTransactions = async (
   email,
   profileId,
   uid,
-  pagination = { paginate: false }
+  pagination = { paginate: false },
 ) => {
   const profiles = await businessService.getUserProfiles(email, uid);
   const profile = profiles.find((p) => String(p.id) === profileId);
@@ -1669,19 +1669,19 @@ const getProfileTransactions = async (
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await decryptValue(
       plaidAccount.currentBalance,
-      dek
+      dek,
     );
     const decryptedAvailableBalance = await decryptValue(
       plaidAccount.availableBalance,
-      dek
+      dek,
     );
     const decryptedAccountType = await decryptValue(
       plaidAccount.account_type,
-      dek
+      dek,
     );
     const decryptedAccountSubtype = await decryptValue(
       plaidAccount.account_subtype,
-      dek
+      dek,
     );
 
     plaidAccounts.push({
@@ -1699,7 +1699,7 @@ const getProfileTransactions = async (
 const getTransactionsByAccount = async (
   accountId,
   uid,
-  pagination = { paginate: false }
+  pagination = { paginate: false },
 ) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
@@ -1723,7 +1723,7 @@ const getTransactionsByAccount = async (
     const decryptedName = await decryptValue(transaction.name, dek);
     const decryptedAccountType = await decryptValue(
       transaction.accountType,
-      dek
+      dek,
     );
 
     let decryptedMerchantName;
@@ -1731,12 +1731,12 @@ const getTransactionsByAccount = async (
     if (transaction.merchant) {
       decryptedMerchantName = await decryptValue(
         transaction.merchant.name,
-        dek
+        dek,
       );
 
       decryptedMerchantMerchantName = await decryptValue(
         transaction.merchant.merchantName,
-        dek
+        dek,
       );
     }
 
@@ -1773,7 +1773,7 @@ const getTransactionsByAccount = async (
   });
 
   const sortedTransactions = allTransactions.sort(
-    (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+    (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate),
   );
 
   // Apply pagination if requested
@@ -1804,7 +1804,7 @@ const findLiabilityByAccountId = (accountId, liabilities) => {
       continue;
     }
     const found = liabilities[category].find(
-      (item) => item.account_id === accountId
+      (item) => item.account_id === accountId,
     );
     if (found) {
       return { category, ...found };
@@ -1817,18 +1817,18 @@ function summarizeHoldingsByAccountId(
   holdings,
   securities,
   accounts,
-  targetAccountId
+  targetAccountId,
 ) {
   const securityMap = Object.fromEntries(
-    securities.map((sec) => [sec.security_id, sec])
+    securities.map((sec) => [sec.security_id, sec]),
   );
 
   const accountMap = Object.fromEntries(
-    accounts.map((acc) => [acc.account_id, acc])
+    accounts.map((acc) => [acc.account_id, acc]),
   );
 
   const filteredHoldings = holdings.filter(
-    (h) => h.account_id === targetAccountId
+    (h) => h.account_id === targetAccountId,
   );
   const account = accountMap[targetAccountId];
 
@@ -1890,19 +1890,20 @@ const getAccountDetails = async (accountId, profileId, uid) => {
 
   if (deac.account_type === "investment") {
     try {
-      const data = await plaidService.getInvestmentsHoldingsWithAccessToken(
-        decryptAccessToken
-      );
+      const data =
+        await plaidService.getInvestmentsHoldingsWithAccessToken(
+          decryptAccessToken,
+        );
       investmentData = summarizeHoldingsByAccountId(
         data.holdings,
         data.securities,
         data.accounts,
-        deac.plaid_account_id
+        deac.plaid_account_id,
       );
     } catch (error) {
       console.error(
         "Error fetching investment data:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
     }
   }
@@ -1938,7 +1939,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
     if (liabilitiesList[field]) {
       decryptedLiabilities[field] = await decryptValue(
         liabilitiesList[field],
-        dek
+        dek,
       );
     }
   }
@@ -1997,7 +1998,7 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
     if (liabilitiesList[field]) {
       decryptedLiabilities[field] = await decryptValue(
         liabilitiesList[field],
-        dek
+        dek,
       );
     }
   }
@@ -2101,7 +2102,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const resultWeeklyCashFlowwCharts = await calculateCashFlowsWeekly(
     plaidWeeklyTransactions.depositoryTransactions,
     plaidWeeklyTransactions.creditTransactions,
-    plaidWeeklyTransactions.allTransactions
+    plaidWeeklyTransactions.allTransactions,
   );
   //----------WEEKLY-cashflow-chart calculations
 
@@ -2154,7 +2155,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
     const decryptedAccountType = await decryptValue(
       transaction.accountType,
-      dek
+      dek,
     );
 
     transactions.push({
@@ -2168,23 +2169,23 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   depositoryTransactions.push(
     ...transactions.filter(
-      (transaction) => plaidAccount.account_type === "depository"
-    )
+      (transaction) => plaidAccount.account_type === "depository",
+    ),
   );
   creditTransactions.push(
     ...transactions.filter(
-      (transaction) => plaidAccount.account_type === "credit"
-    )
+      (transaction) => plaidAccount.account_type === "credit",
+    ),
   );
   investmentTransactions.push(
     ...transactions.filter(
-      (transaction) => plaidAccount.account_type === "investment"
-    )
+      (transaction) => plaidAccount.account_type === "investment",
+    ),
   );
   loanTransactions.push(
     ...transactions.filter(
-      (transaction) => plaidAccount.account_type === "loan"
-    )
+      (transaction) => plaidAccount.account_type === "loan",
+    ),
   );
 
   const depositoryDepositsAmount = depositoryTransactions
@@ -2204,16 +2205,16 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     .reduce((total, transaction) => total + transaction.amount, 0);
 
   const depositoryDepositTransactions = depositoryTransactions.filter(
-    (transaction) => transaction.amount < 0
+    (transaction) => transaction.amount < 0,
   );
   const depositoryWithdrawTransactions = depositoryTransactions.filter(
-    (transaction) => transaction.amount > 0
+    (transaction) => transaction.amount > 0,
   );
   const creditDepositTransactions = creditTransactions.filter(
-    (transaction) => transaction.amount < 0
+    (transaction) => transaction.amount < 0,
   );
   const creditWithdrawTransactions = creditTransactions.filter(
-    (transaction) => transaction.amount > 0
+    (transaction) => transaction.amount > 0,
   );
 
   /// Calculate current cash flow
@@ -2319,7 +2320,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   if (currentCashFlow < 0) {
     cashRunway = Math.floor(
-      (totalCashBalance / (averageDailyIncome - averageDailySpend)) * -1
+      (totalCashBalance / (averageDailyIncome - averageDailySpend)) * -1,
     );
     advice =
       Math.ceil(((averageDailySpend - averageDailyIncome) * 1.05) / 10) * 10;
@@ -2375,10 +2376,10 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   let index = 0;
   for (const weekTransactions of categorizedTransactionByWeek) {
     const weekDepositoryTransactions = weekTransactions.filter(
-      (transaction) => transaction.accountType === "depository"
+      (transaction) => transaction.accountType === "depository",
     );
     const weekCreditTransactions = weekTransactions.filter(
-      (transaction) => transaction.accountType === "credit"
+      (transaction) => transaction.accountType === "credit",
     );
     const depositoryDepositsAmount = weekDepositoryTransactions
       .filter((transaction) => transaction.amount < 0)
@@ -2459,7 +2460,7 @@ const formatAccountsBalances = (accounts) => {
     ) {
       account.balance = account.availableBalance
         ? account.availableBalance
-        : account.currentBalance ?? 0;
+        : (account.currentBalance ?? 0);
     } else {
       account.balance = account.currentBalance ?? 0;
     }
@@ -2482,19 +2483,19 @@ const getCashFlowsWeekly = async (profile, uid) => {
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await decryptValue(
       plaidAccount.currentBalance,
-      dek
+      dek,
     );
     const decryptedAvailableBalance = await decryptValue(
       plaidAccount.availableBalance,
-      dek
+      dek,
     );
     const decryptedAccountType = await decryptValue(
       plaidAccount.account_type,
-      dek
+      dek,
     );
     const decryptedAccountSubtype = await decryptValue(
       plaidAccount.account_subtype,
-      dek
+      dek,
     );
     plaidAccounts.push({
       ...plaidAccount,

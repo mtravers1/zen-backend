@@ -261,7 +261,7 @@ export default function routeValidationMiddleware(req, res, next) {
     // Apply strict rate limiting only to invalid routes
     if (!checkRateLimit(ip, true)) {
       console.warn(
-        `🚫 Rate limit exceeded for invalid routes: ${ip} -> ${method} ${path}`
+        `🚫 Rate limit exceeded for invalid routes: ${ip} -> ${method} ${path}`,
       );
       return res.status(429).json({
         error: "Too Many Requests",
@@ -292,7 +292,7 @@ export default function routeValidationMiddleware(req, res, next) {
         path.startsWith("/api/user/"))
     ) {
       console.log(
-        `✅ Allowing legitimate app request despite blacklist: ${ip} -> ${method} ${path}`
+        `✅ Allowing legitimate app request despite blacklist: ${ip} -> ${method} ${path}`,
       );
       // Allow legitimate app requests to pass through
       next();
@@ -300,7 +300,7 @@ export default function routeValidationMiddleware(req, res, next) {
     }
 
     console.warn(
-      `🚫 Request blocked - IP blacklisted: ${ip} -> ${method} ${path}`
+      `🚫 Request blocked - IP blacklisted: ${ip} -> ${method} ${path}`,
     );
     return res.status(429).json({
       error: "Too Many Requests",

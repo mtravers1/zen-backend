@@ -22,7 +22,7 @@ const saveTrip = async ({
     locations.map(async (loc) => ({
       latitude: await encryptValue(loc.latitude.toString(), dek),
       longitude: await encryptValue(loc.longitude.toString(), dek),
-    }))
+    })),
   );
 
   const encryptedMetadata = {
@@ -166,7 +166,7 @@ const fetchFilteredTrips = async (query, uid) => {
             longitude: loc.longitude
               ? parseFloat(await decryptValue(loc.longitude, dek))
               : null,
-          }))
+          })),
         );
 
         return {
@@ -174,7 +174,7 @@ const fetchFilteredTrips = async (query, uid) => {
           locations: decryptedLocations,
           metadata: decryptedMetadata,
         };
-      })
+      }),
     );
 
     const filteredTrips = search
@@ -240,7 +240,7 @@ const updateTrip = async (tripId, updateData, uid) => {
       updateData.locations.map(async (loc) => ({
         latitude: await encryptValue(loc.latitude.toString(), dek),
         longitude: await encryptValue(loc.longitude.toString(), dek),
-      }))
+      })),
     );
   }
 
@@ -252,7 +252,7 @@ const updateTrip = async (tripId, updateData, uid) => {
       encryptedMetadata.placeName = await encryptValue(
         updateData.metadata.placeName,
         dek,
-        uid
+        uid,
       );
     }
 
@@ -260,7 +260,7 @@ const updateTrip = async (tripId, updateData, uid) => {
       encryptedMetadata.pickupAddress = await encryptValue(
         updateData.metadata.pickupAddress,
         dek,
-        uid
+        uid,
       );
     }
 
@@ -268,7 +268,7 @@ const updateTrip = async (tripId, updateData, uid) => {
       encryptedMetadata.dropoffAddress = await encryptValue(
         updateData.metadata.dropoffAddress,
         dek,
-        uid
+        uid,
       );
     }
 

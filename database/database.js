@@ -1,16 +1,19 @@
 import mongoose from "mongoose";
 
-
 const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
 
 let mongoDBConnection = null;
 
 // Only connect automatically if not in test environment
-if (process.env.NODE_ENV !== 'test') {
-  const requiredEnvVars = ['MONGODB_USER', 'MONGODB_PASS', 'MONGODB_DB'];
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (process.env.NODE_ENV !== "test") {
+  const requiredEnvVars = ["MONGODB_USER", "MONGODB_PASS", "MONGODB_DB"];
+  const missingVars = requiredEnvVars.filter(
+    (varName) => !process.env[varName],
+  );
   if (missingVars.length > 0) {
-    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    throw new Error(
+      `Missing required environment variables: ${missingVars.join(", ")}`,
+    );
   }
 
   mongoose.connect(mongoDB, {
@@ -24,7 +27,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   mongoDBConnection.on(
     "error",
-    console.error.bind(console, "MongoDB connection error:")
+    console.error.bind(console, "MongoDB connection error:"),
   );
   mongoDBConnection.once("open", async function () {
     console.log("Connected to MongoDB!");

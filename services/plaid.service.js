@@ -27,7 +27,7 @@ const createLinkToken = async (
   screen,
   mode,
   access_token,
-  plaidEnvironment
+  plaidEnvironment,
 ) => {
   return await structuredLogger.withContext(
     "create_link_token",
@@ -116,7 +116,7 @@ const createLinkToken = async (
       });
 
       return response.data;
-    }
+    },
   );
 };
 
@@ -143,7 +143,7 @@ const getAccessToken = async (publicToken) => {
       });
 
       return response.data;
-    }
+    },
   );
 };
 
@@ -152,7 +152,7 @@ const saveAccessToken = async (
   accessToken,
   itemId,
   institutionId,
-  uid
+  uid,
 ) => {
   return await structuredLogger.withContext(
     "save_access_token",
@@ -204,7 +204,7 @@ const saveAccessToken = async (
         itemId,
         institutionId,
       };
-    }
+    },
   );
 };
 
@@ -258,15 +258,22 @@ const getAccounts = async (email, uid) => {
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
-  console.log(`[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`);
-  
+  console.log(
+    `[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`,
+  );
+
   const plaidClient = getPlaidClient();
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
-  console.log(`[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`);
-  console.log(`[PLAID] Account details:`, response.data.accounts?.map(acc => `${acc.name} (${acc.account_id})`));
- 
+  console.log(
+    `[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`,
+  );
+  console.log(
+    `[PLAID] Account details:`,
+    response.data.accounts?.map((acc) => `${acc.name} (${acc.account_id})`),
+  );
+
   return response.data;
 };
 
@@ -296,7 +303,6 @@ const getBalance = async (email) => {
 };
 
 const getInstitutions = async () => {
-  
   const plaidClient = getPlaidClient();
   const response = await plaidClient.institutionsGet({
     count: 500,
@@ -375,11 +381,11 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await getOldestAccessToken({ itemId });
-  
+
   if (!access) {
     return;
   }
-  
+
   // If uid is not provided, get it from the access token's userId
   let firebaseUid = uid;
   if (!firebaseUid) {
@@ -389,7 +395,7 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     }
     firebaseUid = user.authUid;
   }
-  
+
   const accessToken = access.accessToken;
   const dek = await getUserDek(firebaseUid);
   const decryptedToken = await decryptValue(accessToken, dek);
@@ -420,7 +426,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
       const accountPlaidId = account.account_id;
 
       const existingAccount = accounts.find(
-        (a) => a.plaid_account_id === accountPlaidId
+        (a) => a.plaid_account_id === accountPlaidId,
       );
 
       if (existingAccount) {
@@ -482,11 +488,14 @@ const updateTransactions = async (item) => {
   if (!accessToken) {
     accessToken = await getAccessTokenFromItemId(item, uid);
     if (!accessToken) {
-      structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
-        operation: 'update_transactions',
-        item_id: item,
-        user_id: userId
-      });
+      structuredLogger.logErrorBlock(
+        new Error("Access token could not be retrieved"),
+        {
+          operation: "update_transactions",
+          item_id: item,
+          user_id: userId,
+        },
+      );
       //TODO: remove item
       return;
     }
@@ -542,7 +551,7 @@ const updateTransactions = async (item) => {
       newTransactions.push(...transactions);
 
       console.log(
-        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
+        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`,
       );
 
       const accountMap = new Map();
@@ -556,7 +565,7 @@ const updateTransactions = async (item) => {
 
         const encryptedMerchantName = await encryptValue(
           transaction.merchant_name,
-          dek
+          dek,
         );
         const encryptedName = await encryptValue(transaction.name, dek);
         const merchant = {
@@ -571,12 +580,12 @@ const updateTransactions = async (item) => {
 
         const encryptedAccountType = await encryptValue(
           accountMap.get(transaction.account_id).account_type,
-          dek
+          dek,
         );
 
         const transactionCode = await encryptValue(
           transaction.transaction_code,
-          dek
+          dek,
         );
 
         bulkOps.push({
@@ -608,7 +617,7 @@ const updateTransactions = async (item) => {
           transactionsByAccount[transaction.account_id] = [];
         }
         transactionsByAccount[transaction.account_id].push(
-          transaction.transaction_id
+          transaction.transaction_id,
         );
       }
 
@@ -678,13 +687,13 @@ const updateTransactions = async (item) => {
         "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
       ) {
         console.log(
-          "Mutation detected during pagination, restarting with old cursor..."
+          "Mutation detected during pagination, restarting with old cursor...",
         );
         cursor = oldCursor; // Reiniciar con el cursor anterior
       } else {
         console.error(
           "Error syncing transactions:",
-          error.response?.data || error
+          error.response?.data || error,
         );
         break;
       }
@@ -737,7 +746,7 @@ const updateInvestmentTransactions = async (item) => {
       let offset = 0;
       let hasMore = true;
       const plaidAccountIds = accounts.map(
-        (account) => account.plaid_account_id
+        (account) => account.plaid_account_id,
       );
 
       const lastTransaction = await Transaction.findOne({
@@ -795,13 +804,13 @@ const updateInvestmentTransactions = async (item) => {
 
           const encryptedSecurityId = await encryptValue(
             transaction.security_id,
-            dek
+            dek,
           );
           const encryptedPrice = await encryptValue(transaction.price, dek);
 
           const encryptedQuantity = await encryptValue(
             transaction.quantity,
-            dek
+            dek,
           );
 
           const encryptedFees = await encryptValue(transaction.fees, dek);
@@ -810,7 +819,7 @@ const updateInvestmentTransactions = async (item) => {
 
           const encryptedSubType = await encryptValue(transaction.subtype, dek);
           const account = accounts.find(
-            (account) => account.plaid_account_id === transaction.account_id
+            (account) => account.plaid_account_id === transaction.account_id,
           );
           const newTransaction = new Transaction({
             accountId: account._id,
@@ -839,7 +848,7 @@ const updateInvestmentTransactions = async (item) => {
       });
 
       return "Investment transactions updated";
-    }
+    },
   );
 };
 
@@ -923,7 +932,7 @@ const repairAccessToken = async (accountId, email) => {
 
         const resAddAcount = await accountsService.addAccount(
           accessToken,
-          email
+          email,
         );
 
         structuredLogger.logSuccess("repair_access_token_completed", {
@@ -941,7 +950,7 @@ const repairAccessToken = async (accountId, email) => {
         });
         throw error;
       }
-    }
+    },
   );
 };
 
@@ -958,8 +967,8 @@ const detectInternalTransfers = async (transactions) => {
   transactions
     .filter((txn) =>
       ["transfer", "internal account transfer"].includes(
-        txn.category?.[0]?.toLowerCase()
-      )
+        txn.category?.[0]?.toLowerCase(),
+      ),
     )
     .forEach((txn) => {
       const key = Math.abs(txn.amount);
@@ -1053,7 +1062,7 @@ const invalidateAccessToken = async (accessToken) => {
         });
         throw error;
       }
-    }
+    },
   );
 };
 
@@ -1080,7 +1089,7 @@ const trackWebhookFailure = (itemId) => {
       operation: "track_webhook_failure",
       item_id: itemId,
       failure_count: newFailureCount,
-    }
+    },
   );
 
   return newFailureCount;
@@ -1100,7 +1109,7 @@ const validateWebhookSignature = (body, signature, webhookSecret) => {
 
     return crypto.timingSafeEqual(
       Buffer.from(signature, "base64"),
-      Buffer.from(expectedSignature, "base64")
+      Buffer.from(expectedSignature, "base64"),
     );
   } catch (error) {
     structuredLogger.logErrorBlock(error, {

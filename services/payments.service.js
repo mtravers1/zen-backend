@@ -12,8 +12,10 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
   try {
     const serviceAccountJson = Buffer.from(
       process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
-      "base64"
-    ).toString("utf8").replace(/\n/g, "");
+      "base64",
+    )
+      .toString("utf8")
+      .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
     googlePlayAuth = new GoogleAuth({
@@ -54,7 +56,8 @@ const validatePayment = async (platform, receipt, uid) => {
       result = await validateApple(receipt);
     } else if (platform === "android") {
       // Parse receipt to extract purchaseToken
-      parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
+      parsedReceipt =
+        typeof receipt === "string" ? JSON.parse(receipt) : receipt;
       result = await validateAndroid(receipt);
     } else {
       return { message: "Invalid platform" };
@@ -66,7 +69,7 @@ const validatePayment = async (platform, receipt, uid) => {
         result,
         platform,
         platform === "android" ? parsedReceipt?.purchaseToken : null,
-        platform === "android" ? result.fullDetails : null
+        platform === "android" ? result.fullDetails : null,
       );
       return { message: "Valid receipt" };
     } else {
@@ -78,13 +81,19 @@ const validatePayment = async (platform, receipt, uid) => {
   }
 };
 
-const updateUserSubscription = async (userId, data, platform, purchaseToken = null, subscriptionDetails = null) => {
+const updateUserSubscription = async (
+  userId,
+  data,
+  platform,
+  purchaseToken = null,
+  subscriptionDetails = null,
+) => {
   try {
     const productId = data.latest_receipt_info[0].product_id;
     const expiresDateMs = data.latest_receipt_info[0].expires_date_ms;
 
     console.log(
-      `Updating user ${userId} to plan ${productId} valid until ${expiresDateMs}`
+      `Updating user ${userId} to plan ${productId} valid until ${expiresDateMs}`,
     );
 
     // Get normalized environment from NODE_ENV
@@ -94,14 +103,14 @@ const updateUserSubscription = async (userId, data, platform, purchaseToken = nu
     const planMappings = PRODUCT_MAPPINGS[environment]?.[platform];
     if (!planMappings) {
       console.warn(
-        `No product mappings found for environment: ${environment}, platform: ${platform}`
+        `No product mappings found for environment: ${environment}, platform: ${platform}`,
       );
     }
 
     let planName = planMappings?.[productId];
     if (!planName) {
       console.warn(
-        `Unknown product ID: ${productId} for environment: ${environment}, platform: ${platform}. Using Free as fallback.`
+        `Unknown product ID: ${productId} for environment: ${environment}, platform: ${platform}. Using Free as fallback.`,
       );
       planName = "Free";
     }
@@ -117,8 +126,12 @@ const updateUserSubscription = async (userId, data, platform, purchaseToken = nu
 
     // Store subscription metadata for RTDN tracking
     if (purchaseToken && platform === "android") {
-      const expiryTime = subscriptionDetails?.lineItems?.[0]?.expiryTime || new Date(parseInt(expiresDateMs)).toISOString();
-      const autoRenewing = subscriptionDetails?.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled !== false;
+      const expiryTime =
+        subscriptionDetails?.lineItems?.[0]?.expiryTime ||
+        new Date(parseInt(expiresDateMs)).toISOString();
+      const autoRenewing =
+        subscriptionDetails?.lineItems?.[0]?.autoRenewingPlan
+          ?.autoRenewEnabled !== false;
 
       user.subscription_metadata = {
         purchaseToken,
@@ -222,13 +235,16 @@ const validateAndroid = async (receipt) => {
     const errorText = await response.text();
     console.error("❌ Google Play API error:", response.status, errorText);
     throw new Error(
-      `Failed to validate purchase: ${response.status} - ${errorText}`
+      `Failed to validate purchase: ${response.status} - ${errorText}`,
     );
   }
 
   const result = await response.json();
   console.log("✅ Google Play validation result:", result);
-  console.log("🔍 [DETAILED] Full Google Play Response:", JSON.stringify(result, null, 2));
+  console.log(
+    "🔍 [DETAILED] Full Google Play Response:",
+    JSON.stringify(result, null, 2),
+  );
 
   // ACKNOWLEDGE the purchase if pending
   if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
@@ -252,8 +268,14 @@ const validateAndroid = async (receipt) => {
       console.log("✅ Purchase acknowledged successfully");
     } else {
       const ackError = await ackResponse.text();
-      console.error("❌ Failed to acknowledge purchase:", ackResponse.status, ackError);
-      console.error(`❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`);
+      console.error(
+        "❌ Failed to acknowledge purchase:",
+        ackResponse.status,
+        ackError,
+      );
+      console.error(
+        `❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`,
+      );
     }
   }
 
@@ -282,7 +304,8 @@ const updateUserUUID = async (uuid, uid) => {
 // Get subscription details from Google Play API
 const getSubscriptionDetails = async (purchaseToken) => {
   try {
-    const packageName = process.env.ANDROID_PACKAGE_NAME || "com.zentavos.zentavosdev";
+    const packageName =
+      process.env.ANDROID_PACKAGE_NAME || "com.zentavos.zentavosdev";
     const accessToken = await getGooglePlayAccessToken();
 
     const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
@@ -297,7 +320,11 @@ const getSubscriptionDetails = async (purchaseToken) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("❌ Failed to get subscription details:", response.status, errorText);
+      console.error(
+        "❌ Failed to get subscription details:",
+        response.status,
+        errorText,
+      );
       return null;
     }
 
@@ -310,7 +337,11 @@ const getSubscriptionDetails = async (purchaseToken) => {
 };
 
 // Update user subscription from RTDN notification
-const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => {
+const updateUserFromRTDN = async (
+  purchaseToken,
+  state,
+  subscriptionDetails,
+) => {
   try {
     console.log(`📝 [RTDN] Updating user from state: ${state}`);
 
@@ -321,7 +352,9 @@ const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => 
 
     // Fallback: If RTDN arrives before /very-receipt, find by productId + recent update
     if (!user) {
-      console.warn(`⚠️ [RTDN] User not found by purchaseToken, trying fallback...`);
+      console.warn(
+        `⚠️ [RTDN] User not found by purchaseToken, trying fallback...`,
+      );
       const productId = subscriptionDetails.lineItems?.[0]?.productId;
 
       if (productId) {
@@ -333,7 +366,9 @@ const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => 
         }).sort({ "subscription_metadata.lastUpdated": -1 });
 
         if (user) {
-          console.log(`✅ [RTDN] Found user by fallback (productId + recent update)`);
+          console.log(
+            `✅ [RTDN] Found user by fallback (productId + recent update)`,
+          );
           // Update purchaseToken now that we have it
           user.subscription_metadata.purchaseToken = purchaseToken;
         }
@@ -341,7 +376,9 @@ const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => 
     }
 
     if (!user) {
-      console.warn(`⚠️ [RTDN] User not found for purchaseToken: ${purchaseToken.substring(0, 20)}...`);
+      console.warn(
+        `⚠️ [RTDN] User not found for purchaseToken: ${purchaseToken.substring(0, 20)}...`,
+      );
       return;
     }
 
@@ -352,7 +389,9 @@ const updateUserFromRTDN = async (purchaseToken, state, subscriptionDetails) => 
 
     const productId = subscriptionDetails.lineItems?.[0]?.productId;
     const expiryTime = subscriptionDetails.lineItems?.[0]?.expiryTime;
-    const autoRenewing = subscriptionDetails.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled || false;
+    const autoRenewing =
+      subscriptionDetails.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled ||
+      false;
 
     // Map productId to plan name
     const planMappings = PRODUCT_MAPPINGS[environment]?.android;
@@ -427,7 +466,7 @@ const mockUpgrade = async (uid) => {
   const user = await User.findOne({ authUid: uid });
   user.account_type = "Tycoon+100gb";
   await user.save();
-}
+};
 
 const paymentService = {
   validatePayment,

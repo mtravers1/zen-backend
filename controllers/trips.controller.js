@@ -11,8 +11,11 @@ const createTrip = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const canCreateTrip = await permissionsService.canPerformAction(uid, 'create_trip');
-    
+    const canCreateTrip = await permissionsService.canPerformAction(
+      uid,
+      "create_trip",
+    );
+
     if (!canCreateTrip.success) {
       return res.status(403).send(canCreateTrip);
     }
@@ -86,15 +89,17 @@ const deleteTrip = async (req, res) => {
 const checkTripLimit = async (req, res) => {
   try {
     const uid = req.user.uid;
-    
-    const canCreateTrip = await permissionsService.canPerformAction(uid, 'create_trip');
-    
+
+    const canCreateTrip = await permissionsService.canPerformAction(
+      uid,
+      "create_trip",
+    );
+
     if (canCreateTrip.success) {
       return res.status(200).send({ success: true });
     } else {
       return res.status(403).send(canCreateTrip);
     }
-    
   } catch (error) {
     console.error("Error checking trip limit:", error);
     res.status(500).send({ error: "Internal server error" });

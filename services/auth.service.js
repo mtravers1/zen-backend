@@ -1,36 +1,43 @@
-import { getAuth } from 'firebase-admin/auth';
-import admin from '../lib/firebaseAdmin.js';
-import structuredLogger from '../lib/structuredLogger.js';
-import { v4 as uuidv4 } from 'uuid';
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-import User from '../database/models/User.js';
-import PlaidAccount from '../database/models/PlaidAccount.js';
-import Transaction from '../database/models/Transaction.js';
-import Liability from '../database/models/Liability.js';
-import Assets from '../database/models/Assets.js';
-import Business from '../database/models/Businesses.js';
-import AccessToken from '../database/models/AccessToken.js';
-import VerificationCode from '../database/models/VerificationCode.js';
-import { encryptValue, decryptValue, getUserDekForSignup, hashEmail, getUserDek } from '../database/encryption.js';
-import plaidService from './plaid.service.js';
-import { getOldestAccessToken } from './utils/accounts.js';
-
+import { getAuth } from "firebase-admin/auth";
+import admin from "../lib/firebaseAdmin.js";
+import structuredLogger from "../lib/structuredLogger.js";
+import { v4 as uuidv4 } from "uuid";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import User from "../database/models/User.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
+import Transaction from "../database/models/Transaction.js";
+import Liability from "../database/models/Liability.js";
+import Assets from "../database/models/Assets.js";
+import Business from "../database/models/Businesses.js";
+import AccessToken from "../database/models/AccessToken.js";
+import VerificationCode from "../database/models/VerificationCode.js";
+import {
+  encryptValue,
+  decryptValue,
+  getUserDekForSignup,
+  hashEmail,
+  getUserDek,
+} from "../database/encryption.js";
+import plaidService from "./plaid.service.js";
+import { getOldestAccessToken } from "./utils/accounts.js";
 
 const signUp = async (userData, req) => {
   const { email, firstName, lastName, authUid } = userData;
 
   // Basic validation
   if (!email || !firstName || !lastName || !authUid) {
-    throw new Error('Missing required fields: email, firstName, lastName, and authUid are required');
+    throw new Error(
+      "Missing required fields: email, firstName, lastName, and authUid are required",
+    );
   }
 
-  const User = (await import('../database/models/User.js')).default;
+  const User = (await import("../database/models/User.js")).default;
 
   // Check if user already exists
   const existingUser = await User.findOne({ authUid });
   if (existingUser) {
-    throw new Error('User already exists');
+    throw new Error("User already exists");
   }
 
   // Get DEK for the new user
@@ -46,12 +53,23 @@ const signUp = async (userData, req) => {
     name: {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
-      middleName: userData.middleName ? await encryptValue(userData.middleName, dek) : null,
+      middleName: userData.middleName
+        ? await encryptValue(userData.middleName, dek)
+        : null,
     },
-    email: [{ email: encryptedEmail, isPrimary: true, isVerified: false, emailType: 'personal' }],
+    email: [
+      {
+        email: encryptedEmail,
+        isPrimary: true,
+        isVerified: false,
+        emailType: "personal",
+      },
+    ],
     emailHash: hashEmail(email),
-    role: 'individual',
-    profilePhotoUrl: userData.profilePhotoUrl ? await encryptValue(userData.profilePhotoUrl, dek) : null,
+    role: "individual",
+    profilePhotoUrl: userData.profilePhotoUrl
+      ? await encryptValue(userData.profilePhotoUrl, dek)
+      : null,
   });
 
   await newUser.save();
@@ -112,7 +130,9 @@ const signInOrCreate = async (uid, userData) => {
     const dek = await getUserDek(uid);
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
+    const decryptedMiddleName = user.name.middleName
+      ? await decryptValue(user.name.middleName, dek)
+      : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
         ? await decryptValue(user.phones[0].phone, dek)
@@ -131,7 +151,7 @@ const signInOrCreate = async (uid, userData) => {
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
-        })
+        }),
       );
     } else {
       emails = [
@@ -287,7 +307,7 @@ const deleteUser = async (uid) => {
     const accessToken = await getOldestAccessToken({ userId: user._id });
     const decryptedAccessToken = await decryptValue(
       accessToken.accessToken,
-      dek
+      dek,
     );
     await plaidService.invalidateAccessToken(decryptedAccessToken);
     await AccessToken.deleteMany({
@@ -311,7 +331,7 @@ const createVerificationCode = async (email) => {
     const testQuery = await VerificationCode.findOne({});
     console.log(
       `[DEBUG] Database connection test result:`,
-      testQuery ? "Connected" : "No data but connected"
+      testQuery ? "Connected" : "No data but connected",
     );
 
     let code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -324,7 +344,7 @@ const createVerificationCode = async (email) => {
     console.log(`[DEBUG] Deleting existing codes...`);
     const deletedCount = await VerificationCode.deleteMany({ email });
     console.log(
-      `[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`
+      `[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`,
     );
 
     console.log(`[DEBUG] Creating VerificationCode model instance...`);
@@ -338,7 +358,7 @@ const createVerificationCode = async (email) => {
     console.log(`[DEBUG] Saving verification code to database...`);
     const savedCode = await verificationCode.save();
     console.log(
-      `[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`
+      `[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`,
     );
 
     return code;
@@ -366,7 +386,7 @@ const verifyCode = async (email, code) => {
     });
 
     console.log(
-      `[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`
+      `[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`,
     );
 
     console.log(
@@ -380,12 +400,12 @@ const verifyCode = async (email, code) => {
             used: verificationCode.used,
             createdAt: verificationCode.createdAt,
           }
-        : "null"
+        : "null",
     );
 
     if (!verificationCode) {
       console.log(
-        `[DEBUG] No valid verification code found for email: ${email}, code: ${code}`
+        `[DEBUG] No valid verification code found for email: ${email}, code: ${code}`,
       );
 
       const allCodes = await VerificationCode.find({ email });
@@ -396,7 +416,7 @@ const verifyCode = async (email, code) => {
           expiresAt: c.expiresAt,
           used: c.used,
           createdAt: c.createdAt,
-        }))
+        })),
       );
 
       return { valid: false, message: "Invalid or expired verification code" };
@@ -437,20 +457,20 @@ const validateGoogleTokenViaAPI = async (idToken) => {
   try {
     console.log("🔑 Attempting validation via Google's API...");
     const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`,
     );
     if (!response.ok) {
       const errorText = await response.text();
       console.log("🔑 Google API Error Response:", errorText);
       throw new Error(
-        `Google token validation failed: ${response.status} ${response.statusText}`
+        `Google token validation failed: ${response.status} ${response.statusText}`,
       );
     }
     const tokenInfo = await response.json();
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
       "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com", // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
     ].filter(Boolean);
@@ -471,7 +491,7 @@ const validateGoogleTokenViaAPI = async (idToken) => {
     }
     if (isExpired) {
       console.log(
-        "🔄 Token expired but within acceptable range - using for authentication"
+        "🔄 Token expired but within acceptable range - using for authentication",
       );
     }
     const userData = {
@@ -513,7 +533,7 @@ const validateGoogleToken = async (idToken) => {
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
       "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com", // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
     ].filter(Boolean);
@@ -537,7 +557,7 @@ const validateGoogleToken = async (idToken) => {
     }
     if (isExpired) {
       console.log(
-        "🔄 Token expired but within acceptable range - attempting to use cached user data"
+        "🔄 Token expired but within acceptable range - attempting to use cached user data",
       );
     }
     if (decodedToken.payload.iss !== "https://accounts.google.com") {
@@ -725,7 +745,7 @@ const createFirebaseUser = async (userData) => {
           emailVerified: userData.emailVerified,
         };
 
-        if (userData.photoURL && userData.photoURL.startsWith('http')) {
+        if (userData.photoURL && userData.photoURL.startsWith("http")) {
           userRecord.photoURL = userData.photoURL;
         }
 
@@ -873,7 +893,7 @@ const signIn = async (email, password) => {
     const firebaseUid = verifyResult.localId;
     console.log(
       "Firebase email/password verification successful, UID:",
-      firebaseUid
+      firebaseUid,
     );
 
     const user = await User.findOne({
@@ -911,7 +931,9 @@ const signIn = async (email, password) => {
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
+    const decryptedMiddleName = user.name.middleName
+      ? await decryptValue(user.name.middleName, dek)
+      : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
         ? await decryptValue(user.phones[0].phone, dek)
@@ -930,7 +952,7 @@ const signIn = async (email, password) => {
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
-        })
+        }),
       );
     } else {
       emails = [
@@ -977,8 +999,8 @@ const signIn = async (email, password) => {
         error.message === "User not found"
           ? "user_not_found"
           : error.message === "Invalid credentials"
-          ? "invalid_credentials"
-          : "decryption_error",
+            ? "invalid_credentials"
+            : "decryption_error",
     });
     throw error;
   }
@@ -988,7 +1010,7 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
   try {
     structuredLogger.logOperationStart(
       "auth_service_create_firebase_user_email_password",
-      { email }
+      { email },
     );
 
     const userRecord = await admin.auth().createUser({
@@ -1002,7 +1024,7 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
       {
         email,
         uid: userRecord.uid,
-      }
+      },
     );
 
     return userRecord;
@@ -1036,7 +1058,9 @@ const own = async (uid) => {
 
     const decryptedFirstName = await decryptValue(user.name.firstName, dek);
     const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
+    const decryptedMiddleName = user.name.middleName
+      ? await decryptValue(user.name.middleName, dek)
+      : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
         ? await decryptValue(user.phones[0].phone, dek)
@@ -1055,7 +1079,7 @@ const own = async (uid) => {
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
-        })
+        }),
       );
     } else {
       emails = [

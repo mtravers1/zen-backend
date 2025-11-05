@@ -1,4 +1,3 @@
-
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -18,21 +17,31 @@ import "./database/database.js";
 import router from "./routes/index.js";
 
 // Initialize Firebase Admin SDK
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== "test") {
   console.log("🔥 Initializing Firebase Admin...");
   let serviceAccount;
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT;
-      const serviceAccountJsonString = Buffer.from(serviceAccountBase64, "base64").toString("utf8");
+      const serviceAccountJsonString = Buffer.from(
+        serviceAccountBase64,
+        "base64",
+      ).toString("utf8");
       serviceAccount = JSON.parse(serviceAccountJsonString);
-      console.log("🔥 Service account loaded successfully from environment variable.");
+      console.log(
+        "🔥 Service account loaded successfully from environment variable.",
+      );
     } catch (error) {
-      console.error("🔥 Error parsing service account from environment variable:", error);
+      console.error(
+        "🔥 Error parsing service account from environment variable:",
+        error,
+      );
       process.exit(1);
     }
   } else {
-    console.error("CRITICAL ERROR: FIREBASE_SERVICE_ACCOUNT is not set. Exiting.");
+    console.error(
+      "CRITICAL ERROR: FIREBASE_SERVICE_ACCOUNT is not set. Exiting.",
+    );
     process.exit(1);
   }
 
@@ -43,22 +52,38 @@ if (process.env.NODE_ENV !== 'test') {
   console.log("🔥 Firebase Admin initialized successfully");
 }
 
-
-
-console.log(`The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`);
+console.log(
+  `The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`,
+);
 console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
-console.log(`USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`);
+console.log(
+  `USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`,
+);
 
 // Check for critical environment variables
 if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
-  console.error("CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.");
+  console.error(
+    "CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.",
+  );
   process.exit(1);
 }
 
-const expectedBucketName = process.env.ENVIRONMENT === 'production' ? 'prod' : process.env.ENVIRONMENT === 'staging' ? 'staging' : process.env.ENVIRONMENT === 'development' ? 'dev' : null;
+const expectedBucketName =
+  process.env.ENVIRONMENT === "production"
+    ? "prod"
+    : process.env.ENVIRONMENT === "staging"
+      ? "staging"
+      : process.env.ENVIRONMENT === "development"
+        ? "dev"
+        : null;
 
-if (expectedBucketName && process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName) {
-  console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`);
+if (
+  expectedBucketName &&
+  process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName
+) {
+  console.error(
+    `CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`,
+  );
   process.exit(1);
 }
 
@@ -88,7 +113,7 @@ app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
 // Rate limiting for brute force protection
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -151,7 +176,7 @@ app.use((req, res, next) => {
   ];
 
   const isAttackPattern = attackPatterns.some((pattern) =>
-    req.path.startsWith(pattern)
+    req.path.startsWith(pattern),
   );
   if (isAttackPattern) {
     // Return 404 immediately for known attack patterns

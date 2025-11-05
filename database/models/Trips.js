@@ -5,7 +5,7 @@ const coordinateSchema = new mongoose.Schema(
     latitude: String,
     longitude: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const metadataSchema = new mongoose.Schema(
@@ -39,7 +39,7 @@ const metadataSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const tripSchema = new mongoose.Schema(
@@ -53,7 +53,7 @@ const tripSchema = new mongoose.Schema(
     totalMiles: Number,
     metadata: metadataSchema,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Trips", tripSchema);

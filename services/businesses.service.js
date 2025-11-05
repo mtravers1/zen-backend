@@ -57,7 +57,7 @@ const addBusinesses = async (businessList, email, uid) => {
 
     const encryptedBusinessLogo = await encryptValue(
       businessData.businessLogo,
-      dek
+      dek,
     );
 
     const newBusiness = new Business({
@@ -78,8 +78,10 @@ const addBusinesses = async (businessList, email, uid) => {
 };
 
 const getUserProfiles = async (email, uid) => {
-  console.log(`[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`);
-  
+  console.log(
+    `[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`,
+  );
+
   try {
     const user = await User.findOne({
       authUid: uid,
@@ -94,19 +96,25 @@ const getUserProfiles = async (email, uid) => {
 
     const profiles = [];
     const dek = await getUserDek(uid);
-    
+
     console.log(`[getUserProfiles] DEK obtained:`, {
       hasDek: !!dek,
       dekType: typeof dek,
-      dekLength: dek ? dek.length : 0
+      dekLength: dek ? dek.length : 0,
     });
 
     // Decrypt user name fields with error handling
-    let decryptedFirstName, decryptedLastName, decryptedMiddleName, decryptedSuffix, decryptedPrefix;
-    
+    let decryptedFirstName,
+      decryptedLastName,
+      decryptedMiddleName,
+      decryptedSuffix,
+      decryptedPrefix;
+
     try {
       decryptedFirstName = await decryptValue(user.name.firstName, dek);
-      console.log(`[getUserProfiles] First name decrypted: ${decryptedFirstName ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] First name decrypted: ${decryptedFirstName ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting first name:`, error);
       decryptedFirstName = null;
@@ -114,7 +122,9 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedLastName = await decryptValue(user.name.lastName, dek);
-      console.log(`[getUserProfiles] Last name decrypted: ${decryptedLastName ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Last name decrypted: ${decryptedLastName ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting last name:`, error);
       decryptedLastName = null;
@@ -122,7 +132,9 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedMiddleName = await decryptValue(user.name.middleName, dek);
-      console.log(`[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Middle name decrypted: ${decryptedMiddleName ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting middle name:`, error);
       decryptedMiddleName = null;
@@ -130,7 +142,9 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedSuffix = await decryptValue(user.name.suffix, dek);
-      console.log(`[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Suffix decrypted: ${decryptedSuffix ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting suffix:`, error);
       decryptedSuffix = null;
@@ -138,7 +152,9 @@ const getUserProfiles = async (email, uid) => {
 
     try {
       decryptedPrefix = await decryptValue(user.name.prefix, dek);
-      console.log(`[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Prefix decrypted: ${decryptedPrefix ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting prefix:`, error);
       decryptedPrefix = null;
@@ -147,7 +163,9 @@ const getUserProfiles = async (email, uid) => {
     let decryptedPhotoUrl;
     try {
       decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
-      console.log(`[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? 'success' : 'failed'}`);
+      console.log(
+        `[getUserProfiles] Photo URL decrypted: ${decryptedPhotoUrl ? "success" : "failed"}`,
+      );
     } catch (error) {
       console.error(`[getUserProfiles] Error decrypting photo URL:`, error);
       decryptedPhotoUrl = null;
@@ -156,8 +174,10 @@ const getUserProfiles = async (email, uid) => {
     let name;
 
     // Check if decryption actually worked (decrypted value should be different from encrypted)
-    const firstNameDecrypted = decryptedFirstName && decryptedFirstName !== user.name.firstName;
-    const lastNameDecrypted = decryptedLastName && decryptedLastName !== user.name.lastName;
+    const firstNameDecrypted =
+      decryptedFirstName && decryptedFirstName !== user.name.firstName;
+    const lastNameDecrypted =
+      decryptedLastName && decryptedLastName !== user.name.lastName;
 
     if (!firstNameDecrypted && !lastNameDecrypted) {
       name = email;
@@ -178,8 +198,8 @@ const getUserProfiles = async (email, uid) => {
           email,
           emailType,
           isPrimary,
-        }))
-      )
+        })),
+      ),
     );
 
     const decryptedPhones = await Promise.all(
@@ -190,8 +210,8 @@ const getUserProfiles = async (email, uid) => {
         ]).then(([phone, phoneType]) => ({
           phoneNumber: phone,
           phoneType,
-        }))
-      )
+        })),
+      ),
     );
 
     const personalProfile = {
@@ -223,33 +243,45 @@ const getUserProfiles = async (email, uid) => {
 
     for (const business of businesses) {
       console.log(`[getUserProfiles] Processing business: ${business._id}`);
-      
+
       let decryptedName, decryptedIndustry, decryptedBusinessLogo;
-      
+
       try {
         decryptedName = await decryptValue(business.name, dek);
-        console.log(`[getUserProfiles] Business name decrypted: ${decryptedName ? 'success' : 'failed'}`);
+        console.log(
+          `[getUserProfiles] Business name decrypted: ${decryptedName ? "success" : "failed"}`,
+        );
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business name:`, error);
-        decryptedName = 'Unknown Business';
+        console.error(
+          `[getUserProfiles] Error decrypting business name:`,
+          error,
+        );
+        decryptedName = "Unknown Business";
       }
 
       try {
         decryptedIndustry = await decryptValue(business.industryDesc, dek);
-        console.log(`[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? 'success' : 'failed'}`);
+        console.log(
+          `[getUserProfiles] Business industry decrypted: ${decryptedIndustry ? "success" : "failed"}`,
+        );
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business industry:`, error);
+        console.error(
+          `[getUserProfiles] Error decrypting business industry:`,
+          error,
+        );
         decryptedIndustry = null;
       }
 
       try {
-        decryptedBusinessLogo = await decryptValue(
-          business.businessLogo,
-          dek
+        decryptedBusinessLogo = await decryptValue(business.businessLogo, dek);
+        console.log(
+          `[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? "success" : "failed"}`,
         );
-        console.log(`[getUserProfiles] Business logo decrypted: ${decryptedBusinessLogo ? 'success' : 'failed'}`);
       } catch (error) {
-        console.error(`[getUserProfiles] Error decrypting business logo:`, error);
+        console.error(
+          `[getUserProfiles] Error decrypting business logo:`,
+          error,
+        );
         decryptedBusinessLogo = null;
       }
 
@@ -263,7 +295,7 @@ const getUserProfiles = async (email, uid) => {
               percentOwned: owner.percentOwned,
               position: owner.position,
             };
-          })
+          }),
         );
       }
 
@@ -338,11 +370,11 @@ const getUserProfiles = async (email, uid) => {
 
     const businessAccounts = businesses.flatMap((b) => b.plaidAccountIds || []);
     const uniqueBusinessAccountIds = new Set(
-      businessAccounts.map((id) => id.toString())
+      businessAccounts.map((id) => id.toString()),
     );
 
     personalProfile.plaidAccounts = (user.plaidAccounts || []).filter(
-      (acc) => !uniqueBusinessAccountIds.has(acc.toString())
+      (acc) => !uniqueBusinessAccountIds.has(acc.toString()),
     );
 
     for (const profile of profiles) {
@@ -444,13 +476,13 @@ const unlinkAccounts = async (data, uid) => {
     });
     await User.updateOne(
       { _id: user._id },
-      { $pull: { plaidAccounts: account.id } }
+      { $pull: { plaidAccounts: account.id } },
     );
 
     for (const business of businesses) {
       if (business.plaidAccountIds.includes(account.id)) {
         business.plaidAccountIds = business.plaidAccountIds.filter(
-          (id) => id !== account.id
+          (id) => id !== account.id,
         );
         await business.save();
       }
@@ -510,7 +542,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     if (formData.isPersonal) {
       const encryptedProfilePhotoUrl = await encryptValue(
         formData.profilePhotoUrl,
-        dek
+        dek,
       );
 
       const updatedPersonalProfile = await User.findByIdAndUpdate(
@@ -521,7 +553,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
           phones: formData.phones,
           profilePhotoUrl: encryptedProfilePhotoUrl, //TODO:validate upload in other process
         },
-        { new: true }
+        { new: true },
       );
       return {
         message: "Personal profile updated successfully.",
@@ -537,24 +569,24 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
           percentOwned: owner.percentOwned,
           position: owner.position,
         };
-      }
+      },
     );
 
     //const encryptedTaxInformation = await encryptValue(formData.taxId, dek);//TODO: not implemented yet
 
     const encryptedBusinessLogo = await encryptValue(
       formData.businessLogo,
-      dek
+      dek,
     );
 
     const encryptedEntityType = await encryptValue(formData.entityType, dek);
     const encryptedBusinessTaxType = await encryptValue(
       formData.businessTaxType,
-      dek
+      dek,
     );
     const encryptedLegalName = await encryptValue(
       formData.legalBusinessName,
-      dek
+      dek,
     );
 
     const updatedProfile = await Business.findByIdAndUpdate(
@@ -571,7 +603,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         industryDesc: encryptedEntityType,
         businessType: formData.businessType,
         subsidiaries: formData.subsidiaries.map(
-          (subsidiary) => subsidiary.name
+          (subsidiary) => subsidiary.name,
         ),
         businessOwners: formData.businessOwners,
         businessOwnersDetails: businessOwnersDetails,
@@ -580,7 +612,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         website: formData.website,
         businessLogo: encryptedBusinessLogo,
       },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedProfile) {

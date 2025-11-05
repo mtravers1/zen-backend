@@ -6,10 +6,10 @@ This script is used to re-encrypt all user Data Encryption Keys (DEKs) with a ne
 
 This script includes several safety features to minimize the risk of data loss:
 
-*   **Backup:** Before modifying a key, the script creates a backup of the original encrypted DEK in a `backup` directory in the Google Cloud Storage bucket.
-*   **Verification:** After re-encrypting a DEK, the script immediately attempts to decrypt it with the new KEK to verify the integrity of the new key. If verification fails, the script will halt and report the error, leaving the original DEK untouched.
-*   **Single-User Mode:** You can run the script for a single user to test the process before running it on all users.
-*   **Dry-Run Mode:** You can run the script in dry-run mode to simulate the process without modifying any files.
+- **Backup:** Before modifying a key, the script creates a backup of the original encrypted DEK in a `backup` directory in the Google Cloud Storage bucket.
+- **Verification:** After re-encrypting a DEK, the script immediately attempts to decrypt it with the new KEK to verify the integrity of the new key. If verification fails, the script will halt and report the error, leaving the original DEK untouched.
+- **Single-User Mode:** You can run the script for a single user to test the process before running it on all users.
+- **Dry-Run Mode:** You can run the script in dry-run mode to simulate the process without modifying any files.
 
 ## Usage
 
@@ -25,7 +25,6 @@ This script includes several safety features to minimize the risk of data loss:
     ```
 
 2.  **Recommended Workflow:**
-
     1.  Test the script on a single, non-critical user in **dry-run mode**:
 
         ```bash

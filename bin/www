@@ -6,16 +6,16 @@ dotenv.config();
 /**
  * Module dependencies.
  */
-import app from '../app.js';
-import debug from 'debug';
-import http from 'http';
+import app from "../app.js";
+import debug from "debug";
+import http from "http";
 
 /**
  * Get port from environment and store in Express.
  */
 
-const port = normalizePort(process.env.APP_PORT || '3000');
-app.set('port', port);
+const port = normalizePort(process.env.APP_PORT || "3000");
+app.set("port", port);
 
 /**
  * Create HTTP server.
@@ -28,8 +28,8 @@ const server = http.createServer(app);
  */
 
 server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+server.on("error", onError);
+server.on("listening", onListening);
 
 /**
  * Normalize a port into a number, string, or false.
@@ -56,22 +56,20 @@ function normalizePort(val) {
  */
 
 function onError(error) {
-  if (error.syscall !== 'listen') {
+  if (error.syscall !== "listen") {
     throw error;
   }
 
-  const bind = typeof port === 'string'
-    ? 'Pipe ' + port
-    : 'Port ' + port;
+  const bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
 
   // handle specific listen errors with friendly messages
   switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
       process.exit(1);
       break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
       process.exit(1);
       break;
     default:
@@ -80,33 +78,40 @@ function onError(error) {
 }
 
 /**
- * Formatting functions 
+ * Formatting functions
  */
-function _print (path, layer) {
+function _print(path, layer) {
   if (layer.route) {
-    layer.route.stack.forEach(_print.bind(null, path.concat(_split(layer.route.path))))
-  } else if (layer.name === 'router' && layer.handle.stack) {
-    layer.handle.stack.forEach(_print.bind(null, path.concat(_split(layer.regexp))))
+    layer.route.stack.forEach(
+      _print.bind(null, path.concat(_split(layer.route.path))),
+    );
+  } else if (layer.name === "router" && layer.handle.stack) {
+    layer.handle.stack.forEach(
+      _print.bind(null, path.concat(_split(layer.regexp))),
+    );
   } else if (layer.method) {
-    console.log('%s /%s',
+    console.log(
+      "%s /%s",
       layer.method.toUpperCase(),
-      path.concat(_split(layer.regexp)).filter(Boolean).join('/'))
+      path.concat(_split(layer.regexp)).filter(Boolean).join("/"),
+    );
   }
 }
 
-function _split (thing) {
-  if (typeof thing === 'string') {
-    return thing.split('/')
+function _split(thing) {
+  if (typeof thing === "string") {
+    return thing.split("/");
   } else if (thing.fast_slash) {
-    return ''
+    return "";
   } else {
-    const match = thing.toString()
-      .replace('\\/?', '')
-      .replace('(?=\\/|$)', '$')
-      .match(/^\/\^((?:\\[.*+?^${}()|[\]\\\/]|[^.*+?^${}()|[\]\\\/])*)\$\//)
+    const match = thing
+      .toString()
+      .replace("\\/?", "")
+      .replace("(?=\\/|$)", "$")
+      .match(/^\/\^((?:\\[.*+?^${}()|[\]\\\/]|[^.*+?^${}()|[\]\\\/])*)\$\//);
     return match
-      ? match[1].replace(/\\(.)/g, '$1').split('/')
-      : '<complex:' + thing.toString() + '>'
+      ? match[1].replace(/\\(.)/g, "$1").split("/")
+      : "<complex:" + thing.toString() + ">";
   }
 }
 
@@ -115,14 +120,12 @@ function _split (thing) {
  */
 function onListening() {
   const addr = server.address();
-  const bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  
-    console.log('\nEndpoints:\n');
-    app._router.stack.forEach(_print.bind(null, []));
-    
-    console.log('\nListening on ' + bind + '...\n');
+  const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
 
-  debug('Listening on ' + bind);
+  console.log("\nEndpoints:\n");
+  app._router.stack.forEach(_print.bind(null, []));
+
+  console.log("\nListening on " + bind + "...\n");
+
+  debug("Listening on " + bind);
 }

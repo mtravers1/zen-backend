@@ -5,7 +5,7 @@ import { Storage } from "@google-cloud/storage";
 const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
 const serviceAccountJsonString = Buffer.from(
   serviceAccountBase64,
-  "base64"
+  "base64",
 ).toString("utf8");
 const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 

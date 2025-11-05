@@ -35,7 +35,11 @@ export default {
     }),
     new CopyWebpackPlugin({
       patterns: [
-        { from: "lib/mailer/templates/", to: "./lib/mailer/templates/", noErrorOnMissing: true },
+        {
+          from: "lib/mailer/templates/",
+          to: "./lib/mailer/templates/",
+          noErrorOnMissing: true,
+        },
         { from: "ecosystem.config.js", to: "./ecosystem.config.js" },
         { from: "package.json", to: "." },
         { from: ".env.sample", to: ".", noErrorOnMissing: true },

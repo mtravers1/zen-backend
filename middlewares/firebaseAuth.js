@@ -10,40 +10,40 @@ async function firebaseAuthentication(req, res, next) {
     .substr(2, 9)}`;
 
   console.log(
-    `\n🔐 [FIREBASE AUTH ${requestId}] ====== AUTHENTICATION REQUEST ======`
+    `\n🔐 [FIREBASE AUTH ${requestId}] ====== AUTHENTICATION REQUEST ======`,
   );
   console.log(
-    `[FIREBASE AUTH ${requestId}] Timestamp: ${new Date().toISOString()}`
+    `[FIREBASE AUTH ${requestId}] Timestamp: ${new Date().toISOString()}`,
   );
   console.log(`[FIREBASE AUTH ${requestId}] Request URL: ${req.url}`);
   console.log(`[FIREBASE AUTH ${requestId}] Request method: ${req.method}`);
   console.log(`[FIREBASE AUTH ${requestId}] Request IP: ${req.ip}`);
   console.log(
-    `[FIREBASE AUTH ${requestId}] User Agent: ${req.headers["user-agent"]}`
+    `[FIREBASE AUTH ${requestId}] User Agent: ${req.headers["user-agent"]}`,
   );
   console.log(
     `[FIREBASE AUTH ${requestId}] Has authorization header: ${!!req.headers
-      .authorization}`
+      .authorization}`,
   );
   console.log(
-    `[FIREBASE AUTH ${requestId}] Authorization header: ${req.headers.authorization}`
+    `[FIREBASE AUTH ${requestId}] Authorization header: ${req.headers.authorization}`,
   );
   console.log(
     `[FIREBASE AUTH ${requestId}] ID Token extracted: ${
       idToken ? `${idToken.substring(0, 20)}...` : "null"
-    }`
+    }`,
   );
   console.log(
-    `[FIREBASE AUTH ${requestId}] Token length: ${idToken ? idToken.length : 0}`
+    `[FIREBASE AUTH ${requestId}] Token length: ${idToken ? idToken.length : 0}`,
   );
 
   if (!idToken) {
     console.log(
-      `[FIREBASE AUTH ${requestId}] ❌ No ID token found - returning 401`
+      `[FIREBASE AUTH ${requestId}] ❌ No ID token found - returning 401`,
     );
     console.log(
       `[FIREBASE AUTH ${requestId}] Headers received:`,
-      Object.keys(req.headers)
+      Object.keys(req.headers),
     );
     return res.status(401).send("Unauthorized");
   }
@@ -51,7 +51,7 @@ async function firebaseAuthentication(req, res, next) {
   try {
     // First, try to verify as JWT custom token
     console.log(
-      `[FIREBASE AUTH ${requestId}] 🔍 Trying JWT custom token verification...`
+      `[FIREBASE AUTH ${requestId}] 🔍 Trying JWT custom token verification...`,
     );
     try {
       const decodedJWT = jwt.verify(idToken, process.env.SECRET);
@@ -64,14 +64,14 @@ async function firebaseAuthentication(req, res, next) {
           tokenIssuedAt: new Date(decodedJWT.iat * 1000).toISOString(),
           tokenExpiresAt: new Date(decodedJWT.exp * 1000).toISOString(),
           tokenKeys: Object.keys(decodedJWT),
-        }
+        },
       );
 
       // Find user in database to get authUid (Firebase UID)
       const user = await User.findById(decodedJWT.userId).lean();
       if (!user) {
         console.error(
-          `[FIREBASE AUTH ${requestId}] ❌ User not found in database for userId: ${decodedJWT.userId}`
+          `[FIREBASE AUTH ${requestId}] ❌ User not found in database for userId: ${decodedJWT.userId}`,
         );
         return res.status(401).send("Unauthorized");
       }
@@ -92,7 +92,7 @@ async function firebaseAuthentication(req, res, next) {
           userId: req.user.userId,
           authUid: user.authUid,
           userKeys: Object.keys(req.user),
-        }
+        },
       );
 
       return next();
@@ -102,12 +102,12 @@ async function firebaseAuthentication(req, res, next) {
         {
           jwtError: jwtError.message,
           jwtErrorName: jwtError.name,
-        }
+        },
       );
 
       // If JWT fails, try Firebase custom token verification first
       console.log(
-        `[FIREBASE AUTH ${requestId}] 🔍 Trying Firebase custom token verification...`
+        `[FIREBASE AUTH ${requestId}] 🔍 Trying Firebase custom token verification...`,
       );
       try {
         // Firebase custom tokens can be verified by checking their structure
@@ -123,7 +123,7 @@ async function firebaseAuthentication(req, res, next) {
               uid: decodedCustomToken.uid,
               iss: decodedCustomToken.iss,
               aud: decodedCustomToken.aud,
-            }
+            },
           );
 
           // Set user info from custom token
@@ -145,7 +145,7 @@ async function firebaseAuthentication(req, res, next) {
               email: req.user.email,
               authUid: req.user.uid,
               userKeys: Object.keys(req.user),
-            }
+            },
           );
 
           return next();
@@ -155,13 +155,13 @@ async function firebaseAuthentication(req, res, next) {
           `[FIREBASE AUTH ${requestId}] Firebase custom token verification failed, trying ID token:`,
           {
             customTokenError: customTokenError.message,
-          }
+          },
         );
       }
 
       // If custom token fails, try Firebase ID token verification
       console.log(
-        `[FIREBASE AUTH ${requestId}] 🔍 Verifying Firebase ID token...`
+        `[FIREBASE AUTH ${requestId}] 🔍 Verifying Firebase ID token...`,
       );
       const decodedToken = await admin.auth().verifyIdToken(idToken);
 
@@ -176,7 +176,7 @@ async function firebaseAuthentication(req, res, next) {
           tokenIssuer: decodedToken.iss,
           tokenAudience: decodedToken.aud,
           tokenKeys: Object.keys(decodedToken),
-        }
+        },
       );
 
       req.user = decodedToken;
@@ -191,7 +191,7 @@ async function firebaseAuthentication(req, res, next) {
           hasUid: !!req.user.uid,
           uidType: typeof req.user.uid,
           uidLength: req.user.uid ? req.user.uid.length : 0,
-        }
+        },
       );
 
       return next();
@@ -206,7 +206,7 @@ async function firebaseAuthentication(req, res, next) {
         tokenLength: idToken ? idToken.length : 0,
         tokenStart: idToken ? idToken.substring(0, 50) : "null",
         timestamp: new Date().toISOString(),
-      }
+      },
     );
     return res.status(401).send("Unauthorized");
   }

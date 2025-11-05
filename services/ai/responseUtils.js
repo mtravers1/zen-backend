@@ -20,7 +20,11 @@ export function isValidJSON(str) {
  * @param {object} params - Parameters including invalidJson, groqClient, and model.
  * @returns {Promise<object|null>} The corrected JSON object, or null if correction fails.
  */
-export async function getCorrectedJsonResponse({ invalidJson, groqClient, model }) {
+export async function getCorrectedJsonResponse({
+  invalidJson,
+  groqClient,
+  model,
+}) {
   try {
     const correctionPrompt = `The following response contains invalid JSON. Please correct any syntax errors and return ONLY the valid JSON object, with no additional text or explanation:
 ${invalidJson}
@@ -40,7 +44,8 @@ Respond with ONLY the corrected JSON object.`;
       max_tokens: 2000,
     });
 
-    const correctedJson = correctionResponse.choices[0]?.message?.content?.trim();
+    const correctedJson =
+      correctionResponse.choices[0]?.message?.content?.trim();
     if (correctedJson && isValidJSON(correctedJson)) {
       return JSON.parse(correctedJson);
     }
@@ -48,4 +53,4 @@ Respond with ONLY the corrected JSON object.`;
     console.error("Error getting corrected JSON:", error);
   }
   return null;
-} 
+}

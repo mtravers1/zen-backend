@@ -12,7 +12,7 @@ const checkUserRole = async (user) => {
     await User.findByIdAndUpdate(
       user.id,
       { account_type: "Free" },
-      { new: true }
+      { new: true },
     );
   }
   return user.account_type;
@@ -81,7 +81,7 @@ const validateCreateTrips = async (createTripsMax, userId) => {
   const tripsThisMonth = await countUserTrips(
     userId,
     currentMonth,
-    currentYear
+    currentYear,
   );
 
   return tripsThisMonth < createTripsMax;
@@ -170,7 +170,7 @@ const canAddAccount = async (uid, institutionId) => {
       return upgradeResponseService.institutionLimitExceeded(
         user,
         currentInstitutions,
-        rolePermissions.accounts_max
+        rolePermissions.accounts_max,
       );
     }
   } catch (error) {
@@ -201,7 +201,7 @@ const canPerformAction = async (uid, action) => {
         const currentInstitutions = await countUserInstitutions(userId);
         const canAdd = await validateAccounts(
           rolePermissions.accounts_max,
-          userId
+          userId,
         );
 
         if (canAdd) {
@@ -210,7 +210,7 @@ const canPerformAction = async (uid, action) => {
           return upgradeResponseService.institutionLimitExceeded(
             user,
             currentInstitutions,
-            rolePermissions.accounts_max
+            rolePermissions.accounts_max,
           );
         }
 
@@ -220,11 +220,11 @@ const canPerformAction = async (uid, action) => {
         const currentTrips = await countUserTrips(
           userId,
           currentMonth,
-          currentYear
+          currentYear,
         );
         const canCreateTrip = await validateCreateTrips(
           rolePermissions.create_trips_max,
-          userId
+          userId,
         );
 
         if (canCreateTrip) {
@@ -233,7 +233,7 @@ const canPerformAction = async (uid, action) => {
           return upgradeResponseService.tripLimitExceeded(
             user,
             currentTrips,
-            rolePermissions.create_trips_max
+            rolePermissions.create_trips_max,
           );
         }
 
@@ -241,7 +241,7 @@ const canPerformAction = async (uid, action) => {
         const currentStorage = await calculateStorageUsage(userId);
         const canUpload = await validateStorage(
           rolePermissions.storage_max_gb,
-          userId
+          userId,
         );
 
         if (canUpload) {
@@ -250,7 +250,7 @@ const canPerformAction = async (uid, action) => {
           return upgradeResponseService.storageLimitExceeded(
             user,
             currentStorage,
-            rolePermissions.storage_max_gb
+            rolePermissions.storage_max_gb,
           );
         }
 
@@ -258,7 +258,7 @@ const canPerformAction = async (uid, action) => {
         const currentBusinesses = await countUserBusinesses(userId);
         const canCreateBusiness = await validateBusinesses(
           rolePermissions.businesses_max,
-          userId
+          userId,
         );
 
         if (canCreateBusiness) {
@@ -267,7 +267,7 @@ const canPerformAction = async (uid, action) => {
           return upgradeResponseService.businessLimitExceeded(
             user,
             currentBusinesses,
-            rolePermissions.businesses_max
+            rolePermissions.businesses_max,
           );
         }
 
@@ -297,7 +297,7 @@ const getCurrentUsage = async (userId) => {
       trips_this_month: await countUserTrips(
         userId,
         new Date().getMonth() + 1,
-        new Date().getFullYear()
+        new Date().getFullYear(),
       ),
     };
   } catch (error) {

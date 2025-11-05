@@ -1,5 +1,9 @@
 import User from "../database/models/User.js";
-import { decryptValue, getUserDek, encryptValue } from "../database/encryption.js";
+import {
+  decryptValue,
+  getUserDek,
+  encryptValue,
+} from "../database/encryption.js";
 
 /**
  * List all users for admin interface
@@ -30,7 +34,7 @@ const listUsers = async (req, res) => {
           } catch (error) {
             console.log(
               `[USER CONTROLLER] Error decrypting email for user ${user._id}:`,
-              error.message
+              error.message,
             );
             email = user.email[0].email; // Show encrypted if decryption fails
           }
@@ -48,7 +52,7 @@ const listUsers = async (req, res) => {
           } catch (error) {
             console.log(
               `[USER CONTROLLER] Error decrypting name for user ${user._id}:`,
-              error.message
+              error.message,
             );
             firstName = user.name.firstName;
             lastName = user.name.lastName || "";
@@ -70,7 +74,7 @@ const listUsers = async (req, res) => {
       } catch (error) {
         console.error(
           `[USER CONTROLLER] Error processing user ${user._id}:`,
-          error
+          error,
         );
         // Add user with basic info if decryption fails
         formattedUsers.push({
@@ -89,7 +93,7 @@ const listUsers = async (req, res) => {
     }
 
     console.log(
-      `[USER CONTROLLER] Successfully formatted ${formattedUsers.length} users`
+      `[USER CONTROLLER] Successfully formatted ${formattedUsers.length} users`,
     );
     res.status(200).json(formattedUsers);
   } catch (error) {
@@ -168,7 +172,7 @@ const updateUserMethod = async (req, res) => {
     await user.save();
 
     console.log(
-      `[USER CONTROLLER] Updated method for user ${userId} to ${method}`
+      `[USER CONTROLLER] Updated method for user ${userId} to ${method}`,
     );
 
     res.status(200).json({
@@ -254,7 +258,8 @@ const checkUserPermission = async (req, res) => {
  */
 const updateUserInfo = async (req, res) => {
   const { userId } = req.params;
-  const { firstName, lastName, middleName, prefix, suffix, photoUrl } = req.body;
+  const { firstName, lastName, middleName, prefix, suffix, photoUrl } =
+    req.body;
 
   try {
     console.log("[USER CONTROLLER] Updating user info for:", userId);
@@ -264,7 +269,7 @@ const updateUserInfo = async (req, res) => {
       console.error("[USER CONTROLLER] User not found:", userId);
       return res.status(404).json({
         success: false,
-        message: "User not found"
+        message: "User not found",
       });
     }
 
@@ -297,20 +302,20 @@ const updateUserInfo = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: updateData },
-      { new: true } // Return updated document
+      { new: true }, // Return updated document
     ).select("-password");
 
     console.log("[USER CONTROLLER] User info updated successfully:", userId);
 
     res.status(200).json({
       success: true,
-      user: updatedUser
+      user: updatedUser,
     });
   } catch (error) {
     console.error("[USER CONTROLLER] Error updating user info:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };

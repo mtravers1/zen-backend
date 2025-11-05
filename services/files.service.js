@@ -5,14 +5,16 @@ import { Storage } from "@google-cloud/storage";
 let storage;
 let bucketName;
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== "test") {
   const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
   if (!serviceAccountBase64) {
-    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
+    throw new Error(
+      "CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.",
+    );
   }
   const serviceAccountJsonString = Buffer.from(
     serviceAccountBase64,
-    "base64"
+    "base64",
   ).toString("utf8");
   const storageServiceAccount = JSON.parse(serviceAccountJsonString);
 
@@ -33,7 +35,7 @@ if (process.env.NODE_ENV !== 'test') {
   storage = {
     bucket: () => ({
       file: () => ({
-        getSignedUrl: () => ['http://mock-signed-url.com'],
+        getSignedUrl: () => ["http://mock-signed-url.com"],
         delete: () => {},
       }),
     }),

@@ -18,7 +18,7 @@ router.delete("/:uid", authController.deleteUser);
 router.post(
   "/recover-encryption-keys/:uid",
   firebaseAuth,
-  authController.recoverEncryptionKeys
+  authController.recoverEncryptionKeys,
 );
 router.get("/test", (req, res) => {
   const aiurl = process.env.AI_URL;
@@ -44,7 +44,7 @@ router.post("/test-existing-user", authController.testExistingUserLogin);
 // Test endpoint for encryption consistency
 router.post(
   "/test-encryption-consistency",
-  authController.testEncryptionConsistency
+  authController.testEncryptionConsistency,
 );
 
 export default router;
