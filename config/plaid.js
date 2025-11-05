@@ -3,6 +3,9 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 const plaidClients = {};
 
 function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV) {
+  console.log(`[Plaid Config] Raw PLAID_ENV from process.env: '${process.env.PLAID_ENV}'`);
+  console.log(`[Plaid Config] plaidEnvironment (after default): '${plaidEnvironment}'`);
+
   if (!plaidEnvironment) {
     throw new Error('PLAID_ENV is not set. Please set it to one of: local, development, staging, production');
   }
@@ -12,6 +15,7 @@ function getPlaidClient(plaidEnvironment = process.env.PLAID_ENV) {
   }
 
   const lowerCaseEnv = plaidEnvironment.toLowerCase().trim();
+  console.log(`[Plaid Config] lowerCaseEnv (trimmed): '${lowerCaseEnv}'`);
 
   // This object maps the application's environment names to the corresponding Plaid API environments.
   const plaidEnvMap = {
