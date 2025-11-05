@@ -388,7 +388,7 @@ async function decryptValue(cipherTextBase64, deks) {
     }...`,
   );
   console.error(`❌ All decryption attempts failed.`);
-  return cipherTextBase64; // Return original value if decryption fails
+  throw new DecryptionError("All decryption attempts failed.", "ALL_DEK_FAILED");
 }
 
 function hashEmail(email) {

@@ -302,11 +302,11 @@ const addAccount = async (accessToken, email, uid) => {
         let name;
 
         if (transaction.merchant_name) {
-          merchantName = await encryptValue(transaction.merchant_name, dek);
+          merchantName = await safeEncrypt(transaction.merchant_name, dek);
         }
 
         if (transaction.name) {
-          name = await encryptValue(transaction.name, dek);
+          name = await safeEncrypt(transaction.name, dek);
         }
 
         const merchant = {
@@ -319,17 +319,17 @@ const addAccount = async (accessToken, email, uid) => {
 
         let transactionCode;
 
-        const encyptedAmount = await encryptValue(transaction.amount, dek);
+        const encyptedAmount = await safeEncrypt(transaction.amount, dek);
 
         if (transaction.transaction_code) {
-          transactionCode = await encryptValue(
+          transactionCode = await safeEncrypt(
             transaction.transaction_code,
             dek,
           );
         }
         let encryptedAccountType;
         if (accountType) {
-          encryptedAccountType = await encryptValue(accountType, dek);
+          encryptedAccountType = await safeEncrypt(accountType, dek);
         }
 
         const newTransaction = new Transaction({
@@ -368,22 +368,22 @@ const addAccount = async (accessToken, email, uid) => {
           (account) => account.plaid_account_id === transaction.account_id,
         );
 
-        const encryptedAmount = await encryptValue(transaction.amount, dek);
-        const encryptedAccountType = await encryptValue(accountType, dek);
+        const encryptedAmount = await safeEncrypt(transaction.amount, dek);
+        const encryptedAccountType = await safeEncrypt(accountType, dek);
 
-        const name = await encryptValue(transaction.name, dek);
+        const name = await safeEncrypt(transaction.name, dek);
 
-        const fees = await encryptValue(transaction.fees, dek);
+        const fees = await safeEncrypt(transaction.fees, dek);
 
-        const price = await encryptValue(transaction.price, dek);
+        const price = await safeEncrypt(transaction.price, dek);
 
-        const quantity = await encryptValue(transaction.quantity, dek);
+        const quantity = await safeEncrypt(transaction.quantity, dek);
 
-        const securityId = await encryptValue(transaction.security_id, dek);
+        const securityId = await safeEncrypt(transaction.security_id, dek);
 
-        const type = await encryptValue(transaction.type, dek);
+        const type = await safeEncrypt(transaction.type, dek);
 
-        const subtype = await encryptValue(transaction.subtype, dek);
+        const subtype = await safeEncrypt(transaction.subtype, dek);
 
         const newTransaction = new Transaction({
           accountId: account._id,
@@ -425,42 +425,42 @@ const addAccount = async (accessToken, email, uid) => {
                 )
                   return;
 
-                const encryptedAccountNumber = await encryptValue(
+                const encryptedAccountNumber = await safeEncrypt(
                   item.account_number,
                   dek,
                 );
 
-                const encryptedLastPaymentAmount = await encryptValue(
+                const encryptedLastPaymentAmount = await safeEncrypt(
                   item.last_payment_amount,
                   dek,
                 );
 
-                const encryptedLastPaymentDate = await encryptValue(
+                const encryptedLastPaymentDate = await safeEncrypt(
                   item.last_payment_date,
                   dek,
                 );
 
-                const encryptedNextPaymentDueDate = await encryptValue(
+                const encryptedNextPaymentDueDate = await safeEncrypt(
                   item.next_payment_due_date,
                   dek,
                 );
 
-                const encryptedMinimumPaymentAmount = await encryptValue(
+                const encryptedMinimumPaymentAmount = await safeEncrypt(
                   item.minimum_payment_amount,
                   dek,
                 );
 
-                const encryptedLastStatementBalance = await encryptValue(
+                const encryptedLastStatementBalance = await safeEncrypt(
                   item.last_statement_balance,
                   dek,
                 );
 
-                const encryptedLastStatementIssueDate = await encryptValue(
+                const encryptedLastStatementIssueDate = await safeEncrypt(
                   item.last_statement_issue_date,
                   dek,
                 );
 
-                const encryptedIsOverdue = await encryptValue(
+                const encryptedIsOverdue = await safeEncrypt(
                   item.is_overdue,
                   dek,
                 );
@@ -468,16 +468,16 @@ const addAccount = async (accessToken, email, uid) => {
                 const encryptedAprs = item.aprs
                   ? await Promise.all(
                       item.aprs.map(async (apr) => ({
-                        aprPercentage: await encryptValue(
+                        aprPercentage: await safeEncrypt(
                           apr.apr_percentage,
                           dek,
                         ),
-                        aprType: await encryptValue(apr.apr_type, dek),
-                        balanceSubjectToApr: await encryptValue(
+                        aprType: await safeEncrypt(apr.apr_type, dek),
+                        balanceSubjectToApr: await safeEncrypt(
                           apr.balance_subject_to_apr,
                           dek,
                         ),
-                        interestChargeAmount: await encryptValue(
+                        interestChargeAmount: await safeEncrypt(
                           apr.interest_charge_amount,
                           dek,
                         ),
@@ -485,69 +485,69 @@ const addAccount = async (accessToken, email, uid) => {
                     )
                   : undefined;
 
-                const encryptedLoanTypeDescription = await encryptValue(
+                const encryptedLoanTypeDescription = await safeEncrypt(
                   item.loan_type_description,
                   dek,
                 );
 
-                const encryptedLoanTerm = await encryptValue(
+                const encryptedLoanTerm = await safeEncrypt(
                   item.loan_term,
                   dek,
                 );
 
-                const encryptedMaturityDate = await encryptValue(
+                const encryptedMaturityDate = await safeEncrypt(
                   item.maturity_date,
                   dek,
                 );
 
-                const encryptedNextMonthlyPayment = await encryptValue(
+                const encryptedNextMonthlyPayment = await safeEncrypt(
                   item.next_monthly_payment,
                   dek,
                 );
 
-                const encryptedOriginationDate = await encryptValue(
+                const encryptedOriginationDate = await safeEncrypt(
                   item.origination_date,
                   dek,
                 );
 
-                const encryptedOriginationPrincipalAmount = await encryptValue(
+                const encryptedOriginationPrincipalAmount = await safeEncrypt(
                   item.origination_principal_amount,
                   dek,
                 );
 
-                const encryptedPastDueAmount = await encryptValue(
+                const encryptedPastDueAmount = await safeEncrypt(
                   item.past_due_amount,
                   dek,
                 );
 
-                const encryptedEscrowBalance = await encryptValue(
+                const encryptedEscrowBalance = await safeEncrypt(
                   item.escrow_balance,
                   dek,
                 );
 
-                const encryptedHasPmi = await encryptValue(item.has_pmi, dek);
+                const encryptedHasPmi = await safeEncrypt(item.has_pmi, dek);
 
-                const encryptedHasPrepaymentPenalty = await encryptValue(
+                const encryptedHasPrepaymentPenalty = await safeEncrypt(
                   item.has_prepayment_penalty,
                   dek,
                 );
                 let encryptedPropertyAddress;
                 if (item.property_address) {
                   encryptedPropertyAddress = {
-                    city: await encryptValue(item.property_address?.city, dek),
-                    country: await encryptValue(
+                    city: await safeEncrypt(item.property_address?.city, dek),
+                    country: await safeEncrypt(
                       item.property_address?.country,
                       dek,
                     ),
-                    postalCode: await encryptValue(
+                    postalCode: await safeEncrypt(
                       item.property_address?.postal_code,
                       dek,
                     ),
-                    region: await encryptValue(
+                    region: await safeEncrypt(
                       item.property_address?.region,
                       dek,
                     ),
-                    street: await encryptValue(
+                    street: await safeEncrypt(
                       item.property_address?.street,
                       dek,
                     ),
@@ -557,100 +557,100 @@ const addAccount = async (accessToken, email, uid) => {
                 let encryptedInterestRate;
                 if (item.servicer_address) {
                   const encryptedInterestRate = {
-                    percentage: await encryptValue(
+                    percentage: await safeEncrypt(
                       item.interest_rate?.percentage,
                       dek,
                     ),
-                    type: await encryptValue(item.interest_rate?.type, dek),
+                    type: await safeEncrypt(item.interest_rate?.type, dek),
                   };
                 }
 
-                const encryptedDisbursementDates = await encryptValue(
+                const encryptedDisbursementDates = await safeEncrypt(
                   item.disbursement_dates,
                   dek,
                 );
 
-                const encryptedExpectedPayoffDate = await encryptValue(
+                const encryptedExpectedPayoffDate = await safeEncrypt(
                   item.expected_payoff_date,
                   dek,
                 );
 
-                const encryptedGuarantor = await encryptValue(
+                const encryptedGuarantor = await safeEncrypt(
                   item.guarantor,
                   dek,
                 );
 
-                const encryptedInterestRatePercentage = await encryptValue(
+                const encryptedInterestRatePercentage = await safeEncrypt(
                   item.interest_rate_percentage,
                   dek,
                 );
 
-                const encryptedLoanName = await encryptValue(
+                const encryptedLoanName = await safeEncrypt(
                   item.loan_name,
                   dek,
                 );
                 let encryptedLoanStatus;
                 if (item.loan_status) {
                   encryptedLoanStatus = {
-                    endDate: await encryptValue(
+                    endDate: await safeEncrypt(
                       item.loan_status?.end_date,
                       dek,
                     ),
-                    type: await encryptValue(item.loan_status?.type, dek),
+                    type: await safeEncrypt(item.loan_status?.type, dek),
                   };
                 }
-                const encryptedOutstandingInterestAmount = await encryptValue(
+                const encryptedOutstandingInterestAmount = await safeEncrypt(
                   item.outstanding_interest_amount,
                   dek,
                 );
-                const encryptedPaymentReferenceNumber = await encryptValue(
+                const encryptedPaymentReferenceNumber = await safeEncrypt(
                   item.payment_reference_number,
                   dek,
                 );
-                const encryptedPslfStatus = await encryptValue(
+                const encryptedPslfStatus = await safeEncrypt(
                   item.pslf_status,
                   dek,
                 );
                 let encryptedRepaymentPlan;
                 if (item.repayment_plan) {
                   encryptedRepaymentPlan = {
-                    type: await encryptValue(item.repayment_plan?.type, dek),
-                    description: await encryptValue(
+                    type: await safeEncrypt(item.repayment_plan?.type, dek),
+                    description: await safeEncrypt(
                       item.repayment_plan?.description,
                       dek,
                     ),
                   };
                 }
-                const encryptedSequenceNumber = await encryptValue(
+                const encryptedSequenceNumber = await safeEncrypt(
                   item.sequence_number,
                   dek,
                 );
                 let encryptedServicerAddress;
                 if (item.servicer_address)
                   encryptedServicerAddress = {
-                    city: await encryptValue(item.servicer_address?.city, dek),
-                    country: await encryptValue(
+                    city: await safeEncrypt(item.servicer_address?.city, dek),
+                    country: await safeEncrypt(
                       item.servicer_address?.country,
                       dek,
                     ),
-                    postalCode: await encryptValue(
+                    postalCode: await safeEncrypt(
                       item.servicer_address?.postal_code,
                       dek,
                     ),
-                    region: await encryptValue(
+                    region: await safeEncrypt(
                       item.servicer_address?.region,
                       dek,
                     ),
-                    street: await encryptValue(
+                    street: await safeEncrypt(
                       item.servicer_address?.street,
                       dek,
                     ),
                   };
-                const encryptedYtdInterestPaid = await encryptValue(
+                const encryptedYtdInterestPaid = await safeEncrypt(
                   item.ytd_interest_paid,
                   dek,
                 );
-                const encryptedYtdPrincipalPaid = await encryptValue(
+                const encryptedYtdPrincipalPaid = await safeEncrypt(
                   item.ytd_principal_paid,
                   dek,
                 );
@@ -2336,7 +2336,7 @@ const generateSignedUrl = async (fileName) => {
 };
 
 const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
-  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid);
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -2407,9 +2407,9 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const transactions = [];
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await decryptValue(transaction.amount, dek);
+    const decryptedAmount = await safeDecrypt(transaction.amount, dek);
 
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecrypt(
       transaction.accountType,
       dek,
     );
@@ -2736,20 +2736,21 @@ const getCashFlowsWeekly = async (profile, uid) => {
   let plaidAccounts = [];
 
   const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid);
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await decryptValue(
+    const decryptedCurrentBalance = await safeDecrypt(
       plaidAccount.currentBalance,
       dek,
     );
-    const decryptedAvailableBalance = await decryptValue(
+    const decryptedAvailableBalance = await safeDecrypt(
       plaidAccount.availableBalance,
       dek,
     );
-    const decryptedAccountType = await decryptValue(
+    const decryptedAccountType = await safeDecrypt(
       plaidAccount.account_type,
       dek,
     );
-    const decryptedAccountSubtype = await decryptValue(
+    const decryptedAccountSubtype = await safeDecrypt(
       plaidAccount.account_subtype,
       dek,
     );

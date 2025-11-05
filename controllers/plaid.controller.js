@@ -1,9 +1,10 @@
+import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 import plaidService from "../services/plaid.service.js";
 import permissionsService from "../services/permissions.service.js";
 import upgradeResponseService from "../services/upgradeResponse.service.js";
 import User from "../database/models/User.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
-import { decryptValue, getUserDek } from "../database/encryption.js";
+import { getUserDek } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
 const createLinkToken = async (req, res) => {
@@ -408,21 +409,22 @@ const getConnectedInstitutions = async (req, res) => {
     }
 
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid);
 
     const institutionsMap = new Map();
 
     for (const account of accounts) {
       const institutionId = account.institution_id;
 
-      const decryptedAccountName = await decryptValue(
+      const decryptedAccountName = await safeDecrypt(
         account.account_name,
         dek,
       );
-      const decryptedAccountType = await decryptValue(
+      const decryptedAccountType = await safeDecrypt(
         account.account_type,
         dek,
       );
-      const decryptedInstitutionName = await decryptValue(
+      const decryptedInstitutionName = await safeDecrypt(
         account.institution_name,
         dek,
       );
@@ -496,16 +498,17 @@ const getUpfrontInstitutionStatus = async (req, res) => {
 
     if (accounts.length > 0) {
       const dek = await getUserDek(uid);
+      const safeDecrypt = createSafeDecrypt(uid);
       const institutionsMap = new Map();
 
       for (const account of accounts) {
         const institutionId = account.institution_id;
 
-        const decryptedInstitutionName = await decryptValue(
+        const decryptedInstitutionName = await safeDecrypt(
           account.institution_name,
           dek,
         );
-        const decryptedAccessToken = await decryptValue(
+        const decryptedAccessToken = await safeDecrypt(
           account.accessToken,
           dek,
         );

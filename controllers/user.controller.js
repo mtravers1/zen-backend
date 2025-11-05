@@ -1,3 +1,4 @@
+import { createSafeEncrypt } from "../lib/encryptionHelper.js";
 import User from "../database/models/User.js";
 import {
   decryptValue,
@@ -36,7 +37,7 @@ const listUsers = async (req, res) => {
               `[USER CONTROLLER] Error decrypting email for user ${user._id}:`,
               error.message,
             );
-            email = user.email[0].email; // Show encrypted if decryption fails
+            email = "Error decrypting email"; // Show error message if decryption fails
           }
         }
 
@@ -54,8 +55,8 @@ const listUsers = async (req, res) => {
               `[USER CONTROLLER] Error decrypting name for user ${user._id}:`,
               error.message,
             );
-            firstName = user.name.firstName;
-            lastName = user.name.lastName || "";
+            firstName = "Error decrypting name";
+            lastName = "";
           }
         }
 
@@ -275,24 +276,25 @@ const updateUserInfo = async (req, res) => {
 
     // Get DEK for encryption
     const dek = await getUserDek(user.authUid);
+    const safeEncrypt = createSafeEncrypt(user.authUid);
 
     // Build update object with encrypted values
     const updateData = {};
 
     if (firstName !== undefined) {
-      updateData["name.firstName"] = await encryptValue(firstName, dek);
+      updateData["name.firstName"] = await safeEncrypt(firstName, dek);
     }
     if (lastName !== undefined) {
-      updateData["name.lastName"] = await encryptValue(lastName, dek);
+      updateData["name.lastName"] = await safeEncrypt(lastName, dek);
     }
     if (middleName !== undefined) {
-      updateData["name.middleName"] = await encryptValue(middleName, dek);
+      updateData["name.middleName"] = await safeEncrypt(middleName, dek);
     }
     if (prefix !== undefined) {
-      updateData["name.prefix"] = await encryptValue(prefix, dek);
+      updateData["name.prefix"] = await safeEncrypt(prefix, dek);
     }
     if (suffix !== undefined) {
-      updateData["name.suffix"] = await encryptValue(suffix, dek);
+      updateData["name.suffix"] = await safeEncrypt(suffix, dek);
     }
     if (photoUrl !== undefined) {
       updateData.photoUrl = photoUrl; // photoUrl is not encrypted
