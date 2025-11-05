@@ -1,14 +1,13 @@
-import fs from "fs";
+import fs from 'fs';
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
 import crypto from "crypto";
 
 class DecryptionError extends Error {
-  constructor(message, errorCode) {
+  constructor(message) {
     super(message);
-    this.name = "DecryptionError";
-    this.errorCode = errorCode;
+    this.name = 'DecryptionError';
   }
 }
 
@@ -31,93 +30,62 @@ for (const envVar of requiredEnvVars) {
 
 let kmsClient, storage;
 
-const MOCK_DEK = crypto.randomBytes(32);
+// Initialize Storage client
+let storageCredentials = null; // Initialize to null
+const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
+let loadedFromEnv = false;
 
-if (process.env.NODE_ENV === "test") {
+if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== '') {
+  try {
+    storageCredentials = JSON.parse(Buffer.from(storageServiceAccountB64, 'base64').toString('utf-8'));
+    console.log("✅ Storage credentials loaded from environment variable.");
+    loadedFromEnv = true;
+  } catch (error) {
+    console.warn("⚠️ WARNING: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Attempting fallback for test environment.");
+    // Do not throw here, allow fallback
+  }
+}
+
+if (!loadedFromEnv && process.env.NODE_ENV === 'test') {
+  try {
+    storageCredentials = JSON.parse(fs.readFileSync('./storage_service_account.json', 'utf-8'));
+    console.log("✅ Storage credentials loaded from storage_service_account.json file for test environment.");
+  } catch (error) {
+    console.error("❌ CRITICAL: Failed to load storage_service_account.json for test environment. Ensure the file exists and is valid JSON.");
+    throw error;
+  }
+}
+
+if (!storageCredentials) {
+  throw new Error("❌ CRITICAL: Storage credentials could not be loaded. Ensure STORAGE_SERVICE_ACCOUNT environment variable is set and valid, or storage_service_account.json exists in test environment.");
+}
+
+storage = new Storage({
+  credentials: storageCredentials,
+  projectId: process.env.GCP_PROJECT_ID,
+});
+console.log("✅ Storage client initialized");
+
+if (process.env.KMS_BYPASS === 'true') {
+  console.warn('⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.');
   kmsClient = {
     encrypt: async ({ plaintext }) => {
+      console.log('KMS mock: encrypt (passthrough)');
       return [{ ciphertext: plaintext }];
     },
     decrypt: async ({ ciphertext }) => {
+      console.log('KMS mock: decrypt (passthrough)');
       return [{ plaintext: ciphertext }];
     },
-    cryptoKeyPath: () => "dummy-path",
+    cryptoKeyPath: () => 'dummy-kms-path',
   };
-  storage = {
-    bucket: (bucketName) => ({
-      name: bucketName, // Add name property for logging
-      file: (filePath) => ({
-        name: filePath, // Add name property for logging
-        save: async () => {},
-        download: async () => [MOCK_DEK],
-        exists: async () => [true],
-        copy: async () => {},
-        move: async () => {},
-      }),
-      getFiles: async () => [
-        [{ name: "test-file", download: async () => [MOCK_DEK] }],
-      ],
-      exists: async () => [true],
-    }),
-  };
+  console.log('✅ KMS client mocked (passthrough)');
 } else {
-  // Initialize Storage client
-  let storageCredentials = null; // Initialize to null
-  const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
-  let loadedFromEnv = false;
-
-  if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== '') {
-    try {
-      storageCredentials = JSON.parse(Buffer.from(storageServiceAccountB64, 'base64').toString('utf-8'));
-      console.log("✅ Storage credentials loaded from environment variable.");
-      loadedFromEnv = true;
-    } catch (error) {
-      console.warn("⚠️ WARNING: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Attempting fallback for test environment.");
-      // Do not throw here, allow fallback
-    }
-  }
-
-  if (!loadedFromEnv && process.env.NODE_ENV === 'test') {
-    try {
-      storageCredentials = JSON.parse(fs.readFileSync('./storage_service_account.json', 'utf-8'));
-      console.log("✅ Storage credentials loaded from storage_service_account.json file for test environment.");
-    } catch (error) {
-      console.error("❌ CRITICAL: Failed to load storage_service_account.json for test environment. Ensure the file exists and is valid JSON.");
-      throw error;
-    }
-  }
-
-  if (!storageCredentials) {
-    throw new Error("❌ CRITICAL: Storage credentials could not be loaded. Ensure STORAGE_SERVICE_ACCOUNT environment variable is set and valid, or storage_service_account.json exists in test environment.");
-  }
-
-  storage = new Storage({
-    credentials: storageCredentials,
+  kmsClient = new KeyManagementServiceClient({
+    credentials: storageCredentials, // KMS uses the same credentials as Storage
     projectId: process.env.GCP_PROJECT_ID,
   });
-  console.log("✅ Storage client initialized");
-
-  if (process.env.KMS_BYPASS === 'true') {
-    console.warn('⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.');
-    kmsClient = {
-      encrypt: async ({ plaintext }) => {
-        console.log('KMS mock: encrypt (passthrough)');
-        return [{ ciphertext: plaintext }];
-      },
-      decrypt: async ({ ciphertext }) => {
-        console.log('KMS mock: decrypt (passthrough)');
-        return [{ plaintext: ciphertext }];
-      },
-      cryptoKeyPath: () => 'dummy-kms-path',
-    };
-    console.log('✅ KMS client mocked (passthrough)');
-  } else {
-    kmsClient = new KeyManagementServiceClient({
-      credentials: storageCredentials, // KMS uses the same credentials as Storage
-      projectId: process.env.GCP_PROJECT_ID,
-    });
-    console.log('✅ KMS client initialized');
-  }
+  console.log('✅ KMS client initialized');
 }
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
@@ -149,7 +117,7 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
   process.env.GCP_PROJECT_ID,
   process.env.GCP_KEY_LOCATION,
   process.env.GCP_KEY_RING,
-  process.env.GCP_KEY_NAME,
+  process.env.GCP_KEY_NAME
 );
 
 // DEK cache in memory
@@ -161,8 +129,9 @@ import User from "./models/User.js";
 
 async function generateAndStoreEncryptedDEK(
   bucketKey,
-    forceRegenerate = false,
-    targetBucket = null // Allow specifying target bucket for migration) {
+  forceRegenerate = false,
+  targetBucket = null // Allow specifying target bucket for migration
+) {
   // Check for regeneration safeguard
   if (process.env.ALLOW_DEK_REGENERATION !== 'true' && !forceRegenerate) {
     const errorMessage = `CRITICAL: DEK regeneration attempted for user ${bucketKey} but ALLOW_DEK_REGENERATION is not 'true'. Aborting to prevent data loss.`;
@@ -229,9 +198,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
     return [];
   }
 
-  console.log(
-    `✅ ${files.length} DEK file(s) found, downloading and decrypting...`,
-  );
+  console.log(`✅ ${files.length} DEK file(s) found, downloading and decrypting...`);
 
   const deks = [];
   for (const file of files) {
@@ -253,7 +220,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
         console.warn(`⚠️ DEK decryption failed for file: ${file.name}`);
         console.warn(`⚠️ Error: ${decryptError.message}`);
         console.warn(
-          `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`,
+          `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`
         );
 
         // Move failing DEK to dead-letter queue
@@ -298,9 +265,7 @@ async function getUserDek(firebaseUid) {
     if (dekCache.has(bucketKey)) {
       const cachedDeks = dekCache.get(bucketKey);
       if (Array.isArray(cachedDeks) && cachedDeks.length > 0) {
-        console.log(
-          `✅ DEK(s) retrieved from cache for bucket key: ${bucketKey}`,
-        );
+        console.log(`✅ DEK(s) retrieved from cache for bucket key: ${bucketKey}`);
         return cachedDeks;
       }
       dekCache.delete(bucketKey);
@@ -421,7 +386,7 @@ async function decryptValue(cipherTextBase64, deks) {
       return JSON.parse(decrypted);
     } catch (e) {
       console.warn(
-        `⚠️ Decryption failed with one of the keys. Trying next key...`,
+        `⚠️ Decryption failed with one of the keys. Trying next key...`
       );
     }
   }
@@ -431,10 +396,10 @@ async function decryptValue(cipherTextBase64, deks) {
       typeof cipherTextBase64 === "string"
         ? cipherTextBase64.substring(0, 50)
         : cipherTextBase64
-    }...`,
+    }...`
   );
   console.error(`❌ All decryption attempts failed.`);
-  throw new DecryptionError("All decryption attempts failed.", "ALL_DEK_FAILED");
+  return cipherTextBase64; // Return original value if decryption fails
 }
 
 function hashEmail(email) {
@@ -481,7 +446,7 @@ async function copyDEKToNewBucketKey(sourceKey, sourceBucket, targetBucket, targ
     } catch (copyError) {
       // Fallback strategy: download then save, to avoid transient SDK copy issues (e.g., Parse Error)
       console.error(
-        `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`,
+        `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`
       );
       try {
         const [encryptedDEK] = await sourceFile.download();
@@ -537,7 +502,7 @@ async function backupExistingDEK(bucketKey, currentBucket) {
       );
     } catch (copyError) {
       console.warn(
-        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`,
+        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`
       );
       try {
         const [encryptedDEK] = await originalFile.download();
@@ -548,20 +513,20 @@ async function backupExistingDEK(bucketKey, currentBucket) {
       } catch (fallbackError) {
         console.error(
           `❌ Fallback backup (download+save) failed for bucket key ${bucketKey}:`,
-          fallbackError,
+          fallbackError
         );
         throw new Error(
-          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`,
+          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`
         );
       }
     }
   } catch (error) {
     console.error(
       `❌ Error creating DEK backup for bucket key ${bucketKey}:`,
-      error,
+      error
     );
     throw new Error(
-      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`,
+      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`
     );
   }
 }
@@ -587,7 +552,7 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
     // Sort by creation time (newest first) and try each backup
     files.sort(
       (a, b) =>
-        new Date(b.metadata.timeCreated) - new Date(a.metadata.timeCreated),
+        new Date(b.metadata.timeCreated) - new Date(a.metadata.timeCreated)
     );
 
     for (const backupFile of files) {
@@ -605,7 +570,7 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
         const dek = Buffer.from(plaintext);
 
         console.log(
-          `✅ Successfully recovered DEK from backup: ${backupFile.name}`,
+          `✅ Successfully recovered DEK from backup: ${backupFile.name}`
         );
 
         // Restore the recovered DEK as the current DEK
@@ -619,7 +584,7 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
       } catch (error) {
         console.error(
           `❌ Failed to recover from backup ${backupFile.name}:`,
-          error,
+          error
         );
         continue;
       }
@@ -632,7 +597,7 @@ async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
   } catch (error) {
     console.error(
       `❌ Error during DEK recovery for bucket key ${bucketKey}:`,
-      error,
+      error
     );
     return null;
   }
@@ -683,7 +648,7 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
     return [newDek];
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`,
+      `❌ Error getting DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`
     );
     throw e;
   }
@@ -698,9 +663,7 @@ async function moveDEKToDeadLetterQueue(file, bucket) {
     await file.move(deadLetterFile);
     console.log(`Moved failing DEK to dead-letter queue: ${deadLetterPath}`);
   } catch (error) {
-    console.error(
-      `Failed to move failing DEK to dead-letter queue: ${error.message}`,
-    );
+    console.error(`Failed to move failing DEK to dead-letter queue: ${error.message}`);
   }
 }
 
