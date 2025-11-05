@@ -62,5 +62,13 @@ export default {
   resolve: {
     extensions: [".js", ".mjs"],
   },
+  module: {
+    rules: [
+      {
+        test: /\.node$/,
+        loader: "node-loader",
+      },
+    ],
+  },
   // externals: nodeModules,
 };
