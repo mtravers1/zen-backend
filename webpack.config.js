@@ -4,14 +4,12 @@ import fs from "fs";
 import TerserPlugin from "terser-webpack-plugin";
 import CopyWebpackPlugin from "copy-webpack-plugin";
 
-/*
 let nodeModules = {};
 fs.readdirSync("node_modules")
   .filter((x) => x !== ".bin")
   .forEach((mod) => {
     nodeModules[mod] = "commonjs " + mod;
   });
-*/
 
 export default {
   entry: "./bin/www",
@@ -39,7 +37,7 @@ export default {
       patterns: [
         { from: "lib/mailer/templates/", to: "./lib/mailer/templates/", noErrorOnMissing: true },
         { from: "ecosystem.config.js", to: "./ecosystem.config.js" },
-
+        { from: "package.json", to: "." },
         { from: ".env.sample", to: ".", noErrorOnMissing: true },
         { from: "scripts/", to: "./scripts/", noErrorOnMissing: true },
         { from: "config/", to: "./config/", noErrorOnMissing: true },
@@ -49,7 +47,6 @@ export default {
         { from: "routes/", to: "./routes/", noErrorOnMissing: true },
         { from: "controllers/", to: "./controllers/", noErrorOnMissing: true },
         { from: "services/", to: "./services/", noErrorOnMissing: true },
-        { from: "utils/", to: "./utils/", noErrorOnMissing: true },
         { from: "lib/", to: "./lib/", noErrorOnMissing: true },
         { from: "bin/", to: "./bin/", noErrorOnMissing: true },
         { from: "app.js", to: "." },
@@ -62,13 +59,5 @@ export default {
   resolve: {
     extensions: [".js", ".mjs"],
   },
-  module: {
-    rules: [
-      {
-        test: /\.node$/,
-        loader: "node-loader",
-      },
-    ],
-  },
-  // externals: nodeModules,
+  externals: nodeModules,
 };

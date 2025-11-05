@@ -54,7 +54,7 @@ jobs:
           sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_DEV }}|g" .env
           sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_DEV }}|g" .env
           sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_DEV }}|g" .env
-          sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=development|g" .env
+          sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ secrets.GCP_PROJECT_ID }}|g" .env
           sed -i -e "s|GCP_EMAIL\=.*|GCP_EMAIL\=${{ secrets.GCP_EMAIL }}|g" .env
           sed -i -e "s|GCP_PRIVATE_KEY\=.*|GCP_PRIVATE_KEY\=\"${{ secrets.GCP_PRIVATE_KEY }}\"|g" .env
