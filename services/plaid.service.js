@@ -242,6 +242,10 @@ const getUserAccessTokens = async (email, uid) => {
       field: "accessToken",
     });
 
+    if (!decryptedAccessToken) {
+      throw new Error(`Failed to decrypt access token for item ID: ${token.itemId}`);
+    }
+
     decryptedTokens.push({
       ...token.toObject(),
       accessToken: decryptedAccessToken,
@@ -422,10 +426,14 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     item_id: itemId,
     field: "accessToken",
   });
+
+  if (!decryptedToken) {
+    throw new Error(`Failed to decrypt access token for item ID: ${itemId}`);
+  }
   return decryptedToken;
 };
 
-const updateAccountBalances = async (dek, accessToken, accounts) => {
+const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
   let newAccountsBalances;
 
   try {
@@ -554,9 +562,7 @@ const updateTransactions = async (item) => {
   const email = emailObject?.email;
 
   const dek = await getUserDek(uid);
-  const safeEncrypt = createSafeEncrypt(uid);
-
-  await updateAccountBalances(dek, accessToken, accounts);
+  await updateAccountBalances(dek, accessToken, accounts, uid);
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
@@ -801,7 +807,7 @@ const updateInvestmentTransactions = async (item) => {
 
       const dek = await getUserDek(uid);
       const safeEncrypt = createSafeEncrypt(uid);
-      await updateAccountBalances(dek, accessToken, accounts);
+      await updateAccountBalances(dek, accessToken, accounts, uid);
       let offset = 0;
       let hasMore = true;
       const plaidAccountIds = accounts.map(
@@ -1124,6 +1130,10 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
       institution_id: institutionId,
       field: "accessToken",
     });
+
+    if (!decryptedAccessToken) {
+      throw new Error(`Failed to decrypt access token for institution ID: ${institutionId}`);
+    }
 
     return { access_token: decryptedAccessToken };
   } catch (error) {
