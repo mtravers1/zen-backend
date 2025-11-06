@@ -13,17 +13,15 @@ class DecryptionError extends Error {
 }
 
 // Validate required environment variables
-const requiredEnvVars = ["STORAGE_SERVICE_ACCOUNT", "GCP_PROJECT_ID", "HASH_SALT"];
-
-// Only require KMS variables if KMS is not bypassed
-if (process.env.KMS_BYPASS !== "true") {
-  requiredEnvVars.push(
-    "KMS_SERVICE_ACCOUNT",
-    "GCP_KEY_LOCATION",
-    "GCP_KEY_RING",
-    "GCP_KEY_NAME",
-  );
-}
+const requiredEnvVars = [
+  "STORAGE_SERVICE_ACCOUNT",
+  "GCP_PROJECT_ID",
+  "HASH_SALT",
+  "KMS_SERVICE_ACCOUNT",
+  "GCP_KEY_LOCATION",
+  "GCP_KEY_RING",
+  "GCP_KEY_NAME",
+];
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
