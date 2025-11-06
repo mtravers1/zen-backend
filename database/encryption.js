@@ -69,8 +69,25 @@ storage = new Storage({
 });
 console.log("✅ Storage client initialized");
 
+// Initialize KMS client
+let kmsCredentials = null;
+const kmsServiceAccountB64 = process.env.KMS_SERVICE_ACCOUNT;
+
+if (kmsServiceAccountB64 && kmsServiceAccountB64.trim() !== "") {
+  try {
+    kmsCredentials = JSON.parse(
+      Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
+    );
+    console.log("✅ KMS credentials loaded from environment variable.");
+  } catch (error) {
+    throw new Error(
+      "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
+    );
+  }
+}
+
 kmsClient = new KeyManagementServiceClient({
-  credentials: storageCredentials, // KMS uses the same credentials as Storage
+  credentials: kmsCredentials,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
