@@ -163,7 +163,6 @@ app.use((req, res, next) => {
     "/api/subscriptions/plans",
     "/api/ai/ping",
     "/api/security/clear-dev-blacklist",
-    "/api/payments/mock-upgrade",
   ];
 
   // Block known attack patterns immediately
@@ -188,7 +187,8 @@ app.use((req, res, next) => {
   const shouldExclude =
     excludedPaths.includes(req.path) ||
     req.path.startsWith("/api/account/photo/") ||
-    (process.env.NODE_ENV === "development" && req.path.startsWith("/dev"));
+    (process.env.NODE_ENV === "development" && req.path.startsWith("/dev")) ||
+    ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && req.path === "/api/payments/mock-upgrade");
 
   if (shouldExclude) {
     // Skip authentication for excluded paths
