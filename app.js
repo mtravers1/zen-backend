@@ -163,6 +163,7 @@ app.use((req, res, next) => {
     "/api/subscriptions/plans",
     "/api/ai/ping",
     "/api/security/clear-dev-blacklist",
+    "/api/payments/mock-upgrade",
   ];
 
   // Block known attack patterns immediately
