@@ -13,7 +13,7 @@ class DecryptionError extends Error {
 }
 
 // Validate required environment variables
-const requiredEnvVars = ["STORAGE_SERVICE_ACCOUNT", "GCP_PROJECT_ID"];
+const requiredEnvVars = ["STORAGE_SERVICE_ACCOUNT", "GCP_PROJECT_ID", "HASH_SALT"];
 
 // Only require KMS variables if KMS is not bypassed
 if (process.env.KMS_BYPASS !== "true") {
@@ -27,8 +27,8 @@ if (process.env.KMS_BYPASS !== "true") {
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    console.warn(
-      `⚠️ WARNING: Environment variable ${envVar} is not set. This may cause issues.`,
+    throw new Error(
+      `❌ CRITICAL: Environment variable ${envVar} is not set. This is a required environment variable.`,
     );
   }
 }
@@ -46,29 +46,15 @@ if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== "") {
       Buffer.from(storageServiceAccountB64, "base64").toString("utf-8"),
     );
     console.log("✅ Storage credentials loaded from environment variable.");
-    loadedFromEnv = true;
   } catch (error) {
-    console.warn(
-      "⚠️ WARNING: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Attempting fallback for test environment.",
+    throw new Error(
+      "❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
     );
-    // Do not throw here, allow fallback
   }
-}
-
-if (!loadedFromEnv && process.env.NODE_ENV === "test") {
-  try {
-    storageCredentials = JSON.parse(
-      fs.readFileSync("./storage_service_account.json", "utf-8"),
-    );
-    console.log(
-      "✅ Storage credentials loaded from storage_service_account.json file for test environment.",
-    );
-  } catch (error) {
-    console.error(
-      "❌ CRITICAL: Failed to load storage_service_account.json for test environment. Ensure the file exists and is valid JSON.",
-    );
-    throw error;
-  }
+} else {
+  throw new Error(
+    "❌ CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set or is empty.",
+  );
 }
 
 if (!storageCredentials) {
@@ -83,41 +69,22 @@ storage = new Storage({
 });
 console.log("✅ Storage client initialized");
 
-if (process.env.KMS_BYPASS === "true") {
-  console.warn(
-    "⚠️ WARNING: Google Cloud KMS is bypassed. DEKs will be stored unencrypted.",
-  );
-  kmsClient = {
-    encrypt: async ({ plaintext }) => {
-      console.log("KMS mock: encrypt (passthrough)");
-      return [{ ciphertext: plaintext }];
-    },
-    decrypt: async ({ ciphertext }) => {
-      console.log("KMS mock: decrypt (passthrough)");
-      return [{ plaintext: ciphertext }];
-    },
-    cryptoKeyPath: () => "dummy-kms-path",
-  };
-  console.log("✅ KMS client mocked (passthrough)");
-} else {
-  kmsClient = new KeyManagementServiceClient({
-    credentials: storageCredentials, // KMS uses the same credentials as Storage
-    projectId: process.env.GCP_PROJECT_ID,
-  });
-  console.log("✅ KMS client initialized");
-}
+kmsClient = new KeyManagementServiceClient({
+  credentials: storageCredentials, // KMS uses the same credentials as Storage
+  projectId: process.env.GCP_PROJECT_ID,
+});
+console.log("✅ KMS client initialized");
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
-const LEGACY_GCS_BUCKET_NAME =
-  process.env.LEGACY_GCS_BUCKET_NAME || "zentavos-bucket"; // Fallback to hardcoded if not set
+const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
+if (!LEGACY_GCS_BUCKET_NAME) {
+  throw new Error("❌ CRITICAL: LEGACY_GCS_BUCKET_NAME environment variable is not set.");
+}
 
 async function getBucket(bucketName) {
   const targetBucketName = bucketName || GCS_BUCKET_NAME;
   if (!targetBucketName) {
-    console.warn(
-      "⚠️ CRITICAL: GCS_BUCKET_NAME environment variable is not set. Using legacy bucket.",
-    );
-    return storage.bucket(LEGACY_GCS_BUCKET_NAME);
+    throw new Error("❌ CRITICAL: GCS_BUCKET_NAME environment variable is not set.");
   }
 
   try {
@@ -126,16 +93,14 @@ async function getBucket(bucketName) {
     if (exists) {
       return bucket;
     } else {
-      console.warn(
-        `⚠️ GCS bucket "${targetBucketName}" does not exist or is not accessible. Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}".`,
+      throw new Error(
+        `❌ CRITICAL: GCS bucket "${targetBucketName}" does not exist or is not accessible.`,
       );
-      return storage.bucket(LEGACY_GCS_BUCKET_NAME);
     }
   } catch (error) {
-    console.warn(
-      `⚠️ Failed to check for GCS bucket "${targetBucketName}". Falling back to legacy bucket "${LEGACY_GCS_BUCKET_NAME}". Error: ${error.message}`,
+    throw new Error(
+      `❌ CRITICAL: Failed to access GCS bucket "${targetBucketName}". Error: ${error.message}`,
     );
-    return storage.bucket(LEGACY_GCS_BUCKET_NAME);
   }
 }
 
@@ -148,31 +113,16 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
 
 // DEK cache in memory
 const dekCache = new LimitedMap(1000);
-const DEK_VERSIONS = new Map();
 
 // Import User model for data checking
 import User from "./models/User.js";
 
 async function generateAndStoreEncryptedDEK(
   bucketKey,
-  forceRegenerate = false,
   targetBucket = null, // Allow specifying target bucket for migration
 ) {
-  // Check for regeneration safeguard
-  if (process.env.ALLOW_DEK_REGENERATION !== "true" && !forceRegenerate) {
-    const errorMessage = `CRITICAL: DEK regeneration attempted for user ${bucketKey} but ALLOW_DEK_REGENERATION is not 'true'. Aborting to prevent data loss.`;
-    console.error(`❌ ${errorMessage}`);
-    throw new Error(errorMessage);
-  }
-
-  // If force regenerate, create backup of old DEK first
-  if (forceRegenerate) {
-    await backupExistingDEK(bucketKey, targetBucket);
-  }
-
   console.log(`✨ Generating new DEK for bucket key: ${bucketKey}`);
   const dek = crypto.randomBytes(32);
-  const version = Date.now();
 
   try {
     const [encryptResponse] = await kmsClient.encrypt({
@@ -181,7 +131,7 @@ async function generateAndStoreEncryptedDEK(
     });
 
     const encryptedDEK = encryptResponse.ciphertext;
-    const filePath = `keys/${bucketKey}_v${version}.key`;
+    const filePath = `keys/${bucketKey}.key`;
     const bucket = targetBucket || (await getBucket());
     const file = bucket.file(filePath);
 
@@ -202,13 +152,7 @@ async function generateAndStoreEncryptedDEK(
   }
 
   // Cache the DEK
-  const dekDetails = { dek, version, createdAt: new Date() };
-  dekCache.set(bucketKey, dekDetails);
-
-  // Store versions in DEK_VERSIONS map
-  const versions = DEK_VERSIONS.get(bucketKey) || [];
-  versions.push(version);
-  DEK_VERSIONS.set(bucketKey, versions);
+  dekCache.set(bucketKey, [dek]);
 
   return dek;
 }
@@ -275,7 +219,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
  * 3. Search for DEK in the primary GCS bucket using the user's database ID.
  * 4. If not found, search in the legacy GCS bucket.
  * 5. If found in legacy, migrate the DEK to the primary bucket.
- * 6. If not found anywhere, regenerate the DEK (with safeguard).
+ * 6. If not found anywhere, throw a critical error.
  */
 async function getUserDek(firebaseUid) {
   let user;
@@ -351,29 +295,19 @@ async function getUserDek(firebaseUid) {
           deks = legacyFirebaseUidDeks;
           dekCache.set(bucketKey, deks);
         } else {
-          // Step 6: If not found anywhere, regenerate the DEK
-          console.warn(
-            `⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`,
-          );
-          const newDek = await generateAndStoreEncryptedDEK(
-            bucketKey,
-            false,
-            currentBucket,
-          );
-          deks = [newDek];
+          // Step 6: If not found anywhere, throw an error
+          const errorMessage = `CRITICAL: No DEK found for user ${user._id} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
+          console.error(`❌ ${errorMessage}`);
+          // We can add an alert here, e.g., by sending a notification to a monitoring service
+          throw new Error(errorMessage);
         }
       }
     } else if (deks.length === 0) {
-      // Step 6: If not found anywhere, regenerate the DEK
-      console.warn(
-        `⚠️ [Step 6] No valid DEK found anywhere. Attempting regeneration...`,
-      );
-      const newDek = await generateAndStoreEncryptedDEK(
-        bucketKey,
-        false,
-        currentBucket,
-      );
-      deks = [newDek];
+      // Step 6: If not found anywhere, throw an error
+      const errorMessage = `CRITICAL: No DEK found for user ${user._id} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
+      console.error(`❌ ${errorMessage}`);
+      // We can add an alert here, e.g., by sending a notification to a monitoring service
+      throw new Error(errorMessage);
     } else {
       console.log(`✅ [Step 3] DEK found in primary bucket.`);
       dekCache.set(bucketKey, deks);
@@ -557,140 +491,7 @@ async function copyDEKToNewBucketKey(
   }
 }
 
-/**
- * Create backup of existing DEK before regenerating
- */
-async function backupExistingDEK(bucketKey, currentBucket) {
-  try {
-    console.log(
-      `💾 Creating backup of existing DEK for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-    );
 
-    const originalFile = currentBucket.file(`keys/${bucketKey}.key`);
-
-    if (!(await originalFile.exists())[0]) {
-      console.log(
-        `ℹ️ No existing DEK to backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-      );
-      return;
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupFile = currentBucket.file(
-      `keys/backups/${bucketKey}_${timestamp}.key`,
-    );
-
-    try {
-      await originalFile.copy(backupFile);
-      console.log(
-        `✅ DEK backup created for bucket key ${bucketKey}: ${backupFile.name}`,
-      );
-    } catch (copyError) {
-      console.warn(
-        `⚠️ Direct copy for backup failed (${copyError?.message}). Falling back to download+save...`,
-      );
-      try {
-        const [encryptedDEK] = await originalFile.download();
-        await backupFile.save(encryptedDEK, { resumable: false });
-        console.log(
-          `✅ DEK backup created via download+save for bucket key ${bucketKey}: ${backupFile.name}`,
-        );
-      } catch (fallbackError) {
-        console.error(
-          `❌ Fallback backup (download+save) failed for bucket key ${bucketKey}:`,
-          fallbackError,
-        );
-        throw new Error(
-          `Failed to create DEK backup for bucket key ${bucketKey}: ${fallbackError.message}`,
-        );
-      }
-    }
-  } catch (error) {
-    console.error(
-      `❌ Error creating DEK backup for bucket key ${bucketKey}:`,
-      error,
-    );
-    throw new Error(
-      `Failed to create DEK backup for bucket key ${bucketKey}: ${error.message}`,
-    );
-  }
-}
-
-/**
- * Try to recover DEK from backup files
- */
-async function tryRecoverDEKFromBackup(bucketKey, currentBucket) {
-  try {
-    console.log(
-      `🔄 Attempting DEK recovery from backup for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-    );
-
-    const [files] = await currentBucket.getFiles({
-      prefix: `keys/backups/${bucketKey}_`,
-    });
-
-    if (files.length === 0) {
-      console.log(
-        `❌ No backup DEK files found for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-      );
-      return null;
-    }
-
-    // Sort by creation time (newest first) and try each backup
-    files.sort(
-      (a, b) =>
-        new Date(b.metadata.timeCreated) - new Date(a.metadata.timeCreated),
-    );
-
-    for (const backupFile of files) {
-      try {
-        console.log(`🔄 Trying backup file: ${backupFile.name}`);
-
-        const [encryptedDEK] = await backupFile.download();
-
-        const [decryptResponse] = await kmsClient.decrypt({
-          name: KEY_PATH,
-          ciphertext: encryptedDEK,
-        });
-
-        const { plaintext } = decryptResponse;
-        const dek = Buffer.from(plaintext);
-
-        console.log(
-          `✅ Successfully recovered DEK from backup: ${backupFile.name}`,
-        );
-
-        // Restore the recovered DEK as the current DEK
-        const currentFile = currentBucket.file(`keys/${bucketKey}.key`);
-
-        await currentFile.save(encryptedDEK);
-        dekCache.set(bucketKey, dek);
-
-        console.log(
-          `✅ DEK restored for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-        );
-        return dek;
-      } catch (error) {
-        console.error(
-          `❌ Failed to recover from backup ${backupFile.name}:`,
-          error,
-        );
-        continue;
-      }
-    }
-
-    console.error(
-      `❌ All backup recovery attempts failed for bucket key: ${bucketKey} in bucket ${currentBucket.name}`,
-    );
-    return null;
-  } catch (error) {
-    console.error(
-      `❌ Error during DEK recovery for bucket key ${bucketKey}:`,
-      error,
-    );
-    return null;
-  }
-}
 
 /**
  * Special function for signup flow - handles DEK creation/migration for new users
@@ -745,7 +546,6 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
     // No existing DEK found anywhere - create new one (with safeguard)
     const newDek = await generateAndStoreEncryptedDEK(
       bucketKey,
-      false,
       currentBucket,
     );
     return [newDek];
@@ -780,8 +580,6 @@ export {
   hashEmail,
   hashValue,
   copyDEKToNewBucketKey,
-  backupExistingDEK,
-  tryRecoverDEKFromBackup,
   moveDEKToDeadLetterQueue,
   DecryptionError,
 };
