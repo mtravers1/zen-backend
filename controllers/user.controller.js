@@ -262,6 +262,14 @@ const updateUserInfo = async (req, res) => {
     req.body;
 
   try {
+    // Authorization check
+    if (req.user.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden",
+      });
+    }
+
     console.log("[USER CONTROLLER] Updating user info for:", userId);
 
     const user = await User.findById(userId);

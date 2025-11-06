@@ -179,7 +179,18 @@ async function firebaseAuthentication(req, res, next) {
         },
       );
 
-      req.user = decodedToken;
+      const user = await User.findOne({ authUid: decodedToken.uid }).lean();
+      if (!user) {
+        console.error(
+          `[FIREBASE AUTH ${requestId}] ❌ User not found in database for authUid: ${decodedToken.uid}`,
+        );
+        return res.status(401).send("Unauthorized");
+      }
+
+      req.user = {
+        ...decodedToken,
+        userId: user._id.toString(),
+      };
       req.requestId = requestId; // Add request ID for tracking
 
       console.log(
@@ -187,6 +198,7 @@ async function firebaseAuthentication(req, res, next) {
         {
           uid: req.user.uid,
           email: req.user.email,
+          userId: req.user.userId,
           userKeys: Object.keys(req.user),
           hasUid: !!req.user.uid,
           uidType: typeof req.user.uid,
