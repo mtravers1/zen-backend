@@ -24,7 +24,7 @@ const requiredEnvVars = [
 ];
 
 for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
+  if (!process.env[envVar] || process.env[envVar].trim() === "") {
     throw new Error(
       `❌ CRITICAL: Environment variable ${envVar} is not set. This is a required environment variable.`,
     );
@@ -76,6 +76,10 @@ if (kmsServiceAccountB64 && kmsServiceAccountB64.trim() !== "") {
       "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
     );
   }
+} else {
+  throw new Error(
+    "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
+  );
 }
 
 kmsClient = new KeyManagementServiceClient({
@@ -182,7 +186,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
       case 'local':
         environmentFolder = 'dev';
         break;
-      default:
+      default: {
         const rawEnv = process.env.ENVIRONMENT;
         if (!rawEnv || rawEnv.trim() === '') {
           environmentFolder = 'dev';
@@ -190,6 +194,8 @@ async function getDEKFromBucket(bucketKey, bucket) {
         } else {
           environmentFolder = rawEnv;
         }
+        break;
+      }
     }
     prefix = `keys/${environmentFolder}/${bucketKey}`;
   } else {
