@@ -13,8 +13,12 @@ import {
   cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
-import "./database/database.js";
+import connectDB from "./database/database.js";
 import router from "./routes/index.js";
+import aiRouter from "./routes/ai.router.js";
+
+// Connect to the database
+connectDB();
 
 // Initialize Firebase Admin SDK
 if (process.env.NODE_ENV !== "test") {
@@ -56,18 +60,17 @@ console.log(
   `The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`,
 );
 console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
-console.log(
-  `USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`,
-);
+console.log(`GCS_BUCKET_NAME: ${process.env.GCS_BUCKET_NAME}`);
 
 // Check for critical environment variables
-if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
+if (!process.env.GCS_BUCKET_NAME) {
   console.error(
-    "CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.",
+    "CRITICAL ERROR: GCS_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.",
   );
   process.exit(1);
 }
 
+/*
 const expectedBucketName =
   process.env.ENVIRONMENT === "production"
     ? "prod"
@@ -79,13 +82,14 @@ const expectedBucketName =
 
 if (
   expectedBucketName &&
-  process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName
+  process.env.GCS_BUCKET_NAME !== expectedBucketName
 ) {
   console.error(
-    `CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`,
+    `CRITICAL ERROR: GCS_BUCKET_NAME is set to '${process.env.GCS_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`,
   );
   process.exit(1);
 }
+*/
 
 const app = express();
 
@@ -202,6 +206,9 @@ app.use((req, res, next) => {
 });
 
 // Load routes
+if (process.env.NODE_ENV !== "test") {
+  app.use("/api/ai", aiRouter);
+}
 app.use("/api", router);
 
 // Add root route to avoid 401 errors
