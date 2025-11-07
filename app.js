@@ -21,7 +21,6 @@ import aiRouter from "./routes/ai.router.js";
 connectDB();
 
 // Initialize Firebase Admin SDK
-if (process.env.NODE_ENV !== "test") {
   console.log("🔥 Initializing Firebase Admin...");
   let serviceAccount;
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -54,7 +53,6 @@ if (process.env.NODE_ENV !== "test") {
     databaseURL: "https://zentavos.firebaseio.com",
   });
   console.log("🔥 Firebase Admin initialized successfully");
-}
 
 console.log(
   `The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`,
@@ -192,8 +190,7 @@ app.use((req, res, next) => {
     excludedPaths.includes(req.path) ||
     req.path.startsWith("/api/account/photo/") ||
     (process.env.NODE_ENV === "development" && req.path.startsWith("/dev")) ||
-    ((process.env.NODE_ENV === "development" ||
-      process.env.NODE_ENV === "test") &&
+    (process.env.NODE_ENV === "development" &&
       req.path === "/api/payments/mock-upgrade");
 
   if (shouldExclude) {
@@ -206,9 +203,7 @@ app.use((req, res, next) => {
 });
 
 // Load routes
-if (process.env.NODE_ENV !== "test") {
-  app.use("/api/ai", aiRouter);
-}
+app.use("/api/ai", aiRouter);
 app.use("/api", router);
 
 // Add root route to avoid 401 errors
