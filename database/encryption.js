@@ -76,6 +76,7 @@ if (kmsServiceAccountB64 && kmsServiceAccountB64.trim() !== "") {
       "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
     );
   }
+}
 
 
 kmsClient = new KeyManagementServiceClient({
@@ -591,7 +592,7 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
       `❌ Error generating DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`,
     );
     throw e;
-  }
+  } 
 }
 
 async function moveDEKToDeadLetterQueue(file, bucket) {
