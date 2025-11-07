@@ -1,51 +1,29 @@
 import mongoose from "mongoose";
 
-const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
+const connectDB = async () => {
+  try {
+    const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
+    const user = process.env.MONGODB_USER;
+    const pass = process.env.MONGODB_PASS;
+    const dbName = process.env.MONGODB_DB;
 
-let mongoDBConnection = null;
+    if (!user || !pass || !dbName) {
+      throw new Error("Missing required MONGODB environment variables");
+    }
 
-// Only connect automatically if not in test environment
-if (process.env.NODE_ENV !== "test") {
-  const requiredEnvVars = ["MONGODB_USER", "MONGODB_PASS", "MONGODB_DB"];
-  const missingVars = requiredEnvVars.filter(
-    (varName) => !process.env[varName],
-  );
-  if (missingVars.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missingVars.join(", ")}`,
-    );
+    await mongoose.connect(mongoDB, {
+      user,
+      pass,
+      dbName,
+      serverSelectionTimeoutMS: 5000,
+    });
+
+    console.log("MongoDB connected!");
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    process.exit(1); // Exit the process with an error
   }
+};
 
-  mongoose.connect(mongoDB, {
-    user: process.env.MONGODB_USER,
-    pass: process.env.MONGODB_PASS,
-    dbName: process.env.MONGODB_DB,
-    serverSelectionTimeoutMS: 300000,
-  });
-
-  mongoDBConnection = mongoose.connection;
-
-  mongoDBConnection.on(
-    "error",
-    console.error.bind(console, "MongoDB connection error:"),
-  );
-  mongoDBConnection.once("open", async function () {
-    console.log("Connected to MongoDB!");
-
-    // await initialize();
-  });
-
-  mongoDBConnection.on("disconnected", function () {
-    console.log("MongoDB disconnected!");
-  });
-} else {
-  // For test environment, use mongoose without connecting
-  mongoDBConnection = {
-    readyState: 1, // Mock connected state
-    on: () => {},
-    once: () => {},
-    // Add other connection methods as needed for tests
-  };
-}
-
-export { mongoDBConnection, mongoose };
+export default connectDB;
+export { mongoose }; // Export mongoose for models

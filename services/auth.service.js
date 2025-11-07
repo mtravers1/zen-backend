@@ -46,7 +46,9 @@ const signUp = async (userData, req) => {
   }
 
   // Get DEK for the new user
-  const dek = await getUserDekForSignup(authUid, new mongoose.Types.ObjectId());
+  console.log("[SIGNUP-TRACE] Step 2: auth.service.js -> Getting user encryption key (DEK).");
+  const userId = new mongoose.Types.ObjectId();
+  const dek = await getUserDekForSignup(authUid, userId);
   const safeEncrypt = createSafeEncrypt(authUid);
 
   // Encrypt user data
@@ -59,6 +61,7 @@ const signUp = async (userData, req) => {
   const encryptedEmail = await safeEncrypt(email, dek, { field: "email" });
 
   const newUser = new User({
+    _id: userId,
     authUid,
     name: {
       firstName: encryptedFirstName,
@@ -77,6 +80,7 @@ const signUp = async (userData, req) => {
     ],
     emailHash: hashEmail(email),
     role: "individual",
+    account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl
       ? await safeEncrypt(userData.profilePhotoUrl, dek, {
           field: "profilePhotoUrl",
@@ -89,13 +93,17 @@ const signUp = async (userData, req) => {
   // Return a decrypted user object
   const response = {
     id: newUser._id,
+    _id: newUser._id,
     authUid: newUser.authUid,
     name: {
       firstName: firstName,
       lastName: lastName,
       middleName: userData.middleName || null,
     },
-    email: [{ email: email, isPrimary: true, isVerified: false }],
+    email: email,
+    phone: null,
+    role: "individual",
+    account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl || null,
   };
 
@@ -115,11 +123,13 @@ const signInOrCreate = async (uid, userData) => {
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
-      const dek = await getUserDekForSignup(uid, new mongoose.Types.ObjectId());
+      const userId = new mongoose.Types.ObjectId();
+      const dek = await getUserDekForSignup(uid, userId);
       const safeEncrypt = createSafeEncrypt(uid);
-      const { firstName, lastName } = userData.name;
+      const { firstName, lastName } = userData;
 
       user = new User({
+        _id: userId,
         authUid: uid,
         email: [
           {

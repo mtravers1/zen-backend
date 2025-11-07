@@ -28,8 +28,8 @@ export const normalizeEnvironment = (rawEnv = process.env.ENVIRONMENT) => {
 
   const env = rawEnv.toLowerCase().trim();
 
-  // Development aliases (including "test" for testing environments)
-  if (["dev", "development", "local", "test"].includes(env)) {
+  // Development aliases
+  if (["dev", "development", "local"].includes(env)) {
     return "dev";
   }
 
