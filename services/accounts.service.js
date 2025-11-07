@@ -2046,7 +2046,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!account) {
     throw new Error("Account not found");
   }
-  const deac = await getDecryptedAccount(account, dek);
+  const deac = await getDecryptedAccount(account, dek, uid);
 
   const access_token = await getOldestAccessToken({
     userId: profileId,
@@ -2061,11 +2061,11 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let accountPlaid;
 
   if (deac.account_type === "credit") {
-    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek);
+    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
   }
 
   if (deac.account_type === "loan") {
-    liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek);
+    liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek, uid);
   }
 
   let investmentData;
@@ -2106,9 +2106,11 @@ const getAccountDetails = async (accountId, profileId, uid) => {
  * @param {*} dek - Data encryption key used to decrypt encrypted fields.
  * @returns {Object} Decrypted liability object including core identifiers, decrypted binary fields (when present), and a decrypted `aprs` array with `aprPercentage`, `aprType`, `balanceSubjectToApr`, and `interestChargeAmount` entries.
  */
-async function getDecryptedLiabilitiesCredit(liabilities, dek) {
+
+async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
+
   const liabilitiesList = liabilities[0];
-  const safeDecrypt = createSafeDecrypt();
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
@@ -2163,9 +2165,10 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
  * @param {Buffer|string} dek - Data encryption key (DEK) used to decrypt the liability's encrypted values.
  * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, interestRate, loanStatus, repaymentPlan, servicerAddress) when present.
  */
-async function getDecryptedLiabilitiesLoan(liabilities, dek) {
+
+async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   const liabilitiesList = liabilities[0];
-  const safeDecrypt = createSafeDecrypt();
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
@@ -2278,8 +2281,9 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
  * @param {Buffer|string} dek - The data encryption key for the account's owner used to decrypt binary fields.
  * @returns {Object} An account object containing the original metadata and decrypted sensitive fields (e.g., `accessToken`, `account_name`, `account_official_name`, `account_type`, `account_subtype`, `institution_name`, `currentBalance`, `availableBalance`, `mask`) when present.
  */
-async function getDecryptedAccount(account, dek) {
-  const safeDecrypt = createSafeDecrypt();
+
+async function getDecryptedAccount(account, dek, uid) {
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedAccount = {
     _id: account._id,
     owner_id: account.owner_id,

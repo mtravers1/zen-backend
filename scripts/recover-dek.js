@@ -73,18 +73,42 @@ if (!LEGACY_GCS_BUCKET_NAME || !GCS_BUCKET_NAME) {
 }
 
 // Initialize Storage client
-let storageCredentials = JSON.parse(
-  Buffer.from(process.env.STORAGE_SERVICE_ACCOUNT, "base64").toString("utf-8")
-);
+let storageCredentials;
+try {
+  if (!process.env.STORAGE_SERVICE_ACCOUNT) {
+    throw new Error("STORAGE_SERVICE_ACCOUNT environment variable not set.");
+  }
+  storageCredentials = JSON.parse(
+    Buffer.from(process.env.STORAGE_SERVICE_ACCOUNT, "base64").toString("utf-8")
+  );
+} catch (error) {
+  console.error(
+    "CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT. Check if it's a valid base64 encoded JSON.",
+    error
+  );
+  process.exit(1);
+}
 const storage = new Storage({
   credentials: storageCredentials,
   projectId: GCP_PROJECT_ID,
 });
 
 // Initialize KMS client
-let kmsCredentials = JSON.parse(
-  Buffer.from(process.env.KMS_SERVICE_ACCOUNT, "base64").toString("utf-8")
-);
+let kmsCredentials;
+try {
+  if (!process.env.KMS_SERVICE_ACCOUNT) {
+    throw new Error("KMS_SERVICE_ACCOUNT environment variable not set.");
+  }
+  kmsCredentials = JSON.parse(
+    Buffer.from(process.env.KMS_SERVICE_ACCOUNT, "base64").toString("utf-8")
+  );
+} catch (error) {
+  console.error(
+    "CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT. Check if it's a valid base64 encoded JSON.",
+    error
+  );
+  process.exit(1);
+}
 const kmsClient = new KeyManagementServiceClient({
   credentials: kmsCredentials,
   projectId: GCP_PROJECT_ID,
@@ -146,25 +170,15 @@ async function decryptValue(cipherTextBase64, dek) {
  * @param {'dbid'|'firebase'} identifierType - The identifier type: 'dbid' to look up by MongoDB _id, 'firebase' to look up by authUid.
  */
 
-async function recoverDek(identifier, identifierType) {
-  console.log(`\tStarting DEK recovery for user with ${identifierType}: ${identifier}`);
+async function recoverDek(firebaseUid, DEBUG_MODE) {
+  console.log(`\tStarting DEK recovery for user with Firebase UID: ${firebaseUid}`);
 
   // 1. Connect to DB and find user
   await connectDB();
-  let user;
-  if (identifierType === 'dbid') {
-    if (!mongoose.Types.ObjectId.isValid(identifier)) {
-      console.error(`\tError: Provided database ID '${identifier}' is not a valid MongoDB ObjectId.`);
-      await mongoose.connection.close();
-      return;
-    }
-    user = await User.findById(identifier);
-  } else { // firebase
-    user = await User.findOne({ authUid: identifier });
-  }
+  const user = await User.findOne({ authUid: firebaseUid });
 
   if (!user) {
-    console.error(`\tError: User with ${identifierType} '${identifier}' not found in the database.`);
+    console.error(`\tError: User with Firebase UID '${firebaseUid}' not found in the database.`);
     await mongoose.connection.close();
     return;
   }
@@ -182,7 +196,7 @@ async function recoverDek(identifier, identifierType) {
   // 2. Construct the path to the specific DEK file
   const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
   const primaryBucket = storage.bucket(GCS_BUCKET_NAME);
-  const keyFileName = `${identifier}.key`;
+  const keyFileName = `${firebaseUid}.key`;
   const keyFilePath = `keys/${keyEnv}/${keyFileName}`;
   const file = legacyBucket.file(keyFilePath);
 
@@ -239,13 +253,20 @@ async function recoverDek(identifier, identifierType) {
           const bodyStart = partBuffer.indexOf(doubleCrlf) + doubleCrlf.length;
           if (bodyStart !== -1) {
                           let extractedBody = partBuffer.slice(bodyStart);
-                          console.log(`    - Extracted body (before cleaning): ${extractedBody.toString('base64')}`);
+                          if (DEBUG_MODE) {
+                            console.log(`    - Extracted body (before cleaning): ${extractedBody.toString('base64')}`);
+                          }
                           // Remove trailing \r\n if present before the next boundary or closing boundary
                           if (extractedBody.length >= crlf.length && extractedBody.slice(extractedBody.length - crlf.length).equals(crlf)) {
                             extractedBody = extractedBody.slice(0, extractedBody.length - crlf.length);
-                            console.log(`    - Removed trailing CRLF.`);
+                            if (DEBUG_MODE) {
+                              console.log(`    - Removed trailing CRLF.`);
+                            }
                           }
-                          console.log(`    - Extracted body (after cleaning): ${extractedBody.toString('base64')}`);            // Remove trailing -- if it's the closing boundary
+                          if (DEBUG_MODE) {
+                            console.log(`    - Extracted body (after cleaning): ${extractedBody.toString('base64')}`);
+                          }
+                                 // Remove trailing -- if it's the closing boundary
             const closingBoundarySuffix = Buffer.from('--', 'ascii');
             if (extractedBody.length >= closingBoundarySuffix.length && extractedBody.slice(extractedBody.length - closingBoundarySuffix.length).equals(closingBoundarySuffix)) {
               extractedBody = extractedBody.slice(0, extractedBody.length - closingBoundarySuffix.length);
@@ -278,7 +299,12 @@ async function recoverDek(identifier, identifierType) {
     if (plaintext.length % 32 === 0) {
       const deks = [];
       for (let i = 0; i < plaintext.length; i += 32) {
-        deks.push(plaintext.slice(i, i + 32));
+        const currentDek = plaintext.slice(i, i + 32);
+        if (currentDek.length !== 32) {
+          console.error(`    - ERROR: DEK slice from ${file.name} for user ${userId} has invalid length ${currentDek.length}. Skipping decryption attempt.`);
+          continue; // Skip to the next DEK slice
+        }
+        deks.push(currentDek);
       }
       console.log(`    - Detected ${deks.length} DEKs in plaintext array.`);
 
@@ -301,22 +327,26 @@ async function recoverDek(identifier, identifierType) {
       }
     } else {
       const dek = plaintext;
-      console.log(`    - Plaintext is a single DEK.`);
-      // b. Try to decrypt the sample data
-      const decryptedSample = await decryptValue(encryptedSample, dek);
-      console.log(`    - Attempting to decrypt sample with DEK. Result: ${decryptedSample ? 'SUCCESS' : 'FAILURE'}`);
+      if (dek.length !== 32) {
+        console.error(`    - ERROR: Plaintext DEK from ${file.name} for user ${userId} has invalid length ${dek.length}. Skipping decryption attempt.`);
+      } else {
+        console.log(`    - Plaintext is a single DEK.`);
+        // b. Try to decrypt the sample data
+        const decryptedSample = await decryptValue(encryptedSample, dek);
+        console.log(`    - Attempting to decrypt sample with DEK. Result: ${decryptedSample ? 'SUCCESS' : 'FAILURE'}`);
 
-      if (decryptedSample) {
-        console.log(`\n\tSUCCESS! Found matching DEK: ${file.name}`);
-        console.log(`\t   - Decrypted first name: ${decryptedSample}`);
-        foundKey = true;
+        if (decryptedSample) {
+          console.log(`\n\tSUCCESS! Found matching DEK: ${file.name}`);
+          console.log(`\t   - Decrypted first name: ${decryptedSample}`);
+          foundKey = true;
 
-        // c. Copy the key to the new bucket with the correct name
-        const newFileName = `keys/${keyEnv}/${userId}.key`;
-        const newFile = primaryBucket.file(newFileName);
-        await file.copy(newFile);
+          // c. Copy the key to the new bucket with the correct name
+          const newFileName = `keys/${keyEnv}/${userId}.key`;
+          const newFile = primaryBucket.file(newFileName);
+          await file.copy(newFile);
 
-        console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
+          console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
+        }
       }
     }
   } catch (error) {
@@ -333,29 +363,18 @@ async function recoverDek(identifier, identifierType) {
 // --- Execute Script ---
 
 const args = process.argv.slice(2);
-const typeIndex = args.findIndex(arg => arg === '--type');
+const DEBUG_MODE = args.includes('--debug');
+const firebaseUid = args.find(arg => !arg.startsWith('--'));
 
-let identifier;
-let identifierType = 'firebase'; // Default to firebase
-
-if (typeIndex !== -1) {
-  identifierType = args[typeIndex + 1];
-  identifier = args[typeIndex + 2];
-} else {
-  identifier = args[0];
+if (DEBUG_MODE) {
+  console.warn('\tWARNING: DEBUG mode is enabled. Sensitive ciphertext may be logged.');
 }
 
-if (!identifier || (typeIndex !== -1 && !identifierType)) {
-  console.error("\tError: Missing arguments.");
-  console.error("\tUsage: node --env-file=.env scripts/recover-dek.js [--type <dbid|firebase>] <USER_ID>");
-  console.error("\t  --type: Specify 'dbid' for a database ID or 'firebase' for a Firebase UID. Defaults to 'firebase'.");
-  console.error("\t  <USER_ID>: The user's identifier.");
+if (!firebaseUid) {
+  console.error('\tError: Missing Firebase UID argument.');
+  console.error('\tUsage: node --env-file=.env scripts/recover-dek.js <USER_FIREBASE_UID> [--debug]');
   process.exit(1);
 }
 
-if (identifierType !== 'dbid' && identifierType !== 'firebase') {
-    console.error(`\tError: Invalid --type specified: ${identifierType}. Must be 'dbid' or 'firebase'.`);
-    process.exit(1);
-}
+recoverDek(firebaseUid, DEBUG_MODE).catch(console.error);
 
-recoverDek(identifier, identifierType).catch(console.error);
