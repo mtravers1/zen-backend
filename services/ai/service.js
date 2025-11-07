@@ -60,7 +60,9 @@ class AIService {
       );
     }
 
-    this.groqClient = new Groq({ apiKey: this.GROQ_API_KEY });
+    if (process.env.NODE_ENV !== "test") {
+      this.groqClient = new Groq({ apiKey: this.GROQ_API_KEY });
+    }
   }
 
   /**

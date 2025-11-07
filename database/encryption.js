@@ -150,6 +150,7 @@ async function generateAndStoreEncryptedDEK(
     const bucket = targetBucket || (await getBucket());
     const file = bucket.file(filePath);
 
+    console.log(`[SIGNUP-TRACE] Step 4: encryption.js -> Attempting to save key to GCS bucket: ${bucket.name}, path: ${filePath}`);
     // Use simple upload for small files (DEK is ~113 bytes)
     // This avoids the resumable upload endpoint that was causing "URL is required" error
     await file.save(encryptedDEK, {
@@ -162,7 +163,7 @@ async function generateAndStoreEncryptedDEK(
     });
   } catch (saveError) {
     console.error(`❌ Failed to save DEK for bucket key: ${bucketKey}`);
-    console.error(`❌ Error: ${saveError.message}`);
+    console.error(`❌ Error:`, saveError);
     throw saveError;
   }
 
@@ -173,10 +174,59 @@ async function generateAndStoreEncryptedDEK(
 }
 
 async function getDEKFromBucket(bucketKey, bucket) {
-  const prefix = `keys/${bucketKey}`;
+  let prefix;
+  if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
+    let environmentFolder;
+    switch (process.env.ENVIRONMENT) {
+      case 'production':
+        environmentFolder = 'prod';
+        break;
+      case 'staging':
+        environmentFolder = 'staging';
+        break;
+      case 'development':
+      case 'local':
+        environmentFolder = 'dev';
+        break;
+      default:
+        environmentFolder = process.env.ENVIRONMENT;
+    }
+    prefix = `keys/${environmentFolder}/${bucketKey}`;
+  } else {
+    prefix = `keys/${bucketKey}`;
+  }
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
-  const [files] = await bucket.getFiles({ prefix });
+  let files = [];
+  let attempts = 0;
+  const maxAttempts = 3;
+  const delay = 500; // 500ms
+
+  while (files.length === 0 && attempts < maxAttempts) {
+    attempts++;
+    if (attempts > 1) {
+      console.log(`[DEK_TRACE] DEK not found, retrying... (Attempt ${attempts}/${maxAttempts})`);
+      await new Promise(resolve => setTimeout(resolve, delay * (attempts - 1))); // increasing delay
+    }
+    const [foundFiles] = await bucket.getFiles({ prefix });
+    files = foundFiles;
+  }
+
+  // If no files are found, and we are not in the legacy bucket, check the root of the bucket
+  if (files.length === 0 && bucket.name !== process.env.LEGACY_GCS_BUCKET_NAME) {
+    console.log(`[DEK_TRACE] DEK not found in keys/ directory, checking root of the bucket`);
+    prefix = bucketKey;
+    attempts = 0;
+    while (files.length === 0 && attempts < maxAttempts) {
+      attempts++;
+      if (attempts > 1) {
+        console.log(`[DEK_TRACE] DEK not found, retrying... (Attempt ${attempts}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, delay * (attempts - 1))); // increasing delay
+      }
+      const [foundFiles] = await bucket.getFiles({ prefix });
+      files = foundFiles;
+    }
+  }
 
   if (files.length === 0) {
     console.log(
@@ -239,96 +289,68 @@ async function getDEKFromBucket(bucketKey, bucket) {
 async function getUserDek(firebaseUid) {
   let user;
   try {
-    // Step 1: Starting DEK retrieval process and checking for cached DEK
-    console.log(
-      `[Step 1] 🕵️‍♂️ Starting DEK retrieval for Firebase UID: ${firebaseUid}`,
-    );
-
-    // Step 2: Find user in database by Firebase UID
-    console.log(`🔍 [Step 2] Looking up user in database...`);
+    // Find user in database
     user = await User.findOne({ authUid: firebaseUid });
-
     if (!user) {
       throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
     }
-
     const bucketKey = user._id.toString();
-    console.log(`✅ [Step 2] User found. Database ID: ${bucketKey}`);
+    console.log(`[DEK_TRACE] Starting DEK retrieval for user ${bucketKey}`);
 
+    // 1. Check cache first
     if (dekCache.has(bucketKey)) {
       const cachedDeks = dekCache.get(bucketKey);
-      if (Array.isArray(cachedDeks) && cachedDeks.length > 0) {
-        console.log(
-          `✅ [Step 1] DEK(s) retrieved from cache for bucket key: ${bucketKey}`,
-        );
+      if (cachedDeks.length > 0) {
+        console.log(`[DEK_TRACE] Found ${cachedDeks.length} DEK(s) in cache.`);
         return cachedDeks;
       }
-      dekCache.delete(bucketKey);
+    }
+    console.log(`[DEK_TRACE] No valid DEKs in cache.`);
+
+    let allDeks = [];
+    const primaryBucket = await getBucket();
+    const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
+
+    // 2. Check primary bucket with databaseId
+    console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
+    const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);
+    if (primaryDeks.length > 0) {
+      console.log(`[DEK_TRACE] Found ${primaryDeks.length} DEK(s) in primary bucket.`);
+      allDeks = allDeks.concat(primaryDeks);
     }
 
-    // Step 3: Search for DEK in the primary GCS bucket
-    const currentBucket = await getBucket();
-    let deks = await getDEKFromBucket(bucketKey, currentBucket);
+    // 3. Check legacy bucket with databaseId
+    console.log(`[DEK_TRACE] Checking legacy bucket with databaseId: ${bucketKey}`);
+    const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket);
+    if (legacyDbIdDeks.length > 0) {
+      console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating...`);
+      await copyDEKToNewBucketKey(bucketKey, legacyBucket, primaryBucket);
+      allDeks = allDeks.concat(legacyDbIdDeks);
+    }
 
-    // Step 4: If not found, search in the legacy GCS bucket
-    if (deks.length === 0 && currentBucket.name !== LEGACY_GCS_BUCKET_NAME) {
-      console.warn(
-        `⚠️ [Step 4] No valid DEK found in primary bucket. Checking legacy bucket...`,
-      );
-      const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
-      const legacyDeks = await getDEKFromBucket(bucketKey, legacyBucket);
+    // 4. Check legacy bucket with firebaseUid
+    console.log(`[DEK_TRACE] Checking legacy bucket with firebaseUid: ${firebaseUid}`);
+    const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
+    if (legacyFirebaseUidDeks.length > 0) {
+      console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating...`);
+      await copyDEKToNewBucketKey(firebaseUid, legacyBucket, primaryBucket, bucketKey); // Copy to new key name
+      allDeks = allDeks.concat(legacyFirebaseUidDeks);
+    }
 
-      if (legacyDeks.length > 0) {
-        // Step 5: If found in legacy, migrate the DEK to the primary bucket
-        console.log(
-          `✅ [Step 5] Found legacy DEK. Migrating to primary bucket...`,
-        );
-        await copyDEKToNewBucketKey(bucketKey, legacyBucket, currentBucket);
-        deks = legacyDeks;
-        dekCache.set(bucketKey, deks);
-      } else {
-        // Try legacy Firebase UID if no DEK found with DB ID in either bucket
-        console.warn(
-          `⚠️ [Step 4] No valid DEK found with Database ID in legacy bucket. Trying legacy Firebase UID...`,
-        );
-        const legacyFirebaseUidDeks = await getDEKFromBucket(
-          firebaseUid,
-          legacyBucket,
-        );
-
-        if (legacyFirebaseUidDeks.length > 0) {
-          // Step 5: If found in legacy, migrate the DEK to the primary bucket
-          console.log(
-            `✅ [Step 5] Found legacy DEK with Firebase UID. Migrating to primary bucket with Database ID...`,
-          );
-          await copyDEKToNewBucketKey(
-            firebaseUid,
-            legacyBucket,
-            currentBucket,
-            bucketKey,
-          ); // Pass new bucketKey for target
-          deks = legacyFirebaseUidDeks;
-          dekCache.set(bucketKey, deks);
-        } else {
-          // Step 6: If not found anywhere, throw an error
-          const errorMessage = `CRITICAL: No DEK found for user ${user._id} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
-          console.error(`❌ ${errorMessage}`);
-          // We can add an alert here, e.g., by sending a notification to a monitoring service
-          throw new Error(errorMessage);
-        }
-      }
-    } else if (deks.length === 0) {
-      // Step 6: If not found anywhere, throw an error
-      const errorMessage = `CRITICAL: No DEK found for user ${user._id} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
+    // 5. Final processing
+    if (allDeks.length === 0) {
+      const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
       console.error(`❌ ${errorMessage}`);
-      // We can add an alert here, e.g., by sending a notification to a monitoring service
       throw new Error(errorMessage);
-    } else {
-      console.log(`✅ [Step 3] DEK found in primary bucket.`);
-      dekCache.set(bucketKey, deks);
     }
 
-    return deks;
+    // Remove duplicates
+    const uniqueDeks = Array.from(new Set(allDeks.map(dek => dek.toString('hex')))).map(hex => Buffer.from(hex, 'hex'));
+    console.log(`[DEK_TRACE] Found a total of ${uniqueDeks.length} unique DEK(s).`);
+
+    dekCache.set(bucketKey, uniqueDeks);
+    return uniqueDeks;
+
   } catch (e) {
     console.error(
       `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`,
@@ -454,7 +476,28 @@ async function copyDEKToNewBucketKey(
       `📦 Copying DEK from source key ${sourceKey} in bucket ${sourceBucket.name} to target key ${finalTargetKey} in bucket ${targetBucket.name}`,
     );
 
-    const sourceFile = sourceBucket.file(`keys/${sourceKey}.key`);
+    let sourcePath;
+    if (sourceBucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
+      let environmentFolder;
+      switch (process.env.ENVIRONMENT) {
+        case 'production':
+          environmentFolder = 'prod';
+          break;
+        case 'staging':
+          environmentFolder = 'staging';
+          break;
+        case 'development':
+        case 'local':
+          environmentFolder = 'dev';
+          break;
+        default:
+          environmentFolder = process.env.ENVIRONMENT;
+      }
+      sourcePath = `keys/${environmentFolder}/${sourceKey}.key`;
+    } else {
+      sourcePath = `keys/${sourceKey}.key`;
+    }
+    const sourceFile = sourceBucket.file(sourcePath);
 
     if (!(await sourceFile.exists())[0]) {
       console.log(
@@ -519,54 +562,22 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
   try {
     const bucketKey = databaseId.toString();
     const currentBucket = await getBucket();
-    const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
 
-    // Check if DEK already exists with the database ID in the current bucket
-    let deks = await getDEKFromBucket(bucketKey, currentBucket);
-
-    if (deks.length > 0) {
-      dekCache.set(bucketKey, deks);
-      return deks;
-    }
-
-    // Check if DEK exists with Firebase UID in the legacy bucket (legacy/migration case)
-    const legacyFirebaseUidDeks = await getDEKFromBucket(
-      firebaseUid,
-      legacyBucket,
-    );
-
-    if (legacyFirebaseUidDeks.length > 0) {
-      const copySuccess = await copyDEKToNewBucketKey(
-        firebaseUid,
-        legacyBucket,
-        currentBucket,
-        bucketKey,
-      );
-
-      if (copySuccess) {
-        deks = legacyFirebaseUidDeks;
-        dekCache.set(bucketKey, deks);
-      } else {
-        // If copy failed, still use the legacy DEK but log a warning
-        console.warn(
-          `⚠️ Failed to copy legacy DEK for Firebase UID: ${firebaseUid} to new bucket. Proceeding with legacy DEK.`,
-        );
-        deks = legacyFirebaseUidDeks;
-        dekCache.set(bucketKey, deks);
-        dekCache.set(firebaseUid, deks); // Cache under both keys for robustness
-      }
-      return deks;
-    }
-
-    // No existing DEK found anywhere - create new one (with safeguard)
+    // For a new signup, we should always generate a new key.
+    // The legacy check is now handled by getUserDek.
+    console.log(`[SIGNUP_TRACE] Generating new DEK for new user. DB_ID: ${bucketKey}`);
     const newDek = await generateAndStoreEncryptedDEK(
       bucketKey,
       currentBucket,
     );
+    
+    // Cache the new DEK
+    dekCache.set(bucketKey, [newDek]);
+
     return [newDek];
   } catch (e) {
     console.error(
-      `❌ Error getting DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`,
+      `❌ Error generating DEK for signup (Firebase UID: ${firebaseUid}, DB ID: ${databaseId}) - ${e.message}`,
     );
     throw e;
   }

@@ -20,7 +20,7 @@ const storage = new Storage({
   apiEndpoint: "https://storage.googleapis.com",
   useAuthWithCustomEndpoint: true,
 });
-const bucketName = `zentavos-bucket-${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`;
+const bucketName = process.env.GCS_BUCKET_NAME;
 
 const getStorageStatus = async (uid) => {
   try {
