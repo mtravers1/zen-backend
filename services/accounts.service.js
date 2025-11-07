@@ -2099,7 +2099,16 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   return { ...result };
 };
 
+/**
+ * Decrypts a credit liability record (expected as the first element in a liabilities array) and its nested APR entries.
+ *
+ * @param {Array} liabilities - Array whose first element is the credit liability object containing encrypted binary fields and an optional `aprs` array.
+ * @param {*} dek - Data encryption key used to decrypt encrypted fields.
+ * @returns {Object} Decrypted liability object including core identifiers, decrypted binary fields (when present), and a decrypted `aprs` array with `aprPercentage`, `aprType`, `balanceSubjectToApr`, and `interestChargeAmount` entries.
+ */
+
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
+
   const liabilitiesList = liabilities[0];
   const safeDecrypt = createSafeDecrypt(uid);
   const decryptedLiabilities = {
@@ -2148,6 +2157,14 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
   }
   return decryptedLiabilities;
 }
+
+/**
+ * Decrypts a loan liability record and its nested fields using the provided data encryption key.
+ *
+ * @param {Array} liabilities - Array whose first element is the stored loan liability object containing encrypted fields and nested objects (e.g., property_address, interest_rate, loan_status, repayment_plan, servicer_address).
+ * @param {Buffer|string} dek - Data encryption key (DEK) used to decrypt the liability's encrypted values.
+ * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, interestRate, loanStatus, repaymentPlan, servicerAddress) when present.
+ */
 
 async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   const liabilitiesList = liabilities[0];
@@ -2257,6 +2274,13 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   }
   return decryptedLiabilities;
 }
+
+/**
+ * Return a Plaid account object with sensitive binary fields decrypted using the provided data encryption key.
+ * @param {Object} account - The PlaidAccount document (binary fields may be encrypted).
+ * @param {Buffer|string} dek - The data encryption key for the account's owner used to decrypt binary fields.
+ * @returns {Object} An account object containing the original metadata and decrypted sensitive fields (e.g., `accessToken`, `account_name`, `account_official_name`, `account_type`, `account_subtype`, `institution_name`, `currentBalance`, `availableBalance`, `mask`) when present.
+ */
 
 async function getDecryptedAccount(account, dek, uid) {
   const safeDecrypt = createSafeDecrypt(uid);

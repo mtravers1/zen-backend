@@ -91,6 +91,12 @@ if (!LEGACY_GCS_BUCKET_NAME) {
   throw new Error("❌ CRITICAL: LEGACY_GCS_BUCKET_NAME environment variable is not set.");
 }
 
+/**
+ * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
+ * @param {string} [bucketName] - Optional explicit bucket name; if omitted the configured `GCS_BUCKET_NAME` is used.
+ * @returns {object} The Storage Bucket instance for the resolved bucket name.
+ * @throws {Error} If no bucket name is configured or the resolved bucket does not exist or is not accessible.
+ */
 async function getBucket(bucketName) {
   const targetBucketName = bucketName || GCS_BUCKET_NAME;
   if (!targetBucketName) {
@@ -127,6 +133,14 @@ const dekCache = new LimitedMap(1000);
 // Import User model for data checking
 import User from "./models/User.js";
 
+/**
+ * Generate a new 32-byte data encryption key (DEK), encrypt it with KMS, store the encrypted DEK in Cloud Storage, cache the plaintext DEK, and return the plaintext.
+ *
+ * @param {string} bucketKey - Identifier used as the storage key name (typically the user's database ID).
+ * @param {object|null} targetBucket - Optional Google Cloud Storage Bucket object to write the encrypted DEK to; if null the configured primary bucket is used.
+ * @returns {Buffer} The generated plaintext 32-byte DEK.
+ * @throws {Error} If KMS encryption or saving the encrypted DEK to Cloud Storage fails.
+ */
 async function generateAndStoreEncryptedDEK(
   bucketKey,
   targetBucket = null, // Allow specifying target bucket for migration
@@ -168,6 +182,14 @@ async function generateAndStoreEncryptedDEK(
   return dek;
 }
 
+/**
+ * List files in a bucket matching a prefix, retrying until at least one match is found or the attempt limit is reached.
+ *
+ * @param {string} prefix - The file name prefix to search for.
+ * @param {number} [maxAttempts=3] - Maximum number of listing attempts.
+ * @param {number} [baseDelay=500] - Base delay in milliseconds used between retries (multiplied by attempt index).
+ * @return {Array} An array of file objects matching the prefix; may be empty if no files are found after all attempts.
+ */
 async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 500) {
   let files = [];
   let attempts = 0;
@@ -183,6 +205,16 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
   return files;
 }
 
+/**
+ * Locate encrypted DEK files for a given bucket key in the specified GCS bucket, download and decrypt them, and return their plaintext DEKs.
+ *
+ * Searches for DEK files under `keys/{bucketKey}` or, when the provided bucket is the legacy bucket, under `keys/{env}/{bucketKey}` (where `env` is derived from ENVIRONMENT). If not found in the keys directory for non-legacy buckets, the function also checks the bucket root for a file named exactly `bucketKey`. Each found encrypted DEK is downloaded and decrypted with the configured KMS key; decrypted plaintext DEKs are returned as Buffer instances. Encrypted DEKs that fail KMS decryption are moved to a dead-letter location and skipped.
+ *
+ * @param {string} bucketKey - Identifier used to locate DEK files in the bucket.
+ * @param {object} bucket - Google Cloud Storage Bucket instance to search.
+ * @returns {Buffer[]} An array of decrypted DEKs (Buffers). Returns an empty array if no DEK files are found or none can be decrypted.
+ * @throws {Error} If file listing, download, or non-decryption-related decryption operations fail.
+ */
 async function getDEKFromBucket(bucketKey, bucket) {
   let prefix;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
@@ -274,13 +306,13 @@ async function getDEKFromBucket(bucketKey, bucket) {
 }
 
 /**
- * DEK Retrieval Flow:
- * 1. Check for cached DEK.
- * 2. Find user in database by Firebase UID.
- * 3. Search for DEK in the primary GCS bucket using the user's database ID.
- * 4. If not found, search in the legacy GCS bucket.
- * 5. If found in legacy, migrate the DEK to the primary bucket.
- * 6. If not found anywhere, throw a critical error.
+ * Retrieve and cache the user's data encryption keys (DEKs) by Firebase UID.
+ *
+ * Searches the in-memory cache, then the primary GCS bucket and legacy bucket(s), migrates any found legacy DEKs to the primary bucket, deduplicates results, caches them, and returns the plaintext DEKs.
+ *
+ * @param {string} firebaseUid - Firebase Authentication UID of the user.
+ * @returns {Buffer[]} An array of unique plaintext DEKs as Buffers.
+ * @throws {Error} If the user does not exist, no DEK is found for the user, or an error occurs during retrieval or migration.
  */
 async function getUserDek(firebaseUid) {
   let user;
@@ -387,7 +419,16 @@ async function encryptValue(value, dek) {
   }
 }
 
-// Decrypts a base64-encoded ciphertext using AES-256-GCM and a provided DEK
+/**
+ * Decrypts a base64-encoded AES-256-GCM ciphertext using one of the provided data encryption keys (DEKs) and returns the original value.
+ *
+ * Tries each DEK in order; on successful decryption parses and returns the JSON-decoded plaintext. If the input is null, undefined, or an empty string, it is returned unchanged.
+ *
+ * @param {string|null|undefined} cipherTextBase64 - The ciphertext encoded as a base64 string (IV || authTag || ciphertext).
+ * @param {Buffer[]|Array<Buffer>} deks - An array of 32-byte DEKs to attempt for decryption; the function tries each key until one succeeds.
+ * @returns {*} The decrypted value parsed from JSON, or the original input if it was null, undefined, or an empty string.
+ * @throws {DecryptionError} When all provided DEKs fail to decrypt the ciphertext; the error includes an `errorCode` for reporting.
+ */
 async function decryptValue(cipherTextBase64, deks) {
   if (
     cipherTextBase64 === null ||
@@ -442,6 +483,11 @@ async function decryptValue(cipherTextBase64, deks) {
   );
 }
 
+/**
+ * Produces a SHA-256 hash of an email after trimming, lowercasing, and appending the configured salt.
+ * @param {string} email - The email address to hash.
+ * @returns {string} Hex-encoded SHA-256 digest of the salted, normalized email.
+ */
 function hashEmail(email) {
   const salt = process.env.HASH_SALT;
   return crypto
@@ -459,7 +505,15 @@ function hashValue(value) {
 }
 
 /**
- * Copy DEK from legacy Firebase UID bucket key to new primary key bucket key
+ * Copy an encrypted DEK file from a source bucket/key to a new key in a target bucket, preserving a versioned filename.
+ *
+ * Attempts a direct server-side copy; if that fails, falls back to downloading the encrypted DEK and saving it to the target location.
+ *
+ * @param {string} sourceKey - The logical key name (bucketKey or legacy UID) identifying the DEK in the source bucket (without path or extension).
+ * @param {object} sourceBucket - The GCS Bucket instance containing the source DEK file.
+ * @param {object} targetBucket - The GCS Bucket instance where the DEK should be copied to.
+ * @param {string|null} [targetKey=null] - Optional override for the target logical key name; when omitted, `sourceKey` is used.
+ * @returns {Promise<boolean>} `true` if the DEK was successfully copied to the target bucket; `false` otherwise.
  */
 async function copyDEKToNewBucketKey(
   sourceKey,
@@ -559,11 +613,12 @@ async function copyDEKToNewBucketKey(
 
 
 /**
- * Special function for signup flow - handles DEK creation/migration for new users
- * Logic:
- * 1. Check if DEK exists with Firebase UID
- * 2. If exists, copy to database ID bucket key
- * 3. If not exists, create new DEK with database ID bucket key
+ * Create and store a new data encryption key (DEK) for a user signing up and cache it under the provided database ID.
+ *
+ * @param {string} firebaseUid - Firebase authentication UID, used for logging and tracing.
+ * @param {string|number} databaseId - Database user ID that will be used as the bucket key for storing the DEK.
+ * @throws {Error} If `databaseId` is missing or empty.
+ * @returns {Buffer[]} An array containing the newly generated plaintext DEK (as a Buffer).
  */
 async function getUserDekForSignup(firebaseUid, databaseId) {
   try {
@@ -595,6 +650,12 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
   } 
 }
 
+/**
+ * Move a DEK file to the dead-letter location within the given bucket.
+ *
+ * @param {import('@google-cloud/storage').File} file - The file object representing the failing DEK to move.
+ * @param {import('@google-cloud/storage').Bucket} bucket - Target bucket where the dead-letter file will be placed.
+ */
 async function moveDEKToDeadLetterQueue(file, bucket) {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
