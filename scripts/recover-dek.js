@@ -97,7 +97,18 @@ const KEY_PATH = kmsClient.cryptoKeyPath(
   GCP_KEY_NAME
 );
 
-// --- Redefined decryptValue function from encryption.js ---
+/**
+ * Decrypts a base64-encoded AES-256-GCM ciphertext and parses the resulting JSON.
+ *
+ * Attempts to decode `cipherTextBase64` (expects IV in bytes 0–15, auth tag in 16–31, ciphertext thereafter),
+ * decrypt using the provided 32-byte `dek`, and return the parsed JSON value.
+ * If `cipherTextBase64` is null, undefined, or an empty string, that original value is returned unchanged.
+ * Any decryption or parse errors are suppressed and result in `null`.
+ *
+ * @param {string|null|undefined} cipherTextBase64 - Base64-encoded ciphertext with IV and auth tag, or null/undefined/"" to pass through.
+ * @param {Buffer} dek - 32-byte Data Encryption Key used for AES-256-GCM decryption.
+ * @returns {any|null|string|undefined} The parsed JSON value on successful decryption, the original input if it was null/undefined/"" , or `null` on failure.
+ */
 
 async function decryptValue(cipherTextBase64, dek) {
   if (
@@ -126,7 +137,14 @@ async function decryptValue(cipherTextBase64, dek) {
   }
 }
 
-// --- Main Recovery Logic ---
+/**
+ * Recover an orphaned Data Encryption Key (DEK) for a user by locating a legacy key file in Google Cloud Storage, validating it against a user's encrypted sample data, and copying the matching key into the primary bucket under the environment-specific path.
+ *
+ * The function looks up the user (either by MongoDB ObjectId or Firebase UID), uses the user's encrypted first name as a test sample, reads and normalizes the legacy key file (including multipart-form extraction when present), attempts KMS or direct decryption to obtain one or more candidate DEKs, tests each candidate by decrypting the sample, and on a match copies the key to gs://{GCS_BUCKET_NAME}/keys/{env}/{userId}.key.
+ *
+ * @param {string} identifier - The user identifier value (either a MongoDB ObjectId or a Firebase auth UID).
+ * @param {'dbid'|'firebase'} identifierType - The identifier type: 'dbid' to look up by MongoDB _id, 'firebase' to look up by authUid.
+ */
 
 async function recoverDek(identifier, identifierType) {
   console.log(`\tStarting DEK recovery for user with ${identifierType}: ${identifier}`);
