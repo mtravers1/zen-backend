@@ -2046,7 +2046,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!account) {
     throw new Error("Account not found");
   }
-  const deac = await getDecryptedAccount(account, dek);
+  const deac = await getDecryptedAccount(account, dek, uid);
 
   const access_token = await getOldestAccessToken({
     userId: profileId,
@@ -2061,11 +2061,11 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let accountPlaid;
 
   if (deac.account_type === "credit") {
-    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek);
+    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
   }
 
   if (deac.account_type === "loan") {
-    liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek);
+    liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek, uid);
   }
 
   let investmentData;
@@ -2099,9 +2099,9 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   return { ...result };
 };
 
-async function getDecryptedLiabilitiesCredit(liabilities, dek) {
+async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
   const liabilitiesList = liabilities[0];
-  const safeDecrypt = createSafeDecrypt();
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
@@ -2149,9 +2149,9 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek) {
   return decryptedLiabilities;
 }
 
-async function getDecryptedLiabilitiesLoan(liabilities, dek) {
+async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   const liabilitiesList = liabilities[0];
-  const safeDecrypt = createSafeDecrypt();
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
@@ -2258,8 +2258,8 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek) {
   return decryptedLiabilities;
 }
 
-async function getDecryptedAccount(account, dek) {
-  const safeDecrypt = createSafeDecrypt();
+async function getDecryptedAccount(account, dek, uid) {
+  const safeDecrypt = createSafeDecrypt(uid);
   const decryptedAccount = {
     _id: account._id,
     owner_id: account.owner_id,
