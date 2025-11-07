@@ -76,11 +76,7 @@ if (kmsServiceAccountB64 && kmsServiceAccountB64.trim() !== "") {
       "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
     );
   }
-} else {
-  throw new Error(
-    "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
-  );
-}
+
 
 kmsClient = new KeyManagementServiceClient({
   credentials: kmsCredentials,
@@ -171,6 +167,21 @@ async function generateAndStoreEncryptedDEK(
   return dek;
 }
 
+async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 500) {
+  let files = [];
+  let attempts = 0;
+  while (files.length === 0 && attempts < maxAttempts) {
+    attempts++;
+    if (attempts > 1) {
+      console.log(`[DEK_TRACE] DEK not found, retrying... (Attempt ${attempts}/${maxAttempts})`);
+      await new Promise(resolve => setTimeout(resolve, baseDelay * (attempts - 1)));
+    }
+    const [foundFiles] = await bucket.getFiles({ prefix });
+    files = foundFiles;
+  }
+  return files;
+}
+
 async function getDEKFromBucket(bucketKey, bucket) {
   let prefix;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
@@ -203,35 +214,13 @@ async function getDEKFromBucket(bucketKey, bucket) {
   }
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
-  let files = [];
-  let attempts = 0;
-  const maxAttempts = 3;
-  const delay = 500; // 500ms
-
-  while (files.length === 0 && attempts < maxAttempts) {
-    attempts++;
-    if (attempts > 1) {
-      console.log(`[DEK_TRACE] DEK not found, retrying... (Attempt ${attempts}/${maxAttempts})`);
-      await new Promise(resolve => setTimeout(resolve, delay * (attempts - 1))); // increasing delay
-    }
-    const [foundFiles] = await bucket.getFiles({ prefix });
-    files = foundFiles;
-  }
+  let files = await getFilesWithRetry(bucket, prefix);
 
   // If no files are found, and we are not in the legacy bucket, check the root of the bucket
   if (files.length === 0 && bucket.name !== process.env.LEGACY_GCS_BUCKET_NAME) {
     console.log(`[DEK_TRACE] DEK not found in keys/ directory, checking root of the bucket`);
     prefix = bucketKey;
-    attempts = 0;
-    while (files.length === 0 && attempts < maxAttempts) {
-      attempts++;
-      if (attempts > 1) {
-        console.log(`[DEK_TRACE] DEK not found, retrying... (Attempt ${attempts}/${maxAttempts})`);
-        await new Promise(resolve => setTimeout(resolve, delay * (attempts - 1))); // increasing delay
-      }
-      const [foundFiles] = await bucket.getFiles({ prefix });
-      files = foundFiles;
-    }
+    files = await getFilesWithRetry(bucket, prefix);
   }
 
   if (files.length === 0) {
@@ -577,6 +566,11 @@ async function copyDEKToNewBucketKey(
  */
 async function getUserDekForSignup(firebaseUid, databaseId) {
   try {
+    if (!databaseId) {
+      throw new Error(
+        `❌ CRITICAL: databaseId is required for DEK generation (Firebase UID: ${firebaseUid})`,
+      );
+    }
     const bucketKey = databaseId.toString();
     const currentBucket = await getBucket();
 
