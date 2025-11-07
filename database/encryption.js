@@ -491,8 +491,18 @@ async function copyDEKToNewBucketKey(
         case 'local':
           environmentFolder = 'dev';
           break;
-        default:
-          environmentFolder = process.env.ENVIRONMENT;
+        default: {
+          const rawEnv = process.env.ENVIRONMENT?.trim();
+          if (!rawEnv) {
+            console.warn(
+              "[DEK_TRACE] ENVIRONMENT not set for legacy copy; defaulting to 'dev'.",
+            );
+            environmentFolder = "dev";
+          } else {
+            environmentFolder = rawEnv;
+          }
+          break;
+        }
       }
       sourcePath = `keys/${environmentFolder}/${sourceKey}.key`;
     } else {
