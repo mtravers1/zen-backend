@@ -245,7 +245,7 @@ function getDEKPath(bucketKey, bucket, includeExtension = false) {
  * @throws {Error} If file listing, download, or non-decryption-related decryption operations fail.
  */
 async function getDEKFromBucket(bucketKey, bucket) {
-  const prefix = getDEKPath(bucketKey, bucket);
+  let prefix = getDEKPath(bucketKey, bucket);
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
   let files = await getFilesWithRetry(bucket, prefix);

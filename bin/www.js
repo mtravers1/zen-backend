@@ -9,27 +9,34 @@ dotenv.config();
 import app from "../app.js";
 import debug from "debug";
 import http from "http";
+import connectDB from "../database/database.js";
 
 /**
  * Get port from environment and store in Express.
  */
 
-const port = normalizePort(process.env.APP_PORT || "3000");
-app.set("port", port);
+async function startServer() {
+  await connectDB();
 
-/**
- * Create HTTP server.
- */
+  const port = normalizePort(process.env.APP_PORT || "3000");
+  app.set("port", port);
 
-const server = http.createServer(app);
+  /**
+   * Create HTTP server.
+   */
 
-/**
- * Listen on provided port, on all network interfaces.
- */
+  const server = http.createServer(app);
 
-server.listen(port);
-server.on("error", (error) => onError(error, port));
-server.on("listening", onListening);
+  /**
+   * Listen on provided port, on all network interfaces. 
+   */
+
+  server.listen(port);
+  server.on("error", (error) => onError(error, port));
+  server.on("listening", onListening);
+}
+
+startServer();
 
 /**
  * Normalize a port into a number, string, or false.

@@ -17,7 +17,6 @@ import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
 export async function createApp() {
-  await connectDB();
   const app = express();
 
 // database initialization
