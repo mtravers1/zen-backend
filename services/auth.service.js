@@ -92,24 +92,7 @@ const _createUser = async (authUid, userData) => {
     throw new Error("User could not be saved to the database.");
   }
 
-  // Return a decrypted user object
-  const response = {
-    id: newUser._id,
-    _id: newUser._id,
-    authUid: newUser.authUid,
-    name: {
-      firstName: firstName,
-      lastName: lastName,
-      middleName: userData.middleName || null,
-    },
-    email: email,
-    phone: null,
-    role: newUser.role,
-    account_type: "Free",
-    profilePhotoUrl: userData.profilePhotoUrl || null,
-  };
-
-  return response;
+  return savedUser;
 };
 
 const signUp = async (userData, req) => {
