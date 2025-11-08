@@ -179,6 +179,85 @@ async function decryptValue(cipherTextBase64, dek) {
  * @returns {Promise<void>}
  */
 
+/**
+ * Extracts ciphertext from a multipart/form-data buffer.
+ *
+ * This function parses a buffer containing a multipart/form-data payload,
+ * identifies the part with `Content-Type: application/octet-stream`, and
+ * extracts its body. It handles boundary detection, CRLF cleaning, and
+ * closing boundary markers.
+ *
+ * @param {Buffer} buffer - The input buffer containing the multipart data.
+ * @param {boolean} DEBUG_MODE - When true, logs additional debugging information.
+ * @returns {Buffer|null} The extracted ciphertext as a Buffer, or null if not found.
+ */
+function extractCiphertextFromMultipart(buffer, DEBUG_MODE) {
+  const boundaryPrefix = Buffer.from('--', 'ascii');
+  const crlf = Buffer.from('\r\n', 'ascii');
+  const doubleCrlf = Buffer.from('\r\n\r\n', 'ascii');
+
+  const firstCrlfIndex = buffer.indexOf(crlf);
+  if (firstCrlfIndex === -1 || !buffer.slice(0, 2).equals(boundaryPrefix)) {
+    return null; // Not a valid multipart buffer
+  }
+
+  const boundary = buffer.slice(0, firstCrlfIndex);
+  if (DEBUG_MODE) {
+    console.log(`    - Detected multipart boundary: ${boundary.toString('ascii')}`);
+  }
+
+  const parts = [];
+  let startIndex = 0;
+  let boundaryIndex = buffer.indexOf(boundary, startIndex);
+
+  while (boundaryIndex !== -1) {
+    const nextBoundaryIndex = buffer.indexOf(boundary, boundaryIndex + boundary.length);
+    if (nextBoundaryIndex !== -1) {
+      parts.push(buffer.slice(boundaryIndex, nextBoundaryIndex));
+    } else {
+      parts.push(buffer.slice(boundaryIndex));
+    }
+    startIndex = boundaryIndex + boundary.length;
+    boundaryIndex = buffer.indexOf(boundary, startIndex);
+  }
+
+  for (const partBuffer of parts) {
+    const partString = partBuffer.toString('utf8');
+    if (partString.includes('Content-Type: application/octet-stream')) {
+      const bodyStart = partBuffer.indexOf(doubleCrlf) + doubleCrlf.length;
+      if (bodyStart !== -1) {
+        let extractedBody = partBuffer.slice(bodyStart);
+        if (DEBUG_MODE) {
+          console.log(`    - Extracted body (before cleaning): ${extractedBody.toString('base64')}`);
+        }
+
+        // Remove trailing \r\n
+        if (extractedBody.length >= crlf.length && extractedBody.slice(extractedBody.length - crlf.length).equals(crlf)) {
+          extractedBody = extractedBody.slice(0, extractedBody.length - crlf.length);
+          if (DEBUG_MODE) {
+            console.log(`    - Removed trailing CRLF.`);
+          }
+        }
+
+        // Remove trailing -- if it's the closing boundary
+        const closingBoundarySuffix = Buffer.from('--', 'ascii');
+        if (extractedBody.length >= closingBoundarySuffix.length && extractedBody.slice(extractedBody.length - closingBoundarySuffix.length).equals(closingBoundarySuffix)) {
+          extractedBody = extractedBody.slice(0, extractedBody.length - closingBoundarySuffix.length);
+        }
+        
+        if (DEBUG_MODE) {
+            console.log(`    - Extracted body (after cleaning): ${extractedBody.toString('base64')}`);
+        }
+
+        console.log(`    - Successfully extracted ciphertext from multipart file.`);
+        return extractedBody;
+      }
+    }
+  }
+
+  return null; // Ciphertext not found
+}
+
 async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
   console.log(`\tStarting DEK recovery for user with Firebase UID: ${firebaseUid}`);
 
@@ -229,64 +308,9 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
 
     let ciphertextToDecrypt = downloadedContent;
 
-    // Attempt to detect and extract ciphertext from multipart format
-    const boundaryPrefix = Buffer.from('--', 'ascii');
-    const crlf = Buffer.from('\r\n', 'ascii');
-    const doubleCrlf = Buffer.from('\r\n\r\n', 'ascii');
-
-    const firstCrlfIndex = downloadedContent.indexOf(crlf);
-    if (firstCrlfIndex !== -1 && downloadedContent.slice(0, 2).equals(boundaryPrefix)) {
-      // Extract the boundary string from the first line
-      const boundary = downloadedContent.slice(0, firstCrlfIndex);
-      console.log(`    - Detected multipart boundary: ${boundary.toString('ascii')}`);
-
-      const parts = [];
-      let startIndex = 0;
-      let boundaryIndex = downloadedContent.indexOf(boundary, startIndex);
-
-      while (boundaryIndex !== -1) {
-        const nextBoundaryIndex = downloadedContent.indexOf(boundary, boundaryIndex + boundary.length);
-        if (nextBoundaryIndex !== -1) {
-          parts.push(downloadedContent.slice(boundaryIndex, nextBoundaryIndex));
-        } else {
-          // Last part, or closing boundary
-          parts.push(downloadedContent.slice(boundaryIndex));
-        }
-        startIndex = boundaryIndex + boundary.length;
-        boundaryIndex = downloadedContent.indexOf(boundary, startIndex);
-      }
-
-      for (const partBuffer of parts) {
-        const partString = partBuffer.toString('utf8'); // Convert to string to search for headers
-        if (partString.includes('Content-Type: application/octet-stream')) {
-          const bodyStart = partBuffer.indexOf(doubleCrlf) + doubleCrlf.length;
-          if (bodyStart !== -1) {
-                          let extractedBody = partBuffer.slice(bodyStart);
-                          if (DEBUG_MODE) {
-                            console.log(`    - Extracted body (before cleaning): ${extractedBody.toString('base64')}`);
-                          }
-                          // Remove trailing \r\n if present before the next boundary or closing boundary
-                          if (extractedBody.length >= crlf.length && extractedBody.slice(extractedBody.length - crlf.length).equals(crlf)) {
-                            extractedBody = extractedBody.slice(0, extractedBody.length - crlf.length);
-                            if (DEBUG_MODE) {
-                              console.log(`    - Removed trailing CRLF.`);
-                            }
-                          }
-                          if (DEBUG_MODE) {
-                            console.log(`    - Extracted body (after cleaning): ${extractedBody.toString('base64')}`);
-                          }
-                                 // Remove trailing -- if it's the closing boundary
-            const closingBoundarySuffix = Buffer.from('--', 'ascii');
-            if (extractedBody.length >= closingBoundarySuffix.length && extractedBody.slice(extractedBody.length - closingBoundarySuffix.length).equals(closingBoundarySuffix)) {
-              extractedBody = extractedBody.slice(0, extractedBody.length - closingBoundarySuffix.length);
-            }
-
-            ciphertextToDecrypt = extractedBody;
-            console.log(`    - Successfully extracted ciphertext from multipart file.`);
-            break;
-          }
-        }
-      }
+    const extractedCiphertext = extractCiphertextFromMultipart(downloadedContent, DEBUG_MODE);
+    if (extractedCiphertext) {
+      ciphertextToDecrypt = extractedCiphertext;
     } else {
       console.log(`    - Key file ${file.name} does not appear to be multipart. Treating as raw ciphertext.`);
     }
