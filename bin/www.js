@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+
+import dotenv from "dotenv";
+dotenv.config();
+
+/**
+ * Module dependencies.
+ */
+import app from "../app.js";
+import debug from "debug";
+import http from "http";
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+const port = normalizePort(process.env.APP_PORT || "3000");
+app.set("port", port);
+
+/**
+ * Create HTTP server.
+ */
+
+const server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on("error", onError);
+server.on("listening", onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  let port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  const bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Formatting functions
+ */
+function _print(path, layer) {
+  if (layer.route) {
+    layer.route.stack.forEach(
+      _print.bind(null, path.concat(_split(layer.route.path))),
+    );
+  } else if (layer.name === "router" && layer.handle.stack) {
+    layer.handle.stack.forEach(
+      _print.bind(null, path.concat(_split(layer.regexp))),
+    );
+  } else if (layer.method) {
+    console.log(
+      "%s /%s",
+      layer.method.toUpperCase(),
+      path.concat(_split(layer.regexp)).filter(Boolean).join("/"),
+    );
+  }
+}
+
+function _split(thing) {
+  if (typeof thing === "string") {
+    return thing.split("/");
+  } else if (thing.fast_slash) {
+    return "";
+  } else {
+    const match = thing
+      .toString()
+      .replace("\\/?", "")
+      .replace("(?=\\/|$)", "$")
+      .match(/^\/\^((?:\\[.*+?^${}()|[\]\\\/]|[^.*+?^${}()|[\]\\\/])*)\$\//);
+    return match
+      ? match[1].replace(/\\(.)/g, "$1").split("/")
+      : "<complex:" + thing.toString() + ">";
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+function onListening() {
+  const addr = server.address();
+  const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+
+  console.log("\nEndpoints:\n");
+  app._router.stack.forEach(_print.bind(null, []));
+
+  console.log("\nListening on " + bind + "...\n");
+
+  debug("Listening on " + bind);
+}

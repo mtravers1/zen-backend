@@ -11,6 +11,7 @@ router.post("/check-email-firebase", authController.checkEmailFirebase);
 router.post("/check-email", authController.checkEmail);
 router.post("/check-oauth-validation", authController.checkOAuthValidation);
 router.get("/me", authController.getOwnUserProfile);
+router.get("/own", authController.getOwnUserProfile);
 router.post("/sendCode", authController.sendCode);
 router.post("/verifyCode", authController.verifyCode);
 router.post("/resetPassword", authController.resetPassword);

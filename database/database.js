@@ -2,7 +2,10 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
   try {
-    const mongoDB = process.env.MONGODB_URI || "mongodb://localhost:27017";
+    const mongoDB = process.env.MONGODB_URI;
+    if (!mongoDB) {
+      throw new Error("MONGODB_URI is not set in the environment variables.");
+    }
     const user = process.env.MONGODB_USER;
     const pass = process.env.MONGODB_PASS;
     const dbName = process.env.MONGODB_DB;

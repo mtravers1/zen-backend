@@ -24,6 +24,12 @@ import {
   createSafeDecrypt,
 } from "../lib/encryptionHelper.js";
 
+/**
+ * Creates a `link_token` for initializing the Plaid Link flow.
+ * This is a transient token used by the frontend to display the Plaid modal to the user.
+ * It is not a decryption token.
+ * @returns {Promise<string>} The link token.
+ */
 const createLinkToken = async (
   email,
   isAndroid,

@@ -68,26 +68,7 @@ if (!process.env.GCS_BUCKET_NAME) {
   process.exit(1);
 }
 
-/*
-const expectedBucketName =
-  process.env.ENVIRONMENT === "production"
-    ? "prod"
-    : process.env.ENVIRONMENT === "staging"
-      ? "staging"
-      : process.env.ENVIRONMENT === "development"
-        ? "dev"
-        : null;
 
-if (
-  expectedBucketName &&
-  process.env.GCS_BUCKET_NAME !== expectedBucketName
-) {
-  console.error(
-    `CRITICAL ERROR: GCS_BUCKET_NAME is set to '${process.env.GCS_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`,
-  );
-  process.exit(1);
-}
-*/
 
 const app = express();
 
@@ -203,7 +184,7 @@ app.use((req, res, next) => {
 });
 
 // Load routes
-app.use("/api/ai", aiRouter);
+
 app.use("/api", router);
 
 // Add root route to avoid 401 errors

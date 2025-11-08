@@ -21,6 +21,7 @@ const requiredEnvVars = [
   "GCP_KEY_LOCATION",
   "GCP_KEY_RING",
   "GCP_KEY_NAME",
+  "LEGACY_GCS_ENVIRONMENT_FOLDER",
 ];
 
 for (const envVar of requiredEnvVars) {
@@ -38,20 +39,20 @@ let storageCredentials = null; // Initialize to null
 const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
 let loadedFromEnv = false;
 
-if (storageServiceAccountB64 && storageServiceAccountB64.trim() !== "") {
-  try {
-    storageCredentials = JSON.parse(
-      Buffer.from(storageServiceAccountB64, "base64").toString("utf-8"),
-    );
-    console.log("✅ Storage credentials loaded from environment variable.");
-  } catch (error) {
-    throw new Error(
-      "❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
-    );
-  }
-} else {
+if (!storageServiceAccountB64 || storageServiceAccountB64.trim() === "") {
   throw new Error(
     "❌ CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set or is empty.",
+  );
+}
+
+try {
+  storageCredentials = JSON.parse(
+    Buffer.from(storageServiceAccountB64, "base64").toString("utf-8"),
+  );
+  console.log("✅ Storage credentials loaded from environment variable.");
+} catch (error) {
+  throw new Error(
+    "❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
   );
 }
 
@@ -65,17 +66,21 @@ console.log("✅ Storage client initialized");
 let kmsCredentials = null;
 const kmsServiceAccountB64 = process.env.KMS_SERVICE_ACCOUNT;
 
-if (kmsServiceAccountB64 && kmsServiceAccountB64.trim() !== "") {
-  try {
-    kmsCredentials = JSON.parse(
-      Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
-    );
-    console.log("✅ KMS credentials loaded from environment variable.");
-  } catch (error) {
-    throw new Error(
-      "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
-    );
-  }
+if (!kmsServiceAccountB64 || kmsServiceAccountB64.trim() === "") {
+  throw new Error(
+    "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
+  );
+}
+
+try {
+  kmsCredentials = JSON.parse(
+    Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
+  );
+  console.log("✅ KMS credentials loaded from environment variable.");
+} catch (error) {
+  throw new Error(
+    "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
+  );
 }
 
 
@@ -218,29 +223,7 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
 async function getDEKFromBucket(bucketKey, bucket) {
   let prefix;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
-    let environmentFolder;
-    switch (process.env.ENVIRONMENT) {
-      case 'production':
-        environmentFolder = 'prod';
-        break;
-      case 'staging':
-        environmentFolder = 'staging';
-        break;
-      case 'development':
-      case 'local':
-        environmentFolder = 'dev';
-        break;
-      default: {
-        const rawEnv = process.env.ENVIRONMENT;
-        if (!rawEnv || rawEnv.trim() === '') {
-          environmentFolder = 'dev';
-          console.warn(`⚠️ ENVIRONMENT variable is unset or blank for legacy DEK lookup. Defaulting to '${environmentFolder}'.`);
-        } else {
-          environmentFolder = rawEnv;
-        }
-        break;
-      }
-    }
+    const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
     prefix = `keys/${environmentFolder}/${bucketKey}`;
   } else {
     prefix = `keys/${bucketKey}`;
@@ -335,16 +318,13 @@ async function getUserDek(firebaseUid) {
     }
     console.log(`[DEK_TRACE] No valid DEKs in cache.`);
 
-    let allDeks = [];
-    const primaryBucket = await getBucket();
-    const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
-
     // 2. Check primary bucket with databaseId
     console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
     const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);
     if (primaryDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${primaryDeks.length} DEK(s) in primary bucket.`);
-      allDeks = allDeks.concat(primaryDeks);
+      dekCache.set(bucketKey, primaryDeks);
+      return primaryDeks;
     }
 
     // 3. Check legacy bucket with databaseId
@@ -353,7 +333,8 @@ async function getUserDek(firebaseUid) {
     if (legacyDbIdDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating...`);
       await copyDEKToNewBucketKey(bucketKey, legacyBucket, primaryBucket);
-      allDeks = allDeks.concat(legacyDbIdDeks);
+      dekCache.set(bucketKey, legacyDbIdDeks);
+      return legacyDbIdDeks;
     }
 
     // 4. Check legacy bucket with firebaseUid
@@ -362,22 +343,14 @@ async function getUserDek(firebaseUid) {
     if (legacyFirebaseUidDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating...`);
       await copyDEKToNewBucketKey(firebaseUid, legacyBucket, primaryBucket, bucketKey); // Copy to new key name
-      allDeks = allDeks.concat(legacyFirebaseUidDeks);
+      dekCache.set(bucketKey, legacyFirebaseUidDeks);
+      return legacyFirebaseUidDeks;
     }
 
     // 5. Final processing
-    if (allDeks.length === 0) {
-      const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
-      console.error(`❌ ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
-
-    // Remove duplicates
-    const uniqueDeks = Array.from(new Set(allDeks.map(dek => dek.toString('hex')))).map(hex => Buffer.from(hex, 'hex'));
-    console.log(`[DEK_TRACE] Found a total of ${uniqueDeks.length} unique DEK(s).`);
-
-    dekCache.set(bucketKey, uniqueDeks);
-    return uniqueDeks;
+    const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
+    console.error(`❌ ${errorMessage}`);
+    throw new Error(errorMessage);
 
   } catch (e) {
     console.error(
@@ -529,31 +502,7 @@ async function copyDEKToNewBucketKey(
 
     let sourcePath;
     if (sourceBucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
-      let environmentFolder;
-      switch (process.env.ENVIRONMENT) {
-        case 'production':
-          environmentFolder = 'prod';
-          break;
-        case 'staging':
-          environmentFolder = 'staging';
-          break;
-        case 'development':
-        case 'local':
-          environmentFolder = 'dev';
-          break;
-        default: {
-          const rawEnv = process.env.ENVIRONMENT?.trim();
-          if (!rawEnv) {
-            console.warn(
-              "[DEK_TRACE] ENVIRONMENT not set for legacy copy; defaulting to 'dev'.",
-            );
-            environmentFolder = "dev";
-          } else {
-            environmentFolder = rawEnv;
-          }
-          break;
-        }
-      }
+      const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
       sourcePath = `keys/${environmentFolder}/${sourceKey}.key`;
     } else {
       sourcePath = `keys/${sourceKey}.key`;

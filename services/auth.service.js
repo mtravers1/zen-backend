@@ -27,8 +27,8 @@ import {
   createSafeDecrypt,
 } from "../lib/encryptionHelper.js";
 
-const signUp = async (userData, req) => {
-  const { email, firstName, lastName, authUid } = userData;
+const _createUser = async (authUid, userData) => {
+  const { email, firstName, lastName } = userData;
 
   // Basic validation
   if (!email || !firstName || !lastName || !authUid) {
@@ -46,7 +46,6 @@ const signUp = async (userData, req) => {
   }
 
   // Get DEK for the new user
-  console.log("[SIGNUP-TRACE] Step 2: auth.service.js -> Getting user encryption key (DEK).");
   const userId = new mongoose.Types.ObjectId();
   const dek = await getUserDekForSignup(authUid, userId);
   const safeEncrypt = createSafeEncrypt(authUid);
@@ -79,7 +78,7 @@ const signUp = async (userData, req) => {
       },
     ],
     emailHash: hashEmail(email),
-    role: "individual",
+    role: userData.role || "individual",
     account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl
       ? await safeEncrypt(userData.profilePhotoUrl, dek, {
@@ -105,12 +104,17 @@ const signUp = async (userData, req) => {
     },
     email: email,
     phone: null,
-    role: "individual",
+    role: newUser.role,
     account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl || null,
   };
 
   return response;
+};
+
+const signUp = async (userData, req) => {
+  const { authUid } = userData;
+  return await _createUser(authUid, userData);
 };
 
 const signInOrCreate = async (uid, userData) => {
@@ -126,34 +130,7 @@ const signInOrCreate = async (uid, userData) => {
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
-      const userId = new mongoose.Types.ObjectId();
-      const dek = await getUserDekForSignup(uid, userId);
-      const safeEncrypt = createSafeEncrypt(uid);
-      const { firstName, lastName } = userData;
-
-      user = new User({
-        _id: userId,
-        authUid: uid,
-        email: [
-          {
-            email: await safeEncrypt(userData.email, dek, { field: "email" }),
-            isPrimary: true,
-            isVerified: true,
-            emailType: "personal",
-          },
-        ],
-        emailHash: hashEmail(userData.email),
-        name: {
-          firstName: await safeEncrypt(firstName, dek, { field: "firstName" }),
-          lastName: await safeEncrypt(lastName, dek, { field: "lastName" }),
-        },
-        role: userData.role,
-      });
-
-      const savedUser = await user.save();
-      if (!savedUser) {
-        throw new Error("New user could not be saved to the database.");
-      }
+      user = await _createUser(uid, userData);
     }
 
     const dek = await getUserDek(uid);
@@ -991,7 +968,7 @@ const signIn = async (email, password) => {
       field: "firstName",
     });
     const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
-      user_id: user._id,
+      user_id: user._id,.
       field: "lastName",
     });
     const decryptedMiddleName = user.name.middleName
@@ -1044,7 +1021,10 @@ const signIn = async (email, password) => {
 
     if (!user.account_type) {
       user.account_type = "Free";
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("New user could not be saved to the database.");
+      }
     }
 
     const token = generateJWTToken(user._id, normalizedEmail);
