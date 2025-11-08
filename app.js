@@ -18,7 +18,14 @@ import router from "./routes/index.js";
 import aiRouter from "./routes/ai.router.js";
 
 // Connect to the database
-connectDB();
+(async () => {
+  try {
+    await connectDB();
+  } catch (error) {
+    console.error("Failed to connect to database:", error);
+    process.exit(1);
+  }
+})();
 
 // Initialize Firebase Admin SDK
   console.log("🔥 Initializing Firebase Admin...");
