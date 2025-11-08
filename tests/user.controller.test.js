@@ -1,17 +1,19 @@
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
 import request from "supertest";
-import app from "../app.js";
+import { createApp } from "../app.js";
 import User from "../database/models/User.js";
 import jwt from "jsonwebtoken";
 
 let mongoServer;
 let mongoUri;
+let app;
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
+  app = createApp();
 });
 
 afterAll(async () => {

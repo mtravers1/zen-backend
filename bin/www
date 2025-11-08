@@ -6,30 +6,41 @@ dotenv.config();
 /**
  * Module dependencies.
  */
-import app from "../app.js";
+import { createApp } from "../app.js";
 import debug from "debug";
 import http from "http";
+import connectDB from "../database/database.js";
 
-/**
- * Get port from environment and store in Express.
- */
+(async () => {
+  try {
+    await connectDB();
 
-const port = normalizePort(process.env.APP_PORT || "3000");
-app.set("port", port);
+    const app = createApp();
 
-/**
- * Create HTTP server.
- */
+    /**
+     * Get port from environment and store in Express.
+     */
+    const port = normalizePort(process.env.APP_PORT || "3000");
+    app.set("port", port);
 
-const server = http.createServer(app);
+    /**
+     * Create HTTP server.
+     */
+    const server = http.createServer(app);
 
-/**
- * Listen on provided port, on all network interfaces.
- */
+    /**
+     * Listen on provided port, on all network interfaces.
+     */
+    server.listen(port);
+    server.on("error", onError);
+    server.on("listening", () => onListening(app, server));
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+})();
 
-server.listen(port);
-server.on("error", onError);
-server.on("listening", onListening);
+
 
 /**
  * Normalize a port into a number, string, or false.
@@ -118,7 +129,7 @@ function _split(thing) {
 /**
  * Event listener for HTTP server "listening" event.
  */
-function onListening() {
+function onListening(app, server) {
   const addr = server.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
 

@@ -17,67 +17,8 @@ import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 import aiRouter from "./routes/ai.router.js";
 
-// Connect to the database
-(async () => {
-  try {
-    await connectDB();
-  } catch (error) {
-    console.error("Failed to connect to database:", error);
-    process.exit(1);
-  }
-})();
-
-// Initialize Firebase Admin SDK
-  console.log("🔥 Initializing Firebase Admin...");
-  let serviceAccount;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT;
-      const serviceAccountJsonString = Buffer.from(
-        serviceAccountBase64,
-        "base64",
-      ).toString("utf8");
-      serviceAccount = JSON.parse(serviceAccountJsonString);
-      console.log(
-        "🔥 Service account loaded successfully from environment variable.",
-      );
-    } catch (error) {
-      console.error(
-        "🔥 Error parsing service account from environment variable:",
-        error,
-      );
-      process.exit(1);
-    }
-  } else {
-    console.error(
-      "CRITICAL ERROR: FIREBASE_SERVICE_ACCOUNT is not set. Exiting.",
-    );
-    process.exit(1);
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://zentavos.firebaseio.com",
-  });
-  console.log("🔥 Firebase Admin initialized successfully");
-
-console.log(
-  `The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`,
-);
-console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
-console.log(`GCS_BUCKET_NAME: ${process.env.GCS_BUCKET_NAME}`);
-
-// Check for critical environment variables
-if (!process.env.GCS_BUCKET_NAME) {
-  console.error(
-    "CRITICAL ERROR: GCS_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.",
-  );
-  process.exit(1);
-}
-
-
-
-const app = express();
+export function createApp() {
+  const app = express();
 
 // database initialization
 // require('./database/database');
@@ -230,4 +171,7 @@ app.use(function (err, req, res, next) {
   res.status(err.status || 500).json(errorResponse);
 });
 
-export default app;
+  return app;
+}
+
+export default { createApp };
