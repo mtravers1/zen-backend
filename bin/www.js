@@ -28,7 +28,7 @@ const server = http.createServer(app);
  */
 
 server.listen(port);
-server.on("error", onError);
+server.on("error", (error) => onError(error, port));
 server.on("listening", onListening);
 
 /**
@@ -55,7 +55,7 @@ function normalizePort(val) {
  * Event listener for HTTP server "error" event.
  */
 
-function onError(error) {
+function onError(error, port) {
   if (error.syscall !== "listen") {
     throw error;
   }
