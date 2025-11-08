@@ -15,7 +15,6 @@ import {
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
 import connectDB from "./database/database.js";
 import router from "./routes/index.js";
-import aiRouter from "./routes/ai.router.js";
 
 export async function createApp() {
   await connectDB();
