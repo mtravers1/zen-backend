@@ -15,7 +15,7 @@ import connectDB from "../database/database.js";
   try {
     await connectDB();
 
-    const app = createApp();
+    const app = await createApp();
 
     /**
      * Get port from environment and store in Express.

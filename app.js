@@ -17,7 +17,8 @@ import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 import aiRouter from "./routes/ai.router.js";
 
-export function createApp() {
+export async function createApp() {
+  await connectDB();
   const app = express();
 
 // database initialization
@@ -172,4 +173,4 @@ app.use(function (err, req, res, next) {
   return app;
 }
 
-export default { createApp };
+export default createApp;

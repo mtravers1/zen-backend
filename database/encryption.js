@@ -211,6 +211,30 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
 }
 
 /**
+ * Constructs the GCS path for a DEK file, handling legacy and modern path structures.
+ *
+ * @param {string} bucketKey - The logical key for the DEK (e.g., user ID).
+ * @param {object} bucket - The GCS Bucket object.
+ * @param {boolean} [includeExtension=false] - Whether to include the '.key' extension in the path.
+ * @returns {string} The constructed GCS path for the DEK file.
+ */
+function getDEKPath(bucketKey, bucket, includeExtension = false) {
+  let path;
+  if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
+    const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
+    path = `keys/${environmentFolder}/${bucketKey}`;
+  } else {
+    path = `keys/${bucketKey}`;
+  }
+
+  if (includeExtension) {
+    path += '.key';
+  }
+
+  return path;
+}
+
+/**
  * Locate encrypted DEK files for a given bucket key in the specified GCS bucket, download and decrypt them, and return their plaintext DEKs.
  *
  * Searches for DEK files under `keys/{bucketKey}` or, when the provided bucket is the legacy bucket, under `keys/{env}/{bucketKey}` (where `env` is derived from ENVIRONMENT). If not found in the keys directory for non-legacy buckets, the function also checks the bucket root for a file named exactly `bucketKey`. Each found encrypted DEK is downloaded and decrypted with the configured KMS key; decrypted plaintext DEKs are returned as Buffer instances. Encrypted DEKs that fail KMS decryption are moved to a dead-letter location and skipped.
@@ -221,13 +245,7 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
  * @throws {Error} If file listing, download, or non-decryption-related decryption operations fail.
  */
 async function getDEKFromBucket(bucketKey, bucket) {
-  let prefix;
-  if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
-    const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
-    prefix = `keys/${environmentFolder}/${bucketKey}`;
-  } else {
-    prefix = `keys/${bucketKey}`;
-  }
+  const prefix = getDEKPath(bucketKey, bucket);
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
   let files = await getFilesWithRetry(bucket, prefix);
@@ -503,13 +521,7 @@ async function copyDEKToNewBucketKey(
       `📦 Copying DEK from source key ${sourceKey} in bucket ${sourceBucket.name} to target key ${finalTargetKey} in bucket ${targetBucket.name}`,
     );
 
-    let sourcePath;
-    if (sourceBucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
-      const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
-      sourcePath = `keys/${environmentFolder}/${sourceKey}.key`;
-    } else {
-      sourcePath = `keys/${sourceKey}.key`;
-    }
+    const sourcePath = getDEKPath(sourceKey, sourceBucket, true);
     const sourceFile = sourceBucket.file(sourcePath);
 
     if (!(await sourceFile.exists())[0]) {
