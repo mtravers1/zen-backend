@@ -59,7 +59,7 @@ console.log(`\tRunning in environment: ${NODE_ENV} (key folder: ${keyEnv})`);
 // --- Redefined constants and clients from encryption.js ---
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
-const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
+const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME || process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID;
 const GCP_KEY_LOCATION = process.env.GCP_KEY_LOCATION;
 const GCP_KEY_RING = process.env.GCP_KEY_RING;
@@ -67,7 +67,7 @@ const GCP_KEY_NAME = process.env.GCP_KEY_NAME;
 
 if (!LEGACY_GCS_BUCKET_NAME || !GCS_BUCKET_NAME) {
   console.error(
-    "\tCRITICAL: LEGACY_GCS_BUCKET_NAME and GCS_BUCKET_NAME environment variables must be set."
+    "\tCRITICAL: LEGACY_GCS_BUCKET_NAME (or LEGACY_GCS_ENVIRONMENT_FOLDER) and GCS_BUCKET_NAME environment variables must be set."
   );
   process.exit(1);
 }

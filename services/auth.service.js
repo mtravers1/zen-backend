@@ -968,7 +968,7 @@ const signIn = async (email, password) => {
       field: "firstName",
     });
     const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
-      user_id: user._id,.
+      user_id: user._id,
       field: "lastName",
     });
     const decryptedMiddleName = user.name.middleName
