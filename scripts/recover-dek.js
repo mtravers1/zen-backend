@@ -189,7 +189,7 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
   if (!user) {
     console.error(`\tError: User with Firebase UID '${firebaseUid}' not found in the database.`);
     await mongoose.connection.close();
-    return;
+    process.exit(1);
   }
   const userId = user._id;
   console.log(`\tFound user: ${user.emailHash}`);
@@ -199,7 +199,7 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
   if (!encryptedSample) {
     console.error("\tError: User does not have an encrypted first name to test against.");
     await mongoose.connection.close();
-    return;
+    process.exit(1);
   }
 
   // 2. Construct the path to the specific DEK file
@@ -219,7 +219,7 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
     if (!exists) {
       console.error(`\tError: Key file not found at path: ${keyFilePath}`);
       await mongoose.connection.close();
-      return;
+      process.exit(1);
     }
 
     // b. Download the encrypted DEK content
