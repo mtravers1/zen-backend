@@ -169,12 +169,14 @@ async function decryptValue(cipherTextBase64, dek) {
 }
 
 /**
- * Recover an orphaned Data Encryption Key (DEK) for a user by locating a legacy key file in Google Cloud Storage, validating it against a user's encrypted sample data, and copying the matching key into the primary bucket under the environment-specific path.
+ * Recovers an orphaned Data Encryption Key (DEK) for a user by Firebase UID.
  *
- * The function looks up the user (either by MongoDB ObjectId or Firebase UID), uses the user's encrypted first name as a test sample, reads and normalizes the legacy key file (including multipart-form extraction when present), attempts KMS or direct decryption to obtain one or more candidate DEKs, tests each candidate by decrypting the sample, and on a match copies the key to gs://{GCS_BUCKET_NAME}/keys/{env}/{userId}.key.
+ * Locates the user by Firebase UID, uses their encrypted first name as a test sample, downloads and normalizes the legacy key file from `keys/{env}/{firebaseUid}.key` (including multipart-form extraction when present), attempts KMS or direct decryption to obtain one or more candidate DEKs, tests each candidate by decrypting the sample, and on a match copies the key to the primary bucket at `gs://{GCS_BUCKET_NAME}/keys/{env}/{userId}.key`.
  *
- * @param {string} identifier - The user identifier value (either a MongoDB ObjectId or a Firebase auth UID).
- * @param {'dbid'|'firebase'} identifierType - The identifier type: 'dbid' to look up by MongoDB _id, 'firebase' to look up by authUid.
+ * @param {string} firebaseUid - The user's Firebase authentication UID.
+ * @param {boolean} DEBUG_MODE - When true, logs sensitive ciphertext for debugging purposes.
+ * @param {boolean} FORCE_MODE - When true, overwrites existing keys in the primary bucket without prompting.
+ * @returns {Promise<void>}
  */
 
 async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
@@ -337,7 +339,6 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
             break; // Exit loop once key is found
           } catch (copyError) {
             console.error(`\n\tFATAL: Failed to copy key to gs://${GCS_BUCKET_NAME}/${newFileName}.`, copyError);
-            foundKey = false;
             process.exit(1);
           }
         }
@@ -377,7 +378,7 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
       }
     }
   } catch (error) {
-    console.warn(`  - Failed to process key ${file.name}: ${error.message}`);
+    console.warn(`  - Failed to process key ${file.name}:`, error);
   }
 
   if (!foundKey) {
