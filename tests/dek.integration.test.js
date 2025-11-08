@@ -8,6 +8,7 @@ import firebaseAdmin from "firebase-admin";
 import mongoose from "mongoose";
 import { hashEmail } from "../database/encryption.js";
 import connectDB from "../database/database.js";
+import { Storage } from "@google-cloud/storage";
 
 // This test requires a separate Firebase app instance
 const serviceAccount = JSON.parse(

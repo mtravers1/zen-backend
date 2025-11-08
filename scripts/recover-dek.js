@@ -372,6 +372,8 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
 
   if (!foundKey) {
     console.error("\n\tRECOVERY FAILED: Could not find a valid DEK for this user.");
+    await mongoose.connection.close();
++   process.exit(1);
   }
 
   await mongoose.connection.close();
@@ -398,5 +400,8 @@ if (!firebaseUid) {
   process.exit(1);
 }
 
-recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE).catch(console.error);
+recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
