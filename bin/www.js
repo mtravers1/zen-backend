@@ -7,7 +7,8 @@ dotenv.config();
  * Module dependencies.
  */
 import createApp from "../app.js";
-import debug from "debug";
+import Debug from "debug";
+const debug = Debug("zentavos-backend:server");
 import http from "http";
 import connectDB from "../database/database.js";
 
@@ -40,7 +41,10 @@ async function startServer() {
   server.on("listening", () => onListening(expressApp));
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
 
 /**
  * Normalize a port into a number, string, or false.
@@ -130,11 +134,18 @@ function _split(thing) {
  * Event listener for HTTP server "listening" event.
  */
 function onListening(expressApp) {
-  const addr = this.address();
+  const addr = server.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
 
-  console.log("\nEndpoints:\n");
-  expressApp._router.stack.forEach(_print.bind(null, []));
+  // NOTE: This route introspection relies on Express internals and may break in future versions.
+  // For a more robust solution, consider using a library like express-list-endpoints.
+  try {
+    console.log("\nEndpoints:\n");
+    expressApp._router.stack.forEach(_print.bind(null, []));
+  } catch (e) {
+    console.warn("\n⚠️  Could not introspect Express routes. The router shape may have changed.");
+    console.warn("Consider using a library like express-list-endpoints for more robust route discovery.");
+  }
 
   console.log("\nListening on " + bind + "...\n");
 
