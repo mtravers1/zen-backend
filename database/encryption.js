@@ -318,6 +318,9 @@ async function getUserDek(firebaseUid) {
     }
     console.log(`[DEK_TRACE] No valid DEKs in cache.`);
 
+    const primaryBucket = await getBucket();
+    const legacyBucket = await getBucket(LEGACY_GCS_BUCKET_NAME);
+
     // 2. Check primary bucket with databaseId
     console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
     const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);

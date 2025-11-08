@@ -118,9 +118,7 @@ app.use((req, res, next) => {
   const shouldExclude =
     excludedPaths.includes(req.path) ||
     req.path.startsWith("/api/account/photo/") ||
-    (process.env.NODE_ENV === "development" && req.path.startsWith("/dev")) ||
-    (process.env.NODE_ENV === "development" &&
-      req.path === "/api/payments/mock-upgrade");
+    (process.env.NODE_ENV === "development" && req.path.startsWith("/dev"));
 
   if (shouldExclude) {
     // Skip authentication for excluded paths
