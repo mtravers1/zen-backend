@@ -72,6 +72,13 @@ if (!LEGACY_GCS_BUCKET_NAME || !GCS_BUCKET_NAME) {
   process.exit(1);
 }
 
+if (!GCP_PROJECT_ID || !GCP_KEY_LOCATION || !GCP_KEY_RING || !GCP_KEY_NAME) {
+  console.error(
+    "\tCRITICAL: GCP_PROJECT_ID, GCP_KEY_LOCATION, GCP_KEY_RING, and GCP_KEY_NAME environment variables must be set."
+  );
+  process.exit(1);
+}
+
 // Initialize Storage client
 let storageCredentials;
 try {
@@ -170,7 +177,7 @@ async function decryptValue(cipherTextBase64, dek) {
  * @param {'dbid'|'firebase'} identifierType - The identifier type: 'dbid' to look up by MongoDB _id, 'firebase' to look up by authUid.
  */
 
-async function recoverDek(firebaseUid, DEBUG_MODE) {
+async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
   console.log(`\tStarting DEK recovery for user with Firebase UID: ${firebaseUid}`);
 
   // 1. Connect to DB and find user
@@ -295,8 +302,8 @@ async function recoverDek(firebaseUid, DEBUG_MODE) {
     }
     console.log(`    - KMS decrypted plaintext (DEK) length: ${plaintext.length}`);
 
-    // Check if the plaintext is an array of DEKs
-    if (plaintext.length % 32 === 0) {
+    // Check if the plaintext is an array of DEKs (multiple DEKs)
+    if (plaintext.length > 32 && plaintext.length % 32 === 0) {
       const deks = [];
       for (let i = 0; i < plaintext.length; i += 32) {
         const currentDek = plaintext.slice(i, i + 32);
@@ -319,13 +326,18 @@ async function recoverDek(firebaseUid, DEBUG_MODE) {
           // c. Copy the key to the new bucket with the correct name
           const newFileName = `keys/${keyEnv}/${userId}.key`;
           const newFile = primaryBucket.file(newFileName);
+          const [exists] = await newFile.exists();
+          if (exists && !FORCE_MODE) {
+            console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+            process.exit(1);
+          }
           await file.copy(newFile);
 
           console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
           break; // Exit loop once key is found
         }
       }
-    } else {
+    } else { // Treat as a single DEK
       const dek = plaintext;
       if (dek.length !== 32) {
         console.error(`    - ERROR: Plaintext DEK from ${file.name} for user ${userId} has invalid length ${dek.length}. Skipping decryption attempt.`);
@@ -343,6 +355,11 @@ async function recoverDek(firebaseUid, DEBUG_MODE) {
           // c. Copy the key to the new bucket with the correct name
           const newFileName = `keys/${keyEnv}/${userId}.key`;
           const newFile = primaryBucket.file(newFileName);
+          const [exists] = await newFile.exists();
+          if (exists && !FORCE_MODE) {
+            console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+            process.exit(1);
+          }
           await file.copy(newFile);
 
           console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
@@ -364,17 +381,22 @@ async function recoverDek(firebaseUid, DEBUG_MODE) {
 
 const args = process.argv.slice(2);
 const DEBUG_MODE = args.includes('--debug');
+const FORCE_MODE = args.includes('--force');
 const firebaseUid = args.find(arg => !arg.startsWith('--'));
 
 if (DEBUG_MODE) {
   console.warn('\tWARNING: DEBUG mode is enabled. Sensitive ciphertext may be logged.');
 }
 
+if (FORCE_MODE) {
+    console.warn('\tWARNING: FORCE mode is enabled. Existing keys will be overwritten.');
+}
+
 if (!firebaseUid) {
   console.error('\tError: Missing Firebase UID argument.');
-  console.error('\tUsage: node --env-file=.env scripts/recover-dek.js <USER_FIREBASE_UID> [--debug]');
+  console.error('\tUsage: node --env-file=.env scripts/recover-dek.js <USER_FIREBASE_UID> [--debug] [--force]');
   process.exit(1);
 }
 
-recoverDek(firebaseUid, DEBUG_MODE).catch(console.error);
+recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE).catch(console.error);
 

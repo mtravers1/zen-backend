@@ -368,22 +368,22 @@ const addAccount = async (accessToken, email, uid) => {
           (account) => account.plaid_account_id === transaction.account_id,
         );
 
-        const encryptedAmount = await safeEncrypt(transaction.amount, dek);
-        const encryptedAccountType = await safeEncrypt(accountType, dek);
+        const encryptedAmount = await safeEncrypt(transaction.amount, dek, { context: { transactionKind: 'investment', field: 'amount' } });
+        const encryptedAccountType = await safeEncrypt(accountType, dek, { context: { transactionKind: 'investment', field: 'accountType' } });
 
-        const name = await safeEncrypt(transaction.name, dek);
+        const name = await safeEncrypt(transaction.name, dek, { context: { transactionKind: 'investment', field: 'name' } });
 
-        const fees = await safeEncrypt(transaction.fees, dek);
+        const fees = await safeEncrypt(transaction.fees, dek, { context: { transactionKind: 'investment', field: 'fees' } });
 
-        const price = await safeEncrypt(transaction.price, dek);
+        const price = await safeEncrypt(transaction.price, dek, { context: { transactionKind: 'investment', field: 'price' } });
 
-        const quantity = await safeEncrypt(transaction.quantity, dek);
+        const quantity = await safeEncrypt(transaction.quantity, dek, { context: { transactionKind: 'investment', field: 'quantity' } });
 
-        const securityId = await safeEncrypt(transaction.security_id, dek);
+        const securityId = await safeEncrypt(transaction.security_id, dek, { context: { transactionKind: 'investment', field: 'securityId' } });
 
-        const type = await safeEncrypt(transaction.type, dek);
+        const type = await safeEncrypt(transaction.type, dek, { context: { transactionKind: 'investment', field: 'type' } });
 
-        const subtype = await safeEncrypt(transaction.subtype, dek);
+        const subtype = await safeEncrypt(transaction.subtype, dek, { context: { transactionKind: 'investment', field: 'subtype' } });
 
         const newTransaction = new Transaction({
           accountId: account._id,
@@ -2429,13 +2429,15 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     .sort({ transactionDate: 1 })
     .lean();
   const transactions = [];
+  const dek = await getUserDek(uid);
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecrypt(transaction.amount, dek);
+    const decryptedAmount = await safeDecrypt(transaction.amount, dek, { context: { resource: 'transaction', field: 'amount' } });
 
     const decryptedAccountType = await safeDecrypt(
       transaction.accountType,
       dek,
+      { context: { resource: 'transaction', field: 'accountType' } }
     );
 
     transactions.push({
@@ -2765,18 +2767,22 @@ const getCashFlowsWeekly = async (profile, uid) => {
     const decryptedCurrentBalance = await safeDecrypt(
       plaidAccount.currentBalance,
       dek,
+      { context: { accountId: plaidAccount._id, field: 'currentBalance' } },
     );
     const decryptedAvailableBalance = await safeDecrypt(
       plaidAccount.availableBalance,
       dek,
+      { context: { accountId: plaidAccount._id, field: 'availableBalance' } },
     );
     const decryptedAccountType = await safeDecrypt(
       plaidAccount.account_type,
       dek,
+      { context: { accountId: plaidAccount._id, field: 'account_type' } },
     );
     const decryptedAccountSubtype = await safeDecrypt(
       plaidAccount.account_subtype,
       dek,
+      { context: { accountId: plaidAccount._id, field: 'account_subtype' } },
     );
     plaidAccounts.push({
       ...plaidAccount,

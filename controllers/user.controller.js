@@ -170,7 +170,10 @@ const updateUserMethod = async (req, res) => {
     }
 
     user.method = method;
-    await user.save();
+    const savedUser = await user.save();
+    if (!savedUser) {
+      throw new Error("User method could not be updated.");
+    }
 
     console.log(
       `[USER CONTROLLER] Updated method for user ${userId} to ${method}`,
@@ -306,6 +309,10 @@ const updateUserInfo = async (req, res) => {
       { $set: updateData },
       { new: true }, // Return updated document
     ).select("-password");
+
+    if (!updatedUser) {
+      throw new Error("User info could not be updated.");
+    }
 
     console.log("[USER CONTROLLER] User info updated successfully:", userId);
 

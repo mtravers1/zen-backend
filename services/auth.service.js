@@ -88,7 +88,10 @@ const signUp = async (userData, req) => {
       : null,
   });
 
-  await newUser.save();
+  const savedUser = await newUser.save();
+  if (!savedUser) {
+    throw new Error("User could not be saved to the database.");
+  }
 
   // Return a decrypted user object
   const response = {
@@ -147,7 +150,10 @@ const signInOrCreate = async (uid, userData) => {
         role: userData.role,
       });
 
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("New user could not be saved to the database.");
+      }
     }
 
     const dek = await getUserDek(uid);
@@ -210,7 +216,10 @@ const signInOrCreate = async (uid, userData) => {
 
     if (!user.account_type) {
       user.account_type = "Free";
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("User account type could not be updated.");
+      }
     }
 
     const retrievedUser = {
