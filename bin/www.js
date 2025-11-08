@@ -6,10 +6,12 @@ dotenv.config();
 /**
  * Module dependencies.
  */
-import app from "../app.js";
+import createApp from "../app.js";
 import debug from "debug";
 import http from "http";
 import connectDB from "../database/database.js";
+
+let server; // Hoisted server declaration
 
 /**
  * Get port from environment and store in Express.
@@ -18,14 +20,16 @@ import connectDB from "../database/database.js";
 async function startServer() {
   await connectDB();
 
+  const expressApp = await createApp();
+
   const port = normalizePort(process.env.APP_PORT || "3000");
-  app.set("port", port);
+  expressApp.set("port", port);
 
   /**
    * Create HTTP server.
    */
 
-  const server = http.createServer(app);
+  server = http.createServer(expressApp);
 
   /**
    * Listen on provided port, on all network interfaces. 
@@ -33,7 +37,7 @@ async function startServer() {
 
   server.listen(port);
   server.on("error", (error) => onError(error, port));
-  server.on("listening", onListening);
+  server.on("listening", () => onListening(expressApp));
 }
 
 startServer();
@@ -125,12 +129,12 @@ function _split(thing) {
 /**
  * Event listener for HTTP server "listening" event.
  */
-function onListening() {
-  const addr = server.address();
+function onListening(expressApp) {
+  const addr = this.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
 
   console.log("\nEndpoints:\n");
-  app._router.stack.forEach(_print.bind(null, []));
+  expressApp._router.stack.forEach(_print.bind(null, []));
 
   console.log("\nListening on " + bind + "...\n");
 
