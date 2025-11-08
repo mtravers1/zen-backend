@@ -321,20 +321,25 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
         if (decryptedSample) {
           console.log(`\n\tSUCCESS! Found matching DEK: ${file.name}`);
           console.log(`\t   - Decrypted first name: ${decryptedSample}`);
-          foundKey = true;
 
-          // c. Copy the key to the new bucket with the correct name
-          const newFileName = `keys/${keyEnv}/${userId}.key`;
-          const newFile = primaryBucket.file(newFileName);
-          const [exists] = await newFile.exists();
-          if (exists && !FORCE_MODE) {
-            console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+          try {
+            // c. Copy the key to the new bucket with the correct name
+            const newFileName = `keys/${keyEnv}/${userId}.key`;
+            const newFile = primaryBucket.file(newFileName);
+            const [exists] = await newFile.exists();
+            if (exists && !FORCE_MODE) {
+              console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+              process.exit(1);
+            }
+            await file.copy(newFile);
+            foundKey = true;
+            console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
+            break; // Exit loop once key is found
+          } catch (copyError) {
+            console.error(`\n\tFATAL: Failed to copy key to gs://${GCS_BUCKET_NAME}/${newFileName}.`, copyError);
+            foundKey = false;
             process.exit(1);
           }
-          await file.copy(newFile);
-
-          console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
-          break; // Exit loop once key is found
         }
       }
     } else { // Treat as a single DEK
@@ -350,19 +355,24 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
         if (decryptedSample) {
           console.log(`\n\tSUCCESS! Found matching DEK: ${file.name}`);
           console.log(`\t   - Decrypted first name: ${decryptedSample}`);
-          foundKey = true;
 
-          // c. Copy the key to the new bucket with the correct name
-          const newFileName = `keys/${keyEnv}/${userId}.key`;
-          const newFile = primaryBucket.file(newFileName);
-          const [exists] = await newFile.exists();
-          if (exists && !FORCE_MODE) {
-            console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+          try {
+            // c. Copy the key to the new bucket with the correct name
+            const newFileName = `keys/${keyEnv}/${userId}.key`;
+            const newFile = primaryBucket.file(newFileName);
+            const [exists] = await newFile.exists();
+            if (exists && !FORCE_MODE) {
+              console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
+              process.exit(1);
+            }
+            await file.copy(newFile);
+            foundKey = true;
+            console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
+          } catch (copyError) {
+            console.error(`\n\tFATAL: Failed to copy key to gs://${GCS_BUCKET_NAME}/${newFileName}.`, copyError);
+            foundKey = false;
             process.exit(1);
           }
-          await file.copy(newFile);
-
-          console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
         }
       }
     }
