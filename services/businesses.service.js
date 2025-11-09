@@ -321,22 +321,12 @@ const getUserProfiles = async (email, uid) => {
             field: "ownership",
           })
         : null;
-      const entityType = business.industryDesc
-        ? await safeDecrypt(business.industryDesc, {
-            business_id: business._id,
-            field: "industryDesc",
-          })
-        : null;
+
+
       const businessType = business.businessType
         ? await safeDecrypt(business.businessType, {
             business_id: business._id,
             field: "businessType",
-          })
-        : null;
-      const entityTaxType = business.entityType
-        ? await safeDecrypt(business.entityType, {
-            business_id: business._id,
-            field: "entityType",
           })
         : null;
 
@@ -358,10 +348,10 @@ const getUserProfiles = async (email, uid) => {
         taxInformation: taxInformation,
         legalBusinessName: legalName,
         ownership: ownership?.percentage || null,
-        entityType: entityType,
+        entityType: decryptedIndustry,
         businessType: businessType,
-        businessTaxCode: entityTaxType,
-        businessEntityType: entityType,
+        businessTaxCode: decryptedEntityType,
+        businessEntityType: decryptedIndustry,
       };
       profiles.push(businessProfile);
     }
