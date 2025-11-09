@@ -580,6 +580,10 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
       formData.legalBusinessName,
       { profile_id: profileId, field: "legalBusinessName" },
     );
+    const encryptedIndustryDesc = await safeEncrypt(
+      formData.industryDesc,
+      { profile_id: profileId, field: "industryDesc" },
+    );
 
     const updatedProfile = await Business.findByIdAndUpdate(
       profileId,
@@ -591,8 +595,8 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         formationDate: formData.formationDate,
         businessDescription: formData.businessDescription,
         businessCode: formData.businessTaxCode,
-        entityType: encryptedBusinessTaxType,
-        industryDesc: encryptedEntityType,
+        entityType: encryptedEntityType,
+        industryDesc: encryptedIndustryDesc,
         businessType: formData.businessType,
         subsidiaries: formData.subsidiaries.map(
           (subsidiary) => subsidiary.name,
