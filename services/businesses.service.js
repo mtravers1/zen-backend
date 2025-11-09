@@ -22,9 +22,8 @@ const addBusinesses = async (businessList, email, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-
   const dek = await getUserDek(uid);
-  const safeEncrypt = createSafeEncrypt(uid);
+  const safeEncrypt = createSafeEncrypt(uid, dek);
 
   const userId = user._id.toString();
 
@@ -58,16 +57,15 @@ const addBusinesses = async (businessList, email, uid) => {
       businessOwners.push(owner.name);
     }
 
-    const encryptedName = await safeEncrypt(businessData.name, dek, {
+    const encryptedName = await safeEncrypt(businessData.name, {
       field: "name",
     });
-    const encryptedIndustry = await safeEncrypt(businessData.industry, dek, {
+    const encryptedIndustry = await safeEncrypt(businessData.industry, {
       field: "industry",
     });
 
     const encryptedBusinessLogo = await safeEncrypt(
       businessData.businessLogo,
-      dek,
       { field: "businessLogo" },
     );
 
@@ -107,7 +105,7 @@ const getUserProfiles = async (email, uid) => {
 
     const profiles = [];
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
     console.log(`[getUserProfiles] DEK obtained:`, {
       hasDek: !!dek,
@@ -116,28 +114,28 @@ const getUserProfiles = async (email, uid) => {
     });
 
     // Decrypt user name fields with error handling
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, dek, {
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
       user_id: user._id,
       field: "firstName",
     });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
       user_id: user._id,
       field: "lastName",
     });
-    const decryptedMiddleName = await safeDecrypt(user.name.middleName, dek, {
+    const decryptedMiddleName = await safeDecrypt(user.name.middleName, {
       user_id: user._id,
       field: "middleName",
     });
-    const decryptedSuffix = await safeDecrypt(user.name.suffix, dek, {
+    const decryptedSuffix = await safeDecrypt(user.name.suffix, {
       user_id: user._id,
       field: "suffix",
     });
-    const decryptedPrefix = await safeDecrypt(user.name.prefix, dek, {
+    const decryptedPrefix = await safeDecrypt(user.name.prefix, {
       user_id: user._id,
       field: "prefix",
     });
 
-    const decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, dek, {
+    const decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
       user_id: user._id,
       field: "profilePhotoUrl",
     });
@@ -154,7 +152,7 @@ const getUserProfiles = async (email, uid) => {
     const decryptedEmail = await Promise.all(
       user.email.map((emailData) =>
         Promise.all([
-          safeDecrypt(emailData.email, dek, {
+          safeDecrypt(emailData.email, {
             user_id: user._id,
             field: "email",
           }),
@@ -171,7 +169,7 @@ const getUserProfiles = async (email, uid) => {
     const decryptedPhones = await Promise.all(
       user.phones.map((phoneData) =>
         Promise.all([
-          safeDecrypt(phoneData.phone, dek, {
+          safeDecrypt(phoneData.phone, {
             user_id: user._id,
             field: "phone",
           }),
@@ -213,17 +211,16 @@ const getUserProfiles = async (email, uid) => {
     for (const business of businesses) {
       console.log(`[getUserProfiles] Processing business: ${business._id}`);
 
-      const decryptedName = await safeDecrypt(business.name, dek, {
+      const decryptedName = await safeDecrypt(business.name, {
         business_id: business._id,
         field: "name",
       });
-      const decryptedIndustry = await safeDecrypt(business.industryDesc, dek, {
+      const decryptedIndustry = await safeDecrypt(business.industryDesc, {
         business_id: business._id,
         field: "industryDesc",
       });
       const decryptedBusinessLogo = await safeDecrypt(
         business.businessLogo,
-        dek,
         { business_id: business._id, field: "businessLogo" },
       );
 
@@ -233,7 +230,7 @@ const getUserProfiles = async (email, uid) => {
           business.businessOwnersDetails.map(async (owner) => {
             return {
               name: owner.name,
-              email: await safeDecrypt(owner.email, dek, {
+              email: await safeDecrypt(owner.email, {
                 business_id: business._id,
                 field: "owner.email",
               }),
@@ -245,85 +242,85 @@ const getUserProfiles = async (email, uid) => {
       }
 
       const decryptedBusinessOwners = business.businessOwners
-        ? await safeDecrypt(business.businessOwners, dek, {
+        ? await safeDecrypt(business.businessOwners, {
             business_id: business._id,
             field: "businessOwners",
           })
         : [];
       const decryptdBusinessAddresses = business.businessLocations
-        ? await safeDecrypt(business.businessLocations, dek, {
+        ? await safeDecrypt(business.businessLocations, {
             business_id: business._id,
             field: "businessLocations",
           })
         : [];
       const decryptdBusinessPhoneNumbers = business.phoneNumbers
-        ? await safeDecrypt(business.phoneNumbers, dek, {
+        ? await safeDecrypt(business.phoneNumbers, {
             business_id: business._id,
             field: "phoneNumbers",
           })
         : [];
       const descyptEntityType = business.entityType
-        ? await safeDecrypt(business.entityType, dek, {
+        ? await safeDecrypt(business.entityType, {
             business_id: business._id,
             field: "entityType",
           })
         : null;
       const descryptsubsidiaries = business.subsidiaries
-        ? await safeDecrypt(business.subsidiaries, dek, {
+        ? await safeDecrypt(business.subsidiaries, {
             business_id: business._id,
             field: "subsidiaries",
           })
         : [];
       const decryptedBusinessDesc = business.businessDescription
-        ? await safeDecrypt(business.businessDescription, dek, {
+        ? await safeDecrypt(business.businessDescription, {
             business_id: business._id,
             field: "businessDescription",
           })
         : null;
       const decryptedWebsite = business.website
-        ? await safeDecrypt(business.website, dek, {
+        ? await safeDecrypt(business.website, {
             business_id: business._id,
             field: "website",
           })
         : null;
       const formationDate = business.formationDate
-        ? await safeDecrypt(business.formationDate, dek, {
+        ? await safeDecrypt(business.formationDate, {
             business_id: business._id,
             field: "formationDate",
           })
         : null;
       const taxInformation = business.taxInformation
-        ? await safeDecrypt(business.taxInformation, dek, {
+        ? await safeDecrypt(business.taxInformation, {
             business_id: business._id,
             field: "taxInformation",
           })
         : null;
       const legalName = business.legalName
-        ? await safeDecrypt(business.legalName, dek, {
+        ? await safeDecrypt(business.legalName, {
             business_id: business._id,
             field: "legalName",
           })
         : null;
       const ownership = business.ownership
-        ? await safeDecrypt(business.ownership, dek, {
+        ? await safeDecrypt(business.ownership, {
             business_id: business._id,
             field: "ownership",
           })
         : null;
       const entityType = business.industryDesc
-        ? await safeDecrypt(business.industryDesc, dek, {
+        ? await safeDecrypt(business.industryDesc, {
             business_id: business._id,
             field: "industryDesc",
           })
         : null;
       const businessType = business.businessType
-        ? await safeDecrypt(business.businessType, dek, {
+        ? await safeDecrypt(business.businessType, {
             business_id: business._id,
             field: "businessType",
           })
         : null;
       const entityTaxType = business.entityType
-        ? await safeDecrypt(business.entityType, dek, {
+        ? await safeDecrypt(business.entityType, {
             business_id: business._id,
             field: "entityType",
           })
@@ -521,7 +518,7 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 
 const updateBusinessProfile = async (profileId, formData, email, uid) => {
   const dek = await getUserDek(uid);
-  const safeEncrypt = createSafeEncrypt(uid);
+  const safeEncrypt = createSafeEncrypt(uid, dek);
   try {
     if (!profileId) {
       throw new Error("No profile selected to update.");
@@ -530,7 +527,6 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     if (formData.isPersonal) {
       const encryptedProfilePhotoUrl = await safeEncrypt(
         formData.profilePhotoUrl,
-        dek,
         { profile_id: profileId, field: "profilePhotoUrl" },
       );
 
@@ -565,22 +561,19 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
 
     const encryptedBusinessLogo = await safeEncrypt(
       formData.businessLogo,
-      dek,
       { profile_id: profileId, field: "businessLogo" },
     );
 
-    const encryptedEntityType = await safeEncrypt(formData.entityType, dek, {
+    const encryptedEntityType = await safeEncrypt(formData.entityType, {
       profile_id: profileId,
       field: "entityType",
     });
     const encryptedBusinessTaxType = await safeEncrypt(
       formData.businessTaxType,
-      dek,
       { profile_id: profileId, field: "businessTaxType" },
     );
     const encryptedLegalName = await safeEncrypt(
       formData.legalBusinessName,
-      dek,
       { profile_id: profileId, field: "legalBusinessName" },
     );
 

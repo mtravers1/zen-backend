@@ -48,16 +48,16 @@ const _createUser = async (authUid, userData) => {
   // Get DEK for the new user
   const userId = new mongoose.Types.ObjectId();
   const dek = await getUserDekForSignup(authUid, userId);
-  const safeEncrypt = createSafeEncrypt(authUid);
+  const safeEncrypt = createSafeEncrypt(authUid, dek);
 
   // Encrypt user data
-  const encryptedFirstName = await safeEncrypt(firstName, dek, {
+  const encryptedFirstName = await safeEncrypt(firstName, {
     field: "firstName",
   });
-  const encryptedLastName = await safeEncrypt(lastName, dek, {
+  const encryptedLastName = await safeEncrypt(lastName, {
     field: "lastName",
   });
-  const encryptedEmail = await safeEncrypt(email, dek, { field: "email" });
+  const encryptedEmail = await safeEncrypt(email, { field: "email" });
 
   const newUser = new User({
     _id: userId,
@@ -66,7 +66,7 @@ const _createUser = async (authUid, userData) => {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
       middleName: userData.middleName
-        ? await safeEncrypt(userData.middleName, dek, { field: "middleName" })
+        ? await safeEncrypt(userData.middleName, { field: "middleName" })
         : null,
     },
     email: [
@@ -81,7 +81,7 @@ const _createUser = async (authUid, userData) => {
     role: userData.role || "individual",
     account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl
-      ? await safeEncrypt(userData.profilePhotoUrl, dek, {
+      ? await safeEncrypt(userData.profilePhotoUrl, {
           field: "profilePhotoUrl",
         })
       : null,
@@ -117,31 +117,31 @@ const signInOrCreate = async (uid, userData) => {
     }
 
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, dek, {
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
       user_id: user._id,
       field: "firstName",
     });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
       user_id: user._id,
       field: "lastName",
     });
     const decryptedMiddleName = user.name.middleName
-      ? await safeDecrypt(user.name.middleName, dek, {
+      ? await safeDecrypt(user.name.middleName, {
           user_id: user._id,
           field: "middleName",
         })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, dek, {
+        ? await safeDecrypt(user.phones[0].phone, {
             user_id: user._id,
             field: "phone",
           })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, dek, {
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
         user_id: user._id,
         field: "profilePhotoUrl",
       });
@@ -152,7 +152,7 @@ const signInOrCreate = async (uid, userData) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await safeDecrypt(emailObj.email, dek, {
+            email: await safeDecrypt(emailObj.email, {
               user_id: user._id,
               field: "email",
             }),
@@ -164,7 +164,7 @@ const signInOrCreate = async (uid, userData) => {
     } else {
       emails = [
         {
-          email: await safeDecrypt(user.email, dek, {
+          email: await safeDecrypt(user.email, {
             user_id: user._id,
             field: "email",
           }),
@@ -296,7 +296,7 @@ const deleteUser = async (uid) => {
       throw new Error("User not found");
     }
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
     });
@@ -322,7 +322,6 @@ const deleteUser = async (uid) => {
     const accessToken = await getOldestAccessToken({ userId: user._id });
     const decryptedAccessToken = await safeDecrypt(
       accessToken.accessToken,
-      dek,
       { user_id: user._id, field: "accessToken" },
     );
     await plaidService.invalidateAccessToken(decryptedAccessToken);
@@ -940,36 +939,31 @@ const signIn = async (email, password) => {
       userId: user._id,
     });
     const dek = await getUserDek(user.authUid);
-    const safeDecrypt = createSafeDecrypt(user.authUid);
-    console.log("DEK retrieved successfully:", {
-      hasDek: !!dek,
-      dekLength: dek?.length,
-    });
-
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, dek, {
+    const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
       user_id: user._id,
       field: "firstName",
     });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
       user_id: user._id,
       field: "lastName",
     });
     const decryptedMiddleName = user.name.middleName
-      ? await safeDecrypt(user.name.middleName, dek, {
+      ? await safeDecrypt(user.name.middleName, {
           user_id: user._id,
           field: "middleName",
         })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, dek, {
+        ? await safeDecrypt(user.phones[0].phone, {
             user_id: user._id,
             field: "phone",
           })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, dek, {
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
         user_id: user._id,
         field: "profilePhotoUrl",
       });
@@ -980,7 +974,7 @@ const signIn = async (email, password) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await safeDecrypt(emailObj.email, dek, {
+            email: await safeDecrypt(emailObj.email, {
               user_id: user._id,
               field: "email",
             }),
@@ -992,7 +986,7 @@ const signIn = async (email, password) => {
     } else {
       emails = [
         {
-          email: await safeDecrypt(user.email, dek, {
+          email: await safeDecrypt(user.email, {
             user_id: user._id,
             field: "email",
           }),
@@ -1096,32 +1090,32 @@ const getOwnUserProfile = async (uid) => {
     }
 
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, dek, {
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
       user_id: user._id,
       field: "firstName",
     });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, dek, {
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
       user_id: user._id,
       field: "lastName",
     });
     const decryptedMiddleName = user.name.middleName
-      ? await safeDecrypt(user.name.middleName, dek, {
+      ? await safeDecrypt(user.name.middleName, {
           user_id: user._id,
           field: "middleName",
         })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, dek, {
+        ? await safeDecrypt(user.phones[0].phone, {
             user_id: user._id,
             field: "phone",
           })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, dek, {
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
         user_id: user._id,
         field: "profilePhotoUrl",
       });
@@ -1132,7 +1126,7 @@ const getOwnUserProfile = async (uid) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await safeDecrypt(emailObj.email, dek, {
+            email: await safeDecrypt(emailObj.email, {
               user_id: user._id,
               field: "email",
             }),
@@ -1144,7 +1138,7 @@ const getOwnUserProfile = async (uid) => {
     } else {
       emails = [
         {
-          email: await safeDecrypt(user.email, dek, {
+          email: await safeDecrypt(user.email, {
             user_id: user._id,
             field: "email",
           }),

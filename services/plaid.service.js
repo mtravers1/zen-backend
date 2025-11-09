@@ -60,13 +60,13 @@ const createLinkToken = async (
       }
       let accessToken;
       const dek = await getUserDek(uid);
-      const safeDecrypt = createSafeDecrypt(uid);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
       if (accountId) {
         const account = await PlaidAccount.findOne({ _id: accountId });
         if (!account) {
           throw new Error("Account not found");
         }
-        accessToken = await safeDecrypt(account.accessToken, dek, {
+        accessToken = await safeDecrypt(account.accessToken, {
           account_id: accountId,
           field: "accessToken",
         });
@@ -181,9 +181,9 @@ const saveAccessToken = async (
       }
       const userId = user._id.toString();
       const dek = await getUserDek(uid);
-      const safeEncrypt = createSafeEncrypt(uid);
+      const safeEncrypt = createSafeEncrypt(uid, dek);
 
-      const encryptedToken = await safeEncrypt(accessToken, dek, {
+      const encryptedToken = await safeEncrypt(accessToken, {
         user_id: userId,
         item_id: itemId,
         field: "accessToken",
@@ -240,9 +240,9 @@ const getUserAccessTokens = async (email, uid) => {
 
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
-  const safeDecrypt = createSafeDecrypt(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
   for (const token of tokens) {
-    const decryptedAccessToken = await safeDecrypt(token.accessToken, dek, {
+    const decryptedAccessToken = await safeDecrypt(token.accessToken, {
       user_id: userId,
       item_id: token.itemId,
       field: "accessToken",
@@ -427,8 +427,8 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
 
   const accessToken = access.accessToken;
   const dek = await getUserDek(firebaseUid);
-  const safeDecrypt = createSafeDecrypt(firebaseUid);
-  const decryptedToken = await safeDecrypt(accessToken, dek, {
+  const safeDecrypt = createSafeDecrypt(firebaseUid, dek);
+  const decryptedToken = await safeDecrypt(accessToken, {
     item_id: itemId,
     field: "accessToken",
   });
@@ -455,7 +455,7 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 
   if (newAccountsBalances) {
     const bulkOps = [];
-    const safeEncrypt = createSafeEncrypt(uid);
+    const safeEncrypt = createSafeEncrypt(uid, dek);
     for (const account of newAccountsBalances.data.accounts) {
       const accountBalance = account.balances;
       const accountType = account.type;
@@ -476,26 +476,26 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
           encryptedCurrentBalance,
           encryptedAvailableBalance,
         ] = await Promise.all([
-          safeEncrypt(accountName, dek, {
+          safeEncrypt(accountName, {
             account_id: accountPlaidId,
             field: "accountName",
           }),
-          safeEncrypt(accountType, dek, {
+          safeEncrypt(accountType, {
             account_id: accountPlaidId,
             field: "accountType",
           }),
-          safeEncrypt(accountSubtype, dek, {
+          safeEncrypt(accountSubtype, {
             account_id: accountPlaidId,
             field: "accountSubtype",
           }),
           accountBalance.current
-            ? safeEncrypt(accountBalance.current, dek, {
+            ? safeEncrypt(accountBalance.current, {
                 account_id: accountPlaidId,
                 field: "currentBalance",
               })
             : null,
           accountBalance.available
-            ? safeEncrypt(accountBalance.available, dek, {
+            ? safeEncrypt(accountBalance.available, {
                 account_id: accountPlaidId,
                 field: "availableBalance",
               })
@@ -568,6 +568,7 @@ const updateTransactions = async (item) => {
   const email = emailObject?.email;
 
   const dek = await getUserDek(uid);
+  const safeEncrypt = createSafeEncrypt(uid, dek);
   await updateAccountBalances(dek, accessToken, accounts, uid);
 
   let cursor = accounts[0].nextCursor || null;
@@ -617,13 +618,12 @@ const updateTransactions = async (item) => {
 
         const encryptedMerchantName = await safeEncrypt(
           transaction.merchant_name,
-          dek,
           {
             transaction_id: transaction.transaction_id,
             field: "merchant_name",
           },
         );
-        const encryptedName = await safeEncrypt(transaction.name, dek, {
+        const encryptedName = await safeEncrypt(transaction.name, {
           transaction_id: transaction.transaction_id,
           field: "name",
         });
@@ -635,20 +635,18 @@ const updateTransactions = async (item) => {
           logo: transaction.logo_url,
         };
 
-        const encryptedAmount = await safeEncrypt(transaction.amount, dek, {
+        const encryptedAmount = await safeEncrypt(transaction.amount, {
           transaction_id: transaction.transaction_id,
           field: "amount",
         });
 
         const encryptedAccountType = await safeEncrypt(
           accountMap.get(transaction.account_id).account_type,
-          dek,
           { transaction_id: transaction.transaction_id, field: "account_type" },
         );
 
         const transactionCode = await safeEncrypt(
           transaction.transaction_code,
-          dek,
           {
             transaction_id: transaction.transaction_id,
             field: "transaction_code",
@@ -670,7 +668,10 @@ const updateTransactions = async (item) => {
                 merchant,
                 description: null,
                 transactionCode: transactionCode,
-                tags: transaction.category,
+                tags: await safeEncrypt(transaction.category, {
+                  transaction_id: transaction.transaction_id,
+                  field: "tags",
+                }),
                 accountType: encryptedAccountType,
                 pending_transaction_id: transaction.pending_transaction_id,
                 pending: transaction.pending,
@@ -703,7 +704,7 @@ const updateTransactions = async (item) => {
       if (modifiedTransactions.length > 0) {
         const modifiedBulkOps = [];
         for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await safeEncrypt(transaction.amount, dek, {
+          const encryptedAmount = await safeEncrypt(transaction.amount, {
             transaction_id: transaction.transaction_id,
             field: "amount",
           });
@@ -715,7 +716,10 @@ const updateTransactions = async (item) => {
                 $set: {
                   amount: encryptedAmount,
                   transactionDate: transaction.date,
-                  tags: transaction.category,
+                  tags: await safeEncrypt(transaction.category, {
+              transaction_id: transaction.transaction_id,
+              field: "tags",
+            }),
                   pending_transaction_id: transaction.pending_transaction_id,
                   pending: transaction.pending,
                 },
@@ -812,7 +816,7 @@ const updateInvestmentTransactions = async (item) => {
       const accounts = await PlaidAccount.find({ itemId: item });
 
       const dek = await getUserDek(uid);
-      const safeEncrypt = createSafeEncrypt(uid);
+      const safeEncrypt = createSafeEncrypt(uid, dek);
       await updateAccountBalances(dek, accessToken, accounts, uid);
       let offset = 0;
       let hasMore = true;
@@ -869,52 +873,50 @@ const updateInvestmentTransactions = async (item) => {
             continue;
           }
           const accountType = "investment";
-          const encryptedAccountType = await safeEncrypt(accountType, dek, {
+          const encryptedAccountType = await safeEncrypt(accountType, {
             transaction_id: transaction.investment_transaction_id,
             field: "accountType",
           });
-          const encryptedName = await safeEncrypt(transaction.name, dek, {
+          const encryptedName = await safeEncrypt(transaction.name, {
             transaction_id: transaction.investment_transaction_id,
             field: "name",
           });
-          const encryptedAmount = await safeEncrypt(transaction.amount, dek, {
+          const encryptedAmount = await safeEncrypt(transaction.amount, {
             transaction_id: transaction.investment_transaction_id,
             field: "amount",
           });
 
           const encryptedSecurityId = await safeEncrypt(
             transaction.security_id,
-            dek,
             {
               transaction_id: transaction.investment_transaction_id,
               field: "security_id",
             },
           );
-          const encryptedPrice = await safeEncrypt(transaction.price, dek, {
+          const encryptedPrice = await safeEncrypt(transaction.price, {
             transaction_id: transaction.investment_transaction_id,
             field: "price",
           });
 
           const encryptedQuantity = await safeEncrypt(
             transaction.quantity,
-            dek,
             {
               transaction_id: transaction.investment_transaction_id,
               field: "quantity",
             },
           );
 
-          const encryptedFees = await safeEncrypt(transaction.fees, dek, {
+          const encryptedFees = await safeEncrypt(transaction.fees, {
             transaction_id: transaction.investment_transaction_id,
             field: "fees",
           });
 
-          const encryptedType = await safeEncrypt(transaction.type, dek, {
+          const encryptedType = await safeEncrypt(transaction.type, {
             transaction_id: transaction.investment_transaction_id,
             field: "type",
           });
 
-          const encryptedSubType = await safeEncrypt(transaction.subtype, dek, {
+          const encryptedSubType = await safeEncrypt(transaction.subtype, {
             transaction_id: transaction.investment_transaction_id,
             field: "subtype",
           });
@@ -1130,8 +1132,8 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
 
     // Decrypt access token
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
-    const decryptedAccessToken = await safeDecrypt(account.accessToken, dek, {
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedAccessToken = await safeDecrypt(account.accessToken, {
       user_id: user._id,
       institution_id: institutionId,
       field: "accessToken",

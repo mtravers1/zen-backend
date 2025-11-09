@@ -279,25 +279,25 @@ const updateUserInfo = async (req, res) => {
 
     // Get DEK for encryption
     const dek = await getUserDek(user.authUid);
-    const safeEncrypt = createSafeEncrypt(user.authUid);
+    const safeEncrypt = createSafeEncrypt(user.authUid, dek);
 
     // Build update object with encrypted values
     const updateData = {};
 
     if (firstName !== undefined) {
-      updateData["name.firstName"] = await safeEncrypt(firstName, dek);
+      updateData["name.firstName"] = await safeEncrypt(firstName, { field: "firstName" });
     }
     if (lastName !== undefined) {
-      updateData["name.lastName"] = await safeEncrypt(lastName, dek);
+      updateData["name.lastName"] = await safeEncrypt(lastName, { field: "lastName" });
     }
     if (middleName !== undefined) {
-      updateData["name.middleName"] = await safeEncrypt(middleName, dek);
+      updateData["name.middleName"] = await safeEncrypt(middleName, { field: "middleName" });
     }
     if (prefix !== undefined) {
-      updateData["name.prefix"] = await safeEncrypt(prefix, dek);
+      updateData["name.prefix"] = await safeEncrypt(prefix, { field: "prefix" });
     }
     if (suffix !== undefined) {
-      updateData["name.suffix"] = await safeEncrypt(suffix, dek);
+      updateData["name.suffix"] = await safeEncrypt(suffix, { field: "suffix" });
     }
     if (photoUrl !== undefined) {
       updateData.photoUrl = photoUrl; // photoUrl is not encrypted

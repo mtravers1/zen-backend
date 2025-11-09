@@ -409,7 +409,7 @@ const getConnectedInstitutions = async (req, res) => {
     }
 
     const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
     const institutionsMap = new Map();
 
@@ -418,15 +418,12 @@ const getConnectedInstitutions = async (req, res) => {
 
       const decryptedAccountName = await safeDecrypt(
         account.account_name,
-        dek,
       );
       const decryptedAccountType = await safeDecrypt(
         account.account_type,
-        dek,
       );
       const decryptedInstitutionName = await safeDecrypt(
         account.institution_name,
-        dek,
       );
 
       if (!institutionsMap.has(institutionId)) {
@@ -498,7 +495,7 @@ const getUpfrontInstitutionStatus = async (req, res) => {
 
     if (accounts.length > 0) {
       const dek = await getUserDek(uid);
-      const safeDecrypt = createSafeDecrypt(uid);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
       const institutionsMap = new Map();
 
       for (const account of accounts) {
@@ -506,11 +503,9 @@ const getUpfrontInstitutionStatus = async (req, res) => {
 
         const decryptedInstitutionName = await safeDecrypt(
           account.institution_name,
-          dek,
         );
         const decryptedAccessToken = await safeDecrypt(
           account.accessToken,
-          dek,
         );
 
         if (!institutionsMap.has(institutionId)) {
