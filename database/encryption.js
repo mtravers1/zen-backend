@@ -273,7 +273,6 @@ async function getDEKFromBucket(bucketKey, bucket) {
     try {
       const [encryptedDEK] = await file.download();
       const [decryptResponse] = await kmsClient.decrypt({
-        name: KEY_PATH,
         ciphertext: encryptedDEK,
       });
 
@@ -352,8 +351,26 @@ async function getUserDek(firebaseUid) {
     console.log(`[DEK_TRACE] Checking legacy bucket with databaseId: ${bucketKey}`);
     const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket);
     if (legacyDbIdDeks.length > 0) {
-      console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating...`);
-      await copyDEKToNewBucketKey(bucketKey, legacyBucket, primaryBucket);
+      console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating by re-encrypting with new KMS key...`);
+      // Re-encrypt and store the DEK with the new key
+      for (const dek of legacyDbIdDeks) {
+        const [encryptResponse] = await kmsClient.encrypt({
+          name: KEY_PATH, // KEY_PATH points to the new KMS key
+          plaintext: dek,
+        });
+        const encryptedDEK = encryptResponse.ciphertext;
+        const filePath = `keys/${bucketKey}.key`;
+        const file = primaryBucket.file(filePath);
+        await file.save(encryptedDEK, {
+          resumable: false,
+          validation: false,
+          metadata: {
+            contentType: "application/octet-stream",
+            cacheControl: "private, max-age=0",
+          },
+        });
+        console.log(`[DEK_TRACE] Successfully migrated and re-encrypted DEK for user ${bucketKey}`);
+      }
       dekCache.set(bucketKey, legacyDbIdDeks);
       return legacyDbIdDeks;
     }
@@ -362,8 +379,27 @@ async function getUserDek(firebaseUid) {
     console.log(`[DEK_TRACE] Checking legacy bucket with firebaseUid: ${firebaseUid}`);
     const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
     if (legacyFirebaseUidDeks.length > 0) {
-      console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating...`);
-      await copyDEKToNewBucketKey(firebaseUid, legacyBucket, primaryBucket, bucketKey); // Copy to new key name
+      console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating by re-encrypting with new KMS key...`);
+      // Re-encrypt and store the DEK with the new key
+      for (const dek of legacyFirebaseUidDeks) {
+        const [encryptResponse] = await kmsClient.encrypt({
+          name: KEY_PATH, // KEY_PATH points to the new KMS key
+          plaintext: dek,
+        });
+        const encryptedDEK = encryptResponse.ciphertext;
+        // IMPORTANT: Save to the new key name (databaseId), not the old one (firebaseUid)
+        const filePath = `keys/${bucketKey}.key`;
+        const file = primaryBucket.file(filePath);
+        await file.save(encryptedDEK, {
+          resumable: false,
+          validation: false,
+          metadata: {
+            contentType: "application/octet-stream",
+            cacheControl: "private, max-age=0",
+          },
+        });
+        console.log(`[DEK_TRACE] Successfully migrated and re-encrypted DEK for user ${bucketKey}`);
+      }
       dekCache.set(bucketKey, legacyFirebaseUidDeks);
       return legacyFirebaseUidDeks;
     }
