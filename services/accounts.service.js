@@ -2251,6 +2251,7 @@ const generateSignedUrl = async (fileName) => {
 };
 
 const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
+  const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   const ninetyDaysAgo = new Date();

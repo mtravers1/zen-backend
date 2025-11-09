@@ -273,13 +273,13 @@ const getUserProfiles = async (email, uid) => {
             field: "phoneNumbers",
           })
         : [];
-      const descyptEntityType = business.entityType
+      const decryptedEntityType = business.entityType
         ? await safeDecrypt(business.entityType, {
             business_id: business._id,
             field: "entityType",
           })
         : null;
-      const descryptsubsidiaries = business.subsidiaries
+      const decryptedSubsidiaries = business.subsidiaries
         ? await safeDecrypt(business.subsidiaries, {
             business_id: business._id,
             field: "subsidiaries",
@@ -341,17 +341,17 @@ const getUserProfiles = async (email, uid) => {
         businessOwners: decryptedBusinessOwners,
         businessAddresses: decryptdBusinessAddresses,
         businessPhoneNumbers: decryptdBusinessPhoneNumbers,
-        subsidiaries: descryptsubsidiaries,
+        subsidiaries: decryptedSubsidiaries,
         businessDescription: decryptedBusinessDesc,
         website: decryptedWebsite,
         formationDate: formationDate,
         taxInformation: taxInformation,
         legalBusinessName: legalName,
         ownership: ownership?.percentage || null,
-        entityType: decryptedIndustry,
+        entityType: decryptedEntityType,
         businessType: businessType,
-        businessTaxCode: decryptedEntityType,
-        businessEntityType: decryptedIndustry,
+        businessTaxCode: taxInformation?.taxCode || null, // Assuming taxCode is a field within taxInformation
+        businessEntityType: decryptedEntityType,
       };
       profiles.push(businessProfile);
     }
@@ -598,6 +598,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         entityType: encryptedEntityType,
         industryDesc: encryptedIndustryDesc,
         businessType: formData.businessType,
+        businessTaxType: encryptedBusinessTaxType,
         subsidiaries: formData.subsidiaries.map(
           (subsidiary) => subsidiary.name,
         ),
