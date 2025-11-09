@@ -741,7 +741,7 @@ const getAccounts = async (profile, uid) => {
           plaidAccount.account_official_name,
           { account_id: plaidAccount._id, field: "account_official_name" },
         );
-        const decryptedMask = await safeDecrypt(plaidAccount.mask, dek, {
+        const decryptedMask = await safeDecrypt(plaidAccount.mask, {
           account_id: plaidAccount._id,
           field: "mask",
         });
@@ -845,7 +845,6 @@ const getAllUserAccounts = async (email, uid) => {
         );
         const decryptedAccountSubtype = await safeDecrypt(
           plaidAccount.account_subtype,
-          dek,
           { account_id: plaidAccount._id, field: "account_subtype" },
         );
 
