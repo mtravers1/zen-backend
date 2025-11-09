@@ -236,8 +236,7 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await getOldestAccessToken({ userId });
-
+  const tokens = await AccessToken.find({ userId }).sort({ createdAt: 1 });
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
@@ -514,9 +513,9 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
             update: {
               currentBalance: encryptedCurrentBalance,
               availableBalance: encryptedAvailableBalance,
-              accountType: encryptedAccountType,
-              accountSubtype: encryptedAccountSubtype,
-              accountName: encryptedAccountName,
+              account_type: encryptedAccountType,
+              account_subtype: encryptedAccountSubtype,
+              account_name: encryptedAccountName,
             },
           },
         });
@@ -616,23 +615,24 @@ const updateTransactions = async (item) => {
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
 
-        const encryptedMerchantName = await safeEncrypt(
-          transaction.merchant_name,
-          {
-            transaction_id: transaction.transaction_id,
-            field: "merchant_name",
-          },
-        );
-        const encryptedName = await safeEncrypt(transaction.name, {
-          transaction_id: transaction.transaction_id,
-          field: "name",
-        });
+        const encryptedMerchantName = transaction.merchant_name
+          ? await safeEncrypt(transaction.merchant_name, {
+              transaction_id: transaction.transaction_id,
+              field: "merchant_name",
+            })
+          : null;
+        const encryptedName = transaction.name
+          ? await safeEncrypt(transaction.name, {
+              transaction_id: transaction.transaction_id,
+              field: "name",
+            })
+          : null;
         const merchant = {
           merchantName: encryptedMerchantName,
           name: encryptedName,
           merchantCategory: transaction.category?.[0],
-          website: transaction.website,
-          logo: transaction.logo_url,
+          website: transaction.website ? transaction.website : null,
+          logo: transaction.logo_url ? transaction.logo_url : null,
         };
 
         const encryptedAmount = await safeEncrypt(transaction.amount, {
@@ -645,13 +645,12 @@ const updateTransactions = async (item) => {
           { transaction_id: transaction.transaction_id, field: "account_type" },
         );
 
-        const transactionCode = await safeEncrypt(
-          transaction.transaction_code,
-          {
-            transaction_id: transaction.transaction_id,
-            field: "transaction_code",
-          },
-        );
+        const transactionCode = transaction.transaction_code
+          ? await safeEncrypt(transaction.transaction_code, {
+              transaction_id: transaction.transaction_id,
+              field: "transaction_code",
+            })
+          : null;
 
         bulkOps.push({
           updateOne: {
@@ -668,10 +667,12 @@ const updateTransactions = async (item) => {
                 merchant,
                 description: null,
                 transactionCode: transactionCode,
-                tags: await safeEncrypt(transaction.category, {
-                  transaction_id: transaction.transaction_id,
-                  field: "tags",
-                }),
+                tags: transaction.category
+                  ? await safeEncrypt(transaction.category, {
+                      transaction_id: transaction.transaction_id,
+                      field: "tags",
+                    })
+                  : null,
                 accountType: encryptedAccountType,
                 pending_transaction_id: transaction.pending_transaction_id,
                 pending: transaction.pending,
@@ -886,40 +887,46 @@ const updateInvestmentTransactions = async (item) => {
             field: "amount",
           });
 
-          const encryptedSecurityId = await safeEncrypt(
-            transaction.security_id,
-            {
-              transaction_id: transaction.investment_transaction_id,
-              field: "security_id",
-            },
-          );
-          const encryptedPrice = await safeEncrypt(transaction.price, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "price",
-          });
+          const encryptedSecurityId = transaction.security_id
+            ? await safeEncrypt(transaction.security_id, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "security_id",
+              })
+            : null;
+          const encryptedPrice = transaction.price
+            ? await safeEncrypt(transaction.price, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "price",
+              })
+            : null;
 
-          const encryptedQuantity = await safeEncrypt(
-            transaction.quantity,
-            {
-              transaction_id: transaction.investment_transaction_id,
-              field: "quantity",
-            },
-          );
+          const encryptedQuantity = transaction.quantity
+            ? await safeEncrypt(transaction.quantity, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "quantity",
+              })
+            : null;
 
-          const encryptedFees = await safeEncrypt(transaction.fees, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "fees",
-          });
+          const encryptedFees = transaction.fees
+            ? await safeEncrypt(transaction.fees, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "fees",
+              })
+            : null;
 
-          const encryptedType = await safeEncrypt(transaction.type, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "type",
-          });
+          const encryptedType = transaction.type
+            ? await safeEncrypt(transaction.type, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "type",
+              })
+            : null;
 
-          const encryptedSubType = await safeEncrypt(transaction.subtype, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "subtype",
-          });
+          const encryptedSubType = transaction.subtype
+            ? await safeEncrypt(transaction.subtype, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "subtype",
+              })
+            : null;
           const account = accounts.find(
             (account) => account.plaid_account_id === transaction.account_id,
           );
