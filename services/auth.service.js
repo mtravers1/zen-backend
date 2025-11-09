@@ -324,7 +324,17 @@ const deleteUser = async (uid) => {
       accessToken.accessToken,
       { user_id: user._id, field: "accessToken" },
     );
-    await plaidService.invalidateAccessToken(decryptedAccessToken);
+
+    if (decryptedAccessToken) {
+      await plaidService.invalidateAccessToken(decryptedAccessToken);
+    } else {
+      structuredLogger.logErrorBlock(new Error("Decrypted access token is null"), {
+        operation: "deleteUser",
+        user_id: user._id,
+        field: "accessToken",
+        warning: "Skipping invalidateAccessToken call due to null token",
+      });
+    }
     await AccessToken.deleteMany({
       userId: user._id,
     });
