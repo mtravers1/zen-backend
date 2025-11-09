@@ -242,10 +242,12 @@ const getUserProfiles = async (email, uid) => {
           business.businessOwnersDetails.map(async (owner) => {
             return {
               name: owner.name,
-              email: await safeDecrypt(owner.email, {
-                business_id: business._id,
-                field: "owner.email",
-              }),
+              email: owner.email
+                ? await safeDecrypt(owner.email, {
+                    business_id: business._id,
+                    field: "owner.email",
+                  })
+                : null,
               percentOwned: owner.percentOwned,
               position: owner.position,
             };
