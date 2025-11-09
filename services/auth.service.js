@@ -1158,10 +1158,13 @@ const getOwnUserProfile = async (uid) => {
       ];
     }
 
+    const primaryEmail = emails.find((e) => e.isPrimary)?.email || emails[0]?.email || null;
+
     const retrievedUser = {
       id: user._id,
       _id: user._id,
-      email: emails,
+      email: primaryEmail,
+      allEmails: emails,
       phone: decryptedPhone,
       role: user.role,
       account_type: user.account_type,
