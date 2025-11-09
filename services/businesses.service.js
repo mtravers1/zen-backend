@@ -114,31 +114,43 @@ const getUserProfiles = async (email, uid) => {
     });
 
     // Decrypt user name fields with error handling
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
-      user_id: user._id,
-      field: "firstName",
-    });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, {
-      user_id: user._id,
-      field: "lastName",
-    });
-    const decryptedMiddleName = await safeDecrypt(user.name.middleName, {
-      user_id: user._id,
-      field: "middleName",
-    });
-    const decryptedSuffix = await safeDecrypt(user.name.suffix, {
-      user_id: user._id,
-      field: "suffix",
-    });
-    const decryptedPrefix = await safeDecrypt(user.name.prefix, {
-      user_id: user._id,
-      field: "prefix",
-    });
+    const decryptedFirstName = user.name.firstName
+      ? await safeDecrypt(user.name.firstName, {
+          user_id: user._id,
+          field: "firstName",
+        })
+      : null;
+    const decryptedLastName = user.name.lastName
+      ? await safeDecrypt(user.name.lastName, {
+          user_id: user._id,
+          field: "lastName",
+        })
+      : null;
+    const decryptedMiddleName = user.name.middleName
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
+      : null;
+    const decryptedSuffix = user.name.suffix
+      ? await safeDecrypt(user.name.suffix, {
+          user_id: user._id,
+          field: "suffix",
+        })
+      : null;
+    const decryptedPrefix = user.name.prefix
+      ? await safeDecrypt(user.name.prefix, {
+          user_id: user._id,
+          field: "prefix",
+        })
+      : null;
 
-    const decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
-      user_id: user._id,
-      field: "profilePhotoUrl",
-    });
+    const decryptedPhotoUrl = user.profilePhotoUrl
+      ? await safeDecrypt(user.profilePhotoUrl, {
+          user_id: user._id,
+          field: "profilePhotoUrl",
+        })
+      : null;
 
     let name;
     if (!decryptedFirstName && !decryptedLastName) {
