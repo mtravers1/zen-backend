@@ -8,7 +8,7 @@ import CopyWebpackPlugin from "copy-webpack-plugin";
 
 let nodeModules = {};
 fs.readdirSync("node_modules")
-  .filter((x) => x !== ".bin" && !x.startsWith("@google-cloud"))
+  .filter((x) => x !== ".bin")
   .forEach((mod) => {
     nodeModules[mod] = "commonjs " + mod;
   });
