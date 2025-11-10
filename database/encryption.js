@@ -38,6 +38,7 @@ let kmsClient, storage;
 // Initialize Storage client
 let storageCredentials = null; // Initialize to null
 const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
+console.log("STORAGE_SERVICE_ACCOUNT:", storageServiceAccountB64 ? storageServiceAccountB64.substring(0, 20) + "..." : "Not Set");
 let loadedFromEnv = false;
 
 if (!storageServiceAccountB64 || storageServiceAccountB64.trim() === "") {
@@ -52,6 +53,7 @@ try {
   );
   console.log("✅ Storage credentials loaded from environment variable.");
 } catch (error) {
+  console.error("❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable.", error);
   throw new Error(
     "❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
   );
@@ -84,6 +86,7 @@ try {
   );
   console.log("✅ KMS credentials loaded from environment variable.");
 } catch (error) {
+  console.error("❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable.", error);
   throw new Error(
     "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
   );
