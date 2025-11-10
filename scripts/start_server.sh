@@ -6,7 +6,7 @@ npm --version
 
 pm2 stop --silent ${DEPLOYMENT_ENV}
 pm2 delete --silent ${DEPLOYMENT_ENV}
-npm install
+npm ci
 pm2 start ecosystem.config.js \
     --only ${DEPLOYMENT_ENV} \
     --max-memory-restart 1G \
