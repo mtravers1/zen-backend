@@ -1,9 +1,9 @@
 import fs from "fs";
+import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
-import { Storage } from "@google-cloud/storage";
-import crypto from "crypto";
+import { storage } from "../lib/storageClient.js";
 
 class DecryptionError extends Error {
   constructor(message, errorCode) {
@@ -13,95 +13,30 @@ class DecryptionError extends Error {
   }
 }
 
-// Validate required environment variables
-const requiredEnvVars = [
-  "STORAGE_SERVICE_ACCOUNT",
-  "GCP_PROJECT_ID",
-  "HASH_SALT",
-  "KMS_SERVICE_ACCOUNT",
-  "GCP_KEY_LOCATION",
-  "GCP_KEY_RING",
-  "GCP_KEY_NAME",
-  "LEGACY_GCS_ENVIRONMENT_FOLDER",
-];
 
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar] || process.env[envVar].trim() === "") {
-    throw new Error(
-      `❌ CRITICAL: Environment variable ${envVar} is not set. This is a required environment variable.`,
-    );
-  }
-}
-
-let storage;
-
-// Initialize Storage client
-let storageCredentials = null; // Initialize to null
-const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
-console.log("STORAGE_SERVICE_ACCOUNT:", storageServiceAccountB64 ? storageServiceAccountB64.substring(0, 20) + "..." : "Not Set");
-let loadedFromEnv = false;
-
-if (!storageServiceAccountB64 || storageServiceAccountB64.trim() === "") {
-  throw new Error(
-    "❌ CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set or is empty.",
-  );
-}
-
-try {
-  storageCredentials = JSON.parse(
-    Buffer.from(storageServiceAccountB64, "base64").toString("utf-8"),
-  );
-  console.log("✅ Storage credentials loaded from environment variable.");
-} catch (error) {
-  console.error("❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable.", error);
-  throw new Error(
-    "❌ CRITICAL: Failed to parse STORAGE_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
-  );
-}
-
-const storageAuth = new GoogleAuth({
-  credentials: storageCredentials,
-  scopes: "https://www.googleapis.com/auth/cloud-platform",
-});
-
-storage = new Storage({
-  auth: storageAuth,
-  projectId: process.env.GCP_PROJECT_ID,
-});
-console.log("✅ Storage client initialized");
-
-// Initialize KMS client
-let kmsCredentials = null;
-const kmsServiceAccountB64 = process.env.KMS_SERVICE_ACCOUNT;
-
-if (!kmsServiceAccountB64 || kmsServiceAccountB64.trim() === "") {
-  throw new Error(
-    "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
-  );
-}
-
-try {
-  kmsCredentials = JSON.parse(
-    Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
-  );
-  console.log("✅ KMS credentials loaded from environment variable.");
-} catch (error) {
-  console.error("❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable.", error);
-  throw new Error(
-    "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
-  );
-}
-
-const kmsAuth = new GoogleAuth({
-  credentials: kmsCredentials,
-  scopes: "https://www.googleapis.com/auth/cloud-platform",
-});
 
 let kmsClientInstance;
 async function getKmsClient() {
   if (!kmsClientInstance) {
+    const kmsServiceAccountB64 = process.env.KMS_SERVICE_ACCOUNT;
+    if (!kmsServiceAccountB64 || kmsServiceAccountB64.trim() === "") {
+      throw new Error(
+        "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
+      );
+    }
+    let kmsCredentials;
+    try {
+      kmsCredentials = JSON.parse(
+        Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
+      );
+    } catch (error) {
+      console.error("❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable.", error);
+      throw new Error(
+        "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
+      );
+    }
     kmsClientInstance = new KeyManagementServiceClient({
-      auth: kmsAuth,
+      credentials: kmsCredentials,
       projectId: process.env.GCP_PROJECT_ID,
     });
     console.log("✅ KMS client initialized");
@@ -112,10 +47,7 @@ async function getKmsClient() {
 
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
-const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
-if (!LEGACY_GCS_BUCKET_NAME) {
-  throw new Error("❌ CRITICAL: LEGACY_GCS_BUCKET_NAME environment variable is not set.");
-}
+
 
 /**
  * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
@@ -267,7 +199,7 @@ function getDEKPath(bucketKey, bucket, includeExtension = false) {
  * @returns {Buffer[]} An array of decrypted DEKs (Buffers). Returns an empty array if no DEK files are found or none can be decrypted.
  * @throws {Error} If file listing, download, or non-decryption-related decryption operations fail.
  */
-async function getDEKFromBucket(bucketKey, bucket) {
+async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
   let prefix = getDEKPath(bucketKey, bucket);
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
@@ -293,10 +225,17 @@ async function getDEKFromBucket(bucketKey, bucket) {
 
   const deks = [];
   const kmsClient = await getKmsClient();
+  const KEY_PATH = kmsKeyPath || kmsClient.cryptoKeyPath(
+    process.env.GCP_PROJECT_ID,
+    process.env.GCP_KEY_LOCATION,
+    process.env.GCP_KEY_RING,
+    process.env.GCP_KEY_NAME,
+  );
   for (const file of files) {
     try {
       const [encryptedDEK] = await file.download();
       const [decryptResponse] = await kmsClient.decrypt({
+        name: KEY_PATH,
         ciphertext: encryptedDEK,
       });
 
@@ -339,6 +278,11 @@ async function getDEKFromBucket(bucketKey, bucket) {
  * @throws {Error} If the user does not exist, no DEK is found for the user, or an error occurs during retrieval or migration.
  */
 async function getUserDek(firebaseUid) {
+  const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
+  if (!LEGACY_GCS_BUCKET_NAME) {
+    throw new Error("❌ CRITICAL: LEGACY_GCS_BUCKET_NAME environment variable is not set.");
+  }
+
   let user;
   try {
     // Find user in database
@@ -357,10 +301,18 @@ async function getUserDek(firebaseUid) {
         return cachedDeks;
       }
     }
-    console.log(`[DEK_TRACE] No valid DEKs in cache.`);
 
     const primaryBucket = await getBucket();
     const legacyBucket = await getBucket(LEGACY_GCS_BUCKET_NAME);
+    const kmsClient = await getKmsClient(); // Get KMS client
+
+    // Construct legacy KMS key path
+    const legacyKmsKeyPath = kmsClient.cryptoKeyPath(
+        process.env.LEGACY_GCP_PROJECT_ID,
+        process.env.LEGACY_GCP_KEY_LOCATION,
+        process.env.LEGACY_GCP_KEY_RING,
+        process.env.LEGACY_GCP_KEY_NAME,
+    );
 
     // 2. Check primary bucket with databaseId
     console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
@@ -373,10 +325,9 @@ async function getUserDek(firebaseUid) {
 
     // 3. Check legacy bucket with databaseId
     console.log(`[DEK_TRACE] Checking legacy bucket with databaseId: ${bucketKey}`);
-    const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket);
+    const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket, legacyKmsKeyPath);
     if (legacyDbIdDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating by re-encrypting with new KMS key...`);
-      const kmsClient = await getKmsClient();
       const KEY_PATH = kmsClient.cryptoKeyPath(
         process.env.GCP_PROJECT_ID,
         process.env.GCP_KEY_LOCATION,
@@ -408,10 +359,9 @@ async function getUserDek(firebaseUid) {
 
     // 4. Check legacy bucket with firebaseUid
     console.log(`[DEK_TRACE] Checking legacy bucket with firebaseUid: ${firebaseUid}`);
-    const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
+    const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket, legacyKmsKeyPath);
     if (legacyFirebaseUidDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating by re-encrypting with new KMS key...`);
-      const kmsClient = await getKmsClient();
       const KEY_PATH = kmsClient.cryptoKeyPath(
         process.env.GCP_PROJECT_ID,
         process.env.GCP_KEY_LOCATION,
@@ -536,14 +486,6 @@ async function decryptValue(cipherTextBase64, deks) {
     }
   }
 
-  console.error(
-    `❌ Decryption failed for value: ${
-      typeof cipherTextBase64 === "string"
-        ? cipherTextBase64.substring(0, 50)
-        : cipherTextBase64
-    }...`,
-  );
-  console.error(`❌ All decryption attempts failed.`);
   const errorCode = `ALL_DEK_FAILED-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   throw new DecryptionError(
     `All decryption attempts failed. Please report error code: ${errorCode}`,

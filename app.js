@@ -17,6 +17,9 @@ import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
 export async function createApp() {
+  console.log("--- PM2 ENVIRONMENT VARIABLES ---");
+  console.log(process.env);
+  console.log("---------------------------------");
   const app = express();
 
 // database initialization

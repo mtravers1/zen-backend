@@ -1,26 +1,6 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
-import { Storage } from "@google-cloud/storage";
-
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const serviceAccountJsonString = Buffer.from(
-  serviceAccountBase64,
-  "base64",
-).toString("utf8");
-const storageServiceAccount = JSON.parse(serviceAccountJsonString);
-
-// Ensure credentials have universe_domain field
-if (!storageServiceAccount.universe_domain) {
-  storageServiceAccount.universe_domain = "googleapis.com";
-}
-
-const storage = new Storage({
-  credentials: storageServiceAccount,
-  projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com",
-  useAuthWithCustomEndpoint: true,
-});
-const bucketName = process.env.GCS_BUCKET_NAME;
+import { storage, bucketName } from "../lib/storageClient.js";
 
 const getStorageStatus = async (uid) => {
   try {

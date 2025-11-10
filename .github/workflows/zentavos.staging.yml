@@ -66,6 +66,10 @@ jobs:
           sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ vars.GCP_KEY_LOCATION_STG }}|g" .env
           sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ vars.GCP_KEY_RING_STG }}|g" .env
           sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ vars.GCP_KEY_NAME_STG }}|g" .env
+          sed -i -e "s|LEGACY_GCP_PROJECT_ID\=.*|LEGACY_GCP_PROJECT_ID\=${{ vars.LEGACY_GCP_PROJECT_ID }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_LOCATION\=.*|LEGACY_GCP_KEY_LOCATION\=${{ vars.LEGACY_GCP_KEY_LOCATION }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_RING\=.*|LEGACY_GCP_KEY_RING\=${{ vars.LEGACY_GCP_KEY_RING }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_NAME\=.*|LEGACY_GCP_KEY_NAME\=${{ vars.LEGACY_GCP_KEY_NAME }}|g" .env
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env

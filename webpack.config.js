@@ -6,12 +6,9 @@ import CopyWebpackPlugin from "copy-webpack-plugin";
 
 
 
-let nodeModules = {};
-fs.readdirSync("node_modules")
-  .filter((x) => x !== ".bin")
-  .forEach((mod) => {
-    nodeModules[mod] = "commonjs " + mod;
-  });
+
+
+
 
 export default {
   entry: "./bin/www",
@@ -23,6 +20,12 @@ export default {
   output: {
     filename: "index.js",
     path: path.resolve(process.cwd(), "dist"),
+    library: {
+      type: "module",
+    },
+  },
+  experiments: {
+    outputModule: true,
   },
   module: {
     rules: [
@@ -50,7 +53,7 @@ export default {
           to: "./lib/mailer/templates/",
           noErrorOnMissing: true,
         },
-        { from: "ecosystem.config.js", to: "./ecosystem.config.js" },
+        { from: "ecosystem.config.cjs", to: "./ecosystem.config.cjs" },
         { from: "package.json", to: "." },
         { from: "package-lock.json", to: "." },
         { from: ".env.sample", to: ".", noErrorOnMissing: true },
@@ -70,10 +73,20 @@ export default {
     new webpack.WatchIgnorePlugin({
       paths: [/\.d\.ts$/],
     }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^(kerberos|@mongodb-js\/zstd|@aws-sdk\/credential-providers|gcp-metadata|snappy|socks|aws4)$/,
+      contextRegExp: /mongodb/,
+    }),
   ],
   resolve: {
     extensions: [".js", ".mjs"],
   },
-  externals: nodeModules,
+  externals: {
+    '@google-cloud/storage': 'module @google-cloud/storage',
+    '@google-cloud/kms': 'module @google-cloud/kms',
+    'mongodb-client-encryption': 'module mongodb-client-encryption',
+    'mongodb': 'module mongodb',
+  },
+
 
 };

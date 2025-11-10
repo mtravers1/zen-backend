@@ -3,7 +3,7 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import businessService from "./businesses.service.js";
-import { Storage } from "@google-cloud/storage";
+import { storage, bucketName } from "../lib/storageClient.js";
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
 import assetsService from "./assets.service.js";
@@ -20,46 +20,6 @@ import {
   groupByWeek,
 } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
-
-let storage;
-let bucketName;
-
-if (process.env.NODE_ENV !== "test") {
-  const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-  if (!serviceAccountBase64) {
-    throw new Error(
-      "CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.",
-    );
-  }
-  const serviceAccountJsonString = Buffer.from(
-    serviceAccountBase64,
-    "base64",
-  ).toString("utf8");
-  const storageServiceAccount = JSON.parse(serviceAccountJsonString);
-
-  // Ensure credentials have universe_domain field
-  if (!storageServiceAccount.universe_domain) {
-    storageServiceAccount.universe_domain = "googleapis.com";
-  }
-
-  storage = new Storage({
-    credentials: storageServiceAccount,
-    projectId: process.env.GCP_PROJECT_ID,
-    apiEndpoint: "https://storage.googleapis.com",
-    useAuthWithCustomEndpoint: true,
-  });
-  bucketName = "zentavos-bucket";
-} else {
-  // Mock Storage for test environment
-  storage = {
-    bucket: () => ({
-      file: () => ({
-        getSignedUrl: () => ["http://mock-signed-url.com"],
-      }),
-    }),
-  };
-  bucketName = "test-bucket";
-}
 
 import {
   createSafeEncrypt,
