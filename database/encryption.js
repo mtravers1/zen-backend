@@ -33,7 +33,7 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-let kmsClient, storage;
+let storage;
 
 // Initialize Storage client
 let storageCredentials = null; // Initialize to null
@@ -97,11 +97,19 @@ const kmsAuth = new GoogleAuth({
   scopes: "https://www.googleapis.com/auth/cloud-platform",
 });
 
-kmsClient = new KeyManagementServiceClient({
-  auth: kmsAuth,
-  projectId: process.env.GCP_PROJECT_ID,
-});
-console.log("✅ KMS client initialized");
+let kmsClientInstance;
+async function getKmsClient() {
+  if (!kmsClientInstance) {
+    kmsClientInstance = new KeyManagementServiceClient({
+      auth: kmsAuth,
+      projectId: process.env.GCP_PROJECT_ID,
+    });
+    console.log("✅ KMS client initialized");
+  }
+  return kmsClientInstance;
+}
+
+
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
@@ -138,12 +146,7 @@ async function getBucket(bucketName) {
   }
 }
 
-const KEY_PATH = kmsClient.cryptoKeyPath(
-  process.env.GCP_PROJECT_ID,
-  process.env.GCP_KEY_LOCATION,
-  process.env.GCP_KEY_RING,
-  process.env.GCP_KEY_NAME,
-);
+
 
 // DEK cache in memory
 const dekCache = new LimitedMap(1000);
@@ -167,6 +170,13 @@ async function generateAndStoreEncryptedDEK(
   const dek = crypto.randomBytes(32);
 
   try {
+    const kmsClient = await getKmsClient();
+    const KEY_PATH = kmsClient.cryptoKeyPath(
+      process.env.GCP_PROJECT_ID,
+      process.env.GCP_KEY_LOCATION,
+      process.env.GCP_KEY_RING,
+      process.env.GCP_KEY_NAME,
+    );
     const [encryptResponse] = await kmsClient.encrypt({
       name: KEY_PATH,
       plaintext: dek,
@@ -282,6 +292,7 @@ async function getDEKFromBucket(bucketKey, bucket) {
   );
 
   const deks = [];
+  const kmsClient = await getKmsClient();
   for (const file of files) {
     try {
       const [encryptedDEK] = await file.download();
@@ -365,6 +376,13 @@ async function getUserDek(firebaseUid) {
     const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket);
     if (legacyDbIdDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating by re-encrypting with new KMS key...`);
+      const kmsClient = await getKmsClient();
+      const KEY_PATH = kmsClient.cryptoKeyPath(
+        process.env.GCP_PROJECT_ID,
+        process.env.GCP_KEY_LOCATION,
+        process.env.GCP_KEY_RING,
+        process.env.GCP_KEY_NAME,
+      );
       // Re-encrypt and store the DEK with the new key
       for (const dek of legacyDbIdDeks) {
         const [encryptResponse] = await kmsClient.encrypt({
@@ -393,6 +411,13 @@ async function getUserDek(firebaseUid) {
     const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket);
     if (legacyFirebaseUidDeks.length > 0) {
       console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating by re-encrypting with new KMS key...`);
+      const kmsClient = await getKmsClient();
+      const KEY_PATH = kmsClient.cryptoKeyPath(
+        process.env.GCP_PROJECT_ID,
+        process.env.GCP_KEY_LOCATION,
+        process.env.GCP_KEY_RING,
+        process.env.GCP_KEY_NAME,
+      );
       // Re-encrypt and store the DEK with the new key
       for (const dek of legacyFirebaseUidDeks) {
         const [encryptResponse] = await kmsClient.encrypt({

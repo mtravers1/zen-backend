@@ -91,7 +91,7 @@ jobs:
       - name: Create ServiceAccountKey.json
         uses: actions/github-script@v6
         env:
-          SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY_PROD }}
+          SERVICE_ACCOUNT_KEY: ${{ secrets.STORAGE_SERVICE_ACCOUNT_PROD }}
         with:
           script: |
             const fs = require('fs');
