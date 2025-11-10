@@ -6,6 +6,13 @@ import CopyWebpackPlugin from "copy-webpack-plugin";
 
 
 
+let nodeModules = {};
+fs.readdirSync("node_modules")
+  .filter((x) => x !== ".bin" && !x.startsWith("@google-cloud"))
+  .forEach((mod) => {
+    nodeModules[mod] = "commonjs " + mod;
+  });
+
 export default {
   entry: "./bin/www",
   target: "node",
@@ -16,6 +23,14 @@ export default {
   output: {
     filename: "index.js",
     path: path.resolve(process.cwd(), "dist"),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.node$/,
+        loader: "node-loader",
+      },
+    ],
   },
   devtool: "source-map",
   plugins: [
@@ -59,5 +74,6 @@ export default {
   resolve: {
     extensions: [".js", ".mjs"],
   },
+  externals: nodeModules,
 
 };
