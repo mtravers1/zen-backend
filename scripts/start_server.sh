@@ -1,5 +1,9 @@
 #!/bin/bash
-DEPLOYMENT_ENV=dev
+set -e
+
+node --version
+npm --version
+
 pm2 stop --silent ${DEPLOYMENT_ENV}
 pm2 delete --silent ${DEPLOYMENT_ENV}
 npm install

@@ -44,7 +44,6 @@ jobs:
         run: |
           cd dist
           cp .env.sample .env
-          sed -i -e "s|DEPLOYMENT_ENV\=.*|DEPLOYMENT_ENV\=$DEPLOYMENT_NAME|g" scripts/start_server.sh
           sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_PROD }}\'|g" .env
           sed -i -e "s|MONGODB_USER\=.*|MONGODB_USER\=\'${{ secrets.MONGODB_USER_PROD }}\'|g" .env
           sed -i -e "s|MONGODB_PASS\=.*|MONGODB_PASS\=\'${{ secrets.MONGODB_PASS_PROD }}\'|g" .env
@@ -125,6 +124,7 @@ jobs:
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             export NODE_ENV=production &&
+            export DEPLOYMENT_ENV=${{ env.DEPLOYMENT_NAME }} &&
             cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             ./scripts/start_server.sh
