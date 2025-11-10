@@ -8,6 +8,10 @@ echo "--- DEBUG: Current directory: $(pwd)"
 echo "--- DEBUG: Files in directory: ---"
 ls -la
 
+if [ -f .env ]; then
+  export $(cat .env | sed 's/#.*//g' | xargs)
+fi
+
 node --version
 npm --version
 
