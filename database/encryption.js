@@ -1,6 +1,5 @@
 import fs from "fs";
-import path from "path";
-import os from "os";
+import { GoogleAuth } from "google-auth-library";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { Storage } from "@google-cloud/storage";
@@ -36,13 +35,6 @@ for (const envVar of requiredEnvVars) {
 
 let kmsClient, storage;
 
-function writeCredentialsToFile(credentials, filename) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gcp-credentials-"));
-  const filePath = path.join(tempDir, filename);
-  fs.writeFileSync(filePath, JSON.stringify(credentials));
-  return filePath;
-}
-
 // Initialize Storage client
 let storageCredentials = null; // Initialize to null
 const storageServiceAccountB64 = process.env.STORAGE_SERVICE_ACCOUNT;
@@ -65,10 +57,13 @@ try {
   );
 }
 
-const storageKeyFilename = writeCredentialsToFile(storageCredentials, "storage-credentials.json");
+const storageAuth = new GoogleAuth({
+  credentials: storageCredentials,
+  scopes: "https://www.googleapis.com/auth/cloud-platform",
+});
 
 storage = new Storage({
-  keyFilename: storageKeyFilename,
+  auth: storageAuth,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ Storage client initialized");
@@ -94,10 +89,13 @@ try {
   );
 }
 
-const kmsKeyFilename = writeCredentialsToFile(kmsCredentials, "kms-credentials.json");
+const kmsAuth = new GoogleAuth({
+  credentials: kmsCredentials,
+  scopes: "https://www.googleapis.com/auth/cloud-platform",
+});
 
 kmsClient = new KeyManagementServiceClient({
-  keyFilename: kmsKeyFilename,
+  auth: kmsAuth,
   projectId: process.env.GCP_PROJECT_ID,
 });
 console.log("✅ KMS client initialized");
