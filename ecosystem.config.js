@@ -8,7 +8,7 @@ module.exports = {
       name: "local",
       script: "./index.js",
       watch: true,
-      node_args: "--env-file=.env",
+      node_args: "-r dotenv/config",
       error_file: "/var/log/zentavos/api-error.log",
       out_file: "/var/log/zentavos/api-out.log",
       log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -17,7 +17,7 @@ module.exports = {
       name: "dev",
       script: "./index.js",
       watch: true,
-      node_args: "--env-file=.env",
+      node_args: "-r dotenv/config",
       env: {
         PLAID_ENV: "development",
       },
@@ -29,7 +29,7 @@ module.exports = {
       name: "stg",
       script: "./index.js",
       watch: false,
-      node_args: "--env-file=.env",
+      node_args: "-r dotenv/config",
       env: {
         PLAID_ENV: "production",
       },
@@ -41,7 +41,7 @@ module.exports = {
       name: "prod",
       script: "./index.js",
       watch: false,
-      node_args: "--env-file=.env",
+      node_args: "-r dotenv/config",
       env: {
         PLAID_ENV: "production",
       },
