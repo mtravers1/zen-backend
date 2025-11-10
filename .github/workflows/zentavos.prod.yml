@@ -129,7 +129,7 @@ jobs:
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             export NODE_ENV=production &&
             export DEPLOYMENT_ENV=${{ env.DEPLOYMENT_NAME }} &&
-            cd ${{ vars.DEPLOYMENT_PATH }}/dist
+            cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             bash ./scripts/start_server.sh
           EOF
