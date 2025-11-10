@@ -129,9 +129,9 @@ jobs:
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             export NODE_ENV=staging &&
             export DEPLOYMENT_ENV=${{ env.DEPLOYMENT_NAME }} &&
-            cd ${{ vars.DEPLOYMENT_PATH }}
+            cd ${{ vars.DEPLOYMENT_PATH }}/dist
             chmod +x scripts/start_server.sh
-            ./scripts/start_server.sh
+            bash ./scripts/start_server.sh
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
