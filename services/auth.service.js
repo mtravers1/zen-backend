@@ -1164,7 +1164,6 @@ const getOwnUserProfile = async (uid) => {
       id: user._id,
       _id: user._id,
       email: primaryEmail,
-      allEmails: emails,
       phone: decryptedPhone,
       role: user.role,
       account_type: user.account_type,
