@@ -22,8 +22,13 @@ import {
 import plaidService from "./plaid.service.js";
 import { getOldestAccessToken } from "./utils/accounts.js";
 
-const signUp = async (userData, req) => {
-  const { email, firstName, lastName, authUid } = userData;
+import {
+  createSafeEncrypt,
+  createSafeDecrypt,
+} from "../lib/encryptionHelper.js";
+
+const _createUser = async (authUid, userData) => {
+  const { email, firstName, lastName } = userData;
 
   // Basic validation
   if (!email || !firstName || !lastName || !authUid) {
@@ -41,20 +46,27 @@ const signUp = async (userData, req) => {
   }
 
   // Get DEK for the new user
-  const dek = await getUserDekForSignup(authUid, new mongoose.Types.ObjectId());
+  const userId = new mongoose.Types.ObjectId();
+  const dek = await getUserDekForSignup(authUid, userId);
+  const safeEncrypt = createSafeEncrypt(authUid, dek);
 
   // Encrypt user data
-  const encryptedFirstName = await encryptValue(firstName, dek);
-  const encryptedLastName = await encryptValue(lastName, dek);
-  const encryptedEmail = await encryptValue(email, dek);
+  const encryptedFirstName = await safeEncrypt(firstName, {
+    field: "firstName",
+  });
+  const encryptedLastName = await safeEncrypt(lastName, {
+    field: "lastName",
+  });
+  const encryptedEmail = await safeEncrypt(email, { field: "email" });
 
   const newUser = new User({
+    _id: userId,
     authUid,
     name: {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
       middleName: userData.middleName
-        ? await encryptValue(userData.middleName, dek)
+        ? await safeEncrypt(userData.middleName, { field: "middleName" })
         : null,
     },
     email: [
@@ -66,28 +78,26 @@ const signUp = async (userData, req) => {
       },
     ],
     emailHash: hashEmail(email),
-    role: "individual",
+    role: userData.role || "individual",
+    account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl
-      ? await encryptValue(userData.profilePhotoUrl, dek)
+      ? await safeEncrypt(userData.profilePhotoUrl, {
+          field: "profilePhotoUrl",
+        })
       : null,
   });
 
-  await newUser.save();
+  const savedUser = await newUser.save();
+  if (!savedUser) {
+    throw new Error("User could not be saved to the database.");
+  }
 
-  // Return a decrypted user object
-  const response = {
-    id: newUser._id,
-    authUid: newUser.authUid,
-    name: {
-      firstName: firstName,
-      lastName: lastName,
-      middleName: userData.middleName || null,
-    },
-    email: [{ email: email, isPrimary: true, isVerified: false }],
-    profilePhotoUrl: userData.profilePhotoUrl || null,
-  };
+  return savedUser;
+};
 
-  return response;
+const signUp = async (userData, req) => {
+  const { authUid } = userData;
+  return await _createUser(authUid, userData);
 };
 
 const signInOrCreate = async (uid, userData) => {
@@ -103,43 +113,38 @@ const signInOrCreate = async (uid, userData) => {
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
-      const dek = await getUserDekForSignup(uid, new mongoose.Types.ObjectId());
-      const { firstName, lastName } = userData.name;
-
-      user = new User({
-        authUid: uid,
-        email: [
-          {
-            email: await encryptValue(userData.email, dek),
-            isPrimary: true,
-            isVerified: true,
-            emailType: "personal",
-          },
-        ],
-        emailHash: hashEmail(userData.email),
-        name: {
-          firstName: await encryptValue(firstName, dek),
-          lastName: await encryptValue(lastName, dek),
-        },
-        role: userData.role,
-      });
-
-      await user.save();
+      user = await _createUser(uid, userData);
     }
 
     const dek = await getUserDek(uid);
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
+    });
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
     const decryptedMiddleName = user.name.middleName
-      ? await decryptValue(user.name.middleName, dek)
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
+        ? await safeDecrypt(user.phones[0].phone, {
+            user_id: user._id,
+            field: "phone",
+          })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
     }
 
     let emails = [];
@@ -147,7 +152,10 @@ const signInOrCreate = async (uid, userData) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await decryptValue(emailObj.email, dek),
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
@@ -156,7 +164,10 @@ const signInOrCreate = async (uid, userData) => {
     } else {
       emails = [
         {
-          email: await decryptValue(user.email, dek),
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
           emailType: "personal",
           isPrimary: true,
         },
@@ -165,7 +176,10 @@ const signInOrCreate = async (uid, userData) => {
 
     if (!user.account_type) {
       user.account_type = "Free";
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("User account type could not be updated.");
+      }
     }
 
     const retrievedUser = {
@@ -282,6 +296,7 @@ const deleteUser = async (uid) => {
       throw new Error("User not found");
     }
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
     });
@@ -305,11 +320,21 @@ const deleteUser = async (uid) => {
       userId: user._id,
     });
     const accessToken = await getOldestAccessToken({ userId: user._id });
-    const decryptedAccessToken = await decryptValue(
+    const decryptedAccessToken = await safeDecrypt(
       accessToken.accessToken,
-      dek,
+      { user_id: user._id, field: "accessToken" },
     );
-    await plaidService.invalidateAccessToken(decryptedAccessToken);
+
+    if (decryptedAccessToken) {
+      await plaidService.invalidateAccessToken(decryptedAccessToken);
+    } else {
+      structuredLogger.logErrorBlock(new Error("Decrypted access token is null"), {
+        operation: "deleteUser",
+        user_id: user._id,
+        field: "accessToken",
+        warning: "Skipping invalidateAccessToken call due to null token",
+      });
+    }
     await AccessToken.deleteMany({
       userId: user._id,
     });
@@ -924,23 +949,34 @@ const signIn = async (email, password) => {
       userId: user._id,
     });
     const dek = await getUserDek(user.authUid);
-    console.log("DEK retrieved successfully:", {
-      hasDek: !!dek,
-      dekLength: dek?.length,
+    const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
     });
-
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
     const decryptedMiddleName = user.name.middleName
-      ? await decryptValue(user.name.middleName, dek)
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
+        ? await safeDecrypt(user.phones[0].phone, {
+            user_id: user._id,
+            field: "phone",
+          })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
     }
 
     let emails = [];
@@ -948,7 +984,10 @@ const signIn = async (email, password) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await decryptValue(emailObj.email, dek),
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
@@ -957,7 +996,10 @@ const signIn = async (email, password) => {
     } else {
       emails = [
         {
-          email: await decryptValue(user.email, dek),
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
           emailType: "personal",
           isPrimary: true,
         },
@@ -966,7 +1008,10 @@ const signIn = async (email, password) => {
 
     if (!user.account_type) {
       user.account_type = "Free";
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("New user could not be saved to the database.");
+      }
     }
 
     const token = generateJWTToken(user._id, normalizedEmail);
@@ -1038,16 +1083,16 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
   }
 };
 
-const own = async (uid) => {
+const getOwnUserProfile = async (uid) => {
   try {
-    structuredLogger.logOperationStart("auth_service_own", { user_id: uid });
+    structuredLogger.logOperationStart("auth_service_get_own_user_profile", { user_id: uid });
 
     const user = await User.findOne({ authUid: uid });
 
     if (!user) {
       const error = new Error("User not found");
       structuredLogger.logErrorBlock(error, {
-        operation: "auth_service_own",
+        operation: "auth_service_get_own_user_profile",
         user_id: uid,
         error_classification: "user_not_found",
       });
@@ -1055,19 +1100,35 @@ const own = async (uid) => {
     }
 
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
+    });
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
     const decryptedMiddleName = user.name.middleName
-      ? await decryptValue(user.name.middleName, dek)
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
       : null;
     const decryptedPhone =
       user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
+        ? await safeDecrypt(user.phones[0].phone, {
+            user_id: user._id,
+            field: "phone",
+          })
         : null;
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
     }
 
     let emails = [];
@@ -1075,7 +1136,10 @@ const own = async (uid) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await decryptValue(emailObj.email, dek),
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
@@ -1084,17 +1148,23 @@ const own = async (uid) => {
     } else {
       emails = [
         {
-          email: await decryptValue(user.email, dek),
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
           emailType: "personal",
           isPrimary: true,
         },
       ];
     }
 
+    const primaryEmail = emails.find((e) => e.isPrimary)?.email || emails[0]?.email || null;
+
     const retrievedUser = {
       id: user._id,
       _id: user._id,
-      email: emails[0]?.email,
+      email: primaryEmail,
+      allEmails: emails,
       phone: decryptedPhone,
       role: user.role,
       account_type: user.account_type,
@@ -1106,11 +1176,11 @@ const own = async (uid) => {
       },
     };
 
-    structuredLogger.logSuccess("auth_service_own", { user_id: uid });
+    structuredLogger.logSuccess("auth_service_get_own_user_profile", { user_id: uid });
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_service_own",
+      operation: "auth_service_get_own_user_profile",
       user_id: uid,
       error_classification: "user_retrieval_error",
     });
@@ -1134,7 +1204,7 @@ const authService = {
   createFirebaseUser,
   createFirebaseUserWithEmailPassword,
   generateFirebaseToken,
-  own,
+  getOwnUserProfile,
 };
 
 export default authService;

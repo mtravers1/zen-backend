@@ -462,18 +462,13 @@ const updateUserFromRTDN = async (
   }
 };
 
-const mockUpgrade = async (uid) => {
-  const user = await User.findOne({ authUid: uid });
-  user.account_type = "Tycoon+100gb";
-  await user.save();
-};
+
 
 const paymentService = {
   validatePayment,
   updateUserUUID,
   getSubscriptionDetails,
   updateUserFromRTDN,
-  mockUpgrade,
 };
 
 export default paymentService;

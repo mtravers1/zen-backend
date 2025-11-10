@@ -59,7 +59,6 @@ class AIService {
         `[AI Service] ❌ GROQ_AI_MODEL not found in environment variables`,
       );
     }
-
     this.groqClient = new Groq({ apiKey: this.GROQ_API_KEY });
   }
 

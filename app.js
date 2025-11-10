@@ -13,81 +13,11 @@ import {
   cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
-import "./database/database.js";
+import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
-// Initialize Firebase Admin SDK
-if (process.env.NODE_ENV !== "test") {
-  console.log("🔥 Initializing Firebase Admin...");
-  let serviceAccount;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT;
-      const serviceAccountJsonString = Buffer.from(
-        serviceAccountBase64,
-        "base64",
-      ).toString("utf8");
-      serviceAccount = JSON.parse(serviceAccountJsonString);
-      console.log(
-        "🔥 Service account loaded successfully from environment variable.",
-      );
-    } catch (error) {
-      console.error(
-        "🔥 Error parsing service account from environment variable:",
-        error,
-      );
-      process.exit(1);
-    }
-  } else {
-    console.error(
-      "CRITICAL ERROR: FIREBASE_SERVICE_ACCOUNT is not set. Exiting.",
-    );
-    process.exit(1);
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://zentavos.firebaseio.com",
-  });
-  console.log("🔥 Firebase Admin initialized successfully");
-}
-
-console.log(
-  `The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`,
-);
-console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
-console.log(
-  `USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`,
-);
-
-// Check for critical environment variables
-if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
-  console.error(
-    "CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.",
-  );
-  process.exit(1);
-}
-
-const expectedBucketName =
-  process.env.ENVIRONMENT === "production"
-    ? "prod"
-    : process.env.ENVIRONMENT === "staging"
-      ? "staging"
-      : process.env.ENVIRONMENT === "development"
-        ? "dev"
-        : null;
-
-if (
-  expectedBucketName &&
-  process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName
-) {
-  console.error(
-    `CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`,
-  );
-  process.exit(1);
-}
-
-const app = express();
+export async function createApp() {
+  const app = express();
 
 // database initialization
 // require('./database/database');
@@ -199,6 +129,7 @@ app.use((req, res, next) => {
 });
 
 // Load routes
+
 app.use("/api", router);
 
 // Add root route to avoid 401 errors
@@ -237,4 +168,7 @@ app.use(function (err, req, res, next) {
   res.status(err.status || 500).json(errorResponse);
 });
 
-export default app;
+  return app;
+}
+
+export default createApp;

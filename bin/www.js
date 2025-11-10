@@ -6,41 +6,45 @@ dotenv.config();
 /**
  * Module dependencies.
  */
-import { createApp } from "../app.js";
-import debug from "debug";
+import createApp from "../app.js";
+import Debug from "debug";
+const debug = Debug("zentavos-backend:server");
 import http from "http";
 import connectDB from "../database/database.js";
 
-(async () => {
-  try {
-    await connectDB();
+let server; // Hoisted server declaration
 
-    const app = await createApp();
+/**
+ * Get port from environment and store in Express.
+ */
 
-    /**
-     * Get port from environment and store in Express.
-     */
-    const port = normalizePort(process.env.APP_PORT || "3000");
-    app.set("port", port);
+async function startServer() {
+  await connectDB();
 
-    /**
-     * Create HTTP server.
-     */
-    const server = http.createServer(app);
+  const expressApp = await createApp();
 
-    /**
-     * Listen on provided port, on all network interfaces.
-     */
-    server.listen(port);
-    server.on("error", (error) => onError(error, port));
-    server.on("listening", () => onListening(app, server));
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
-})();
+  const port = normalizePort(process.env.APP_PORT || "3000");
+  expressApp.set("port", port);
 
+  /**
+   * Create HTTP server.
+   */
 
+  server = http.createServer(expressApp);
+
+  /**
+   * Listen on provided port, on all network interfaces. 
+   */
+
+  server.listen(port);
+  server.on("error", (error) => onError(error, port));
+  server.on("listening", () => onListening(expressApp));
+}
+
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
 
 /**
  * Normalize a port into a number, string, or false.
@@ -129,12 +133,19 @@ function _split(thing) {
 /**
  * Event listener for HTTP server "listening" event.
  */
-function onListening(app, server) {
+function onListening(expressApp) {
   const addr = server.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
 
-  console.log("\nEndpoints:\n");
-  app._router.stack.forEach(_print.bind(null, []));
+  // NOTE: This route introspection relies on Express internals and may break in future versions.
+  // For a more robust solution, consider using a library like express-list-endpoints.
+  try {
+    console.log("\nEndpoints:\n");
+    expressApp._router.stack.forEach(_print.bind(null, []));
+  } catch (e) {
+    console.warn("\n⚠️  Could not introspect Express routes. The router shape may have changed.");
+    console.warn("Consider using a library like express-list-endpoints for more robust route discovery.");
+  }
 
   console.log("\nListening on " + bind + "...\n");
 
