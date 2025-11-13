@@ -67,8 +67,9 @@ const generateSignedUrl = async (fileName) => {
 
     const [url] = await storage
       .bucket(filesBucketName)
-
-    return url;
+      .file(fileName)
+      .getSignedUrl(options);    
+      return url;
   } catch (error) {
     console.error("Error generating signed URL:", error);
     return null;
