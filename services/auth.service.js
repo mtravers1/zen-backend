@@ -950,92 +950,102 @@ const signIn = async (email, password) => {
     });
     const dek = await getUserDek(user.authUid);
     const safeDecrypt = createSafeDecrypt(user.authUid, dek);
-    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
-      user_id: user._id,
-      field: "firstName",
-    });
-    const decryptedLastName = await safeDecrypt(user.name.lastName, {
-      user_id: user._id,
-      field: "lastName",
-    });
-    const decryptedMiddleName = user.name.middleName
-      ? await safeDecrypt(user.name.middleName, {
-          user_id: user._id,
-          field: "middleName",
-        })
-      : null;
-    const decryptedPhone =
-      user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, {
+
+    try {
+      const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+        user_id: user._id,
+        field: "firstName",
+      });
+      const decryptedLastName = await safeDecrypt(user.name.lastName, {
+        user_id: user._id,
+        field: "lastName",
+      });
+      const decryptedMiddleName = user.name.middleName
+        ? await safeDecrypt(user.name.middleName, {
             user_id: user._id,
-            field: "phone",
+            field: "middleName",
           })
         : null;
-    let decryptedPhotoUrl;
-    if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
-        user_id: user._id,
-        field: "profilePhotoUrl",
-      });
-    }
+      const decryptedPhone =
+        user.phones && user.phones.length > 0
+          ? await safeDecrypt(user.phones[0].phone, {
+              user_id: user._id,
+              field: "phone",
+            })
+          : null;
+      let decryptedPhotoUrl;
+      if (user.profilePhotoUrl) {
+        decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+          user_id: user._id,
+          field: "profilePhotoUrl",
+        });
+      }
 
-    let emails = [];
-    if (Array.isArray(user.email)) {
-      emails = await Promise.all(
-        user.email.map(async (emailObj) => {
-          return {
-            email: await safeDecrypt(emailObj.email, {
+      let emails = [];
+      if (Array.isArray(user.email)) {
+        emails = await Promise.all(
+          user.email.map(async (emailObj) => {
+            return {
+              email: await safeDecrypt(emailObj.email, {
+                user_id: user._id,
+                field: "email",
+              }),
+              emailType: emailObj.emailType,
+              isPrimary: emailObj.isPrimary,
+            };
+          }),
+        );
+      } else {
+        emails = [
+          {
+            email: await safeDecrypt(user.email, {
               user_id: user._id,
               field: "email",
             }),
-            emailType: emailObj.emailType,
-            isPrimary: emailObj.isPrimary,
-          };
-        }),
-      );
-    } else {
-      emails = [
-        {
-          email: await safeDecrypt(user.email, {
-            user_id: user._id,
-            field: "email",
-          }),
-          emailType: "personal",
-          isPrimary: true,
-        },
-      ];
-    }
-
-    if (!user.account_type) {
-      user.account_type = "Free";
-      const savedUser = await user.save();
-      if (!savedUser) {
-        throw new Error("New user could not be saved to the database.");
+            emailType: "personal",
+            isPrimary: true,
+          },
+        ];
       }
+
+      if (!user.account_type) {
+        user.account_type = "Free";
+        const savedUser = await user.save();
+        if (!savedUser) {
+          throw new Error("New user could not be saved to the database.");
+        }
+      }
+
+      const token = generateJWTToken(user._id, normalizedEmail);
+
+      const retrievedUser = {
+        id: user._id,
+        _id: user._id,
+        email: emails[0]?.email || normalizedEmail,
+        phone: decryptedPhone,
+        role: user.role,
+        account_type: user.account_type,
+        profilePhotoUrl: decryptedPhotoUrl,
+        name: {
+          firstName: decryptedFirstName,
+          lastName: decryptedLastName,
+          middleName: decryptedMiddleName,
+        },
+        token: token,
+      };
+
+      structuredLogger.logSuccess("auth_service_signin_email", {
+        email: normalizedEmail,
+      });
+      return retrievedUser;
+    } catch (error) {
+      if (error.name === 'DecryptionError' || error.message.includes('CRITICAL: No DEK found for user')) {
+        const signInError = new Error('SIGN_IN_ERROR');
+        signInError.code = error.errorCode;
+        throw signInError;
+      }
+      throw error;
     }
-
-    const token = generateJWTToken(user._id, normalizedEmail);
-
-    const retrievedUser = {
-      id: user._id,
-      _id: user._id,
-      email: emails[0]?.email || normalizedEmail,
-      phone: decryptedPhone,
-      role: user.role,
-      account_type: user.account_type,
-      profilePhotoUrl: decryptedPhotoUrl,
-      name: {
-        firstName: decryptedFirstName,
-        lastName: decryptedLastName,
-        middleName: decryptedMiddleName,
-      },
-      token: token,
-    };
-
-    structuredLogger.logSuccess("auth_service_signin_email", {
-      email: normalizedEmail,
-    });
-    return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_service_signin_email",

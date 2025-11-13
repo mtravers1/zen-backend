@@ -225,6 +225,12 @@ const signIn = async (req, res) => {
     ) {
       return res.status(401).send("Invalid email or password");
     }
+    if (error.message === 'SIGN_IN_ERROR') {
+      return res.status(418).json({
+        error: 'SIGN_IN_ERROR',
+        message: `We couldn't sign you in. Please contact support with code ${error.code}`
+      });
+    }
     res.status(500).send(error.message);
   }
 };

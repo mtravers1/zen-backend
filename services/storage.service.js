@@ -1,6 +1,6 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
-import { storage, bucketName } from "../lib/storageClient.js";
+import { storage, filesBucketName } from "../lib/storageClient.js";
 
 const getStorageStatus = async (uid) => {
   try {
@@ -22,7 +22,7 @@ const getStorageStatus = async (uid) => {
       for (const file of userFiles) {
         try {
           const [fileMetadata] = await storage
-            .bucket(bucketName)
+            .bucket(filesBucketName)
             .file(file.fileurl)
             .getMetadata();
           realStorageUsed += parseInt(fileMetadata.size || 0);
@@ -62,7 +62,7 @@ const getStorageStatus = async (uid) => {
     for (const file of userFiles) {
       try {
         const [fileMetadata] = await storage
-          .bucket(bucketName)
+          .bucket(filesBucketName)
           .file(file.fileurl)
           .getMetadata();
         userStorageUsed += parseInt(fileMetadata.size || 0);

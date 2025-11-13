@@ -1,6 +1,6 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
-import { storage, bucketName } from "../lib/storageClient.js";
+import { storage, filesBucketName } from "../lib/storageClient.js";
 
 const addFile = async (data, uid) => {
   const user = await User.findOne({ authUid: uid });
@@ -24,7 +24,7 @@ const addFile = async (data, uid) => {
 const generateUploadUrl = async (fileName, mimeType) => {
   try {
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl({
         action: "write",
@@ -43,7 +43,7 @@ const generateImageUploadUrl = async (fileName, mimeType) => {
   console.log("🚀 ~ generateImageUploadUrl ~ mimeType:", mimeType);
   try {
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl({
         action: "write",
@@ -66,9 +66,7 @@ const generateSignedUrl = async (fileName) => {
     };
 
     const [url] = await storage
-      .bucket(bucketName)
-      .file(fileName)
-      .getSignedUrl(options);
+      .bucket(filesBucketName)
 
     return url;
   } catch (error) {
@@ -146,7 +144,7 @@ const deleteFiles = async (data, uid) => {
         _id: element.id,
         userId: user._id.toString(),
       });
-      await storage.bucket(bucketName).file(element.fileurl).delete();
+      await storage.bucket(filesBucketName).file(element.fileurl).delete();
       console.log(`File ${element.fileurl} deleted successfully.`);
     });
   } catch (error) {

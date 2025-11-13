@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
-import { storage } from "../lib/storageClient.js";
+import { storage, keysBucketName } from "../lib/storageClient.js";
 
 class DecryptionError extends Error {
   constructor(message, errorCode) {
@@ -46,7 +46,7 @@ async function getKmsClient() {
 
 
 
-const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+const GCS_DEK_BUCKET_NAME = process.env.GCS_DEK_BUCKET_NAME;
 
 
 /**
@@ -56,9 +56,9 @@ const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
  * @throws {Error} If no bucket name is configured or the resolved bucket does not exist or is not accessible.
  */
 async function getBucket(bucketName) {
-  const targetBucketName = bucketName || GCS_BUCKET_NAME;
+  const targetBucketName = bucketName || GCS_DEK_BUCKET_NAME;
   if (!targetBucketName) {
-    throw new Error("❌ CRITICAL: GCS_BUCKET_NAME environment variable is not set.");
+    throw new Error("❌ CRITICAL: GCS_DEK_BUCKET_NAME environment variable is not set.");
   }
 
   try {
@@ -173,6 +173,8 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
  * @param {boolean} [includeExtension=false] - Whether to include the '.key' extension in the path.
  * @returns {string} The constructed GCS path for the DEK file.
  */
+function getDEKPath(bucketKey, bucket, includeExtension = false) {
+  let path;
 function getDEKPath(bucketKey, bucket, includeExtension = false) {
   let path;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
@@ -395,7 +397,8 @@ async function getUserDek(firebaseUid) {
     // 5. Final processing
     const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
     console.error(`❌ ${errorMessage}`);
-    throw new Error(errorMessage);
+    const errorCode = `NO_DEK_FOUND-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    throw new DecryptionError(errorMessage, errorCode);
 
   } catch (e) {
     console.error(
