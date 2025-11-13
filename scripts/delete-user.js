@@ -108,6 +108,12 @@ const deleteUser = async (uid) => {
     console.log("Deleting access tokens...");
     await AccessToken.deleteMany({ userId: user._id });
 
+    console.log("Deleting files...");
+    await Files.deleteMany({ userId: user._id });
+
+    console.log("Deleting businesses...");
+    await Business.deleteMany({ userId: user._id });
+
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
     await User.deleteOne({ authUid: uid });
