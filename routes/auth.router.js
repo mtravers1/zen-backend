@@ -15,7 +15,7 @@ router.get("/own", authController.getOwnUserProfile);
 router.post("/sendCode", authController.sendCode);
 router.post("/verifyCode", authController.verifyCode);
 router.post("/resetPassword", authController.resetPassword);
-router.delete("/:uid", authController.deleteUser);
+router.delete("/:uid", firebaseAuth, authController.deleteUser);
 router.post(
   "/recover-encryption-keys/:uid",
   firebaseAuth,

@@ -3,7 +3,7 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import businessService from "./businesses.service.js";
-import { storage, bucketName } from "../lib/storageClient.js";
+
 import Liability from "../database/models/Liability.js";
 import AccessToken from "../database/models/AccessToken.js";
 import assetsService from "./assets.service.js";

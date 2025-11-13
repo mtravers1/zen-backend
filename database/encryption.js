@@ -175,8 +175,6 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
  */
 function getDEKPath(bucketKey, bucket, includeExtension = false) {
   let path;
-function getDEKPath(bucketKey, bucket, includeExtension = false) {
-  let path;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
     const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
     path = `keys/${environmentFolder}/${bucketKey}`;
@@ -664,4 +662,5 @@ export {
   copyDEKToNewBucketKey,
   moveDEKToDeadLetterQueue,
   DecryptionError,
+  getBucket,
 };
