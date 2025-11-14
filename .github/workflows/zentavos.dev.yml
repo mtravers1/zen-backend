@@ -60,7 +60,8 @@ jobs:
           sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=development|g" .env
           # --- GCP/KMS/Encryption Variables ---
           sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ vars.GCP_PROJECT_ID_DEV }}|g" .env
-          sed -i -e "s|GCS_BUCKET_NAME\=.*|GCS_BUCKET_NAME\=${{ vars.GCS_BUCKET_NAME_DEV }}|g" .env
+          sed -i -e "s|GCS_DEK_BUCKET_NAME\=.*|GCS_DEK_BUCKET_NAME\=${{ vars.GCS_DEK_BUCKET_NAME_DEV }}|g" .env
+          sed -i -e "s|GCS_FILES_BUCKET_NAME\=.*|GCS_FILES_BUCKET_NAME\=${{ vars.GCS_FILES_BUCKET_NAME_DEV }}|g" .env
           sed -i -e "s|LEGACY_GCS_BUCKET_NAME\=.*|LEGACY_GCS_BUCKET_NAME\=${{ vars.LEGACY_GCS_BUCKET_NAME_DEV }}|g" .env
           sed -i -e "s|LEGACY_GCS_ENVIRONMENT_FOLDER\=.*|LEGACY_GCS_ENVIRONMENT_FOLDER\=${{ vars.LEGACY_GCS_ENVIRONMENT_FOLDER_DEV }}|g" .env
           sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ vars.GCP_KEY_LOCATION_DEV }}|g" .env

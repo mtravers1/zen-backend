@@ -521,10 +521,14 @@ const assignAccountToProfile = async (email, profileId, accountIds, uid) => {
 };
 
 const updateBusinessProfile = async (profileId, formData, email, uid) => {
+  console.log(`[updateBusinessProfile] Starting profile update for profileId: ${profileId}`);
+  console.log(`[updateBusinessProfile] Received formData:`, formData);
+
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
   try {
     if (!profileId) {
+      console.error("[updateBusinessProfile] Error: No profileId provided.");
       throw new Error("No profile selected to update.");
     }
 
