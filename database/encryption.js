@@ -46,9 +46,6 @@ async function getKmsClient() {
 
 
 
-const GCS_DEK_BUCKET_NAME = process.env.GCS_DEK_BUCKET_NAME;
-
-
 /**
  * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
  * @param {string} [bucketName] - Optional explicit bucket name; if omitted the configured `GCS_BUCKET_NAME` is used.
@@ -56,7 +53,7 @@ const GCS_DEK_BUCKET_NAME = process.env.GCS_DEK_BUCKET_NAME;
  * @throws {Error} If no bucket name is configured or the resolved bucket does not exist or is not accessible.
  */
 async function getBucket(bucketName) {
-  const targetBucketName = bucketName || GCS_DEK_BUCKET_NAME;
+  const targetBucketName = bucketName || keysBucketName;
   if (!targetBucketName) {
     throw new Error("❌ CRITICAL: GCS_DEK_BUCKET_NAME environment variable is not set.");
   }
