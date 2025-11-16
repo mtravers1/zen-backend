@@ -69,6 +69,10 @@ const addBusinesses = async (businessList, email, uid) => {
       { field: "businessLogo" },
     );
 
+    const encryptedBusinessOwners = await safeEncrypt(businessOwners, {
+      field: "businessOwners",
+    });
+
     const newBusiness = new Business({
       userId: userId,
       name: encryptedName,
@@ -77,7 +81,7 @@ const addBusinesses = async (businessList, email, uid) => {
       businessLogo: encryptedBusinessLogo,
       numAccounts: businessData.accounts,
       color: color,
-      businessOwners: businessOwners,
+      businessOwners: encryptedBusinessOwners,
     });
 
     await newBusiness.save();
