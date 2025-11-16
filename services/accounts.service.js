@@ -1,4 +1,5 @@
 import plaidService from "./plaid.service.js";
+import { storage, filesBucketName } from "../lib/storageClient.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
@@ -2176,7 +2177,7 @@ async function getDecryptedAccount(account, dek, uid) {
 const generateUploadUrl = async (fileName) => {
   try {
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl({
         action: "write",
@@ -2199,7 +2200,7 @@ const generateSignedUrl = async (fileName) => {
     };
 
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl(options);
 
