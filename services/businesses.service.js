@@ -73,37 +73,37 @@ const addBusinesses = async (businessList, email, uid) => {
       field: "businessOwners",
     });
 
-    const encryptedBusinessLocations = await safeEncrypt(businessData.businessLocations, {
+    const encryptedBusinessLocations = businessData.businessLocations ? await safeEncrypt(businessData.businessLocations, {
         field: 'businessLocations',
-    });
-    const encryptedPhoneNumbers = await safeEncrypt(businessData.phoneNumbers, {
+    }) : null;
+    const encryptedPhoneNumbers = businessData.phoneNumbers ? await safeEncrypt(businessData.phoneNumbers, {
         field: 'phoneNumbers',
-    });
-    const encryptedEntityType = await safeEncrypt(businessData.entityType, {
+    }) : null;
+    const encryptedEntityType = businessData.entityType ? await safeEncrypt(businessData.entityType, {
         field: 'entityType',
-    });
-    const encryptedSubsidiaries = await safeEncrypt(businessData.subsidiaries, {
+    }) : null;
+    const encryptedSubsidiaries = businessData.subsidiaries ? await safeEncrypt(businessData.subsidiaries, {
         field: 'subsidiaries',
-    });
-    const encryptedBusinessDescription = await safeEncrypt(
+    }) : null;
+    const encryptedBusinessDescription = businessData.businessDescription ? await safeEncrypt(
         businessData.businessDescription,
         { field: 'businessDescription' }
-    );
-    const encryptedWebsite = await safeEncrypt(businessData.website, {
+    ) : null;
+    const encryptedWebsite = businessData.website ? await safeEncrypt(businessData.website, {
         field: 'website',
-    });
-    const encryptedFormationDate = await safeEncrypt(businessData.formationDate, {
+    }) : null;
+    const encryptedFormationDate = businessData.formationDate ? await safeEncrypt(businessData.formationDate, {
         field: 'formationDate',
-    });
-    const encryptedTaxInformation = await safeEncrypt(businessData.taxInformation, {
+    }) : null;
+    const encryptedTaxInformation = businessData.taxInformation ? await safeEncrypt(businessData.taxInformation, {
         field: 'taxInformation',
-    });
-    const encryptedLegalName = await safeEncrypt(businessData.legalName, {
+    }) : null;
+    const encryptedLegalName = businessData.legalName ? await safeEncrypt(businessData.legalName, {
         field: 'legalName',
-    });
-    const encryptedBusinessType = await safeEncrypt(businessData.businessType, {
+    }) : null;
+    const encryptedBusinessType = businessData.businessType ? await safeEncrypt(businessData.businessType, {
         field: 'businessType',
-    });
+    }) : null;
 
     const newBusiness = new Business({
       userId: userId,
