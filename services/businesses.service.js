@@ -51,6 +51,18 @@ const addBusinesses = async (businessList, email, uid) => {
       }
     }
 
+    const encryptedName = await safeEncrypt(businessData.name, {
+      field: "name",
+    });
+    const encryptedIndustry = await safeEncrypt(businessData.industry, {
+      field: "industry",
+    });
+
+    const encryptedBusinessLogo = await safeEncrypt(
+      businessData.businessLogo,
+      { field: "businessLogo" },
+    );
+
     const encryptedBusinessOwners = await Promise.all(
       businessData.businessOwners.map(async (owner) => {
         if (owner.name === "") return null;
