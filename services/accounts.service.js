@@ -1895,7 +1895,10 @@ function summarizeHoldingsByAccountId(
 const getAccountDetails = async (accountId, profileId, uid) => {
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
-
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .lean()
     .exec();
@@ -1908,7 +1911,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   const deac = await getDecryptedAccount(account, dek, uid);
 
   const access_token = await getOldestAccessToken({
-    userId: profileId,
+    userId: user._id,
     institutionId: deac.institution_id,
   });
   const decryptAccessToken = await safeDecrypt(access_token.accessToken, {
