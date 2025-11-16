@@ -51,27 +51,14 @@ const addBusinesses = async (businessList, email, uid) => {
       }
     }
 
-    const businessOwners = [];
-    for (const owner of businessData.businessOwners) {
-      if (owner.name === "") continue;
-      businessOwners.push(owner.name);
-    }
-
-    const encryptedName = await safeEncrypt(businessData.name, {
-      field: "name",
-    });
-    const encryptedIndustry = await safeEncrypt(businessData.industry, {
-      field: "industry",
-    });
-
-    const encryptedBusinessLogo = await safeEncrypt(
-      businessData.businessLogo,
-      { field: "businessLogo" },
+    const encryptedBusinessOwners = await Promise.all(
+      businessData.businessOwners.map(async (owner) => {
+        if (owner.name === "") return null;
+        return await safeEncrypt(owner.name, {
+          field: "businessOwnerName",
+        });
+      })
     );
-
-    const encryptedBusinessOwners = await safeEncrypt(businessOwners, {
-      field: "businessOwners",
-    });
 
     const encryptedBusinessLocations = businessData.businessLocations ? await safeEncrypt(businessData.businessLocations, {
         field: 'businessLocations',
@@ -302,10 +289,14 @@ const getUserProfiles = async (email, uid) => {
       }
 
       const decryptedBusinessOwners = business.businessOwners
-        ? await safeDecrypt(business.businessOwners, {
-            business_id: business._id,
-            field: "businessOwners",
-          })
+        ? await Promise.all(
+            business.businessOwners.map(async (owner) => {
+              return await safeDecrypt(owner, {
+                business_id: business._id,
+                field: "businessOwnerName",
+              });
+            })
+          )
         : [];
       const decryptdBusinessAddresses = business.businessLocations
         ? await safeDecrypt(business.businessLocations, {
