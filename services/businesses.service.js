@@ -538,12 +538,45 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         { profile_id: profileId, field: "profilePhotoUrl" },
       );
 
+      const encryptedFirstName = await safeEncrypt(formData.nameParts.firstName, {
+        profile_id: profileId,
+        field: "firstName",
+      });
+      const encryptedLastName = await safeEncrypt(formData.nameParts.lastName, {
+        profile_id: profileId,
+        field: "lastName",
+      });
+      const encryptedMiddleName = formData.nameParts.middleName ? await safeEncrypt(formData.nameParts.middleName, { profile_id: profileId, field: "middleName" }) : null;
+      const encryptedPrefix = formData.nameParts.prefix ? await safeEncrypt(formData.nameParts.prefix, { profile_id: profileId, field: "prefix" }) : null;
+      const encryptedSuffix = formData.nameParts.suffix ? await safeEncrypt(formData.nameParts.suffix, { profile_id: profileId, field: "suffix" }) : null;
+
+      const encryptedEmails = await Promise.all(
+        formData.email.map(async (emailData) => ({
+          email: await safeEncrypt(emailData.email, { profile_id: profileId, field: "email" }),
+          emailType: emailData.emailType,
+          isPrimary: emailData.isPrimary,
+        }))
+      );
+
+      const encryptedPhones = await Promise.all(
+        formData.phones.map(async (phoneData) => ({
+          phone: await safeEncrypt(phoneData.phoneNumber, { profile_id: profileId, field: "phone" }),
+          phoneType: phoneData.phoneType,
+        }))
+      );
+
       const updatedPersonalProfile = await User.findByIdAndUpdate(
         profileId,
         {
-          name: formData.nameParts,
-          email: formData.email,
-          phones: formData.phones,
+          name: {
+            firstName: encryptedFirstName,
+            lastName: encryptedLastName,
+            middleName: encryptedMiddleName,
+            prefix: encryptedPrefix,
+            suffix: encryptedSuffix,
+          },
+          email: encryptedEmails,
+          phones: encryptedPhones,
           profilePhotoUrl: encryptedProfilePhotoUrl, //TODO:validate upload in other process
         },
         { new: true },
