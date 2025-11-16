@@ -77,6 +77,38 @@ const addBusinesses = async (businessList, email, uid) => {
       field: "ownership",
     });
 
+    const encryptedBusinessLocations = await safeEncrypt(businessData.businessLocations, {
+        field: 'businessLocations',
+    });
+    const encryptedPhoneNumbers = await safeEncrypt(businessData.phoneNumbers, {
+        field: 'phoneNumbers',
+    });
+    const encryptedEntityType = await safeEncrypt(businessData.entityType, {
+        field: 'entityType',
+    });
+    const encryptedSubsidiaries = await safeEncrypt(businessData.subsidiaries, {
+        field: 'subsidiaries',
+    });
+    const encryptedBusinessDescription = await safeEncrypt(
+        businessData.businessDescription,
+        { field: 'businessDescription' }
+    );
+    const encryptedWebsite = await safeEncrypt(businessData.website, {
+        field: 'website',
+    });
+    const encryptedFormationDate = await safeEncrypt(businessData.formationDate, {
+        field: 'formationDate',
+    });
+    const encryptedTaxInformation = await safeEncrypt(businessData.taxInformation, {
+        field: 'taxInformation',
+    });
+    const encryptedLegalName = await safeEncrypt(businessData.legalName, {
+        field: 'legalName',
+    });
+    const encryptedBusinessType = await safeEncrypt(businessData.businessType, {
+        field: 'businessType',
+    });
+
     const newBusiness = new Business({
       userId: userId,
       name: encryptedName,
@@ -86,6 +118,16 @@ const addBusinesses = async (businessList, email, uid) => {
       numAccounts: businessData.accounts,
       color: color,
       businessOwners: encryptedBusinessOwners,
+      businessLocations: encryptedBusinessLocations,
+      phoneNumbers: encryptedPhoneNumbers,
+      entityType: encryptedEntityType,
+      subsidiaries: encryptedSubsidiaries,
+      businessDescription: encryptedBusinessDescription,
+      website: encryptedWebsite,
+      formationDate: encryptedFormationDate,
+      taxInformation: encryptedTaxInformation,
+      legalName: encryptedLegalName,
+      businessType: encryptedBusinessType,
     });
 
     await newBusiness.save();
