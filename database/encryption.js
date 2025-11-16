@@ -431,7 +431,7 @@ async function encryptValue(value, dek) {
     return Buffer.concat([iv, tag, encrypted]).toString("base64");
   } catch (e) {
     console.error("Error encrypting value:", e);
-    return value;
+    throw e; // Re-throw the error to propagate encryption failures
   }
 }
 
