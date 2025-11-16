@@ -73,10 +73,6 @@ const addBusinesses = async (businessList, email, uid) => {
       field: "businessOwners",
     });
 
-    const encryptedOwnership = await safeEncrypt(ownership, {
-      field: "ownership",
-    });
-
     const encryptedBusinessLocations = await safeEncrypt(businessData.businessLocations, {
         field: 'businessLocations',
     });
@@ -113,7 +109,7 @@ const addBusinesses = async (businessList, email, uid) => {
       userId: userId,
       name: encryptedName,
       industryDesc: encryptedIndustry,
-      ownership: encryptedOwnership,
+      ownership: ownership,
       businessLogo: encryptedBusinessLogo,
       numAccounts: businessData.accounts,
       color: color,
@@ -365,12 +361,7 @@ const getUserProfiles = async (email, uid) => {
             field: "legalName",
           })
         : null;
-      const ownership = business.ownership
-        ? await safeDecrypt(business.ownership, {
-            business_id: business._id,
-            field: "ownership",
-          })
-        : null;
+      const ownership = business.ownership;
 
 
       const businessType = business.businessType
