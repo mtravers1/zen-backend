@@ -59,6 +59,17 @@ const _createUser = async (authUid, userData) => {
   });
   const encryptedEmail = await safeEncrypt(email, { field: "email" });
 
+  const encryptedPhones = userData.phones
+    ? await Promise.all(
+        userData.phones.map(async (phoneData) => {
+          return {
+            phone: await safeEncrypt(phoneData.phone, { field: "phone" }),
+            phoneType: phoneData.phoneType,
+          };
+        })
+      )
+    : [];
+
   const newUser = new User({
     _id: userId,
     authUid,
@@ -85,6 +96,7 @@ const _createUser = async (authUid, userData) => {
           field: "profilePhotoUrl",
         })
       : null,
+    phones: encryptedPhones,
   });
 
   const savedUser = await newUser.save();
@@ -132,13 +144,20 @@ const signInOrCreate = async (uid, userData) => {
           field: "middleName",
         })
       : null;
-    const decryptedPhone =
+    const decryptedPhones =
       user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, {
-            user_id: user._id,
-            field: "phone",
-          })
-        : null;
+        ? await Promise.all(
+            user.phones.map(async (phoneData) => {
+              return {
+                phone: await safeDecrypt(phoneData.phone, {
+                  user_id: user._id,
+                  field: "phone",
+                }),
+                phoneType: phoneData.phoneType,
+              };
+            })
+          )
+        : [];
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
       decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
@@ -186,7 +205,7 @@ const signInOrCreate = async (uid, userData) => {
       id: user._id,
       _id: user._id,
       email: emails[0]?.email || userData.email,
-      phone: decryptedPhone,
+      phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -1126,13 +1145,20 @@ const getOwnUserProfile = async (uid) => {
           field: "middleName",
         })
       : null;
-    const decryptedPhone =
+    const decryptedPhones =
       user.phones && user.phones.length > 0
-        ? await safeDecrypt(user.phones[0].phone, {
-            user_id: user._id,
-            field: "phone",
-          })
-        : null;
+        ? await Promise.all(
+            user.phones.map(async (phoneData) => {
+              return {
+                phone: await safeDecrypt(phoneData.phone, {
+                  user_id: user._id,
+                  field: "phone",
+                }),
+                phoneType: phoneData.phoneType,
+              };
+            })
+          )
+        : [];
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
       decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
@@ -1174,7 +1200,7 @@ const getOwnUserProfile = async (uid) => {
       id: user._id,
       _id: user._id,
       email: primaryEmail,
-      phone: decryptedPhone,
+      phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,

@@ -112,7 +112,7 @@ const addBusinesses = async (businessList, email, uid) => {
       businessLogo: encryptedBusinessLogo,
       numAccounts: businessData.accounts,
       color: color,
-      businessOwners: encryptedBusinessOwners,
+      businessOwners: encryptedBusinessOwners.filter(owner => owner !== null),
       businessLocations: encryptedBusinessLocations,
       phoneNumbers: encryptedPhoneNumbers,
       entityType: encryptedEntityType,
