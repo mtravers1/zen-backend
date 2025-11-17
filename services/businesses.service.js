@@ -395,13 +395,25 @@ const getUserProfiles = async (email, uid) => {
             field: "legalName",
           })
         : null;
-      const ownership = business.ownership;
+      const ownership = business.ownership
+        ? await safeDecrypt(business.ownership, {
+            business_id: business._id,
+            field: "ownership",
+          })
+        : null;
 
 
       const businessType = business.businessType
         ? await safeDecrypt(business.businessType, {
             business_id: business._id,
             field: "businessType",
+          })
+        : null;
+
+      const businessCode = business.businessCode
+        ? await safeDecrypt(business.businessCode, {
+            business_id: business._id,
+            field: "businessCode",
           })
         : null;
 
@@ -422,10 +434,10 @@ const getUserProfiles = async (email, uid) => {
         formationDate: formationDate,
         taxInformation: taxInformation,
         legalBusinessName: legalName,
-        ownership: ownership?.percentage || null,
+        ownership: ownership,
         entityType: decryptedEntityType,
         businessType: businessType,
-        businessTaxCode: taxInformation?.taxCode || null, // Assuming taxCode is a field within taxInformation
+        businessTaxCode: businessCode,
         businessEntityType: decryptedEntityType,
       };
       profiles.push(businessProfile);
@@ -692,6 +704,11 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
       formData.businessTaxType,
       { profile_id: profileId, field: "businessTaxType" },
     );
+
+    const encryptedBusinessType = formData.businessType ? await safeEncrypt(formData.businessType, {
+        profile_id: profileId,
+        field: 'businessType',
+    }) : null;
     const encryptedLegalName = await safeEncrypt(
       formData.legalBusinessName,
       { profile_id: profileId, field: "legalBusinessName" },
@@ -740,6 +757,37 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         )
       : [];
 
+    const encryptedFormationDate = formData.formationDate ? await safeEncrypt(formData.formationDate, {
+        profile_id: profileId,
+        field: 'formationDate',
+    }) : null;
+
+    const encryptedBusinessCode = formData.businessTaxCode ? await safeEncrypt(formData.businessTaxCode, {
+        profile_id: profileId,
+        field: 'businessTaxCode',
+    }) : null;
+
+    const encryptedSubsidiaries = formData.subsidiaries
+      ? await Promise.all(
+          formData.subsidiaries.map(async (subsidiary) => {
+            return await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" });
+          })
+        )
+      : [];
+
+    const encryptedBusinessOwners = formData.businessOwners
+      ? await Promise.all(
+          formData.businessOwners.map(async (owner) => {
+            return await safeEncrypt(owner, { profile_id: profileId, field: "businessOwner" });
+          })
+        )
+      : [];
+
+    const encryptedOwnership = formData.ownership ? await safeEncrypt(formData.ownership, {
+        profile_id: profileId,
+        field: 'ownership',
+    }) : null;
+
     const updatedProfile = await Business.findByIdAndUpdate(
       profileId,
       {
@@ -747,19 +795,17 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         legalName: encryptedLegalName,
 
         businessLocations: encryptedBusinessAddresses,
-        formationDate: formData.formationDate,
+        formationDate: encryptedFormationDate,
         businessDescription: encryptedBusinessDescription,
-        businessCode: formData.businessTaxCode,
+        businessCode: encryptedBusinessCode,
         entityType: encryptedEntityType,
         industryDesc: encryptedIndustryDesc,
-        businessType: formData.businessType,
+        businessType: encryptedBusinessType,
         businessTaxType: encryptedBusinessTaxType,
-        subsidiaries: formData.subsidiaries.map(
-          (subsidiary) => subsidiary.name,
-        ),
-        businessOwners: formData.businessOwners,
+        subsidiaries: encryptedSubsidiaries,
+        businessOwners: encryptedBusinessOwners,
         businessOwnersDetails: encryptedBusinessOwnersDetails,
-        ownership: { percentage: formData.ownership?.percentage || 0 },
+        ownership: encryptedOwnership,
         //taxInformation: encryptedTaxInformation, //TODO: not implemented yet
         website: encryptedWebsite,
         businessLogo: encryptedBusinessLogo,
