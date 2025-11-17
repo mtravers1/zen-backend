@@ -54,7 +54,7 @@ const addBusinesses = async (businessList, email, uid) => {
     const encryptedName = await safeEncrypt(businessData.name, {
       field: "name",
     });
-    const encryptedIndustry = await safeEncrypt(businessData.industry, {
+    const encryptedIndustryDesc = await safeEncrypt(businessData.industry, {
       field: "industry",
     });
 
@@ -104,6 +104,18 @@ const addBusinesses = async (businessList, email, uid) => {
         field: 'businessType',
     }) : null;
 
+    const encryptedBusinessTaxType = businessData.businessTaxType ? await safeEncrypt(businessData.businessTaxType, {
+        field: 'businessTaxType',
+    }) : null;
+
+    const encryptedBusinessCode = businessData.businessCode ? await safeEncrypt(businessData.businessCode, {
+        field: 'businessCode',
+    }) : null;
+
+    const encryptedOwnership = businessData.ownership ? await safeEncrypt(businessData.ownership, {
+        field: 'ownership',
+    }) : null;
+
     const encryptedBusinessOwnersDetails = businessData.businessOwnersDetails
       ? await Promise.all(
           businessData.businessOwnersDetails.map(async (owner) => {
@@ -122,8 +134,8 @@ const addBusinesses = async (businessList, email, uid) => {
     const newBusiness = new Business({
       userId: userId,
       name: encryptedName,
-      industryDesc: encryptedIndustry,
-      ownership: ownership,
+      industryDesc: encryptedIndustryDesc,
+      ownership: encryptedOwnership,
       businessLogo: encryptedBusinessLogo,
       numAccounts: businessData.accounts,
       color: color,
@@ -138,6 +150,8 @@ const addBusinesses = async (businessList, email, uid) => {
       taxInformation: encryptedTaxInformation,
       legalName: encryptedLegalName,
       businessType: encryptedBusinessType,
+      businessTaxType: encryptedBusinessTaxType,
+      businessCode: encryptedBusinessCode,
       businessOwnersDetails: encryptedBusinessOwnersDetails,
     });
 
@@ -326,7 +340,7 @@ const getUserProfiles = async (email, uid) => {
             })
           )
         : [];
-      const decryptdBusinessAddresses = business.businessLocations
+      const decryptedBusinessAddresses = business.businessLocations
         ? await Promise.all(
             business.businessLocations.map(async (address) => {
               return {
@@ -343,7 +357,7 @@ const getUserProfiles = async (email, uid) => {
             })
           )
         : [];
-      const decryptdBusinessPhoneNumbers = business.phoneNumbers
+      const decryptedBusinessPhoneNumbers = business.phoneNumbers
         ? await Promise.all(
             business.phoneNumbers.map(async (phone) => {
               return {
@@ -377,25 +391,25 @@ const getUserProfiles = async (email, uid) => {
             field: "website",
           })
         : null;
-      const formationDate = business.formationDate
+      const decryptedFormationDate = business.formationDate
         ? await safeDecrypt(business.formationDate, {
             business_id: business._id,
             field: "formationDate",
           })
         : null;
-      const taxInformation = business.taxInformation
+      const decryptedTaxInformation = business.taxInformation
         ? await safeDecrypt(business.taxInformation, {
             business_id: business._id,
             field: "taxInformation",
           })
         : null;
-      const legalName = business.legalName
+      const decryptedLegalName = business.legalName
         ? await safeDecrypt(business.legalName, {
             business_id: business._id,
             field: "legalName",
           })
         : null;
-      const ownership = business.ownership
+      const decryptedOwnership = business.ownership
         ? await safeDecrypt(business.ownership, {
             business_id: business._id,
             field: "ownership",
@@ -403,14 +417,14 @@ const getUserProfiles = async (email, uid) => {
         : null;
 
 
-      const businessType = business.businessType
+      const decryptedBusinessType = business.businessType
         ? await safeDecrypt(business.businessType, {
             business_id: business._id,
             field: "businessType",
           })
         : null;
 
-      const businessCode = business.businessCode
+      const decryptedBusinessCode = business.businessCode
         ? await safeDecrypt(business.businessCode, {
             business_id: business._id,
             field: "businessCode",
@@ -426,18 +440,18 @@ const getUserProfiles = async (email, uid) => {
         color: business.color,
         businessOwnersDetails: decryptedBusinessOwnersDetails,
         businessOwners: decryptedBusinessOwners,
-        businessAddresses: decryptdBusinessAddresses,
-        businessPhoneNumbers: decryptdBusinessPhoneNumbers,
+        businessAddresses: decryptedBusinessAddresses,
+        businessPhoneNumbers: decryptedBusinessPhoneNumbers,
         subsidiaries: decryptedSubsidiaries,
         businessDescription: decryptedBusinessDesc,
         website: decryptedWebsite,
-        formationDate: formationDate,
-        taxInformation: taxInformation,
-        legalBusinessName: legalName,
-        ownership: ownership,
+        formationDate: decryptedFormationDate,
+        taxInformation: decryptedTaxInformation,
+        legalBusinessName: decryptedLegalName,
+        ownership: decryptedOwnership,
         entityType: decryptedEntityType,
-        businessType: businessType,
-        businessTaxCode: businessCode,
+        businessType: decryptedBusinessType,
+        businessTaxCode: decryptedBusinessCode,
         businessEntityType: decryptedEntityType,
       };
       profiles.push(businessProfile);
@@ -710,8 +724,8 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         field: 'businessType',
     }) : null;
     const encryptedLegalName = await safeEncrypt(
-      formData.legalBusinessName,
-      { profile_id: profileId, field: "legalBusinessName" },
+      formData.legalName,
+      { profile_id: profileId, field: "legalName" },
     );
     const encryptedIndustryDesc = await safeEncrypt(
       formData.industryDesc,
@@ -728,7 +742,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         field: 'website',
     }) : null;
 
-    const encryptedBusinessAddresses = formData.businessAddresses
+    const encryptedBusinessLocations = formData.businessAddresses
       ? await Promise.all(
           formData.businessAddresses.map(async (address) => {
             return {
@@ -746,7 +760,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         )
       : [];
 
-    const encryptedBusinessPhones = formData.businessPhones
+    const encryptedPhoneNumbers = formData.businessPhones
       ? await Promise.all(
           formData.businessPhones.map(async (phone) => {
             return {
@@ -788,13 +802,18 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         field: 'ownership',
     }) : null;
 
+    const encryptedTaxInformation = formData.taxInformation ? await safeEncrypt(formData.taxInformation, {
+        profile_id: profileId,
+        field: 'taxInformation',
+    }) : null;
+
     const updatedProfile = await Business.findByIdAndUpdate(
       profileId,
       {
-        phoneNumbers: encryptedBusinessPhones,
+        phoneNumbers: encryptedPhoneNumbers,
         legalName: encryptedLegalName,
 
-        businessLocations: encryptedBusinessAddresses,
+        businessLocations: encryptedBusinessLocations,
         formationDate: encryptedFormationDate,
         businessDescription: encryptedBusinessDescription,
         businessCode: encryptedBusinessCode,
@@ -806,7 +825,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         businessOwners: encryptedBusinessOwners,
         businessOwnersDetails: encryptedBusinessOwnersDetails,
         ownership: encryptedOwnership,
-        //taxInformation: encryptedTaxInformation, //TODO: not implemented yet
+        taxInformation: encryptedTaxInformation,
         website: encryptedWebsite,
         businessLogo: encryptedBusinessLogo,
       },
