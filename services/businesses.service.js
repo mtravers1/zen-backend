@@ -72,12 +72,34 @@ const addBusinesses = async (businessList, email, uid) => {
       })
     );
 
-    const encryptedBusinessLocations = businessData.businessLocations ? await safeEncrypt(businessData.businessLocations, {
-        field: 'businessLocations',
-    }) : null;
-    const encryptedPhoneNumbers = businessData.phoneNumbers ? await safeEncrypt(businessData.phoneNumbers, {
-        field: 'phoneNumbers',
-    }) : null;
+    const encryptedBusinessLocations = businessData.businessLocations
+      ? await Promise.all(
+          businessData.businessLocations.map(async (address) => {
+            return {
+              name: address.name,
+              street: address.street ? await safeEncrypt(address.street, { field: "address.street" }) : null,
+              city: address.city ? await safeEncrypt(address.city, { field: "address.city" }) : null,
+              state: address.state ? await safeEncrypt(address.state, { field: "address.state" }) : null,
+              postalCode: address.postalCode ? await safeEncrypt(address.postalCode, { field: "address.postalCode" }) : null,
+              country: address.country ? await safeEncrypt(address.country, { field: "address.country" }) : null,
+              addressLine1: address.addressLine1 ? await safeEncrypt(address.addressLine1, { field: "address.addressLine1" }) : null,
+              addressLine2: address.addressLine2 ? await safeEncrypt(address.addressLine2, { field: "address.addressLine2" }) : null,
+              type: address.type,
+            };
+          })
+        )
+      : [];
+
+    const encryptedPhoneNumbers = businessData.phoneNumbers
+      ? await Promise.all(
+          businessData.phoneNumbers.map(async (phone) => {
+            return {
+              phone: phone.phone ? await safeEncrypt(phone.phone, { field: "phone.phone" }) : null,
+              phoneType: phone.phoneType,
+            };
+          })
+        )
+      : [];
     const encryptedEntityType = businessData.entityType ? await safeEncrypt(businessData.entityType, {
         field: 'entityType',
     }) : null;
