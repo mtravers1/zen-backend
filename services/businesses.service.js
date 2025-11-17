@@ -362,12 +362,16 @@ const getUserProfiles = async (email, uid) => {
             field: "entityType",
           })
         : null;
-      const decryptedSubsidiaries = business.subsidiaries
-        ? await safeDecrypt(business.subsidiaries, {
+      const decryptedSubsidiaries = [];
+      if (business.subsidiaries) {
+        for (const subsidiary of business.subsidiaries) {
+          const decryptedSubsidiary = await safeDecrypt(subsidiary, {
             business_id: business._id,
             field: "subsidiaries",
-          })
-        : [];
+          });
+          decryptedSubsidiaries.push(decryptedSubsidiary);
+        }
+      }
       const decryptedBusinessDesc = business.businessDescription
         ? await safeDecrypt(business.businessDescription, {
             business_id: business._id,
