@@ -402,10 +402,10 @@ const getUserProfiles = async (email, uid) => {
             field: "legalName",
           })
         : null;
-      const decryptedOwnership = business.ownership
-        ? await safeDecrypt(business.ownership, {
+      const decryptedOwnershipPercentage = business.ownership && business.ownership.percentage
+        ? await safeDecrypt(business.ownership.percentage, {
             business_id: business._id,
-            field: "ownership",
+            field: "ownership.percentage",
           })
         : null;
 
@@ -441,7 +441,10 @@ const getUserProfiles = async (email, uid) => {
         formationDate: decryptedFormationDate,
         taxInformation: decryptedTaxInformation,
         legalBusinessName: decryptedLegalName,
-        ownership: decryptedOwnership,
+        ownership: business.ownership ? {
+          percentage: decryptedOwnershipPercentage,
+          _id: business.ownership._id,
+        } : null,
         entityType: decryptedEntityType,
         businessType: decryptedBusinessType,
         businessTaxCode: decryptedBusinessCode,
