@@ -50,6 +50,21 @@ const saveTrip = async ({
           field: "dropoffAddress",
         })
       : undefined,
+    description: metadata.description
+      ? await safeEncrypt(metadata.description, { field: "description" })
+      : undefined,
+    purpose: metadata.purpose
+      ? await safeEncrypt(metadata.purpose, { field: "purpose" })
+      : undefined,
+    other: metadata.other
+      ? await safeEncrypt(metadata.other, { field: "other" })
+      : undefined,
+    dateTime: metadata.dateTime
+      ? await safeEncrypt(metadata.dateTime, { field: "dateTime" })
+      : undefined,
+    vehicle: metadata.vehicle
+      ? await safeEncrypt(metadata.vehicle, { field: "vehicle" })
+      : undefined,
   };
 
   const trip = new Trips({
@@ -190,6 +205,36 @@ const fetchFilteredTrips = async (query, uid) => {
                 field: "dropoffAddress",
               })
             : undefined,
+          description: trip.metadata.description
+            ? await safeDecrypt(trip.metadata.description, {
+                trip_id: trip._id,
+                field: "description",
+              })
+            : undefined,
+          purpose: trip.metadata.purpose
+            ? await safeDecrypt(trip.metadata.purpose, {
+                trip_id: trip._id,
+                field: "purpose",
+              })
+            : undefined,
+          other: trip.metadata.other
+            ? await safeDecrypt(trip.metadata.other, {
+                trip_id: trip._id,
+                field: "other",
+              })
+            : undefined,
+          dateTime: trip.metadata.dateTime
+            ? await safeDecrypt(trip.metadata.dateTime, {
+                trip_id: trip._id,
+                field: "dateTime",
+              })
+            : undefined,
+          vehicle: trip.metadata.vehicle
+            ? await safeDecrypt(trip.metadata.vehicle, {
+                trip_id: trip._id,
+                field: "vehicle",
+              })
+            : undefined,
           profileData: setting,
         };
 
@@ -319,6 +364,41 @@ const updateTrip = async (tripId, updateData, uid) => {
       encryptedMetadata.dropoffAddress = await safeEncrypt(
         updateData.metadata.dropoffAddress,
         { trip_id: tripId, field: "dropoffAddress" },
+      );
+    }
+
+    if (updateData.metadata.description) {
+      encryptedMetadata.description = await safeEncrypt(
+        updateData.metadata.description,
+        { trip_id: tripId, field: "description" },
+      );
+    }
+
+    if (updateData.metadata.purpose) {
+      encryptedMetadata.purpose = await safeEncrypt(
+        updateData.metadata.purpose,
+        { trip_id: tripId, field: "purpose" },
+      );
+    }
+
+    if (updateData.metadata.other) {
+      encryptedMetadata.other = await safeEncrypt(
+        updateData.metadata.other,
+        { trip_id: tripId, field: "other" },
+      );
+    }
+
+    if (updateData.metadata.dateTime) {
+      encryptedMetadata.dateTime = await safeEncrypt(
+        updateData.metadata.dateTime,
+        { trip_id: tripId, field: "dateTime" },
+      );
+    }
+
+    if (updateData.metadata.vehicle) {
+      encryptedMetadata.vehicle = await safeEncrypt(
+        updateData.metadata.vehicle,
+        { trip_id: tripId, field: "vehicle" },
       );
     }
 
