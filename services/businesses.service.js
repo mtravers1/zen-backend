@@ -236,37 +236,23 @@ const getUserProfiles = async (email, uid) => {
       console.log(`[getUserProfiles] Using decrypted name: ${name}`);
     }
 
-    const decryptedEmail = await Promise.all(
-      user.email.map((emailData) =>
-        Promise.all([
-          safeDecrypt(emailData.email, {
-            user_id: user._id,
-            field: "email",
-          }),
-          emailData.emailType,
-          emailData.isPrimary,
-        ]).then(([email, emailType, isPrimary]) => ({
-          email,
-          emailType,
-          isPrimary,
-        })),
-      ),
-    );
+    const decryptedEmail = [];
+    for (const emailData of user.email) {
+      const email = await safeDecrypt(emailData.email, {
+        user_id: user._id,
+        field: "email",
+      });
+      decryptedEmail.push({ email, emailType: emailData.emailType, isPrimary: emailData.isPrimary });
+    }
 
-    const decryptedPhones = await Promise.all(
-      user.phones.map((phoneData) =>
-        Promise.all([
-          safeDecrypt(phoneData.phone, {
-            user_id: user._id,
-            field: "phone",
-          }),
-          phoneData.phoneType,
-        ]).then(([phone, phoneType]) => ({
-          phoneNumber: phone,
-          phoneType,
-        })),
-      ),
-    );
+    const decryptedPhones = [];
+    for (const phoneData of user.phones) {
+      const phone = await safeDecrypt(phoneData.phone, {
+        user_id: user._id,
+        field: "phone",
+      });
+      decryptedPhones.push({ phoneNumber: phone, phoneType: phoneData.phoneType });
+    }
 
     const personalProfile = {
       id: user._id,
@@ -313,60 +299,63 @@ const getUserProfiles = async (email, uid) => {
 
       let decryptedBusinessOwnersDetails = [];
       if (business.businessOwnersDetails) {
-        decryptedBusinessOwnersDetails = await Promise.all(
-          business.businessOwnersDetails.map(async (owner) => {
-            return {
-              name: owner.name ? await safeDecrypt(owner.name, { business_id: business._id, field: "owner.name" }) : null,
-              email: owner.email
-                ? await safeDecrypt(owner.email, {
-                    business_id: business._id,
-                    field: "owner.email",
-                  })
-                : null,
-              percentOwned: owner.percentOwned,
-              position: owner.position,
-            };
-          }),
-        );
+        for (const owner of business.businessOwnersDetails) {
+          const decryptedOwnerName = owner.name ? await safeDecrypt(owner.name, { business_id: business._id, field: "owner.name" }) : null;
+          const decryptedOwnerEmail = owner.email ? await safeDecrypt(owner.email, { business_id: business._id, field: "owner.email" }) : null;
+          decryptedBusinessOwnersDetails.push({
+            name: decryptedOwnerName,
+            email: decryptedOwnerEmail,
+            percentOwned: owner.percentOwned,
+            position: owner.position,
+          });
+        }
       }
 
-      const decryptedBusinessOwners = business.businessOwners
-        ? await Promise.all(
-            business.businessOwners.map(async (owner) => {
-              return await safeDecrypt(owner, {
-                business_id: business._id,
-                field: "businessOwnerName",
-              });
-            })
-          )
-        : [];
-      const decryptedBusinessAddresses = business.businessLocations
-        ? await Promise.all(
-            business.businessLocations.map(async (address) => {
-              return {
-                name: address.name,
-                street: address.street ? await safeDecrypt(address.street, { business_id: business._id, field: "address.street" }) : null,
-                city: address.city ? await safeDecrypt(address.city, { business_id: business._id, field: "address.city" }) : null,
-                state: address.state ? await safeDecrypt(address.state, { business_id: business._id, field: "address.state" }) : null,
-                postalCode: address.postalCode ? await safeDecrypt(address.postalCode, { business_id: business._id, field: "address.postalCode" }) : null,
-                country: address.country ? await safeDecrypt(address.country, { business_id: business._id, field: "address.country" }) : null,
-                addressLine1: address.addressLine1 ? await safeDecrypt(address.addressLine1, { business_id: business._id, field: "address.addressLine1" }) : null,
-                addressLine2: address.addressLine2 ? await safeDecrypt(address.addressLine2, { business_id: business._id, field: "address.addressLine2" }) : null,
-                type: address.type,
-              };
-            })
-          )
-        : [];
-      const decryptedBusinessPhoneNumbers = business.phoneNumbers
-        ? await Promise.all(
-            business.phoneNumbers.map(async (phone) => {
-              return {
-                phone: phone.phone ? await safeDecrypt(phone.phone, { business_id: business._id, field: "phone.phone" }) : null,
-                phoneType: phone.phoneType,
-              };
-            })
-          )
-        : [];
+      const decryptedBusinessOwners = [];
+      if (business.businessOwners) {
+        for (const owner of business.businessOwners) {
+          const decryptedOwner = await safeDecrypt(owner, {
+            business_id: business._id,
+            field: "businessOwnerName",
+          });
+          decryptedBusinessOwners.push(decryptedOwner);
+        }
+      }
+
+      const decryptedBusinessAddresses = [];
+      if (business.businessLocations) {
+        for (const address of business.businessLocations) {
+          const decryptedStreet = address.street ? await safeDecrypt(address.street, { business_id: business._id, field: "address.street" }) : null;
+          const decryptedCity = address.city ? await safeDecrypt(address.city, { business_id: business._id, field: "address.city" }) : null;
+          const decryptedState = address.state ? await safeDecrypt(address.state, { business_id: business._id, field: "address.state" }) : null;
+          const decryptedPostalCode = address.postalCode ? await safeDecrypt(address.postalCode, { business_id: business._id, field: "address.postalCode" }) : null;
+          const decryptedCountry = address.country ? await safeDecrypt(address.country, { business_id: business._id, field: "address.country" }) : null;
+          const decryptedAddressLine1 = address.addressLine1 ? await safeDecrypt(address.addressLine1, { business_id: business._id, field: "address.addressLine1" }) : null;
+          const decryptedAddressLine2 = address.addressLine2 ? await safeDecrypt(address.addressLine2, { business_id: business._id, field: "address.addressLine2" }) : null;
+          decryptedBusinessAddresses.push({
+            name: address.name,
+            street: decryptedStreet,
+            city: decryptedCity,
+            state: decryptedState,
+            postalCode: decryptedPostalCode,
+            country: decryptedCountry,
+            addressLine1: decryptedAddressLine1,
+            addressLine2: decryptedAddressLine2,
+            type: address.type,
+          });
+        }
+      }
+
+      const decryptedBusinessPhoneNumbers = [];
+      if (business.phoneNumbers) {
+        for (const phone of business.phoneNumbers) {
+          const decryptedPhone = phone.phone ? await safeDecrypt(phone.phone, { business_id: business._id, field: "phone.phone" }) : null;
+          decryptedBusinessPhoneNumbers.push({
+            phone: decryptedPhone,
+            phoneType: phone.phoneType,
+          });
+        }
+      }
       const decryptedEntityType = business.entityType
         ? await safeDecrypt(business.entityType, {
             business_id: business._id,
