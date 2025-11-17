@@ -112,9 +112,11 @@ const addBusinesses = async (businessList, email, uid) => {
         field: 'businessCode',
     }) : null;
 
-    const encryptedOwnership = businessData.ownership ? await safeEncrypt(businessData.ownership, {
-        field: 'ownership',
-    }) : null;
+    const encryptedOwnership = businessData.ownership ? {
+      percentage: await safeEncrypt(String(businessData.ownership), {
+        field: 'ownership.percentage',
+      })
+    } : null;
 
     const encryptedBusinessOwnersDetails = businessData.businessOwnersDetails
       ? await Promise.all(
@@ -793,9 +795,9 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         )
       : [];
 
-    const encryptedOwnership = formData.ownership ? await safeEncrypt(formData.ownership, {
+    const encryptedOwnershipPercentage = formData.ownership && formData.ownership.percentage ? await safeEncrypt(String(formData.ownership.percentage), {
         profile_id: profileId,
-        field: 'ownership',
+        field: 'ownership.percentage',
     }) : null;
 
     const encryptedTaxInformation = formData.taxInformation ? await safeEncrypt(formData.taxInformation, {
@@ -820,7 +822,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         subsidiaries: encryptedSubsidiaries,
         businessOwners: encryptedBusinessOwners,
         businessOwnersDetails: encryptedBusinessOwnersDetails,
-        ownership: encryptedOwnership,
+        'ownership.percentage': encryptedOwnershipPercentage,
         taxInformation: encryptedTaxInformation,
         website: encryptedWebsite,
         businessLogo: encryptedBusinessLogo,
