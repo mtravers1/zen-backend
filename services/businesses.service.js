@@ -518,55 +518,64 @@ const getUserProfiles = async (email, uid) => {
 };
 
 const assignsAccountsToProfiles = async (data, email, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   const profiles = await getUserProfiles(email, uid);
-  for (const [key, value] of Object.entries(data)) {
-    const profile = profiles.find((p) => String(p.id) === value);
-    if (!profile) {
-      throw new Error("Profile not found");
+
+  for (const [accountId, profileId] of Object.entries(data)) {
+    let accountObjectId;
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(accountId);
+
+    if (isValidObjectId) {
+      accountObjectId = accountId;
+    } else {
+      const plaidAccount = await PlaidAccount.findOne({
+        plaid_account_id: accountId,
+      });
+      if (!plaidAccount) {
+        console.error(`Plaid account not found for ID: ${accountId}`);
+        continue; // or throw error
+      }
+      accountObjectId = plaidAccount._id;
     }
 
-    if (profile.isPersonal) {
+    // First, remove the account from any business it might be currently assigned to.
+    // This handles moving an account from one business to another, or from a business back to personal.
+    await Business.updateMany(
+      { userId: user._id.toString() },
+      { $pull: { plaidAccountIds: accountObjectId } },
+    );
+
+    const profile = profiles.find((p) => String(p.id) === profileId);
+    if (!profile) {
+      // Account is now unassigned. It should remain in the user's master list.
+      // We already removed it from any business. So we are done for this account.
       continue;
     }
 
-    const business = await Business.findById(profile.id);
-    if (!business) {
-      throw new Error("Business not found");
-    }
-
-    if (!business.plaidAccountIds) {
-      business.plaidAccountIds = [];
-    }
-
-    // Check if key is a valid ObjectId (24 character hex string)
-    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(key);
-
-    let accountObjectId;
-
-    if (isValidObjectId) {
-      // If it's a valid ObjectId, use it directly
-      accountObjectId = key;
+    if (profile.isPersonal) {
+      // The account is being assigned to personal.
+      // It should be in the user's master list. Let's make sure.
+      await User.updateOne(
+        { _id: user._id },
+        { $addToSet: { plaidAccounts: accountObjectId } },
+      );
     } else {
-      // If it's not a valid ObjectId, assume it's a Plaid account ID and find the document
-      try {
-        const plaidAccount = await PlaidAccount.findOne({
-          plaid_account_id: key,
-        });
-        if (!plaidAccount) {
-          throw new Error(`Plaid account not found for ID: ${key}`);
-        }
-        accountObjectId = plaidAccount._id;
-      } catch (error) {
-        console.error(`Error finding Plaid account for ID: ${key}`, error);
-        throw new Error(`Invalid Plaid account ID: ${key}`);
-      }
+      // The account is being assigned to a business.
+      // Add it to the business's list.
+      await Business.updateOne(
+        { _id: profile.id },
+        { $addToSet: { plaidAccountIds: accountObjectId } },
+      );
+      // And also make sure it's in the user's master list.
+      await User.updateOne(
+        { _id: user._id },
+        { $addToSet: { plaidAccounts: accountObjectId } },
+      );
     }
-
-    if (!business.plaidAccountIds.includes(accountObjectId)) {
-      business.plaidAccountIds.push(accountObjectId);
-    }
-
-    await business.save();
   }
 
   return { message: "Accounts assigned successfully" };
