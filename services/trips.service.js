@@ -65,6 +65,9 @@ const saveTrip = async ({
     vehicle: metadata.vehicle
       ? await safeEncrypt(metadata.vehicle, { field: "vehicle" })
       : undefined,
+    profile: metadata.profile
+      ? await safeEncrypt(metadata.profile, { field: "profile" })
+      : undefined,
   };
 
   const trip = new Trips({
@@ -73,7 +76,13 @@ const saveTrip = async ({
     totalMiles,
     metadata: encryptedMetadata,
   });
-  return await trip.save();
+
+  try {
+    return await trip.save();
+  } catch (error) {
+    console.error("Error saving trip to database:", error);
+    throw error;
+  }
 };
 
 const fetchFilteredTrips = async (query, uid) => {
