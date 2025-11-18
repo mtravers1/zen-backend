@@ -11,12 +11,12 @@ const coordinateSchema = new mongoose.Schema(
 const metadataSchema = new mongoose.Schema(
   {
     profile: {
-      type: Schema.Types.ObjectId,
+      type: String,
       ref: "Business",
       required: true,
     },
     vehicle: {
-      type: Schema.Types.Mixed,
+      type: String,
       ref: "Assets",
       required: true,
     },
@@ -25,7 +25,7 @@ const metadataSchema = new mongoose.Schema(
     placeName: String,
     pickupAddress: String,
     dropoffAddress: String,
-    dateTime: Date,
+    dateTime: String,
     initialMileage: {
       type: Number,
       default: null,

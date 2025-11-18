@@ -1,25 +1,41 @@
-import Trip from '../../database/models/Trips.js';
+import Trips from '../../database/models/Trips.js';
 import structuredLogger from '../../lib/structuredLogger.js';
 
 async function migrateTrips(user, encryptIfPlaintext, documentId) {
-  const trips = await Trip.find({ user: user._id });
+  const trips = await Trips.find({ user: user._id });
   for (const trip of trips) {
     try {
+      if (!trip.metadata || !trip.metadata.profile) {
+        console.warn('Skipping trip with missing metadata or profile', { tripId: trip._id });
+        continue;
+      }
+      // Encrypt locations
       if (trip.locations) {
         for (const location of trip.locations) {
-          location.latitude = await encryptIfPlaintext(location.latitude, { field: 'trip.locations.latitude' }, documentId);
-          location.longitude = await encryptIfPlaintext(location.longitude, { field: 'trip.locations.longitude' }, documentId);
+          if (location.latitude) {
+            location.latitude = await encryptIfPlaintext(location.latitude, { field: 'trip.locations.latitude' }, trip._id);
+          }
+          if (location.longitude) {
+            location.longitude = await encryptIfPlaintext(location.longitude, { field: 'trip.locations.longitude' }, trip._id);
+          }
         }
       }
+
       if (trip.metadata) {
-        trip.metadata.purpose = await encryptIfPlaintext(trip.metadata.purpose, { field: 'trip.metadata.purpose' }, documentId);
-        trip.metadata.description = await encryptIfPlaintext(trip.metadata.description, { field: 'trip.metadata.description' }, documentId);
-        trip.metadata.placeName = await encryptIfPlaintext(trip.metadata.placeName, { field: 'trip.metadata.placeName' }, documentId);
-        trip.metadata.pickupAddress = await encryptIfPlaintext(trip.metadata.pickupAddress, { field: 'trip.metadata.pickupAddress' }, documentId);
-        trip.metadata.dropoffAddress = await encryptIfPlaintext(trip.metadata.dropoffAddress, { field: 'trip.metadata.dropoffAddress' }, documentId);
-        trip.metadata.initialMileage = await encryptIfPlaintext(trip.metadata.initialMileage, { field: 'trip.metadata.initialMileage' }, documentId);
-        trip.metadata.endMileage = await encryptIfPlaintext(trip.metadata.endMileage, { field: 'trip.metadata.endMileage' }, documentId);
-        trip.metadata.other = await encryptIfPlaintext(trip.metadata.other, { field: 'trip.metadata.other' }, documentId);
+        const metadata = trip.metadata;
+        const newMetadata = {
+          ...metadata.toObject(),
+          placeName: metadata.placeName ? await encryptIfPlaintext(metadata.placeName, { field: 'trip.metadata.placeName' }, trip._id) : metadata.placeName,
+          pickupAddress: metadata.pickupAddress ? await encryptIfPlaintext(metadata.pickupAddress, { field: 'trip.metadata.pickupAddress' }, trip._id) : metadata.pickupAddress,
+          dropoffAddress: metadata.dropoffAddress ? await encryptIfPlaintext(metadata.dropoffAddress, { field: 'trip.metadata.dropoffAddress' }, trip._id) : metadata.dropoffAddress,
+          description: metadata.description ? await encryptIfPlaintext(metadata.description, { field: 'trip.metadata.description' }, trip._id) : metadata.description,
+          purpose: metadata.purpose ? await encryptIfPlaintext(metadata.purpose, { field: 'trip.metadata.purpose' }, trip._id) : metadata.purpose,
+          other: metadata.other ? await encryptIfPlaintext(metadata.other, { field: 'trip.metadata.other' }, trip._id) : metadata.other,
+          dateTime: metadata.dateTime ? await encryptIfPlaintext(metadata.dateTime.toString(), { field: 'trip.metadata.dateTime' }, trip._id) : metadata.dateTime,
+          vehicle: metadata.vehicle ? await encryptIfPlaintext(metadata.vehicle, { field: 'trip.metadata.vehicle' }, trip._id) : metadata.vehicle,
+          profile: metadata.profile ? await encryptIfPlaintext(metadata.profile, { field: 'trip.metadata.profile' }, trip._id) : metadata.profile,
+        };
+        trip.metadata = newMetadata;
       }
 
       await trip.save();

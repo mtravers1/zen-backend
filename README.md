@@ -98,6 +98,39 @@ This will run all tests in the `tests` directory. The test suite uses Jest for t
 
 To handle Apple's anonymized emails, the application implements an account linking flow. When a user signs in with Apple for the first time with an anonymized email, the backend will return a `404 Not Found` error with an `accountLinkingRequired: true` flag and the `appleUserId`. The frontend should then prompt the user to sign in to their existing account. Once the user is signed in, the frontend should make a `POST` request to the `/api/auth/link-apple-account` endpoint with the `appleUserId` to link the Apple ID to the existing account.
 
+## Data Migration
+
+To ensure all sensitive data is encrypted at rest, a migration script is provided. This script will identify unencrypted fields in your database and encrypt them. It's crucial to run this script after deploying changes related to encryption.
+
+**Before running any migration, always back up your database.**
+
+### Usage
+
+The migration script supports several options, including a dry run and targeting specific users.
+
+**1. Dry Run (Recommended First Step):**
+Perform a dry run to see what changes the script will make without modifying your database. This helps you verify the script's behavior.
+
+To run a dry run for a specific user (e.g., with a Firebase UID), use the following command:
+
+```bash
+DOTENV_CONFIG_PATH=./.env node -r dotenv/config ./scripts/migrate-encryption.js --dry-run --firebase-uid=AOy6WbXIgNTrm37lbcaLTdNNA8g2
+```
+
+You can omit `--firebase-uid` to perform a dry run for all users. You can also specify a limit for the dry run (e.g., `--dry-run=5` for 5 users).
+
+**2. Run the Actual Migration:**
+After you have reviewed the dry run results and are confident, execute the migration to encrypt your data.
+
+```bash
+DOTENV_CONFIG_PATH=./.env node -r dotenv/config ./scripts/migrate-encryption.js
+```
+
+**Other Options:**
+*   `--manual-verification`: Prompts for confirmation before encrypting each field.
+*   `--user-id=<USER_ID>`: Migrates data for a specific MongoDB user ID.
+*   `--firebase-uid=<FIREBASE_UID>`: Migrates data for a specific Firebase UID.
+
 ## Deployment
 
 Deployment is handled automatically by GitHub Actions. When changes are pushed to the `development`, `staging`, or `production` branches, the corresponding workflow in the `.github/workflows` directory is triggered. The workflow builds the application, deploys it to the server using `rsync`, and restarts the application using `pm2`.

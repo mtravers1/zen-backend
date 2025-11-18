@@ -150,11 +150,12 @@ const fetchFilteredTrips = async (query, uid) => {
 
     const populatedTrips = await Promise.all(
       trips.map(async (trip) => {
-        const profileId = trip.metadata?.profile;
+        const encryptedProfileId = trip.metadata?.profile;
         let profileData = null;
         let setting = null;
 
-        if (profileId) {
+        if (encryptedProfileId) {
+          const profileId = await safeDecrypt(encryptedProfileId, { trip_id: trip._id, field: "profile" });
           profileData = await Business.findById(profileId).lean();
           if (!profileData) {
             profileData = await User.findById(profileId).lean();
@@ -233,10 +234,10 @@ const fetchFilteredTrips = async (query, uid) => {
               })
             : undefined,
           dateTime: trip.metadata.dateTime
-            ? await safeDecrypt(trip.metadata.dateTime, {
+            ? new Date(await safeDecrypt(trip.metadata.dateTime, {
                 trip_id: trip._id,
                 field: "dateTime",
-              })
+              }))
             : undefined,
           vehicle: trip.metadata.vehicle
             ? await safeDecrypt(trip.metadata.vehicle, {
@@ -399,7 +400,7 @@ const updateTrip = async (tripId, updateData, uid) => {
 
     if (updateData.metadata.dateTime) {
       encryptedMetadata.dateTime = await safeEncrypt(
-        updateData.metadata.dateTime,
+        updateData.metadata.dateTime.toString(),
         { trip_id: tripId, field: "dateTime" },
       );
     }
@@ -408,6 +409,13 @@ const updateTrip = async (tripId, updateData, uid) => {
       encryptedMetadata.vehicle = await safeEncrypt(
         updateData.metadata.vehicle,
         { trip_id: tripId, field: "vehicle" },
+      );
+    }
+
+    if (updateData.metadata.profile) {
+      encryptedMetadata.profile = await safeEncrypt(
+        updateData.metadata.profile,
+        { trip_id: tripId, field: "profile" },
       );
     }
 
