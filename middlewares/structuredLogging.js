@@ -149,35 +149,8 @@ export const structuredLoggingMiddleware = (req, res, next) => {
   console.log(
     `[REQUEST ${requestId}] User Agent: ${req.headers["user-agent"]}`,
   );
-  console.log(`[REQUEST ${requestId}] Headers Keys:`, Object.keys(req.headers));
-  console.log(
-    `[REQUEST ${requestId}] Headers Sanitized:`,
-    sanitizeRequestHeaders(req.headers),
-  );
-  console.log(
-    `[REQUEST ${requestId}] Has Authorization: ${!!req.headers.authorization}`,
-  );
-  console.log(
-    `[REQUEST ${requestId}] Authorization Type: ${req.headers.authorization ? req.headers.authorization.split(" ")[0] : "none"}`,
-  );
-  console.log(
-    `[REQUEST ${requestId}] Content-Type: ${req.headers["content-type"]}`,
-  );
-  console.log(
-    `[REQUEST ${requestId}] Content-Length: ${req.headers["content-length"]}`,
-  );
 
-  // Log request body if present
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log(
-      `[REQUEST ${requestId}] Request Body Keys:`,
-      Object.keys(req.body),
-    );
-    console.log(
-      `[REQUEST ${requestId}] Request Body Preview:`,
-      JSON.stringify(req.body, null, 2),
-    );
-  }
+
 
   // Log query parameters if present
   if (req.query && Object.keys(req.query).length > 0) {

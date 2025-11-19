@@ -257,7 +257,9 @@ const getUserProfiles = async (email, uid) => {
       console.log(`[getUserProfiles] Using email as name: ${name}`);
     } else {
       name = decryptedFirstName + " " + decryptedLastName;
-      console.log(`[getUserProfiles] Using decrypted name: ${name}`);
+      if (process.env.DEBUG_MODE === 'true') {
+        console.log("[getUserProfiles] Successfully decrypted user name.");
+      }
     }
 
     const decryptedEmail = [];
