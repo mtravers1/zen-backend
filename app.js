@@ -94,6 +94,8 @@ const limiter = rateLimit({
 });
 
 // Apply rate limiting to all requests
+// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
+app.set('trust proxy', 1);
 app.use(limiter);
 
 // Apply structured logging middleware BEFORE authentication
