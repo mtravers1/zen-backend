@@ -93,7 +93,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Due to current caching limitations, setting a higher rate limit for both production and development.
+  max: 100, // Temporarily reduced for testing purposes.
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
