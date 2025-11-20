@@ -75,9 +75,11 @@ const weebhookAndroid = async (req, res) => {
 
     // Handle subscription notifications
     if (notification.subscriptionNotification) {
-      await handleSubscriptionNotification(
+      handleSubscriptionNotification(
         notification.subscriptionNotification,
-      );
+      ).catch(error => {
+        console.error("❌ [RTDN] Unhandled error in handleSubscriptionNotification:", error);
+      });
     }
     // Handle one-time product notifications
     else if (notification.oneTimeProductNotification) {
