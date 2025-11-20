@@ -310,14 +310,17 @@ export default function routeValidationMiddleware(req, res, next) {
   }
 
   // Apply normal rate limiting for valid routes (more lenient)
-  if (!checkRateLimit(ip, false)) {
-    console.warn(`🚫 Rate limit exceeded for IP: ${ip} -> ${method} ${path}`);
-    return res.status(429).json({
-      error: "Too Many Requests",
-      message: "Rate limit exceeded",
-      retryAfter: 60,
-    });
-  }
+  // This IP-based rate limiter for valid routes is being disabled.
+  // Rate limiting for valid routes will now be handled by the user-aware
+  // 'express-rate-limit' middleware configured in 'app.js'.
+  // if (!checkRateLimit(ip, false)) {
+  //   console.warn(`🚫 Rate limit exceeded for IP: ${ip} -> ${method} ${path}`);
+  //   return res.status(429).json({
+  //     error: "Too Many Requests",
+  //     message: "Rate limit exceeded",
+  //     retryAfter: 60,
+  //   });
+  // }
 
   // Valid route, continue
   next();
