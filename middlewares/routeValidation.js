@@ -278,7 +278,7 @@ export default function routeValidationMiddleware(req, res, next) {
   }
 
   // For valid routes, check blacklist with exceptions for legitimate apps
-  if (isBlacklisted(ip)) {
+  if (isBlacklisted(ip) && !req.user) {
     // Check if this is a legitimate Zentavos app request
     const isLegitimateApp =
       userAgent.includes("Zentavos") ||

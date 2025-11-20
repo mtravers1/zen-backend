@@ -24,7 +24,6 @@ async function decodeUserMiddleware(req, res, next) {
           email: decodedJWT.email,
           userId: decodedJWT.userId,
         };
-        console.log(`[decodeUserMiddleware] Successfully decoded user ${req.user.uid} from JWT.`);
       }
     } catch (jwtError) {
       // If JWT fails, try Firebase ID token
@@ -32,13 +31,11 @@ async function decodeUserMiddleware(req, res, next) {
       const user = await User.findOne({ authUid: decodedToken.uid }).lean();
       if (user) {
         req.user = { ...decodedToken, userId: user._id.toString() };
-        console.log(`[decodeUserMiddleware] Successfully decoded user ${req.user.uid} from Firebase token.`);
       }
     }
   } catch (error) {
     // If any token verification fails, just ignore it and proceed without a user.
     // The downstream firebaseAuth middleware will catch and handle the invalid token for protected routes.
-    console.warn(`[decodeUserMiddleware] Could not decode token: ${error.message}`);
   }
 
   return next();

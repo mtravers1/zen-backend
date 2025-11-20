@@ -3,6 +3,17 @@ import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import User from "../database/models/User.js";
 
+const redactEmail = (email) => {
+  if (!email || !email.includes('@')) {
+    return email;
+  }
+  const [localPart, domain] = email.split('@');
+  if (localPart.length <= 3) {
+    return `${localPart.slice(0, 1)}...*@*${domain}`;
+  }
+  return `${localPart.slice(0, 3)}...*@*${domain}`;
+};
+
 async function firebaseAuthentication(req, res, next) {
   const idToken = req.headers.authorization?.split("Bearer ")[1];
   const requestId = `req_${Date.now()}_${Math.random()
@@ -60,7 +71,7 @@ async function firebaseAuthentication(req, res, next) {
         `[FIREBASE AUTH ${requestId}] ✅ JWT custom token verified successfully:`,
         {
           userId: decodedJWT.userId,
-          email: decodedJWT.email,
+          email: redactEmail(decodedJWT.email),
           tokenIssuedAt: new Date(decodedJWT.iat * 1000).toISOString(),
           tokenExpiresAt: new Date(decodedJWT.exp * 1000).toISOString(),
           tokenKeys: Object.keys(decodedJWT),
@@ -88,7 +99,7 @@ async function firebaseAuthentication(req, res, next) {
         `[FIREBASE AUTH ${requestId}] ✅ JWT req.user set successfully:`,
         {
           uid: req.user.uid,
-          email: req.user.email,
+          email: redactEmail(req.user.email),
           userId: req.user.userId,
           authUid: user.authUid,
           userKeys: Object.keys(req.user),
@@ -142,7 +153,7 @@ async function firebaseAuthentication(req, res, next) {
             `[FIREBASE AUTH ${requestId}] ✅ Firebase custom token req.user set successfully:`,
             {
               uid: req.user.uid,
-              email: req.user.email,
+              email: redactEmail(req.user.email),
               authUid: req.user.uid,
               userKeys: Object.keys(req.user),
             },
@@ -169,7 +180,7 @@ async function firebaseAuthentication(req, res, next) {
         `[FIREBASE AUTH ${requestId}] ✅ Firebase token verified successfully:`,
         {
           uid: decodedToken.uid,
-          email: decodedToken.email,
+          email: redactEmail(decodedToken.email),
           emailVerified: decodedToken.email_verified,
           tokenIssuedAt: new Date(decodedToken.iat * 1000).toISOString(),
           tokenExpiresAt: new Date(decodedToken.exp * 1000).toISOString(),
@@ -197,7 +208,7 @@ async function firebaseAuthentication(req, res, next) {
         `[FIREBASE AUTH ${requestId}] ✅ Firebase req.user set successfully:`,
         {
           uid: req.user.uid,
-          email: req.user.email,
+          email: redactEmail(req.user.email),
           userId: req.user.userId,
           userKeys: Object.keys(req.user),
           hasUid: !!req.user.uid,

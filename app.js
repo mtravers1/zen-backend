@@ -101,10 +101,8 @@ const limiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     if (req.user && req.user.uid) {
-      console.log(`[RateLimiter] Using user UID for key: ${req.user.uid}`)
       return req.user.uid;
     }
-    console.log(`[RateLimiter] Using IP for key: ${req.ip}`)
     return req.ip;
   },
   handler: (req, res, next, options) => {
