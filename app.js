@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import admin from "firebase-admin";
 import fs from "fs";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
+import decodeUserMiddleware from "./middlewares/decodeUserMiddleware.js";
 import {
   structuredLoggingMiddleware,
   errorHandlingMiddleware,
@@ -80,6 +81,13 @@ app.use(express.json({ limit: "1mb" })); // Increased limit for iOS receipts
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
+// Apply structured logging first to ensure all requests have an ID.
+app.use(structuredLoggingMiddleware);
+
+// Passively decode the user from the token without enforcing auth. 
+// This makes req.user available to subsequent middleware like the rate limiter.
+app.use(decodeUserMiddleware);
+
 // Rate limiting for brute force protection
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -99,7 +107,9 @@ const limiter = rateLimit({
   },
   handler: (req, res, next, options) => {
     const key = options.keyGenerator(req, res);
-    console.log(`Rate limit exceeded for key: ${key} on path: ${req.path}`);
+    console.warn(
+      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for key: ${key} on path: ${req.path}`,
+    );
 
     const retryAfter = Math.ceil(options.windowMs / 1000);
     res.setHeader('Retry-After', String(retryAfter));
@@ -111,9 +121,6 @@ const limiter = rateLimit({
 // Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
 app.set('trust proxy', 1);
 app.use(limiter);
-
-// Apply structured logging middleware BEFORE authentication
-app.use(structuredLoggingMiddleware);
 
 // Apply route validation middleware FIRST to block invalid routes and attacks
 app.use(routeValidationMiddleware);
