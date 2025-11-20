@@ -94,7 +94,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Temporarily reduced for testing purposes.
+  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
