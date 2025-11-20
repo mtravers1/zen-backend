@@ -8,10 +8,10 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
     const weekTransactions = groupedTransactions[week];
 
     const depositoryTransactions = weekTransactions.filter(
-      (t) => t.accountType === "depository"
+      (t) => t.accountType === "depository",
     );
     const creditTransactions = weekTransactions.filter(
-      (t) => t.accountType === "credit"
+      (t) => t.accountType === "credit",
     );
 
     const depositoryDepositsAmount = depositoryTransactions
@@ -31,10 +31,10 @@ export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
     const weekTransactions = groupedTransactions[week];
 
     const depositoryTransactions = weekTransactions.filter(
-      (t) => t.accountType === "depository"
+      (t) => t.accountType === "depository",
     );
     const creditTransactions = weekTransactions.filter(
-      (t) => t.accountType === "credit"
+      (t) => t.accountType === "credit",
     );
 
     const depositoryDepositsAmount = depositoryTransactions
@@ -115,7 +115,6 @@ export const getOldestAccessToken = async (find) => {
   return accessTokens[0];
 };
 
-
 export const groupByWeek = (transactions) => {
   if (transactions.length === 0) return {};
 
@@ -128,7 +127,7 @@ export const groupByWeek = (transactions) => {
 
   // Get the minimum and maximum weeks of the group
   const allWeeksSorted = Object.keys(groupedTrans).sort(
-    (a, b) => new Date(a) - new Date(b)
+    (a, b) => new Date(a) - new Date(b),
   );
 
   const start = new Date(allWeeksSorted[0]);

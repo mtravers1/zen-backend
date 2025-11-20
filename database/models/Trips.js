@@ -5,18 +5,18 @@ const coordinateSchema = new mongoose.Schema(
     latitude: String,
     longitude: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const metadataSchema = new mongoose.Schema(
   {
     profile: {
-      type: Schema.Types.ObjectId,
+      type: String,
       ref: "Business",
       required: true,
     },
     vehicle: {
-      type: Schema.Types.Mixed,
+      type: String,
       ref: "Assets",
       required: true,
     },
@@ -25,7 +25,7 @@ const metadataSchema = new mongoose.Schema(
     placeName: String,
     pickupAddress: String,
     dropoffAddress: String,
-    dateTime: Date,
+    dateTime: String,
     initialMileage: {
       type: Number,
       default: null,
@@ -39,7 +39,7 @@ const metadataSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const tripSchema = new mongoose.Schema(
@@ -53,7 +53,7 @@ const tripSchema = new mongoose.Schema(
     totalMiles: Number,
     metadata: metadataSchema,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Trips", tripSchema);

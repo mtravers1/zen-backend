@@ -10,15 +10,16 @@ router.post("/signup-oauth", authController.signUpWithOAuth);
 router.post("/check-email-firebase", authController.checkEmailFirebase);
 router.post("/check-email", authController.checkEmail);
 router.post("/check-oauth-validation", authController.checkOAuthValidation);
-router.get("/own", authController.own);
+router.get("/me", authController.getOwnUserProfile);
+router.get("/own", authController.getOwnUserProfile);
 router.post("/sendCode", authController.sendCode);
 router.post("/verifyCode", authController.verifyCode);
 router.post("/resetPassword", authController.resetPassword);
-router.delete("/:uid", authController.deleteUser);
+router.delete("/:uid", firebaseAuth, authController.deleteUser);
 router.post(
   "/recover-encryption-keys/:uid",
   firebaseAuth,
-  authController.recoverEncryptionKeys
+  authController.recoverEncryptionKeys,
 );
 router.get("/test", (req, res) => {
   const aiurl = process.env.AI_URL;
@@ -44,7 +45,7 @@ router.post("/test-existing-user", authController.testExistingUserLogin);
 // Test endpoint for encryption consistency
 router.post(
   "/test-encryption-consistency",
-  authController.testEncryptionConsistency
+  authController.testEncryptionConsistency,
 );
 
 export default router;

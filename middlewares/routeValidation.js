@@ -14,7 +14,7 @@ const VALID_ROUTES = new Set([
   "/api/auth/check-email",
   "/api/auth/check-email-firebase",
   "/api/auth/check-oauth-validation",
-  "/api/auth/own",
+  "/api/auth/me",
   "/api/auth/recoverypassword",
   "/api/auth/sendCode",
   "/api/auth/verifyCode",
@@ -261,7 +261,7 @@ export default function routeValidationMiddleware(req, res, next) {
     // Apply strict rate limiting only to invalid routes
     if (!checkRateLimit(ip, true)) {
       console.warn(
-        `🚫 Rate limit exceeded for invalid routes: ${ip} -> ${method} ${path}`
+        `🚫 Rate limit exceeded for invalid routes: ${ip} -> ${method} ${path}`,
       );
       return res.status(429).json({
         error: "Too Many Requests",
@@ -278,7 +278,7 @@ export default function routeValidationMiddleware(req, res, next) {
   }
 
   // For valid routes, check blacklist with exceptions for legitimate apps
-  if (isBlacklisted(ip)) {
+  if (isBlacklisted(ip) && !req.user) {
     // Check if this is a legitimate Zentavos app request
     const isLegitimateApp =
       userAgent.includes("Zentavos") ||
@@ -292,7 +292,7 @@ export default function routeValidationMiddleware(req, res, next) {
         path.startsWith("/api/user/"))
     ) {
       console.log(
-        `✅ Allowing legitimate app request despite blacklist: ${ip} -> ${method} ${path}`
+        `✅ Allowing legitimate app request despite blacklist: ${ip} -> ${method} ${path}`,
       );
       // Allow legitimate app requests to pass through
       next();
@@ -300,7 +300,7 @@ export default function routeValidationMiddleware(req, res, next) {
     }
 
     console.warn(
-      `🚫 Request blocked - IP blacklisted: ${ip} -> ${method} ${path}`
+      `🚫 Request blocked - IP blacklisted: ${ip} -> ${method} ${path}`,
     );
     return res.status(429).json({
       error: "Too Many Requests",
@@ -310,14 +310,17 @@ export default function routeValidationMiddleware(req, res, next) {
   }
 
   // Apply normal rate limiting for valid routes (more lenient)
-  if (!checkRateLimit(ip, false)) {
-    console.warn(`🚫 Rate limit exceeded for IP: ${ip} -> ${method} ${path}`);
-    return res.status(429).json({
-      error: "Too Many Requests",
-      message: "Rate limit exceeded",
-      retryAfter: 60,
-    });
-  }
+  // This IP-based rate limiter for valid routes is being disabled.
+  // Rate limiting for valid routes will now be handled by the user-aware
+  // 'express-rate-limit' middleware configured in 'app.js'.
+  // if (!checkRateLimit(ip, false)) {
+  //   console.warn(`🚫 Rate limit exceeded for IP: ${ip} -> ${method} ${path}`);
+  //   return res.status(429).json({
+  //     error: "Too Many Requests",
+  //     message: "Rate limit exceeded",
+  //     retryAfter: 60,
+  //   });
+  // }
 
   // Valid route, continue
   next();

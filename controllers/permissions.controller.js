@@ -5,7 +5,7 @@ const checkUserPermission = async (req, res) => {
     const { email, permissionKey } = req.query;
     const hasPermission = await permissionService.checkPermission(
       email,
-      permissionKey
+      permissionKey,
     );
 
     if (hasPermission) {

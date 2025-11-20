@@ -1,26 +1,6 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
-import { Storage } from "@google-cloud/storage";
-
-const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-const serviceAccountJsonString = Buffer.from(
-  serviceAccountBase64,
-  "base64"
-).toString("utf8");
-const storageServiceAccount = JSON.parse(serviceAccountJsonString);
-
-// Ensure credentials have universe_domain field
-if (!storageServiceAccount.universe_domain) {
-  storageServiceAccount.universe_domain = "googleapis.com";
-}
-
-const storage = new Storage({
-  credentials: storageServiceAccount,
-  projectId: process.env.GCP_PROJECT_ID,
-  apiEndpoint: "https://storage.googleapis.com",
-  useAuthWithCustomEndpoint: true,
-});
-const bucketName = `zentavos-bucket-${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`;
+import { storage, filesBucketName } from "../lib/storageClient.js";
 
 const getStorageStatus = async (uid) => {
   try {
@@ -42,7 +22,7 @@ const getStorageStatus = async (uid) => {
       for (const file of userFiles) {
         try {
           const [fileMetadata] = await storage
-            .bucket(bucketName)
+            .bucket(filesBucketName)
             .file(file.fileurl)
             .getMetadata();
           realStorageUsed += parseInt(fileMetadata.size || 0);
@@ -82,7 +62,7 @@ const getStorageStatus = async (uid) => {
     for (const file of userFiles) {
       try {
         const [fileMetadata] = await storage
-          .bucket(bucketName)
+          .bucket(filesBucketName)
           .file(file.fileurl)
           .getMetadata();
         userStorageUsed += parseInt(fileMetadata.size || 0);

@@ -4,7 +4,10 @@ import aiController from "../controllers/ai.controller.js";
 const router = Router();
 
 console.log("[AI Router] 🔧 Setting up AI routes");
-console.log("[AI Router] aiController methods available:", Object.keys(aiController));
+console.log(
+  "[AI Router] aiController methods available:",
+  Object.keys(aiController),
+);
 
 // Main route for AI requests
 router.post("/", (req, res, next) => {
@@ -49,36 +52,36 @@ router.delete("/cancel/:requestId", (req, res, next) => {
 // Health check endpoint for mobile app authentication testing
 router.get("/health", (req, res) => {
   console.log("[AI Router] 🏥 GET /health route hit");
-  
+
   // This endpoint requires authentication (via firebaseAuth middleware)
   // If we reach here, authentication is working
   const { uid } = req.user || {};
-  
+
   if (!uid) {
     return res.status(401).json({
       status: "unauthorized",
       message: "Authentication required",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
-  
+
   return res.status(200).json({
     status: "healthy",
     message: "AI service is accessible",
     authenticated: true,
     uid: uid,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 // Simple connectivity test endpoint (no authentication required)
 router.get("/ping", (req, res) => {
   console.log("[AI Router] 🏓 GET /ping route hit");
-  
+
   return res.status(200).json({
     status: "pong",
     message: "AI service is reachable",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 

@@ -33,7 +33,7 @@ const assignsAccountsToProfiles = async (req, res) => {
     const response = await businessService.assignsAccountsToProfiles(
       data,
       email,
-      uid
+      uid,
     );
     res.status(200).json(response);
   } catch (error) {
@@ -63,7 +63,7 @@ const assignAccountToProfile = async (req, res) => {
       email,
       profileId,
       accountIds,
-      uid
+      uid,
     );
     res.status(200).json(response);
   } catch (error) {
@@ -83,7 +83,7 @@ const updateBusinessProfile = async (req, res) => {
       profileId,
       formData,
       email,
-      uid
+      uid,
     );
     res.status(200).json(response);
   } catch (error) {

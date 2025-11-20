@@ -1,11 +1,27 @@
 #!/bin/bash
-DEPLOYMENT_ENV=dev
-pm2 stop --silent ${DEPLOYMENT_ENV}
-pm2 delete --silent ${DEPLOYMENT_ENV}
-npm install
-pm2 start ecosystem.config.js \
+set -e
+set -x # Print every command to the log *before* it runs (SUPER HELPFUL)
+
+echo "--- DEBUG: Starting deployment script ---"
+echo "--- DEBUG: Current user: $(whoami)"
+echo "--- DEBUG: Current directory: $(pwd)"
+echo "--- DEBUG: Files in directory: ---"
+ls -la
+
+if [ -f .env ]; then
+  export $(cat .env | sed 's/#.*//g' | xargs)
+fi
+
+node --version
+npm --version
+
+echo "--- DEBUG: Starting PM2 ---"
+# Use pm2 reload for zero-downtime deployments and --no-daemon for loud logging
+pm2 reload ecosystem.config.cjs \
     --only ${DEPLOYMENT_ENV} \
+    --name ${DEPLOYMENT_ENV} \
     --max-memory-restart 1G \
-    --log-date-format 'YYYY-MM-DD HH:mm Z'
+    --log-date-format 'YYYY-MM-DD HH:mm Z' \
+    --no-daemon
 
 pm2 save

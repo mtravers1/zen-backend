@@ -1,75 +1,115 @@
-import { getAuth } from 'firebase-admin/auth';
-import admin from '../lib/firebaseAdmin.js';
-import structuredLogger from '../lib/structuredLogger.js';
-import { v4 as uuidv4 } from 'uuid';
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-import User from '../database/models/User.js';
-import PlaidAccount from '../database/models/PlaidAccount.js';
-import Transaction from '../database/models/Transaction.js';
-import Liability from '../database/models/Liability.js';
-import Assets from '../database/models/Assets.js';
-import Business from '../database/models/Businesses.js';
-import AccessToken from '../database/models/AccessToken.js';
-import VerificationCode from '../database/models/VerificationCode.js';
-import { encryptValue, decryptValue, getUserDekForSignup, hashEmail, getUserDek } from '../database/encryption.js';
-import plaidService from './plaid.service.js';
-import { getOldestAccessToken } from './utils/accounts.js';
+import { getAuth } from "firebase-admin/auth";
+import admin from "../lib/firebaseAdmin.js";
+import structuredLogger from "../lib/structuredLogger.js";
+import { v4 as uuidv4 } from "uuid";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import User from "../database/models/User.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
+import Transaction from "../database/models/Transaction.js";
+import Liability from "../database/models/Liability.js";
+import Assets from "../database/models/Assets.js";
+import Business from "../database/models/Businesses.js";
+import AccessToken from "../database/models/AccessToken.js";
+import VerificationCode from "../database/models/VerificationCode.js";
+import {
+  encryptValue,
+  decryptValue,
+  getUserDekForSignup,
+  hashEmail,
+  getUserDek,
+} from "../database/encryption.js";
+import plaidService from "./plaid.service.js";
+import { getOldestAccessToken } from "./utils/accounts.js";
 
+import {
+  createSafeEncrypt,
+  createSafeDecrypt,
+} from "../lib/encryptionHelper.js";
 
-const signUp = async (userData, req) => {
-  const { email, firstName, lastName, authUid } = userData;
+const _createUser = async (authUid, userData) => {
+  const { email, firstName, lastName } = userData;
 
   // Basic validation
   if (!email || !firstName || !lastName || !authUid) {
-    throw new Error('Missing required fields: email, firstName, lastName, and authUid are required');
+    throw new Error(
+      "Missing required fields: email, firstName, lastName, and authUid are required",
+    );
   }
 
-  const User = (await import('../database/models/User.js')).default;
+  const User = (await import("../database/models/User.js")).default;
 
   // Check if user already exists
   const existingUser = await User.findOne({ authUid });
   if (existingUser) {
-    throw new Error('User already exists');
+    throw new Error("User already exists");
   }
 
   // Get DEK for the new user
-  const dek = await getUserDekForSignup(authUid, new mongoose.Types.ObjectId());
+  const userId = new mongoose.Types.ObjectId();
+  const dek = await getUserDekForSignup(authUid, userId);
+  const safeEncrypt = createSafeEncrypt(authUid, dek);
 
   // Encrypt user data
-  const encryptedFirstName = await encryptValue(firstName, dek);
-  const encryptedLastName = await encryptValue(lastName, dek);
-  const encryptedEmail = await encryptValue(email, dek);
+  const encryptedFirstName = await safeEncrypt(firstName, {
+    field: "firstName",
+  });
+  const encryptedLastName = await safeEncrypt(lastName, {
+    field: "lastName",
+  });
+  const encryptedEmail = await safeEncrypt(email, { field: "email" });
+
+  const encryptedPhones = userData.phones
+    ? await Promise.all(
+        userData.phones.map(async (phoneData) => {
+          return {
+            phone: await safeEncrypt(phoneData.phone, { field: "phone" }),
+            phoneType: phoneData.phoneType,
+          };
+        })
+      )
+    : [];
 
   const newUser = new User({
+    _id: userId,
     authUid,
     name: {
       firstName: encryptedFirstName,
       lastName: encryptedLastName,
-      middleName: userData.middleName ? await encryptValue(userData.middleName, dek) : null,
+      middleName: userData.middleName
+        ? await safeEncrypt(userData.middleName, { field: "middleName" })
+        : null,
     },
-    email: [{ email: encryptedEmail, isPrimary: true, isVerified: false, emailType: 'personal' }],
+    email: [
+      {
+        email: encryptedEmail,
+        isPrimary: true,
+        isVerified: false,
+        emailType: "personal",
+      },
+    ],
     emailHash: hashEmail(email),
-    role: 'individual',
-    profilePhotoUrl: userData.profilePhotoUrl ? await encryptValue(userData.profilePhotoUrl, dek) : null,
+    role: userData.role || "individual",
+    account_type: "Free",
+    profilePhotoUrl: userData.profilePhotoUrl
+      ? await safeEncrypt(userData.profilePhotoUrl, {
+          field: "profilePhotoUrl",
+        })
+      : null,
+    phones: encryptedPhones,
   });
 
-  await newUser.save();
+  const savedUser = await newUser.save();
+  if (!savedUser) {
+    throw new Error("User could not be saved to the database.");
+  }
 
-  // Return a decrypted user object
-  const response = {
-    id: newUser._id,
-    authUid: newUser.authUid,
-    name: {
-      firstName: firstName,
-      lastName: lastName,
-      middleName: userData.middleName || null,
-    },
-    email: [{ email: email, isPrimary: true, isVerified: false }],
-    profilePhotoUrl: userData.profilePhotoUrl || null,
-  };
+  return savedUser;
+};
 
-  return response;
+const signUp = async (userData, req) => {
+  const { authUid } = userData;
+  return await _createUser(authUid, userData);
 };
 
 const signInOrCreate = async (uid, userData) => {
@@ -85,41 +125,45 @@ const signInOrCreate = async (uid, userData) => {
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
-      const dek = await getUserDekForSignup(uid, new mongoose.Types.ObjectId());
-      const { firstName, lastName } = userData.name;
-
-      user = new User({
-        authUid: uid,
-        email: [
-          {
-            email: await encryptValue(userData.email, dek),
-            isPrimary: true,
-            isVerified: true,
-            emailType: "personal",
-          },
-        ],
-        emailHash: hashEmail(userData.email),
-        name: {
-          firstName: await encryptValue(firstName, dek),
-          lastName: await encryptValue(lastName, dek),
-        },
-        role: userData.role,
-      });
-
-      await user.save();
+      user = await _createUser(uid, userData);
     }
 
     const dek = await getUserDek(uid);
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
-    const decryptedPhone =
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
+    });
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
+    const decryptedMiddleName = user.name.middleName
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
+      : null;
+    const decryptedPhones =
       user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
-        : null;
+        ? await Promise.all(
+            user.phones.map(async (phoneData) => {
+              return {
+                phone: await safeDecrypt(phoneData.phone, {
+                  user_id: user._id,
+                  field: "phone",
+                }),
+                phoneType: phoneData.phoneType,
+              };
+            })
+          )
+        : [];
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
     }
 
     let emails = [];
@@ -127,16 +171,22 @@ const signInOrCreate = async (uid, userData) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await decryptValue(emailObj.email, dek),
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
-        })
+        }),
       );
     } else {
       emails = [
         {
-          email: await decryptValue(user.email, dek),
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
           emailType: "personal",
           isPrimary: true,
         },
@@ -145,14 +195,17 @@ const signInOrCreate = async (uid, userData) => {
 
     if (!user.account_type) {
       user.account_type = "Free";
-      await user.save();
+      const savedUser = await user.save();
+      if (!savedUser) {
+        throw new Error("User account type could not be updated.");
+      }
     }
 
     const retrievedUser = {
       id: user._id,
       _id: user._id,
       email: emails[0]?.email || userData.email,
-      phone: decryptedPhone,
+      phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -262,6 +315,7 @@ const deleteUser = async (uid) => {
       throw new Error("User not found");
     }
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
     });
@@ -285,11 +339,21 @@ const deleteUser = async (uid) => {
       userId: user._id,
     });
     const accessToken = await getOldestAccessToken({ userId: user._id });
-    const decryptedAccessToken = await decryptValue(
+    const decryptedAccessToken = await safeDecrypt(
       accessToken.accessToken,
-      dek
+      { user_id: user._id, field: "accessToken" },
     );
-    await plaidService.invalidateAccessToken(decryptedAccessToken);
+
+    if (decryptedAccessToken) {
+      await plaidService.invalidateAccessToken(decryptedAccessToken);
+    } else {
+      structuredLogger.logErrorBlock(new Error("Decrypted access token is null"), {
+        operation: "deleteUser",
+        user_id: user._id,
+        field: "accessToken",
+        warning: "Skipping invalidateAccessToken call due to null token",
+      });
+    }
     await AccessToken.deleteMany({
       userId: user._id,
     });
@@ -311,7 +375,7 @@ const createVerificationCode = async (email) => {
     const testQuery = await VerificationCode.findOne({});
     console.log(
       `[DEBUG] Database connection test result:`,
-      testQuery ? "Connected" : "No data but connected"
+      testQuery ? "Connected" : "No data but connected",
     );
 
     let code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -324,7 +388,7 @@ const createVerificationCode = async (email) => {
     console.log(`[DEBUG] Deleting existing codes...`);
     const deletedCount = await VerificationCode.deleteMany({ email });
     console.log(
-      `[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`
+      `[DEBUG] Deleted ${deletedCount.deletedCount} existing codes for ${email}`,
     );
 
     console.log(`[DEBUG] Creating VerificationCode model instance...`);
@@ -338,7 +402,7 @@ const createVerificationCode = async (email) => {
     console.log(`[DEBUG] Saving verification code to database...`);
     const savedCode = await verificationCode.save();
     console.log(
-      `[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`
+      `[DEBUG] Verification code saved successfully with ID: ${savedCode._id}`,
     );
 
     return code;
@@ -366,7 +430,7 @@ const verifyCode = async (email, code) => {
     });
 
     console.log(
-      `[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`
+      `[DEBUG] Database query: { email: "${email}", code: "${code}", expiresAt: { $gt: new Date() }, used: false }`,
     );
 
     console.log(
@@ -380,12 +444,12 @@ const verifyCode = async (email, code) => {
             used: verificationCode.used,
             createdAt: verificationCode.createdAt,
           }
-        : "null"
+        : "null",
     );
 
     if (!verificationCode) {
       console.log(
-        `[DEBUG] No valid verification code found for email: ${email}, code: ${code}`
+        `[DEBUG] No valid verification code found for email: ${email}, code: ${code}`,
       );
 
       const allCodes = await VerificationCode.find({ email });
@@ -396,7 +460,7 @@ const verifyCode = async (email, code) => {
           expiresAt: c.expiresAt,
           used: c.used,
           createdAt: c.createdAt,
-        }))
+        })),
       );
 
       return { valid: false, message: "Invalid or expired verification code" };
@@ -437,20 +501,20 @@ const validateGoogleTokenViaAPI = async (idToken) => {
   try {
     console.log("🔑 Attempting validation via Google's API...");
     const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`,
     );
     if (!response.ok) {
       const errorText = await response.text();
       console.log("🔑 Google API Error Response:", errorText);
       throw new Error(
-        `Google token validation failed: ${response.status} ${response.statusText}`
+        `Google token validation failed: ${response.status} ${response.statusText}`,
       );
     }
     const tokenInfo = await response.json();
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
       "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com", // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
     ].filter(Boolean);
@@ -471,7 +535,7 @@ const validateGoogleTokenViaAPI = async (idToken) => {
     }
     if (isExpired) {
       console.log(
-        "🔄 Token expired but within acceptable range - using for authentication"
+        "🔄 Token expired but within acceptable range - using for authentication",
       );
     }
     const userData = {
@@ -513,7 +577,7 @@ const validateGoogleToken = async (idToken) => {
     const validAudiences = [
       process.env.GOOGLE_CLIENT_ID,
       "330070489004-rqp1s380632bfqbecqksngfv03gifpu8.apps.googleusercontent.com", // Staging
-      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com",  // Web (primary)
+      "515568445134-gk987so4a5jrthgp4vmvjeiojaeoqrhm.apps.googleusercontent.com", // Web (primary)
       "515568445134-0023hg69si2poqsh4om00bon62l6q7o6.apps.googleusercontent.com", // Android
       "515568445134-0bofh2avub5q5o31bv4ja2o9kbpib5b1.apps.googleusercontent.com", // iOS
     ].filter(Boolean);
@@ -537,7 +601,7 @@ const validateGoogleToken = async (idToken) => {
     }
     if (isExpired) {
       console.log(
-        "🔄 Token expired but within acceptable range - attempting to use cached user data"
+        "🔄 Token expired but within acceptable range - attempting to use cached user data",
       );
     }
     if (decodedToken.payload.iss !== "https://accounts.google.com") {
@@ -725,7 +789,7 @@ const createFirebaseUser = async (userData) => {
           emailVerified: userData.emailVerified,
         };
 
-        if (userData.photoURL && userData.photoURL.startsWith('http')) {
+        if (userData.photoURL && userData.photoURL.startsWith("http")) {
           userRecord.photoURL = userData.photoURL;
         }
 
@@ -873,7 +937,7 @@ const signIn = async (email, password) => {
     const firebaseUid = verifyResult.localId;
     console.log(
       "Firebase email/password verification successful, UID:",
-      firebaseUid
+      firebaseUid,
     );
 
     const user = await User.findOne({
@@ -904,71 +968,103 @@ const signIn = async (email, password) => {
       userId: user._id,
     });
     const dek = await getUserDek(user.authUid);
-    console.log("DEK retrieved successfully:", {
-      hasDek: !!dek,
-      dekLength: dek?.length,
-    });
+    const safeDecrypt = createSafeDecrypt(user.authUid, dek);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
-    const decryptedPhone =
-      user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
+    try {
+      const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+        user_id: user._id,
+        field: "firstName",
+      });
+      const decryptedLastName = await safeDecrypt(user.name.lastName, {
+        user_id: user._id,
+        field: "lastName",
+      });
+      const decryptedMiddleName = user.name.middleName
+        ? await safeDecrypt(user.name.middleName, {
+            user_id: user._id,
+            field: "middleName",
+          })
         : null;
-    let decryptedPhotoUrl;
-    if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
-    }
+      const decryptedPhone =
+        user.phones && user.phones.length > 0
+          ? await safeDecrypt(user.phones[0].phone, {
+              user_id: user._id,
+              field: "phone",
+            })
+          : null;
+      let decryptedPhotoUrl;
+      if (user.profilePhotoUrl) {
+        decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+          user_id: user._id,
+          field: "profilePhotoUrl",
+        });
+      }
 
-    let emails = [];
-    if (Array.isArray(user.email)) {
-      emails = await Promise.all(
-        user.email.map(async (emailObj) => {
-          return {
-            email: await decryptValue(emailObj.email, dek),
-            emailType: emailObj.emailType,
-            isPrimary: emailObj.isPrimary,
-          };
-        })
-      );
-    } else {
-      emails = [
-        {
-          email: await decryptValue(user.email, dek),
-          emailType: "personal",
-          isPrimary: true,
+      let emails = [];
+      if (Array.isArray(user.email)) {
+        emails = await Promise.all(
+          user.email.map(async (emailObj) => {
+            return {
+              email: await safeDecrypt(emailObj.email, {
+                user_id: user._id,
+                field: "email",
+              }),
+              emailType: emailObj.emailType,
+              isPrimary: emailObj.isPrimary,
+            };
+          }),
+        );
+      } else {
+        emails = [
+          {
+            email: await safeDecrypt(user.email, {
+              user_id: user._id,
+              field: "email",
+            }),
+            emailType: "personal",
+            isPrimary: true,
+          },
+        ];
+      }
+
+      if (!user.account_type) {
+        user.account_type = "Free";
+        const savedUser = await user.save();
+        if (!savedUser) {
+          throw new Error("New user could not be saved to the database.");
+        }
+      }
+
+      const token = generateJWTToken(user._id, normalizedEmail);
+
+      const retrievedUser = {
+        id: user._id,
+        _id: user._id,
+        email: emails[0]?.email || normalizedEmail,
+        phone: decryptedPhone,
+        role: user.role,
+        account_type: user.account_type,
+        profilePhotoUrl: decryptedPhotoUrl,
+        name: {
+          firstName: decryptedFirstName,
+          lastName: decryptedLastName,
+          middleName: decryptedMiddleName,
         },
-      ];
+        token: token,
+      };
+
+      structuredLogger.logSuccess("auth_service_signin_email", {
+        email: normalizedEmail,
+      });
+      return retrievedUser;
+    } catch (error) {
+      if (error.name === 'DecryptionError' || error.message.includes('CRITICAL: No DEK found for user')) {
+        const signInError = new Error('SIGN_IN_ERROR');
+        signInError.code = error.errorCode;
+        throw signInError;
+      }
+      throw error;
     }
-
-    if (!user.account_type) {
-      user.account_type = "Free";
-      await user.save();
-    }
-
-    const token = generateJWTToken(user._id, normalizedEmail);
-
-    const retrievedUser = {
-      id: user._id,
-      _id: user._id,
-      email: emails[0]?.email || normalizedEmail,
-      phone: decryptedPhone,
-      role: user.role,
-      account_type: user.account_type,
-      profilePhotoUrl: decryptedPhotoUrl,
-      name: {
-        firstName: decryptedFirstName,
-        lastName: decryptedLastName,
-        middleName: decryptedMiddleName,
-      },
-      token: token,
-    };
-
-    structuredLogger.logSuccess("auth_service_signin_email", {
-      email: normalizedEmail,
-    });
-    return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_service_signin_email",
@@ -977,8 +1073,8 @@ const signIn = async (email, password) => {
         error.message === "User not found"
           ? "user_not_found"
           : error.message === "Invalid credentials"
-          ? "invalid_credentials"
-          : "decryption_error",
+            ? "invalid_credentials"
+            : "decryption_error",
     });
     throw error;
   }
@@ -988,7 +1084,7 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
   try {
     structuredLogger.logOperationStart(
       "auth_service_create_firebase_user_email_password",
-      { email }
+      { email },
     );
 
     const userRecord = await admin.auth().createUser({
@@ -1002,7 +1098,7 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
       {
         email,
         uid: userRecord.uid,
-      }
+      },
     );
 
     return userRecord;
@@ -1016,16 +1112,16 @@ const createFirebaseUserWithEmailPassword = async (email, password) => {
   }
 };
 
-const own = async (uid) => {
+const getOwnUserProfile = async (uid) => {
   try {
-    structuredLogger.logOperationStart("auth_service_own", { user_id: uid });
+    structuredLogger.logOperationStart("auth_service_get_own_user_profile", { user_id: uid });
 
     const user = await User.findOne({ authUid: uid });
 
     if (!user) {
       const error = new Error("User not found");
       structuredLogger.logErrorBlock(error, {
-        operation: "auth_service_own",
+        operation: "auth_service_get_own_user_profile",
         user_id: uid,
         error_classification: "user_not_found",
       });
@@ -1033,17 +1129,42 @@ const own = async (uid) => {
     }
 
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
-    const decryptedFirstName = await decryptValue(user.name.firstName, dek);
-    const decryptedLastName = await decryptValue(user.name.lastName, dek);
-    const decryptedMiddleName = user.name.middleName ? await decryptValue(user.name.middleName, dek) : null;
-    const decryptedPhone =
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
+    });
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
+    const decryptedMiddleName = user.name.middleName
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
+      : null;
+    const decryptedPhones =
       user.phones && user.phones.length > 0
-        ? await decryptValue(user.phones[0].phone, dek)
-        : null;
+        ? await Promise.all(
+            user.phones.map(async (phoneData) => {
+              return {
+                phone: await safeDecrypt(phoneData.phone, {
+                  user_id: user._id,
+                  field: "phone",
+                }),
+                phoneType: phoneData.phoneType,
+              };
+            })
+          )
+        : [];
     let decryptedPhotoUrl;
     if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
     }
 
     let emails = [];
@@ -1051,27 +1172,35 @@ const own = async (uid) => {
       emails = await Promise.all(
         user.email.map(async (emailObj) => {
           return {
-            email: await decryptValue(emailObj.email, dek),
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
             emailType: emailObj.emailType,
             isPrimary: emailObj.isPrimary,
           };
-        })
+        }),
       );
     } else {
       emails = [
         {
-          email: await decryptValue(user.email, dek),
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
           emailType: "personal",
           isPrimary: true,
         },
       ];
     }
 
+    const primaryEmail = emails.find((e) => e.isPrimary)?.email || emails[0]?.email || null;
+
     const retrievedUser = {
       id: user._id,
       _id: user._id,
-      email: emails[0]?.email,
-      phone: decryptedPhone,
+      email: primaryEmail,
+      phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
       profilePhotoUrl: decryptedPhotoUrl,
@@ -1082,11 +1211,11 @@ const own = async (uid) => {
       },
     };
 
-    structuredLogger.logSuccess("auth_service_own", { user_id: uid });
+    structuredLogger.logSuccess("auth_service_get_own_user_profile", { user_id: uid });
     return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_service_own",
+      operation: "auth_service_get_own_user_profile",
       user_id: uid,
       error_classification: "user_retrieval_error",
     });
@@ -1110,7 +1239,7 @@ const authService = {
   createFirebaseUser,
   createFirebaseUserWithEmailPassword,
   generateFirebaseToken,
-  own,
+  getOwnUserProfile,
 };
 
 export default authService;

@@ -121,4 +121,4 @@ export function filterAccounts(accounts, filters = {}) {
 
     return true;
   });
-} 
+}

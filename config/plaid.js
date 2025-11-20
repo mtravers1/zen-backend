@@ -2,24 +2,35 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 const plaidClients = {};
 
-function getPlaidClient(plaidEnvironment = 'development') { // default to development
+function getPlaidClient(
+  plaidEnvironment = process.env.PLAID_ENV || "development",
+) {
+  // default to development
   if (plaidClients[plaidEnvironment]) {
     return plaidClients[plaidEnvironment];
   }
 
   let plaidEnv;
-  switch (plaidEnvironment.toLowerCase()) {
+  const lowerCaseEnv = plaidEnvironment.toLowerCase();
+
+  switch (lowerCaseEnv) {
+    case "local":
     case "sandbox":
       plaidEnv = PlaidEnvironments.sandbox;
       break;
     case "development":
-      plaidEnv = PlaidEnvironments.development;
+      plaidEnv = PlaidEnvironments.sandbox;
+      break;
+    case "staging":
+      plaidEnv = PlaidEnvironments.production;
       break;
     case "production":
       plaidEnv = PlaidEnvironments.production;
       break;
     default:
-      throw new Error(`Unknown Plaid environment: ${plaidEnvironment}`);
+      throw new Error(
+        `Unknown Plaid environment: ${plaidEnvironment}. Must be one of: local, sandbox, development, staging, production`,
+      );
   }
 
   const plaidConfig = new Configuration({

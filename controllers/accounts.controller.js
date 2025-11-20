@@ -67,7 +67,7 @@ const getCashFlowsByPlaidAccount = async (req, res) => {
 
     const cashFlows = await accountsService.getCashFlowsByPlaidAccount(
       account,
-      uid
+      uid,
     );
     res.status(200).send(cashFlows);
   } catch (error) {
@@ -84,7 +84,7 @@ const getUserTransactions = async (req, res) => {
     const transactions = await accountsService.getUserTransactions(email, uid, {
       page: parseInt(page),
       limit: parseInt(limit),
-      paginate: paginate === 'true'
+      paginate: paginate === "true",
     });
     res.status(200).send(transactions);
   } catch (error) {
@@ -105,8 +105,8 @@ const getProfileTransactions = async (req, res) => {
       {
         page: parseInt(page),
         limit: parseInt(limit),
-        paginate: paginate === 'true'
-      }
+        paginate: paginate === "true",
+      },
     );
     res.status(200).send(transactions);
   } catch (e) {
@@ -121,13 +121,13 @@ const getTransactionsByAccount = async (req, res) => {
     const uid = req.user.uid;
     const { page = 1, limit = 50, paginate = false } = req.query;
     const transactions = await accountsService.getTransactionsByAccount(
-      accountId, 
+      accountId,
       uid,
       {
         page: parseInt(page),
         limit: parseInt(limit),
-        paginate: paginate === 'true'
-      }
+        paginate: paginate === "true",
+      },
     );
     res.status(200).send(transactions);
   } catch (error) {
@@ -143,7 +143,7 @@ const getAccountDetails = async (req, res) => {
     const accountData = await accountsService.getAccountDetails(
       accountId,
       profileId,
-      uid
+      uid,
     );
     res.status(200).send(accountData);
   } catch (error) {
@@ -178,28 +178,36 @@ const getAccountPhoto = async (req, res) => {
 const serveAccountPhoto = async (req, res) => {
   try {
     const { fileName } = req.params;
-    console.log('🔍 [serveAccountPhoto] Serving photo:', fileName);
-    
+    console.log("🔍 [serveAccountPhoto] Serving photo:", fileName);
+
     // Generate signed URL for the photo first
     const signedUrl = await accountsService.generateSignedUrl(fileName);
-    console.log('🔍 [serveAccountPhoto] Signed URL generated:', signedUrl);
-    
+    console.log("🔍 [serveAccountPhoto] Signed URL generated:", signedUrl);
+
     if (!signedUrl) {
-      console.error('❌ [serveAccountPhoto] Failed to generate signed URL for:', fileName);
-      return res.status(404).send({ message: 'Photo not found or access denied' });
+      console.error(
+        "❌ [serveAccountPhoto] Failed to generate signed URL for:",
+        fileName,
+      );
+      return res
+        .status(404)
+        .send({ message: "Photo not found or access denied" });
     }
-    
+
     // Redirect to the signed URL
-    console.log('🔍 [serveAccountPhoto] Redirecting to signed URL for:', fileName);
+    console.log(
+      "🔍 [serveAccountPhoto] Redirecting to signed URL for:",
+      fileName,
+    );
     res.redirect(signedUrl);
   } catch (error) {
-    console.error('❌ [serveAccountPhoto] Error:', error);
+    console.error("❌ [serveAccountPhoto] Error:", error);
     error.details = {
-      operation: 'serveAccountPhoto',
+      operation: "serveAccountPhoto",
       fileName: req.params.fileName,
       user_email: req.user?.email,
       user_uid: req.user?.uid,
-      error_type: 'server_error'
+      error_type: "server_error",
     };
     res.status(500).send({ message: error.message });
   }
@@ -217,7 +225,7 @@ const accountsController = {
   getAccountPhoto,
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
-  serveAccountPhoto
+  serveAccountPhoto,
 };
 
 export default accountsController;

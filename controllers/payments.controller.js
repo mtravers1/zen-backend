@@ -10,7 +10,6 @@ import {
 } from "@apple/app-store-server-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 
-
 //Todo move to secret manager
 const PRIVATE_KEY_BASE64 = process.env.IAP_CERTIFICATE;
 
@@ -27,7 +26,7 @@ const client = new AppStoreServerAPIClient(
   KEY_ID,
   ISSUER_ID,
   BUNLDE_ID,
-  environment
+  environment,
 );
 
 const verifyReceipts = async (req, res) => {
@@ -38,7 +37,7 @@ const verifyReceipts = async (req, res) => {
     const response = await paymentService.validatePayment(
       data.platform,
       data.receipt,
-      uid
+      uid,
     );
     res.status(201).json(response);
   } catch (error) {
@@ -76,9 +75,11 @@ const weebhookAndroid = async (req, res) => {
 
     // Handle subscription notifications
     if (notification.subscriptionNotification) {
-      await handleSubscriptionNotification(
-        notification.subscriptionNotification
-      );
+      handleSubscriptionNotification(
+        notification.subscriptionNotification,
+      ).catch(error => {
+        console.error("❌ [RTDN] Unhandled error in handleSubscriptionNotification:", error);
+      });
     }
     // Handle one-time product notifications
     else if (notification.oneTimeProductNotification) {
@@ -119,7 +120,7 @@ const handleSubscriptionNotification = async (subscriptionNotification) => {
 
     case 3: // SUBSCRIPTION_CANCELED
       console.log(
-        "❌ [RTDN] Subscription canceled (but still valid until expiry)"
+        "❌ [RTDN] Subscription canceled (but still valid until expiry)",
       );
       await updateSubscriptionState(purchaseToken, "canceled");
       break;
@@ -182,9 +183,8 @@ const handleSubscriptionNotification = async (subscriptionNotification) => {
 const updateSubscriptionState = async (purchaseToken, state) => {
   try {
     // Call Google Play API to get full subscription details
-    const subscriptionDetails = await paymentService.getSubscriptionDetails(
-      purchaseToken
-    );
+    const subscriptionDetails =
+      await paymentService.getSubscriptionDetails(purchaseToken);
 
     if (!subscriptionDetails) return;
 
@@ -192,7 +192,7 @@ const updateSubscriptionState = async (purchaseToken, state) => {
     await paymentService.updateUserFromRTDN(
       purchaseToken,
       state,
-      subscriptionDetails
+      subscriptionDetails,
     );
 
     console.log(`✅ [RTDN] Successfully updated subscription state: ${state}`);
@@ -224,7 +224,9 @@ const weebhookApple = async (req, res) => {
       break;
 
     case "DID_CHANGE_RENEWAL_STATUS":
-      console.log("⚠️ [iOS] Subscription canceled but still valid until expiry");
+      console.log(
+        "⚠️ [iOS] Subscription canceled but still valid until expiry",
+      );
       break;
 
     case "DID_RENEW":
@@ -253,7 +255,7 @@ const decodeSignedPayload = async (signedPayload) => {
   try {
     const [headerB64] = signedPayload.split(".");
     const header = JSON.parse(
-      Buffer.from(headerB64, "base64").toString("utf-8")
+      Buffer.from(headerB64, "base64").toString("utf-8"),
     );
 
     const x5c = header.x5c?.[0];
@@ -271,7 +273,7 @@ const decodeSignedPayload = async (signedPayload) => {
     const transactionB64 = payload.data.signedTransactionInfo.split(".");
 
     const transactionId = JSON.parse(
-      Buffer.from(transactionB64[1], "base64").toString("utf-8")
+      Buffer.from(transactionB64[1], "base64").toString("utf-8"),
     );
 
     const originalTransactionId = transactionId.originalTransactionId;
@@ -295,7 +297,7 @@ const validateSubscription = async (originalTransactionId) => {
   const info = await client.getTransactionInfo(originalTransactionId);
   const splited = info.signedTransactionInfo.split(".");
   const signedTransactionInfo = JSON.parse(
-    Buffer.from(splited[1], "base64").toString("utf-8")
+    Buffer.from(splited[1], "base64").toString("utf-8"),
   );
   if (signedTransactionInfo.appAccountToken) {
     return signedTransactionInfo.appAccountToken;
@@ -332,7 +334,7 @@ const getProductIdForPlan = (planId, platform) => {
   const mappings = PRODUCT_MAPPINGS[env]?.[platform];
 
   console.log(
-    `🔍 getProductIdForPlan("${planId}", "${platform}") - env: ${env}`
+    `🔍 getProductIdForPlan("${planId}", "${platform}") - env: ${env}`,
   );
   console.log(`🔍 Available mappings:`, mappings);
 
@@ -344,7 +346,7 @@ const getProductIdForPlan = (planId, platform) => {
   // Find the productId that maps to this planId
   for (const [productId, mappedPlanId] of Object.entries(mappings)) {
     console.log(
-      `🔍 Checking: "${productId}" → "${mappedPlanId}" vs "${planId}"`
+      `🔍 Checking: "${productId}" → "${mappedPlanId}" vs "${planId}"`,
     );
     if (mappedPlanId === planId) {
       console.log(`✅ Found match: "${planId}" → "${productId}"`);
@@ -408,16 +410,7 @@ const getAvailablePlans = async (req, res) => {
   }
 };
 
-const mockUpgrade = async (req, res) => {
-  try {
-    const uid = req.user.uid;
-    await paymentService.mockUpgrade(uid);
-    res.status(200).json({ success: true, message: "User upgraded successfully." });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error.message });
-  }
-};
+
 
 const paymentsController = {
   verifyReceipts,
@@ -425,6 +418,5 @@ const paymentsController = {
   weebhookApple,
   updateUserUUID,
   getAvailablePlans,
-  mockUpgrade,
 };
 export default paymentsController;

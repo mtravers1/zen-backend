@@ -14,11 +14,11 @@ router.post("/check-institution-limit", plaidController.checkInstitutionLimit);
 router.get("/institutions-connected", plaidController.getConnectedInstitutions);
 router.get(
   "/upfront-institution-status",
-  plaidController.getUpfrontInstitutionStatus
+  plaidController.getUpfrontInstitutionStatus,
 );
 router.post(
   "/institution-update-token",
-  plaidController.getInstitutionUpdateToken
+  plaidController.getInstitutionUpdateToken,
 );
 router.post("/balance", plaidController.getBalance);
 router.get("/institutions", plaidController.getInstitutions);

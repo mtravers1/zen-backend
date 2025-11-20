@@ -1,4 +1,3 @@
-import "./config/env.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -8,61 +7,57 @@ import rateLimit from "express-rate-limit";
 import admin from "firebase-admin";
 import fs from "fs";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
+import decodeUserMiddleware from "./middlewares/decodeUserMiddleware.js";
+import { redactEmail } from "./lib/emailUtils.js";
 import {
   structuredLoggingMiddleware,
   errorHandlingMiddleware,
   cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
-import "./database/database.js";
+import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
-// Initialize Firebase Admin SDK
-if (process.env.NODE_ENV !== 'test') {
-  console.log("🔥 Initializing Firebase Admin...");
-  let serviceAccount;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT;
-      const serviceAccountJsonString = Buffer.from(serviceAccountBase64, "base64").toString("utf8");
-      serviceAccount = JSON.parse(serviceAccountJsonString);
-      console.log("🔥 Service account loaded successfully from environment variable.");
-    } catch (error) {
-      console.error("🔥 Error parsing service account from environment variable:", error);
-      process.exit(1);
+export async function createApp() {
+  const redactEnv = (env) => {
+    const sensitiveKeys = [
+      'SECRET',
+      'MONGODB_URI',
+      'MONGODB_USER',
+      'MONGODB_PASS',
+      'HASH_SALT',
+      'PLAID_CLIENT_ID',
+      'PLAID_SECRET',
+      'GCP_PRIVATE_KEY',
+      'STORAGE_SERVICE_ACCOUNT',
+      'KMS_SERVICE_ACCOUNT',
+      'FIREBASE_API_KEY',
+      'FIREBASE_SERVICE_ACCOUNT',
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_PLAY_SERVICE_ACCOUNT',
+      'IAP_CERTIFICATE',
+      'ISSUER_ID',
+      'KEY_ID',
+      'APPLE_SHARED_SECRET',
+      'APPLE_SANDBOX_PASSWORD',
+      'GROQ_API_KEY',
+      'MAIL_AUTH_PASS',
+    ];
+    const redactedEnv = {};
+    for (const key in env) {
+      if (sensitiveKeys.includes(key)) {
+        redactedEnv[key] = '[REDACTED]';
+      } else {
+        redactedEnv[key] = env[key];
+      }
     }
-  } else {
-    console.error("CRITICAL ERROR: FIREBASE_SERVICE_ACCOUNT is not set. Exiting.");
-    process.exit(1);
-  }
+    return redactedEnv;
+  };
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://zentavos.firebaseio.com",
-  });
-  console.log("🔥 Firebase Admin initialized successfully");
-}
-
-
-
-console.log(`The encryption key bucket name is critical to avoid data loss. Please check to make sure it's correct.`);
-console.log(`ENVIRONMENT: ${process.env.ENVIRONMENT}`);
-console.log(`USER_ENCRYPTION_KEY_BUCKET_NAME: ${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}`);
-
-// Check for critical environment variables
-if (!process.env.USER_ENCRYPTION_KEY_BUCKET_NAME) {
-  console.error("CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is not set. This can lead to permanent data loss. Exiting.");
-  process.exit(1);
-}
-
-const expectedBucketName = process.env.ENVIRONMENT === 'production' ? 'prod' : process.env.ENVIRONMENT === 'staging' ? 'staging' : process.env.ENVIRONMENT === 'development' ? 'dev' : null;
-
-if (expectedBucketName && process.env.USER_ENCRYPTION_KEY_BUCKET_NAME !== expectedBucketName) {
-  console.error(`CRITICAL ERROR: USER_ENCRYPTION_KEY_BUCKET_NAME is set to '${process.env.USER_ENCRYPTION_KEY_BUCKET_NAME}' but expected '${expectedBucketName}' for ${process.env.ENVIRONMENT} environment. Exiting.`);
-  process.exit(1);
-}
-
-const app = express();
+  console.log("--- PM2 ENVIRONMENT VARIABLES ---");
+  console.log(redactEnv(process.env));
+  console.log("---------------------------------");
+  const app = express();
 
 // database initialization
 // require('./database/database');
@@ -87,24 +82,47 @@ app.use(express.json({ limit: "1mb" })); // Increased limit for iOS receipts
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 
+// Apply structured logging first to ensure all requests have an ID.
+app.use(structuredLoggingMiddleware);
+
+// Passively decode the user from the token without enforcing auth. 
+// This makes req.user available to subsequent middleware like the rate limiter.
+app.use(decodeUserMiddleware);
+
 // Rate limiting for brute force protection
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 100 : 1000, // Limit each IP to 100 requests per windowMs in production, 1000 otherwise
+  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    if (req.user && req.user.uid) {
+      return req.user.uid;
+    }
+    return req.ip;
+  },
+  handler: (req, res, next, options) => {
+    const key = options.keyGenerator(req, res);
+    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
+    console.log(
+      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
+    );
+
+    const retryAfter = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(options.statusCode).send(options.message);
+  },
 });
 
 // Apply rate limiting to all requests
+// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
+app.set('trust proxy', 1);
 app.use(limiter);
-
-// Apply structured logging middleware BEFORE authentication
-app.use(structuredLoggingMiddleware);
 
 // Apply route validation middleware FIRST to block invalid routes and attacks
 app.use(routeValidationMiddleware);
@@ -151,7 +169,7 @@ app.use((req, res, next) => {
   ];
 
   const isAttackPattern = attackPatterns.some((pattern) =>
-    req.path.startsWith(pattern)
+    req.path.startsWith(pattern),
   );
   if (isAttackPattern) {
     // Return 404 immediately for known attack patterns
@@ -174,6 +192,7 @@ app.use((req, res, next) => {
 });
 
 // Load routes
+
 app.use("/api", router);
 
 // Add root route to avoid 401 errors
@@ -212,4 +231,7 @@ app.use(function (err, req, res, next) {
   res.status(err.status || 500).json(errorResponse);
 });
 
-export default app;
+  return app;
+}
+
+export default createApp;

@@ -21,7 +21,7 @@ const filesSchema = new Schema({
   fileurl: String,
   folder: {
     type: String,
-    default: "General"
+    default: "General",
   },
   updatedAt: Date,
 });

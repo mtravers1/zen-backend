@@ -105,7 +105,7 @@ const limitExceeded = (
   limitType,
   currentUsage,
   planLimit,
-  actionBlocked
+  actionBlocked,
 ) => {
   return {
     success: false,

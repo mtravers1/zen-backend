@@ -1,45 +1,6 @@
 import User from "../database/models/User.js";
 import Files from "../database/models/Files.js";
-import { Storage } from "@google-cloud/storage";
-
-let storage;
-let bucketName;
-
-if (process.env.NODE_ENV !== 'test') {
-  const serviceAccountBase64 = process.env.STORAGE_SERVICE_ACCOUNT;
-  if (!serviceAccountBase64) {
-    throw new Error('CRITICAL: STORAGE_SERVICE_ACCOUNT environment variable is not set.');
-  }
-  const serviceAccountJsonString = Buffer.from(
-    serviceAccountBase64,
-    "base64"
-  ).toString("utf8");
-  const storageServiceAccount = JSON.parse(serviceAccountJsonString);
-
-  // Ensure credentials have universe_domain field
-  if (!storageServiceAccount.universe_domain) {
-    storageServiceAccount.universe_domain = "googleapis.com";
-  }
-
-  storage = new Storage({
-    credentials: storageServiceAccount,
-    projectId: process.env.GCP_PROJECT_ID,
-    apiEndpoint: "https://storage.googleapis.com",
-    useAuthWithCustomEndpoint: true,
-  });
-  bucketName = "zentavos-bucket";
-} else {
-  // Mock Storage for test environment
-  storage = {
-    bucket: () => ({
-      file: () => ({
-        getSignedUrl: () => ['http://mock-signed-url.com'],
-        delete: () => {},
-      }),
-    }),
-  };
-  bucketName = "test-bucket";
-}
+import { storage, filesBucketName } from "../lib/storageClient.js";
 
 const addFile = async (data, uid) => {
   const user = await User.findOne({ authUid: uid });
@@ -63,7 +24,7 @@ const addFile = async (data, uid) => {
 const generateUploadUrl = async (fileName, mimeType) => {
   try {
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl({
         action: "write",
@@ -82,7 +43,7 @@ const generateImageUploadUrl = async (fileName, mimeType) => {
   console.log("🚀 ~ generateImageUploadUrl ~ mimeType:", mimeType);
   try {
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
       .getSignedUrl({
         action: "write",
@@ -105,11 +66,10 @@ const generateSignedUrl = async (fileName) => {
     };
 
     const [url] = await storage
-      .bucket(bucketName)
+      .bucket(filesBucketName)
       .file(fileName)
-      .getSignedUrl(options);
-
-    return url;
+      .getSignedUrl(options);    
+      return url;
   } catch (error) {
     console.error("Error generating signed URL:", error);
     return null;
@@ -185,7 +145,7 @@ const deleteFiles = async (data, uid) => {
         _id: element.id,
         userId: user._id.toString(),
       });
-      await storage.bucket(bucketName).file(element.fileurl).delete();
+      await storage.bucket(filesBucketName).file(element.fileurl).delete();
       console.log(`File ${element.fileurl} deleted successfully.`);
     });
   } catch (error) {

@@ -19,6 +19,17 @@ const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
 
+import {
+  createSafeEncrypt,
+  createSafeDecrypt,
+} from "../lib/encryptionHelper.js";
+
+/**
+ * Creates a `link_token` for initializing the Plaid Link flow.
+ * This is a transient token used by the frontend to display the Plaid modal to the user.
+ * It is not a decryption token.
+ * @returns {Promise<string>} The link token.
+ */
 const createLinkToken = async (
   email,
   isAndroid,
@@ -27,7 +38,7 @@ const createLinkToken = async (
   screen,
   mode,
   access_token,
-  plaidEnvironment
+  plaidEnvironment,
 ) => {
   return await structuredLogger.withContext(
     "create_link_token",
@@ -49,12 +60,16 @@ const createLinkToken = async (
       }
       let accessToken;
       const dek = await getUserDek(uid);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
       if (accountId) {
         const account = await PlaidAccount.findOne({ _id: accountId });
         if (!account) {
           throw new Error("Account not found");
         }
-        accessToken = await decryptValue(account.accessToken, dek);
+        accessToken = await safeDecrypt(account.accessToken, {
+          account_id: accountId,
+          field: "accessToken",
+        });
       }
 
       // UPDATE MODE: Use provided access_token for update mode
@@ -116,7 +131,7 @@ const createLinkToken = async (
       });
 
       return response.data;
-    }
+    },
   );
 };
 
@@ -143,7 +158,7 @@ const getAccessToken = async (publicToken) => {
       });
 
       return response.data;
-    }
+    },
   );
 };
 
@@ -152,7 +167,7 @@ const saveAccessToken = async (
   accessToken,
   itemId,
   institutionId,
-  uid
+  uid,
 ) => {
   return await structuredLogger.withContext(
     "save_access_token",
@@ -166,8 +181,13 @@ const saveAccessToken = async (
       }
       const userId = user._id.toString();
       const dek = await getUserDek(uid);
+      const safeEncrypt = createSafeEncrypt(uid, dek);
 
-      const encryptedToken = await encryptValue(accessToken, dek);
+      const encryptedToken = await safeEncrypt(accessToken, {
+        user_id: userId,
+        item_id: itemId,
+        field: "accessToken",
+      });
       // Check if access token already exists for this itemId
       const existingToken = await getOldestAccessToken({ itemId });
 
@@ -204,7 +224,7 @@ const saveAccessToken = async (
         itemId,
         institutionId,
       };
-    }
+    },
   );
 };
 
@@ -216,12 +236,20 @@ const getUserAccessTokens = async (email, uid) => {
     throw new Error("User not found");
   }
   const userId = user._id.toString();
-  const tokens = await getOldestAccessToken({ userId });
-
+  const tokens = await AccessToken.find({ userId }).sort({ createdAt: 1 });
   const decryptedTokens = [];
   const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
   for (const token of tokens) {
-    const decryptedAccessToken = await decryptValue(token.accessToken, dek);
+    const decryptedAccessToken = await safeDecrypt(token.accessToken, {
+      user_id: userId,
+      item_id: token.itemId,
+      field: "accessToken",
+    });
+
+    if (!decryptedAccessToken) {
+      throw new Error(`Failed to decrypt access token for item ID: ${token.itemId}`);
+    }
 
     decryptedTokens.push({
       ...token.toObject(),
@@ -258,15 +286,22 @@ const getAccounts = async (email, uid) => {
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
-  console.log(`[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`);
-  
+  console.log(
+    `[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`,
+  );
+
   const plaidClient = getPlaidClient();
   const response = await plaidClient.accountsGet({
     access_token: accessToken,
   });
-  console.log(`[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`);
-  console.log(`[PLAID] Account details:`, response.data.accounts?.map(acc => `${acc.name} (${acc.account_id})`));
- 
+  console.log(
+    `[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`,
+  );
+  console.log(
+    `[PLAID] Account details:`,
+    response.data.accounts?.map((acc) => `${acc.name} (${acc.account_id})`),
+  );
+
   return response.data;
 };
 
@@ -296,7 +331,6 @@ const getBalance = async (email) => {
 };
 
 const getInstitutions = async () => {
-  
   const plaidClient = getPlaidClient();
   const response = await plaidClient.institutionsGet({
     count: 500,
@@ -375,11 +409,11 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await getOldestAccessToken({ itemId });
-  
+
   if (!access) {
     return;
   }
-  
+
   // If uid is not provided, get it from the access token's userId
   let firebaseUid = uid;
   if (!firebaseUid) {
@@ -389,14 +423,22 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
     }
     firebaseUid = user.authUid;
   }
-  
+
   const accessToken = access.accessToken;
   const dek = await getUserDek(firebaseUid);
-  const decryptedToken = await decryptValue(accessToken, dek);
+  const safeDecrypt = createSafeDecrypt(firebaseUid, dek);
+  const decryptedToken = await safeDecrypt(accessToken, {
+    item_id: itemId,
+    field: "accessToken",
+  });
+
+  if (!decryptedToken) {
+    throw new Error(`Failed to decrypt access token for item ID: ${itemId}`);
+  }
   return decryptedToken;
 };
 
-const updateAccountBalances = async (dek, accessToken, accounts) => {
+const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
   let newAccountsBalances;
 
   try {
@@ -412,6 +454,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
 
   if (newAccountsBalances) {
     const bulkOps = [];
+    const safeEncrypt = createSafeEncrypt(uid, dek);
     for (const account of newAccountsBalances.data.accounts) {
       const accountBalance = account.balances;
       const accountType = account.type;
@@ -420,7 +463,7 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
       const accountPlaidId = account.account_id;
 
       const existingAccount = accounts.find(
-        (a) => a.plaid_account_id === accountPlaidId
+        (a) => a.plaid_account_id === accountPlaidId,
       );
 
       if (existingAccount) {
@@ -432,14 +475,29 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
           encryptedCurrentBalance,
           encryptedAvailableBalance,
         ] = await Promise.all([
-          encryptValue(accountName, dek),
-          encryptValue(accountType, dek),
-          encryptValue(accountSubtype, dek),
+          safeEncrypt(accountName, {
+            account_id: accountPlaidId,
+            field: "accountName",
+          }),
+          safeEncrypt(accountType, {
+            account_id: accountPlaidId,
+            field: "accountType",
+          }),
+          safeEncrypt(accountSubtype, {
+            account_id: accountPlaidId,
+            field: "accountSubtype",
+          }),
           accountBalance.current
-            ? encryptValue(accountBalance.current, dek)
+            ? safeEncrypt(accountBalance.current, {
+                account_id: accountPlaidId,
+                field: "currentBalance",
+              })
             : null,
           accountBalance.available
-            ? encryptValue(accountBalance.available, dek)
+            ? safeEncrypt(accountBalance.available, {
+                account_id: accountPlaidId,
+                field: "availableBalance",
+              })
             : null,
         ]);
 
@@ -455,9 +513,9 @@ const updateAccountBalances = async (dek, accessToken, accounts) => {
             update: {
               currentBalance: encryptedCurrentBalance,
               availableBalance: encryptedAvailableBalance,
-              accountType: encryptedAccountType,
-              accountSubtype: encryptedAccountSubtype,
-              accountName: encryptedAccountName,
+              account_type: encryptedAccountType,
+              account_subtype: encryptedAccountSubtype,
+              account_name: encryptedAccountName,
             },
           },
         });
@@ -482,11 +540,14 @@ const updateTransactions = async (item) => {
   if (!accessToken) {
     accessToken = await getAccessTokenFromItemId(item, uid);
     if (!accessToken) {
-      structuredLogger.logErrorBlock(new Error("Access token could not be retrieved"), {
-        operation: 'update_transactions',
-        item_id: item,
-        user_id: userId
-      });
+      structuredLogger.logErrorBlock(
+        new Error("Access token could not be retrieved"),
+        {
+          operation: "update_transactions",
+          item_id: item,
+          user_id: userId,
+        },
+      );
       //TODO: remove item
       return;
     }
@@ -506,8 +567,8 @@ const updateTransactions = async (item) => {
   const email = emailObject?.email;
 
   const dek = await getUserDek(uid);
-
-  await updateAccountBalances(dek, accessToken, accounts);
+  const safeEncrypt = createSafeEncrypt(uid, dek);
+  await updateAccountBalances(dek, accessToken, accounts, uid);
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
@@ -542,7 +603,7 @@ const updateTransactions = async (item) => {
       newTransactions.push(...transactions);
 
       console.log(
-        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`
+        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`,
       );
 
       const accountMap = new Map();
@@ -554,30 +615,42 @@ const updateTransactions = async (item) => {
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
 
-        const encryptedMerchantName = await encryptValue(
-          transaction.merchant_name,
-          dek
-        );
-        const encryptedName = await encryptValue(transaction.name, dek);
+        const encryptedMerchantName = transaction.merchant_name
+          ? await safeEncrypt(transaction.merchant_name, {
+              transaction_id: transaction.transaction_id,
+              field: "merchant_name",
+            })
+          : null;
+        const encryptedName = transaction.name
+          ? await safeEncrypt(transaction.name, {
+              transaction_id: transaction.transaction_id,
+              field: "name",
+            })
+          : null;
         const merchant = {
           merchantName: encryptedMerchantName,
           name: encryptedName,
           merchantCategory: transaction.category?.[0],
-          website: transaction.website,
-          logo: transaction.logo_url,
+          website: transaction.website ? transaction.website : null,
+          logo: transaction.logo_url ? transaction.logo_url : null,
         };
 
-        const encryptedAmount = await encryptValue(transaction.amount, dek);
+        const encryptedAmount = await safeEncrypt(transaction.amount, {
+          transaction_id: transaction.transaction_id,
+          field: "amount",
+        });
 
-        const encryptedAccountType = await encryptValue(
+        const encryptedAccountType = await safeEncrypt(
           accountMap.get(transaction.account_id).account_type,
-          dek
+          { transaction_id: transaction.transaction_id, field: "account_type" },
         );
 
-        const transactionCode = await encryptValue(
-          transaction.transaction_code,
-          dek
-        );
+        const transactionCode = transaction.transaction_code
+          ? await safeEncrypt(transaction.transaction_code, {
+              transaction_id: transaction.transaction_id,
+              field: "transaction_code",
+            })
+          : null;
 
         bulkOps.push({
           updateOne: {
@@ -594,7 +667,12 @@ const updateTransactions = async (item) => {
                 merchant,
                 description: null,
                 transactionCode: transactionCode,
-                tags: transaction.category,
+                tags: transaction.category
+                  ? await safeEncrypt(transaction.category, {
+                      transaction_id: transaction.transaction_id,
+                      field: "tags",
+                    })
+                  : null,
                 accountType: encryptedAccountType,
                 pending_transaction_id: transaction.pending_transaction_id,
                 pending: transaction.pending,
@@ -608,7 +686,7 @@ const updateTransactions = async (item) => {
           transactionsByAccount[transaction.account_id] = [];
         }
         transactionsByAccount[transaction.account_id].push(
-          transaction.transaction_id
+          transaction.transaction_id,
         );
       }
 
@@ -627,7 +705,10 @@ const updateTransactions = async (item) => {
       if (modifiedTransactions.length > 0) {
         const modifiedBulkOps = [];
         for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await encryptValue(transaction.amount, dek);
+          const encryptedAmount = await safeEncrypt(transaction.amount, {
+            transaction_id: transaction.transaction_id,
+            field: "amount",
+          });
 
           modifiedBulkOps.push({
             updateOne: {
@@ -636,7 +717,10 @@ const updateTransactions = async (item) => {
                 $set: {
                   amount: encryptedAmount,
                   transactionDate: transaction.date,
-                  tags: transaction.category,
+                  tags: await safeEncrypt(transaction.category, {
+              transaction_id: transaction.transaction_id,
+              field: "tags",
+            }),
                   pending_transaction_id: transaction.pending_transaction_id,
                   pending: transaction.pending,
                 },
@@ -678,13 +762,13 @@ const updateTransactions = async (item) => {
         "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
       ) {
         console.log(
-          "Mutation detected during pagination, restarting with old cursor..."
+          "Mutation detected during pagination, restarting with old cursor...",
         );
         cursor = oldCursor; // Reiniciar con el cursor anterior
       } else {
         console.error(
           "Error syncing transactions:",
-          error.response?.data || error
+          error.response?.data || error,
         );
         break;
       }
@@ -733,11 +817,12 @@ const updateInvestmentTransactions = async (item) => {
       const accounts = await PlaidAccount.find({ itemId: item });
 
       const dek = await getUserDek(uid);
-      await updateAccountBalances(dek, accessToken, accounts);
+      const safeEncrypt = createSafeEncrypt(uid, dek);
+      await updateAccountBalances(dek, accessToken, accounts, uid);
       let offset = 0;
       let hasMore = true;
       const plaidAccountIds = accounts.map(
-        (account) => account.plaid_account_id
+        (account) => account.plaid_account_id,
       );
 
       const lastTransaction = await Transaction.findOne({
@@ -789,28 +874,61 @@ const updateInvestmentTransactions = async (item) => {
             continue;
           }
           const accountType = "investment";
-          const encryptedAccountType = await encryptValue(accountType, dek);
-          const encryptedName = await encryptValue(transaction.name, dek);
-          const encryptedAmount = await encryptValue(transaction.amount, dek);
+          const encryptedAccountType = await safeEncrypt(accountType, {
+            transaction_id: transaction.investment_transaction_id,
+            field: "accountType",
+          });
+          const encryptedName = await safeEncrypt(transaction.name, {
+            transaction_id: transaction.investment_transaction_id,
+            field: "name",
+          });
+          const encryptedAmount = await safeEncrypt(transaction.amount, {
+            transaction_id: transaction.investment_transaction_id,
+            field: "amount",
+          });
 
-          const encryptedSecurityId = await encryptValue(
-            transaction.security_id,
-            dek
-          );
-          const encryptedPrice = await encryptValue(transaction.price, dek);
+          const encryptedSecurityId = transaction.security_id
+            ? await safeEncrypt(transaction.security_id, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "security_id",
+              })
+            : null;
+          const encryptedPrice = transaction.price
+            ? await safeEncrypt(transaction.price, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "price",
+              })
+            : null;
 
-          const encryptedQuantity = await encryptValue(
-            transaction.quantity,
-            dek
-          );
+          const encryptedQuantity = transaction.quantity
+            ? await safeEncrypt(transaction.quantity, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "quantity",
+              })
+            : null;
 
-          const encryptedFees = await encryptValue(transaction.fees, dek);
+          const encryptedFees = transaction.fees
+            ? await safeEncrypt(transaction.fees, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "fees",
+              })
+            : null;
 
-          const encryptedType = await encryptValue(transaction.type, dek);
+          const encryptedType = transaction.type
+            ? await safeEncrypt(transaction.type, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "type",
+              })
+            : null;
 
-          const encryptedSubType = await encryptValue(transaction.subtype, dek);
+          const encryptedSubType = transaction.subtype
+            ? await safeEncrypt(transaction.subtype, {
+                transaction_id: transaction.investment_transaction_id,
+                field: "subtype",
+              })
+            : null;
           const account = accounts.find(
-            (account) => account.plaid_account_id === transaction.account_id
+            (account) => account.plaid_account_id === transaction.account_id,
           );
           const newTransaction = new Transaction({
             accountId: account._id,
@@ -839,7 +957,7 @@ const updateInvestmentTransactions = async (item) => {
       });
 
       return "Investment transactions updated";
-    }
+    },
   );
 };
 
@@ -923,7 +1041,7 @@ const repairAccessToken = async (accountId, email) => {
 
         const resAddAcount = await accountsService.addAccount(
           accessToken,
-          email
+          email,
         );
 
         structuredLogger.logSuccess("repair_access_token_completed", {
@@ -941,7 +1059,7 @@ const repairAccessToken = async (accountId, email) => {
         });
         throw error;
       }
-    }
+    },
   );
 };
 
@@ -958,8 +1076,8 @@ const detectInternalTransfers = async (transactions) => {
   transactions
     .filter((txn) =>
       ["transfer", "internal account transfer"].includes(
-        txn.category?.[0]?.toLowerCase()
-      )
+        txn.category?.[0]?.toLowerCase(),
+      ),
     )
     .forEach((txn) => {
       const key = Math.abs(txn.amount);
@@ -1021,7 +1139,16 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
 
     // Decrypt access token
     const dek = await getUserDek(uid);
-    const decryptedAccessToken = await decryptValue(account.accessToken, dek);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedAccessToken = await safeDecrypt(account.accessToken, {
+      user_id: user._id,
+      institution_id: institutionId,
+      field: "accessToken",
+    });
+
+    if (!decryptedAccessToken) {
+      throw new Error(`Failed to decrypt access token for institution ID: ${institutionId}`);
+    }
 
     return { access_token: decryptedAccessToken };
   } catch (error) {
@@ -1053,7 +1180,7 @@ const invalidateAccessToken = async (accessToken) => {
         });
         throw error;
       }
-    }
+    },
   );
 };
 
@@ -1080,7 +1207,7 @@ const trackWebhookFailure = (itemId) => {
       operation: "track_webhook_failure",
       item_id: itemId,
       failure_count: newFailureCount,
-    }
+    },
   );
 
   return newFailureCount;
@@ -1100,7 +1227,7 @@ const validateWebhookSignature = (body, signature, webhookSecret) => {
 
     return crypto.timingSafeEqual(
       Buffer.from(signature, "base64"),
-      Buffer.from(expectedSignature, "base64")
+      Buffer.from(expectedSignature, "base64"),
     );
   } catch (error) {
     structuredLogger.logErrorBlock(error, {

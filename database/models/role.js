@@ -1,33 +1,36 @@
-import { Schema, Types, model } from 'mongoose';
+import { Schema, Types, model } from "mongoose";
 
-const roleSchema = new Schema({
+const roleSchema = new Schema(
+  {
     id: {
-        type: String,
-        default: () => new Types.ObjectId().toString(),
-        immutable: true,
+      type: String,
+      default: () => new Types.ObjectId().toString(),
+      immutable: true,
     },
     name: {
-        type: String,
-        required: true,
+      type: String,
+      required: true,
     },
     description: {
-        type: String,
+      type: String,
     },
     deleted: {
-        type: Boolean,
-        default: false,
+      type: Boolean,
+      default: false,
     },
     createdById: {
-        type: String,
+      type: String,
     },
     updatedById: {
-        type: String,
+      type: String,
     },
     lastUpdateDate: {
-        type: Date,
-    }
-}, { timestamps: true });
+      type: Date,
+    },
+  },
+  { timestamps: true },
+);
 
-const Role = model('Role', roleSchema);
+const Role = model("Role", roleSchema);
 
 export default Role;

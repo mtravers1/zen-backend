@@ -9,31 +9,41 @@
  * @returns {string} The generated prompt for the LLM.
  */
 export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
-  const baseScreen = currentScreen || 'dashboard';
-  
+  const baseScreen = currentScreen || "dashboard";
+
   // Build minimal context information
   const contextInfo = [];
-  
+
   // Use the currentScreen parameter first (this comes directly from the mobile app)
-  if (currentScreen && currentScreen !== 'unknown' && currentScreen !== 'dashboard') {
+  if (
+    currentScreen &&
+    currentScreen !== "unknown" &&
+    currentScreen !== "dashboard"
+  ) {
     contextInfo.push(`Current screen: ${currentScreen}`);
   }
   // Fallback to rich context if available
-  else if (richContext.screen?.currentScreen && richContext.screen.currentScreen !== 'unknown') {
+  else if (
+    richContext.screen?.currentScreen &&
+    richContext.screen.currentScreen !== "unknown"
+  ) {
     contextInfo.push(`Current screen: ${richContext.screen.currentScreen}`);
   }
-  
-  if (richContext.user?.profileName && richContext.user.profileName !== 'Unknown') {
+
+  if (
+    richContext.user?.profileName &&
+    richContext.user.profileName !== "Unknown"
+  ) {
     contextInfo.push(`Profile: ${richContext.user.profileName}`);
   }
-  
-  if (dataScreen && dataScreen !== 'unknown' && dataScreen !== 'overview') {
+
+  if (dataScreen && dataScreen !== "unknown" && dataScreen !== "overview") {
     contextInfo.push(`Viewing: ${dataScreen}`);
   }
-  
+
   const baseContext = `
     ## CONTEXT
-    ${contextInfo.length > 0 ? contextInfo.join(' | ') : baseScreen}
+    ${contextInfo.length > 0 ? contextInfo.join(" | ") : baseScreen}
     
     ## GUIDELINES
     - Answer the user's specific question directly
@@ -50,12 +60,14 @@ export function buildScreenPrompt(currentScreen, dataScreen, richContext = {}) {
     - Items: **Title** • Details
     - Text: Simple text response
   `;
-  
+
   return baseContext;
 }
 
 // Enhanced system prompt with clear tool usage instructions
-export const getProductionSystemPrompt = (screen = 'dashboard') => `You are Zi, the AI financial assistant for Zentavos.
+export const getProductionSystemPrompt = (
+  screen = "dashboard",
+) => `You are Zi, the AI financial assistant for Zentavos.
 
 ## CRITICAL IDENTITY RULES
 - **NEVER identify yourself as ChatGPT, OpenAI, or any other AI model**
@@ -214,7 +226,9 @@ Current screen: ${screen}
 Remember: Be direct, use tools for data, respond naturally for everything else.`;
 
 // Simplified system prompt for cases where the main prompt might be too complex
-export const getSimplifiedSystemPrompt = (screen = 'dashboard') => `You are Zi, the AI financial assistant for Zentavos.
+export const getSimplifiedSystemPrompt = (
+  screen = "dashboard",
+) => `You are Zi, the AI financial assistant for Zentavos.
 
 ## CRITICAL IDENTITY RULES
 - **NEVER identify yourself as ChatGPT, OpenAI, or any other AI model**
@@ -284,4 +298,4 @@ Return ONLY this JSON structure:
 
 Remember: ALWAYS answer the actual question. NEVER default to generic messages.
 
-Current screen: ${screen}`; 
+Current screen: ${screen}`;

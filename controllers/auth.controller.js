@@ -6,16 +6,16 @@ import { hashEmail } from "../database/encryption.js";
 import admin from "../lib/firebaseAdmin.js";
 import User from "../database/models/User.js";
 
-const own = async (req, res) => {
+const getOwnUserProfile = async (req, res) => {
   const { uid } = req.user;
   try {
-    structuredLogger.logOperationStart("auth_own", { user_id: uid });
-    const user = await authService.own(uid);
-    structuredLogger.logSuccess("auth_own", { user_id: uid });
+    structuredLogger.logOperationStart("auth_get_own_user_profile", { user_id: uid });
+    const user = await authService.getOwnUserProfile(uid);
+    structuredLogger.logSuccess("auth_get_own_user_profile", { user_id: uid });
     res.status(200).send(user);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_own",
+      operation: "auth_get_own_user_profile",
       user_id: uid,
       error_classification: "authentication_error",
     });
@@ -61,11 +61,22 @@ const signUp = async (req, res) => {
         });
       }
 
-      const firebaseUser =
-        await authService.createFirebaseUserWithEmailPassword(
+      let firebaseUser;
+      try {
+        firebaseUser = await authService.createFirebaseUserWithEmailPassword(
           data.email,
-          data.password
+          data.password,
         );
+      } catch (error) {
+        console.log("Caught error in createFirebaseUserWithEmailPassword:", JSON.stringify(error, null, 2));
+        if (error.code === "auth/email-already-exists") {
+          // User already exists in Firebase, so retrieve the user and proceed
+          firebaseUser = await admin.auth().getUserByEmail(data.email);
+        } else {
+          // For other errors, re-throw
+          throw error;
+        }
+      }
       authUid = firebaseUser.uid;
     }
 
@@ -89,7 +100,7 @@ const signUp = async (req, res) => {
       if (uid) {
         const canCreateBusiness = await permissionsService.canPerformAction(
           uid,
-          "business_owner_signup"
+          "business_owner_signup",
         );
 
         if (!canCreateBusiness.success) {
@@ -103,6 +114,7 @@ const signUp = async (req, res) => {
       has_phone: !!data.phone,
       authUid: authUid,
     });
+    console.log("\n[SIGNUP-TRACE] Step 1: auth.controller.js -> Initiating user creation.");
     const user = await authService.signUp(data, req);
     structuredLogger.logSuccess("auth_signup", {
       email: data.email,
@@ -213,6 +225,12 @@ const signIn = async (req, res) => {
     ) {
       return res.status(401).send("Invalid email or password");
     }
+    if (error.message === 'SIGN_IN_ERROR') {
+      return res.status(418).json({
+        error: 'SIGN_IN_ERROR',
+        message: `We couldn't sign you in. Please contact support with code ${error.code}`
+      });
+    }
     res.status(500).send(error.message);
   }
 };
@@ -226,13 +244,15 @@ const checkEmail = async (req, res) => {
       method: method,
     });
     const user = await authService.checkEmail(email);
-    structuredLogger.logSuccess("auth_check_email", { email: email });
-    res.status(200).send(user);
+    structuredLogger.logSuccess("auth_check_email", { email: email, user_exists: true });
+    res.status(200).json({ exists: true, user: user });
   } catch (error) {
-    const errorClassification =
-      error.message === "User not found"
-        ? "user_not_found"
-        : "validation_error";
+    if (error.message === "User not found") {
+      structuredLogger.logSuccess("auth_check_email", { email: email, user_exists: false });
+      return res.status(200).json({ exists: false });
+    }
+
+    const errorClassification = "validation_error";
     structuredLogger.logErrorBlock(error, {
       operation: "auth_check_email",
       email: email,
@@ -240,13 +260,10 @@ const checkEmail = async (req, res) => {
       error_classification: errorClassification,
     });
 
-    if (error.message === "User not found") {
-      return res.status(404).send(error.message);
-    }
     if (error.message === "Invalid method") {
-      return res.status(400).send(error.message);
+      return res.status(400).json({ exists: false, error: error.message });
     }
-    res.status(500).send(error.message);
+    res.status(500).json({ exists: false, error: error.message });
   }
 };
 
@@ -281,7 +298,7 @@ const sendCode = async (req, res) => {
     // Normalize email to lowercase for consistency
     const normalizedEmail = email.trim().toLowerCase();
     console.log(
-      `[DEBUG] sendCode called for email: ${email} (normalized: ${normalizedEmail})`
+      `[DEBUG] sendCode called for email: ${email} (normalized: ${normalizedEmail})`,
     );
     structuredLogger.logOperationStart("auth_send_code", {
       email: normalizedEmail,
@@ -307,7 +324,7 @@ const sendCode = async (req, res) => {
 
     structuredLogger.logSuccess("auth_send_code", { email: normalizedEmail });
     console.log(
-      `[DEBUG] sendCode completed successfully for email: ${normalizedEmail}`
+      `[DEBUG] sendCode completed successfully for email: ${normalizedEmail}`,
     );
     res.status(200).send({ message: "Verification code sent successfully" });
   } catch (error) {
@@ -687,7 +704,7 @@ const checkOAuthValidation = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -700,7 +717,7 @@ const checkOAuthValidation = async (req, res) => {
 
     // Create or get Firebase user
     const firebaseUserResult = await authService.createFirebaseUser(
-      validationResult.user
+      validationResult.user,
     );
 
     if (!firebaseUserResult.success) {
@@ -713,7 +730,7 @@ const checkOAuthValidation = async (req, res) => {
 
     // Generate Firebase custom token
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUserResult.user.uid
+      firebaseUserResult.user.uid,
     );
 
     if (!tokenResult.success) {
@@ -772,7 +789,7 @@ const signInWithOAuth = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -804,7 +821,7 @@ const signInWithOAuth = async (req, res) => {
         {
           email: validationResult.user.email,
           firebaseUid: existingFirebaseUser.uid,
-        }
+        },
       );
 
       firebaseUser = existingFirebaseUser;
@@ -813,7 +830,7 @@ const signInWithOAuth = async (req, res) => {
       const expectedProviderId =
         provider === "google" ? "google.com" : "apple.com";
       const isProviderLinked = firebaseUser.providerData?.some(
-        (providerInfo) => providerInfo.providerId === expectedProviderId
+        (providerInfo) => providerInfo.providerId === expectedProviderId,
       );
 
       if (!isProviderLinked) {
@@ -838,7 +855,7 @@ const signInWithOAuth = async (req, res) => {
               uid: firebaseUser.uid,
               provider: provider,
               providerUid: validationResult.user.uid,
-            }
+            },
           );
         } catch (linkError) {
           structuredLogger.logErrorBlock(linkError, {
@@ -865,7 +882,7 @@ const signInWithOAuth = async (req, res) => {
 
         if (existingDbUser) {
           console.log(
-            "🔄 Found existing user with same email but different authUid, linking providers..."
+            "🔄 Found existing user with same email but different authUid, linking providers...",
           );
 
           // Update the existing user's authUid to link the new OAuth provider
@@ -908,7 +925,7 @@ const signInWithOAuth = async (req, res) => {
 
         signInResult = await authService.signInOrCreate(
           firebaseUser.uid, // Use Firebase UID
-          userDataForSignIn
+          userDataForSignIn,
         );
 
         structuredLogger.logSuccess("auth_oauth_signin_existing_user", {
@@ -928,7 +945,7 @@ const signInWithOAuth = async (req, res) => {
           {
             email: validationResult.user.email,
             firebaseUid: firebaseUser.uid,
-          }
+          },
         );
 
         return res.status(404).json({
@@ -939,23 +956,57 @@ const signInWithOAuth = async (req, res) => {
         });
       }
     } else {
-      // User doesn't exist in Firebase - Return 404 for Sign In
-      structuredLogger.logOperationStart("auth_oauth_user_not_found", {
+      // User doesn't exist in Firebase - This is a NEW user signing in with OAuth for the first time.
+      // We will create a new account for them.
+      structuredLogger.logOperationStart("auth_oauth_create_new_user", {
         email: validationResult.user.email,
       });
 
-      return res.status(404).json({
-        success: false,
-        message: "User not found. Please sign up first.",
-        error: "USER_NOT_FOUND",
+      // Create Firebase user
+      const firebaseUserResult = await authService.createFirebaseUser(
+        validationResult.user,
+      );
+
+      if (!firebaseUserResult.success) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create Firebase user during sign-in",
+          error: firebaseUserResult.error,
+        });
+      }
+
+      firebaseUser = firebaseUserResult.user;
+
+      // Create user in database
+      const userDataForSignUp = {
         email: validationResult.user.email,
-      });
+        method: provider,
+        firstName:
+          userData?.firstName ||
+          validationResult.user.displayName?.split(" ")[0] ||
+          "User",
+        lastName:
+          userData?.lastName ||
+          validationResult.user.displayName?.split(" ").slice(1).join(" ") ||
+          "",
+        photoUrl: userData?.photoUrl || validationResult.user.photoURL,
+        authUid: firebaseUser.uid,
+        numAccounts: 0,
+        role: userData?.role || "individual",
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      };
+
+      signInResult = await authService.signInOrCreate(
+        firebaseUser.uid,
+        userDataForSignUp,
+      );
     }
 
     // Generate Firebase custom token for authentication
     // Both existing and new users need custom tokens for API authentication
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUser.uid
+      firebaseUser.uid,
     );
 
     if (!tokenResult.success) {
@@ -1020,7 +1071,7 @@ const signUpWithOAuth = async (req, res) => {
     // Validate the OAuth token using the service
     const validationResult = await authService.validateOAuthToken(
       provider,
-      idToken
+      idToken,
     );
 
     if (!validationResult.success) {
@@ -1068,7 +1119,7 @@ const signUpWithOAuth = async (req, res) => {
         {
           email: validationResult.user.email,
           firebaseUid: existingFirebaseUser.uid,
-        }
+        },
       );
 
       const userDataForSignUp = {
@@ -1092,12 +1143,12 @@ const signUpWithOAuth = async (req, res) => {
 
       const signUpResult = await authService.signInOrCreate(
         existingFirebaseUser.uid,
-        userDataForSignUp
+        userDataForSignUp,
       );
 
       // Generate Firebase custom token
       const tokenResult = await authService.generateFirebaseToken(
-        existingFirebaseUser.uid
+        existingFirebaseUser.uid,
       );
 
       if (!tokenResult.success) {
@@ -1130,7 +1181,7 @@ const signUpWithOAuth = async (req, res) => {
 
     // Create Firebase user
     const firebaseUserResult = await authService.createFirebaseUser(
-      validationResult.user
+      validationResult.user,
     );
 
     if (!firebaseUserResult.success) {
@@ -1165,12 +1216,12 @@ const signUpWithOAuth = async (req, res) => {
 
     const signUpResult = await authService.signInOrCreate(
       firebaseUser.uid,
-      userDataForSignUp
+      userDataForSignUp,
     );
 
     // Generate Firebase custom token
     const tokenResult = await authService.generateFirebaseToken(
-      firebaseUser.uid
+      firebaseUser.uid,
     );
 
     if (!tokenResult.success) {
@@ -1211,7 +1262,7 @@ const signUpWithOAuth = async (req, res) => {
 };
 
 const authController = {
-  own,
+  getOwnUserProfile,
   signUp,
   signIn,
   checkEmail,

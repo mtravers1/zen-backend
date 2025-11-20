@@ -10,8 +10,8 @@ const permissions = {
     buy_more_space: false,
     pricing: {
       monthly: "Free",
-      annual: "Free"
-    }
+      annual: "Free",
+    },
   },
   Personal: {
     create_trips_max: -1,
@@ -24,8 +24,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$9.99",
-      annual: "$99.90"
-    }
+      annual: "$99.90",
+    },
   },
   Founder: {
     create_trips_max: -1,
@@ -38,8 +38,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$14.99",
-      annual: "$149.90"
-    }
+      annual: "$149.90",
+    },
   },
   Entrepreneur: {
     create_trips_max: -1,
@@ -52,8 +52,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$24.99",
-      annual: "$249.90"
-    }
+      annual: "$249.90",
+    },
   },
   Tycoon: {
     create_trips_max: -1,
@@ -66,8 +66,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$49.99",
-      annual: "$499.90"
-    }
+      annual: "$499.90",
+    },
   },
   CFO: {
     create_trips_max: -1,
@@ -133,8 +133,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$12.99",
-      annual: "$129.90"
-    }
+      annual: "$129.90",
+    },
   },
   "Founder+1": {
     create_trips_max: -1,
@@ -147,8 +147,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$17.99",
-      annual: "$179.90"
-    }
+      annual: "$179.90",
+    },
   },
   "Entrepreneur+1": {
     create_trips_max: -1,
@@ -161,8 +161,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$27.99",
-      annual: "$279.90"
-    }
+      annual: "$279.90",
+    },
   },
   "Entrepreneur+2": {
     create_trips_max: -1,
@@ -175,8 +175,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$30.99",
-      annual: "$309.90"
-    }
+      annual: "$309.90",
+    },
   },
   "Tycoon+100gb": {
     create_trips_max: -1,
@@ -189,8 +189,8 @@ const permissions = {
     buy_more_space: true,
     pricing: {
       monthly: "$59.99",
-      annual: "$599.90"
-    }
+      annual: "$599.90",
+    },
   },
 };
 

@@ -3,6 +3,7 @@ trigger: always_on
 ---
 
 # General Code Style & Formatting
+
 - Use English for all code and documentation.
 - Always use best practices and style guidelines
 - Always declare the type of each variable and function (parameters and return value).
@@ -14,6 +15,7 @@ trigger: always_on
 - Always use ES modules (import/export), never use CommonJS (require).
 
 # Naming Conventions
+
 - Use PascalCase for classes.
 - Use camelCase for variables, functions, and methods.
 - Use kebab-case for file and directory names.
@@ -21,6 +23,7 @@ trigger: always_on
 - Avoid magic numbers and define constants.
 
 # Functions & Logic
+
 - Keep functions short and single-purpose (<20 lines).
 - Avoid deeply nested blocks by:
   - Using early returns.
@@ -30,12 +33,14 @@ trigger: always_on
 - Use default parameter values instead of null/undefined checks.
 
 # Data Handling
+
 - Avoid excessive use of primitive types; encapsulate data in composite types.
 - Avoid placing validation inside functions—use classes with internal validation instead.
 - Prefer immutability for data:
 - Use as const for literals that never change.
 
 # Tests
+
 - Write thorough tests for all major functionality
 - Each unit test should only test a single function. All other functions should be mocked.
 - Each unit test should test all paths for the function it's testing (happy path, errors, etc.)
@@ -43,8 +48,8 @@ trigger: always_on
 - End-to-end tests can test multiple functions, but we should have very limeted end-to-end tests.
 - All tests should always pass before a task is done. If they don't, make sure you notify me.
 
-
 # General instructions
+
 - Focus only on code areas relevant to the assigned task
 - Prefer iterating on existing code rather than creating new solutions
 - Keep solutions simple and avoid introducing unnecessary complexity

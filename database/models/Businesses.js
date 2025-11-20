@@ -22,7 +22,7 @@ const businessOwnershipSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: "User",
   },
-  percentage: Number,
+  percentage: String,
 });
 
 const businessOwnersDetailsSchema = new Schema([

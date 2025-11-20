@@ -1,21 +1,29 @@
+import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 import plaidService from "../services/plaid.service.js";
 import permissionsService from "../services/permissions.service.js";
 import upgradeResponseService from "../services/upgradeResponse.service.js";
 import User from "../database/models/User.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
-import { decryptValue, getUserDek } from "../database/encryption.js";
+import { getUserDek } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
 const createLinkToken = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(
     req,
-    "createLinkToken"
+    "createLinkToken",
   );
 
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { isAndroid, accountId, screen, mode, access_token, plaidEnvironment } = req.body;
+    const {
+      isAndroid,
+      accountId,
+      screen,
+      mode,
+      access_token,
+      plaidEnvironment,
+    } = req.body;
 
     const linkToken = await structuredLogger.withContext(
       "createLinkToken",
@@ -34,9 +42,9 @@ const createLinkToken = async (req, res) => {
           screen,
           mode,
           access_token,
-          plaidEnvironment
+          plaidEnvironment,
         );
-      }
+      },
     );
 
     res.status(200).send({ linkToken });
@@ -82,7 +90,7 @@ const getPublicToken = async (req, res) => {
       },
       async () => {
         return await plaidService.getPublicToken(linkToken);
-      }
+      },
     );
 
     res.status(200).send(response);
@@ -112,18 +120,34 @@ const getAccessToken = async (req, res) => {
       },
       async () => {
         return await plaidService.getAccessToken(publicToken);
-      }
+      },
     );
 
     res.status(200).send(accessToken);
   } catch (error) {
+    // Log the detailed error
     structuredLogger.logErrorBlock(error, {
       operation: "getAccessToken",
+      user_id: req.user?.uid,
       request_id: requestId,
-      request: structuredLogger.requestContext.get(requestId)?.request,
-      response: { statusCode: 500, body: { message: error.message } },
+      plaid_error_data: error.response?.data, // Log Plaid's specific error response
     });
 
+    // Check if this is a Plaid API error and forward a more specific error message
+    if (error.response && error.response.data) {
+      const plaidError = error.response.data;
+      return res.status(error.response.status || 500).json({
+        message: "A Plaid API error occurred.",
+        plaid_error: {
+          error_code: plaidError.error_code,
+          error_message: plaidError.error_message,
+          error_type: plaidError.error_type,
+          request_id: plaidError.request_id,
+        },
+      });
+    }
+
+    // Fallback for non-Plaid errors
     res.status(500).send({ message: error.message });
   }
 };
@@ -131,7 +155,7 @@ const getAccessToken = async (req, res) => {
 const saveAccessToken = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(
     req,
-    "saveAccessToken"
+    "saveAccessToken",
   );
 
   try {
@@ -139,24 +163,24 @@ const saveAccessToken = async (req, res) => {
     const uid = req.user.uid;
     const { accessToken, itemId, institutionId } = req.body;
     console.log(
-      `[CONTROLLER] saveAccessToken request - uid: ${uid}, itemId: ${itemId}, institutionId: ${institutionId}`
+      `[CONTROLLER] saveAccessToken request - uid: ${uid}, itemId: ${itemId}, institutionId: ${institutionId}`,
     );
 
     const canAddAccount = await permissionsService.canAddAccount(
       uid,
-      institutionId
+      institutionId,
     );
 
     if (!canAddAccount.success) {
       console.log(
         `[CONTROLLER] Permission denied for uid: ${uid}, institutionId: ${institutionId}`,
-        canAddAccount
+        canAddAccount,
       );
       return res.status(403).send(canAddAccount);
     }
 
     console.log(
-      `[CONTROLLER] saveAccessToken success - uid: ${uid}, itemId: ${itemId}`
+      `[CONTROLLER] saveAccessToken success - uid: ${uid}, itemId: ${itemId}`,
     );
     const token = await structuredLogger.withContext(
       "saveAccessToken",
@@ -174,9 +198,9 @@ const saveAccessToken = async (req, res) => {
           accessToken,
           itemId,
           institutionId,
-          uid
+          uid,
         );
-      }
+      },
     );
 
     res.status(200).send(token);
@@ -209,7 +233,7 @@ const getAccounts = async (req, res) => {
       },
       async () => {
         return await plaidService.getAccounts(email);
-      }
+      },
     );
 
     res.status(200).send(accounts);
@@ -240,7 +264,7 @@ const getBalance = async (req, res) => {
       },
       async () => {
         return await plaidService.getBalance(email);
-      }
+      },
     );
 
     res.status(200).send(balance);
@@ -260,7 +284,7 @@ const getBalance = async (req, res) => {
 const getInstitutions = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(
     req,
-    "getInstitutions"
+    "getInstitutions",
   );
 
   try {
@@ -271,7 +295,7 @@ const getInstitutions = async (req, res) => {
       },
       async () => {
         return await plaidService.getInstitutions();
-      }
+      },
     );
 
     res.status(200).send(institutions);
@@ -290,7 +314,7 @@ const getInstitutions = async (req, res) => {
 const getTransactions = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(
     req,
-    "getTransactions"
+    "getTransactions",
   );
 
   try {
@@ -305,7 +329,7 @@ const getTransactions = async (req, res) => {
       },
       async () => {
         return await plaidService.getTransactions(req.user.email, uid);
-      }
+      },
     );
 
     res.status(200).send(transactions);
@@ -355,7 +379,7 @@ const checkInstitutionLimit = async (req, res) => {
 
     const canAddAccount = await permissionsService.canAddAccount(
       uid,
-      institutionId
+      institutionId,
     );
 
     if (canAddAccount.success) {
@@ -385,23 +409,21 @@ const getConnectedInstitutions = async (req, res) => {
     }
 
     const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
     const institutionsMap = new Map();
 
     for (const account of accounts) {
       const institutionId = account.institution_id;
 
-      const decryptedAccountName = await decryptValue(
+      const decryptedAccountName = await safeDecrypt(
         account.account_name,
-        dek
       );
-      const decryptedAccountType = await decryptValue(
+      const decryptedAccountType = await safeDecrypt(
         account.account_type,
-        dek
       );
-      const decryptedInstitutionName = await decryptValue(
+      const decryptedInstitutionName = await safeDecrypt(
         account.institution_name,
-        dek
       );
 
       if (!institutionsMap.has(institutionId)) {
@@ -433,7 +455,7 @@ const getUpfrontInstitutionStatus = async (req, res) => {
     const uid = req.user.uid;
 
     console.log(
-      `[CONTROLLER] getUpfrontInstitutionStatus request - uid: ${uid}`
+      `[CONTROLLER] getUpfrontInstitutionStatus request - uid: ${uid}`,
     );
 
     const user = await User.findOne({ authUid: uid });
@@ -450,7 +472,7 @@ const getUpfrontInstitutionStatus = async (req, res) => {
 
     // Import permissions config
     const permissionsConfig = await import("../config/permissions.js").then(
-      (m) => m.default
+      (m) => m.default,
     );
     const rolePermissions = permissionsConfig[rolePermission];
 
@@ -459,9 +481,8 @@ const getUpfrontInstitutionStatus = async (req, res) => {
     }
 
     // Count current institutions
-    const institutionsCount = await permissionsService.countUserInstitutions(
-      userId
-    );
+    const institutionsCount =
+      await permissionsService.countUserInstitutions(userId);
     const maxInstitutions = rolePermissions.accounts_max;
 
     // Determine if user can add new institutions
@@ -474,23 +495,22 @@ const getUpfrontInstitutionStatus = async (req, res) => {
 
     if (accounts.length > 0) {
       const dek = await getUserDek(uid);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
       const institutionsMap = new Map();
 
       for (const account of accounts) {
         const institutionId = account.institution_id;
 
-        const decryptedInstitutionName = await decryptValue(
+        const decryptedInstitutionName = await safeDecrypt(
           account.institution_name,
-          dek
         );
-        const decryptedAccessToken = await decryptValue(
+        const decryptedAccessToken = await safeDecrypt(
           account.accessToken,
-          dek
         );
 
         if (!institutionsMap.has(institutionId)) {
           const accountsCount = accounts.filter(
-            (acc) => acc.institution_id === institutionId
+            (acc) => acc.institution_id === institutionId,
           ).length;
           institutionsMap.set(institutionId, {
             institution_id: institutionId,
@@ -517,13 +537,13 @@ const getUpfrontInstitutionStatus = async (req, res) => {
     };
 
     console.log(
-      `[CONTROLLER] getUpfrontInstitutionStatus success - uid: ${uid}, plan: ${rolePermission}, institutions: ${institutionsCount}/${maxInstitutions}, can_add: ${canAddNewInstitution}`
+      `[CONTROLLER] getUpfrontInstitutionStatus success - uid: ${uid}, plan: ${rolePermission}, institutions: ${institutionsCount}/${maxInstitutions}, can_add: ${canAddNewInstitution}`,
     );
     res.status(200).send(response);
   } catch (error) {
     console.error(
       `[CONTROLLER] getUpfrontInstitutionStatus error - uid: ${req.user?.uid}:`,
-      error.message
+      error.message,
     );
     res.status(500).send({ error: "Internal server error" });
   }
@@ -535,7 +555,7 @@ const getInstitutionUpdateToken = async (req, res) => {
     const { institution_id } = req.body;
 
     console.log(
-      `[CONTROLLER] getInstitutionUpdateToken request - uid: ${uid}, institution_id: ${institution_id}`
+      `[CONTROLLER] getInstitutionUpdateToken request - uid: ${uid}, institution_id: ${institution_id}`,
     );
 
     if (!institution_id) {
@@ -544,17 +564,17 @@ const getInstitutionUpdateToken = async (req, res) => {
 
     const result = await plaidService.getInstitutionUpdateToken(
       institution_id,
-      uid
+      uid,
     );
 
     console.log(
-      `[CONTROLLER] getInstitutionUpdateToken success - uid: ${uid}, institution_id: ${institution_id}`
+      `[CONTROLLER] getInstitutionUpdateToken success - uid: ${uid}, institution_id: ${institution_id}`,
     );
     res.status(200).send(result);
   } catch (error) {
     console.error(
       `[CONTROLLER] getInstitutionUpdateToken error - uid: ${req.user?.uid}, institution_id: ${req.body?.institution_id}:`,
-      error.message
+      error.message,
     );
 
     if (error.message === "User not found") {

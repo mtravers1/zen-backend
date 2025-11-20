@@ -75,7 +75,7 @@ const generateFeaturesFromLimits = (limits) => {
     features.push(
       `Up to ${limits.accounts_max} Financial Institution${
         limits.accounts_max > 1 ? "s" : ""
-      }`
+      }`,
     );
   }
 
@@ -93,7 +93,7 @@ const generateFeaturesFromLimits = (limits) => {
     features.push(
       `Up to ${limits.create_trips_max} Trip${
         limits.create_trips_max > 1 ? "s" : ""
-      } per month`
+      } per month`,
     );
   }
 
@@ -104,7 +104,7 @@ const generateFeaturesFromLimits = (limits) => {
     features.push(
       `Up to ${limits.businesses_max} Business Profile${
         limits.businesses_max > 1 ? "s" : ""
-      }`
+      }`,
     );
   }
 
@@ -115,7 +115,7 @@ const generateFeaturesFromLimits = (limits) => {
     features.push(
       `Up to ${limits.receipts_max} Receipt${
         limits.receipts_max > 1 ? "s" : ""
-      }`
+      }`,
     );
   }
 
@@ -124,7 +124,7 @@ const generateFeaturesFromLimits = (limits) => {
     features.push("Unlimited Documents (subject to storage limits)");
   } else {
     features.push(
-      `Up to ${limits.docs_max} Document${limits.docs_max > 1 ? "s" : ""}`
+      `Up to ${limits.docs_max} Document${limits.docs_max > 1 ? "s" : ""}`,
     );
   }
 
@@ -167,7 +167,10 @@ const getAvailablePlans = async (req, res) => {
           monthly: permissions[planId].pricing?.monthly || "TBD",
           annual: permissions[planId].pricing?.annual || "TBD",
           sku: getProductIdForPlan(planId, platform, "monthly"),
-          skuAnnual: platform === "ios" ? getProductIdForPlan(planId, platform, "yearly") : null,
+          skuAnnual:
+            platform === "ios"
+              ? getProductIdForPlan(planId, platform, "yearly")
+              : null,
         },
         available: true,
       }));
@@ -189,7 +192,7 @@ const getAvailablePlans = async (req, res) => {
 
     console.log(
       "🚀 [SUBSCRIPTIONS] Response ready - plans count:",
-      sortedPlans.length
+      sortedPlans.length,
     );
     console.log("🚀 [SUBSCRIPTIONS] First plan example:", sortedPlans[0]);
 

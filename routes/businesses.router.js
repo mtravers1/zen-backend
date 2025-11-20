@@ -10,7 +10,7 @@ router.post("/unlink", businessController.unlinkAccounts);
 router.post("/assign-account", businessController.assignAccountToProfile);
 router.put(
   "/profile/update/:profileId",
-  businessController.updateBusinessProfile
+  businessController.updateBusinessProfile,
 );
 router.delete("/profile/delete/:profileId", businessController.deleteProfile);
 
