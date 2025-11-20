@@ -97,6 +97,14 @@ const limiter = rateLimit({
     }
     return req.ip;
   },
+  handler: (req, res, next, options) => {
+    const key = options.keyGenerator(req, res);
+    console.log(`Rate limit exceeded for key: ${key} on path: ${req.path}`);
+
+    const retryAfter = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(options.statusCode).send(options.message);
+  },
 });
 
 // Apply rate limiting to all requests
