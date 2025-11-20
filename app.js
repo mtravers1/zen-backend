@@ -85,12 +85,18 @@ const isProduction = process.env.NODE_ENV === "production";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 100 : 1000, // Limit each IP to 100 requests per windowMs in production, 1000 otherwise
+  max: 1000, // Due to current caching limitations, setting a higher rate limit for both production and development.
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    if (req.user && req.user.uid) {
+      return req.user.uid;
+    }
+    return req.ip;
+  },
 });
 
 // Apply rate limiting to all requests
