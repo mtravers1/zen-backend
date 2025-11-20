@@ -8,6 +8,7 @@ import admin from "firebase-admin";
 import fs from "fs";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
 import decodeUserMiddleware from "./middlewares/decodeUserMiddleware.js";
+import { redactEmail } from "./lib/emailUtils.js";
 import {
   structuredLoggingMiddleware,
   errorHandlingMiddleware,
@@ -107,8 +108,9 @@ const limiter = rateLimit({
   },
   handler: (req, res, next, options) => {
     const key = options.keyGenerator(req, res);
-    console.warn(
-      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for key: ${key} on path: ${req.path}`,
+    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
+    console.log(
+      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
     );
 
     const retryAfter = Math.ceil(options.windowMs / 1000);

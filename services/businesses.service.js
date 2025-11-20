@@ -1,3 +1,4 @@
+import { redactEmail } from "../lib/emailUtils.js";
 import User from "../database/models/User.js";
 import Business from "../database/models/Businesses.js";
 import { businessColors } from "../constants/colors.js";
@@ -187,7 +188,7 @@ const addBusinesses = async (businessList, email, uid) => {
 
 const getUserProfiles = async (email, uid) => {
   console.log(
-    `[getUserProfiles] Starting profile retrieval for email: ${email}, uid: ${uid}`,
+    `[getUserProfiles] Starting profile retrieval for email: ${redactEmail(email)}, uid: ${uid}`,
   );
 
   try {

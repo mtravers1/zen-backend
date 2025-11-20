@@ -2,17 +2,7 @@ import { unless } from "express-unless";
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import User from "../database/models/User.js";
-
-const redactEmail = (email) => {
-  if (!email || !email.includes('@')) {
-    return email;
-  }
-  const [localPart, domain] = email.split('@');
-  if (localPart.length <= 3) {
-    return `${localPart.slice(0, 1)}...*@*${domain}`;
-  }
-  return `${localPart.slice(0, 3)}...*@*${domain}`;
-};
+import { redactEmail } from "../lib/emailUtils.js";
 
 async function firebaseAuthentication(req, res, next) {
   const idToken = req.headers.authorization?.split("Bearer ")[1];
