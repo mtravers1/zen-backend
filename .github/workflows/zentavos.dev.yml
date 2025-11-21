@@ -96,6 +96,9 @@ jobs:
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV }}|g" .env
 
+          echo "--- .env contents ---"
+          cat .env
+
           cd ..
       - name: Debug GCP/KMS Variables
         run: |
