@@ -19,44 +19,6 @@ import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
 export async function createApp() {
-  const redactEnv = (env) => {
-    const sensitiveKeys = [
-      'SECRET',
-      'MONGODB_URI',
-      'MONGODB_USER',
-      'MONGODB_PASS',
-      'HASH_SALT',
-      'PLAID_CLIENT_ID',
-      'PLAID_SECRET',
-      'GCP_PRIVATE_KEY',
-      'STORAGE_SERVICE_ACCOUNT',
-      'KMS_SERVICE_ACCOUNT',
-      'FIREBASE_API_KEY',
-      'FIREBASE_SERVICE_ACCOUNT',
-      'GOOGLE_CLIENT_ID',
-      'GOOGLE_PLAY_SERVICE_ACCOUNT',
-      'IAP_CERTIFICATE',
-      'ISSUER_ID',
-      'KEY_ID',
-      'APPLE_SHARED_SECRET',
-      'APPLE_SANDBOX_PASSWORD',
-      'GROQ_API_KEY',
-      'MAIL_AUTH_PASS',
-    ];
-    const redactedEnv = {};
-    for (const key in env) {
-      if (sensitiveKeys.includes(key)) {
-        redactedEnv[key] = '[REDACTED]';
-      } else {
-        redactedEnv[key] = env[key];
-      }
-    }
-    return redactedEnv;
-  };
-
-  console.log("--- PM2 ENVIRONMENT VARIABLES ---");
-  console.log(redactEnv(process.env));
-  console.log("---------------------------------");
   const app = express();
 
 // database initialization
