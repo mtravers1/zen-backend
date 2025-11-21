@@ -14,16 +14,30 @@ export function verifyEnvironmentVariables() {
     process.exit(1);
   }
 
-  const sampleContent = fs.readFileSync(sampleEnvPath, 'utf-8');
+  let sampleContent;
+  try {
+    sampleContent = fs.readFileSync(sampleEnvPath, 'utf-8');
+  } catch (e) {
+    console.error('FATAL: Error reading .env.sample file:', e);
+    process.exit(1);
+  }
+  
   const lines = sampleContent.split('\n');
   const missingVariables = [];
 
+  console.log('--- Checking for presence of variables from .env.sample in process.env ---');
   for (const line of lines) {
     const trimmedLine = line.trim();
     if (trimmedLine && !trimmedLine.startsWith('#')) {
       const variableName = trimmedLine.split('=')[0];
-      if (variableName && !process.env[variableName]) {
-        missingVariables.push(variableName);
+      if (variableName) {
+        const value = process.env[variableName];
+        if (value) {
+          console.log(`- ${variableName}: found (length: ${value.length})`);
+        } else {
+          console.log(`- ${variableName}: NOT FOUND`);
+          missingVariables.push(variableName);
+        }
       }
     }
   }

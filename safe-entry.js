@@ -1,6 +1,61 @@
-console.log("--- DIAGNOSTIC: DUMPING PM2 ENVIRONMENT AND EXITING ---");
-console.log(process.env);
-process.exit(0);
+
+const requiredEnv = [
+  'MONGODB_URI',
+  'MONGODB_USER',
+  'MONGODB_PASS',
+  'MONGODB_DB',
+  'PLAID_CLIENT_ID',
+  'PLAID_SECRET',
+];
+
+console.log("--- Checking Required Environment Variables ---");
+requiredEnv.forEach(key => {
+  if (process.env[key]) {
+    console.log(`- ${key}: set (length: ${process.env[key].length})`);
+  } else {
+    console.log(`- ${key}: NOT SET`);
+  }
+});
+console.log("-------------------------------------------");
+
+const redactEnv = (env) => {
+  const sensitiveKeys = [
+    'SECRET',
+    'MONGODB_URI',
+    'MONGODB_USER',
+    'MONGODB_PASS',
+    'HASH_SALT',
+    'PLAID_CLIENT_ID',
+    'PLAID_SECRET',
+    'GCP_PRIVATE_KEY',
+    'STORAGE_SERVICE_ACCOUNT',
+    'KMS_SERVICE_ACCOUNT',
+    'FIREBASE_API_KEY',
+    'FIREBASE_SERVICE_ACCOUNT',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_PLAY_SERVICE_ACCOUNT',
+    'IAP_CERTIFICATE',
+    'ISSUER_ID',
+    'KEY_ID',
+    'APPLE_SHARED_SECRET',
+    'APPLE_SANDBOX_PASSWORD',
+    'GROQ_API_KEY',
+    'MAIL_AUTH_PASS',
+  ];
+  const redactedEnv = {};
+  for (const key in env) {
+    if (sensitiveKeys.includes(key)) {
+      redactedEnv[key] = '[REDACTED]';
+    } else {
+      redactedEnv[key] = env[key];
+    }
+  }
+  return redactedEnv;
+};
+
+console.log("--- PM2 ENVIRONMENT VARIABLES ---");
+console.log(redactEnv(process.env));
+console.log("---------------------------------");
 
 /**
  * Safe Application Entrypoint
