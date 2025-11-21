@@ -1,3 +1,7 @@
+console.log("--- DIAGNOSTIC: DUMPING PM2 ENVIRONMENT AND EXITING ---");
+console.log(process.env);
+process.exit(0);
+
 /**
  * Safe Application Entrypoint
  * This script performs critical pre-flight checks before loading the main application.
