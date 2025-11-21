@@ -173,17 +173,8 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
 function getDEKPath(bucketKey, bucket, includeExtension = false) {
   let path;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
-    const envKeyMap = {
-      development: "dev",
-      staging: "staging",
-      production: "prod",
-      test: "test",
-    };
-    const keyEnv = envKeyMap[process.env.NODE_ENV];
-    if (!keyEnv) {
-      throw new Error(`CRITICAL: No key folder mapping found for NODE_ENV='${process.env.NODE_ENV}'.`);
-    }
-    path = `keys/${keyEnv}/${bucketKey}`;
+    const environmentFolder = process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
+    path = `keys/${environmentFolder}/${bucketKey}`;
   } else {
     path = `keys/${bucketKey}`;
   }
