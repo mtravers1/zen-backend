@@ -90,4 +90,4 @@ tests/jest.setup.js
 
 # Key files
 keys_*.key
-*.key
+*.keyServiceAccountKey-Dev.json
