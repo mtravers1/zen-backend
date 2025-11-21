@@ -23,4 +23,11 @@ pm2 startOrReload ecosystem.config.cjs \
     --max-memory-restart 1G \
     --log-date-format 'YYYY-MM-DD HH:mm Z'
 
+# Wait for a moment to let the app initialize or crash
+sleep 5
+
+# Display the latest logs to the CI output
+echo "--- Displaying latest logs from PM2 ---"
+pm2 logs ${DEPLOYMENT_ENV} --lines 100 --nostream
+
 pm2 save
