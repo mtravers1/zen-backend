@@ -17,11 +17,10 @@ npm --version
 
 echo "--- DEBUG: Starting PM2 ---"
 # Use pm2 reload for zero-downtime deployments and --no-daemon for loud logging
-pm2 reload ecosystem.config.cjs \
+pm2 startOrReload ecosystem.config.cjs \
     --only ${DEPLOYMENT_ENV} \
     --name ${DEPLOYMENT_ENV} \
     --max-memory-restart 1G \
-    --log-date-format 'YYYY-MM-DD HH:mm Z' \
-    --no-daemon
+    --log-date-format 'YYYY-MM-DD HH:mm Z'
 
 pm2 save
