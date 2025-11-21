@@ -26,6 +26,8 @@ module.exports = {
       },
       //error_file: "/var/log/zentavos/api-error.log",
       //out_file: "/var/log/zentavos/api-out.log",
+      error_file: "/dev/stdout",
+      out_file: "/dev/stdout",
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
     {
@@ -38,6 +40,8 @@ module.exports = {
       },
       //error_file: "/var/log/zentavos/api-error.log",
       //out_file: "/var/log/zentavos/api-out.log",
+      error_file: "/dev/stdout",
+      out_file: "/dev/stdout",
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
     {
@@ -50,6 +54,8 @@ module.exports = {
       },
       //error_file: "/var/log/zentavos/api-error.log",
       //out_file: "/var/log/zentavos/api-out.log",
+      error_file: "/dev/stdout",
+      out_file: "/dev/stdout",
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
   ],
