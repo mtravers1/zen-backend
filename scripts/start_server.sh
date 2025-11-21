@@ -47,5 +47,7 @@ pm2 startOrReload ecosystem.config.cjs \
     --max-memory-restart 1G \
     --log-date-format 'YYYY-MM-DD HH:mm Z'
 
+pm2 save
+
 echo "--- Displaying final PM2 status ---"
 pm2 list
