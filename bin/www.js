@@ -3,19 +3,15 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-// IMPORTANT: Run verification BEFORE importing any other application files.
-// This prevents crashes during module initialization if the environment is misconfigured.
-import { verifyEnvironmentVariables } from "../scripts/verify-env.js";
-verifyEnvironmentVariables();
-
-// --- Imports --- //
-// We use dynamic imports here to ensure they only run after the env has been verified.
-const { default: createApp } = await import("../app.js");
-const { default: connectDB } = await import("../database/database.js");
+/**
+ * Module dependencies.
+ */
+import createApp from "../app.js";
 import Debug from "debug";
-import http from "http";
-
 const debug = Debug("zentavos-backend:server");
+import http from "http";
+import connectDB from "../database/database.js";
+
 let server; // Hoisted server declaration
 
 /**

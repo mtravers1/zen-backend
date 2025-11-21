@@ -11,7 +11,7 @@ import CopyWebpackPlugin from "copy-webpack-plugin";
 
 
 export default {
-  entry: "./bin/www",
+  entry: "./safe-entry.js",
   target: "node",
   mode: "production",
   node: {
