@@ -58,7 +58,7 @@ console.log(`\tRunning in environment: ${NODE_ENV} (key folder: ${keyEnv})`);
 
 // --- Redefined constants and clients from encryption.js ---
 
-const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+const GCS_BUCKET_NAME = process.env.GCS_DEK_BUCKET_NAME;
 const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME || process.env.LEGACY_GCS_ENVIRONMENT_FOLDER;
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID;
 const GCP_KEY_LOCATION = process.env.GCP_KEY_LOCATION;
@@ -75,6 +75,13 @@ if (!LEGACY_GCS_BUCKET_NAME || !GCS_BUCKET_NAME) {
 if (!GCP_PROJECT_ID || !GCP_KEY_LOCATION || !GCP_KEY_RING || !GCP_KEY_NAME) {
   console.error(
     "\tCRITICAL: GCP_PROJECT_ID, GCP_KEY_LOCATION, GCP_KEY_RING, and GCP_KEY_NAME environment variables must be set."
+  );
+  process.exit(1);
+}
+
+if (!process.env.LEGACY_GCP_PROJECT_ID || !process.env.LEGACY_GCP_KEY_LOCATION || !process.env.LEGACY_GCP_KEY_RING || !process.env.LEGACY_GCP_KEY_NAME) {
+  console.error(
+    "\tCRITICAL: LEGACY_GCP_PROJECT_ID, LEGACY_GCP_KEY_LOCATION, LEGACY_GCP_KEY_RING, and LEGACY_GCP_KEY_NAME environment variables must be set for this script."
   );
   process.exit(1);
 }
@@ -122,10 +129,17 @@ const kmsClient = new KeyManagementServiceClient({
 });
 
 const KEY_PATH = kmsClient.cryptoKeyPath(
-  GCP_PROJECT_ID,
-  GCP_KEY_LOCATION,
-  GCP_KEY_RING,
-  GCP_KEY_NAME
+  process.env.LEGACY_GCP_PROJECT_ID,
+  process.env.LEGACY_GCP_KEY_LOCATION,
+  process.env.LEGACY_GCP_KEY_RING,
+  process.env.LEGACY_GCP_KEY_NAME
+);
+
+const PRIMARY_KEY_PATH = kmsClient.cryptoKeyPath(
+  process.env.GCP_PROJECT_ID,
+  process.env.GCP_KEY_LOCATION,
+  process.env.GCP_KEY_RING,
+  process.env.GCP_KEY_NAME
 );
 
 /**
@@ -258,7 +272,7 @@ function extractCiphertextFromMultipart(buffer, DEBUG_MODE) {
   return null; // Ciphertext not found
 }
 
-async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
+async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE, USE_DB_ID_MODE) {
   console.log(`\tStarting DEK recovery for user with Firebase UID: ${firebaseUid}`);
 
   // 1. Connect to DB and find user
@@ -284,7 +298,8 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
   // 2. Construct the path to the specific DEK file
   const legacyBucket = storage.bucket(LEGACY_GCS_BUCKET_NAME);
   const primaryBucket = storage.bucket(GCS_BUCKET_NAME);
-  const keyFileName = `${firebaseUid}.key`;
+  const keyIdentifier = USE_DB_ID_MODE ? userId : firebaseUid;
+  const keyFileName = `${keyIdentifier}.key`;
   const keyFilePath = `keys/${keyEnv}/${keyFileName}`;
   const file = legacyBucket.file(keyFilePath);
 
@@ -350,16 +365,28 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
 
           try {
             // c. Copy the key to the new bucket with the correct name
-            const newFileName = `keys/${keyEnv}/${userId}.key`;
+            const newFileName = `keys/${userId}.key`;
             const newFile = primaryBucket.file(newFileName);
             const [exists] = await newFile.exists();
             if (exists && !FORCE_MODE) {
               console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
               process.exit(1);
             }
-            await file.copy(newFile);
+            const [encryptResponse] = await kmsClient.encrypt({
+              name: PRIMARY_KEY_PATH,
+              plaintext: dek,
+            });
+            const encryptedDEK = encryptResponse.ciphertext;
+            await newFile.save(encryptedDEK, {
+              resumable: false,
+              validation: false,
+              metadata: {
+                contentType: "application/octet-stream",
+                cacheControl: "private, max-age=0",
+              },
+            });
+            console.log(`\tSuccessfully RE-ENCRYPTED and migrated key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
             foundKey = true;
-            console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
             break; // Exit loop once key is found
           } catch (copyError) {
             console.error(`\n\tFATAL: Failed to copy key to gs://${GCS_BUCKET_NAME}/${newFileName}.`, copyError);
@@ -383,16 +410,28 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
 
           try {
             // c. Copy the key to the new bucket with the correct name
-            const newFileName = `keys/${keyEnv}/${userId}.key`;
+            const newFileName = `keys/${userId}.key`;
             const newFile = primaryBucket.file(newFileName);
             const [exists] = await newFile.exists();
             if (exists && !FORCE_MODE) {
               console.error(`\n\tERROR: Key file already exists at gs://${GCS_BUCKET_NAME}/${newFileName}. Use --force to overwrite.`);
               process.exit(1);
             }
-            await file.copy(newFile);
+            const [encryptResponse] = await kmsClient.encrypt({
+              name: PRIMARY_KEY_PATH,
+              plaintext: dek,
+            });
+            const encryptedDEK = encryptResponse.ciphertext;
+            await newFile.save(encryptedDEK, {
+              resumable: false,
+              validation: false,
+              metadata: {
+                contentType: "application/octet-stream",
+                cacheControl: "private, max-age=0",
+              },
+            });
+            console.log(`\tSuccessfully RE-ENCRYPTED and migrated key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
             foundKey = true;
-            console.log(`\tSuccessfully copied key to primary bucket: gs://${GCS_BUCKET_NAME}/${newFileName}`);
           } catch (copyError) {
             console.error(`\n\tFATAL: Failed to copy key to gs://${GCS_BUCKET_NAME}/${newFileName}.`, copyError);
             foundKey = false;
@@ -419,6 +458,7 @@ async function recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE) {
 const args = process.argv.slice(2);
 const DEBUG_MODE = args.includes('--debug');
 const FORCE_MODE = args.includes('--force');
+const USE_DB_ID_MODE = args.includes('--use-db-id');
 const firebaseUid = args.find(arg => !arg.startsWith('--'));
 
 if (DEBUG_MODE) {
@@ -431,11 +471,11 @@ if (FORCE_MODE) {
 
 if (!firebaseUid) {
   console.error('\tError: Missing Firebase UID argument.');
-  console.error('\tUsage: node --env-file=.env scripts/recover-dek.js <USER_FIREBASE_UID> [--debug] [--force]');
+  console.error('\tUsage: node --env-file=.env scripts/recover-dek.js <USER_FIREBASE_UID> [--debug] [--force] [--use-db-id]');
   process.exit(1);
 }
 
-recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE).catch((err) => {
+recoverDek(firebaseUid, DEBUG_MODE, FORCE_MODE, USE_DB_ID_MODE).catch((err) => {
   console.error(err);
   process.exit(1);
 });
