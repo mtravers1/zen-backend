@@ -17,9 +17,6 @@ npm --version
 
 echo '--- DEBUG: Starting PM2 ---'
 
-echo "--- DIAGNOSTIC: Attempting to run the app directly to expose startup errors ---"
-node index.js
-
 pm2 startOrReload ecosystem.config.cjs \
     --only ${DEPLOYMENT_ENV} \
     --name ${DEPLOYMENT_ENV} \
