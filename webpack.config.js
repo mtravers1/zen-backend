@@ -11,7 +11,7 @@ import CopyWebpackPlugin from "copy-webpack-plugin";
 
 
 export default {
-  entry: "./bin/www",
+  entry: "./safe-entry.js",
   target: "node",
   mode: "production",
   node: {
@@ -38,12 +38,8 @@ export default {
   devtool: "source-map",
   plugins: [
     new TerserPlugin({
-      parallel: true,
       terserOptions: {
-        compress: false,
-        ecma: 6,
-        mangle: true,
-        sourceMap: true,
+        ecma: 2022,
       },
     }),
     new CopyWebpackPlugin({

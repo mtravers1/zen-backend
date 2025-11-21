@@ -3,8 +3,6 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { verifyEnvironmentVariables } from "../scripts/verify-env.js";
-
 /**
  * Module dependencies.
  */
@@ -21,8 +19,6 @@ let server; // Hoisted server declaration
  */
 
 async function startServer() {
-  verifyEnvironmentVariables(); // Check for all required environment variables
-
   await connectDB();
 
   const expressApp = await createApp();
