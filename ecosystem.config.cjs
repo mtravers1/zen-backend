@@ -18,7 +18,7 @@ module.exports = {
     },
     {
       name: "dev",
-      script: "./bin/www.js",
+      script: "./index.js",
       watch: true,
       node_args: "-r dotenv/config",
       env: {
@@ -30,7 +30,7 @@ module.exports = {
     },
     {
       name: "staging",
-      script: "./bin/www.js",
+      script: "./index.js",
       watch: false,
       node_args: "-r dotenv/config",
       env: {
@@ -42,7 +42,7 @@ module.exports = {
     },
     {
       name: "prod",
-      script: "./bin/www.js",
+      script: "./index.js",
       watch: false,
       node_args: "-r dotenv/config",
       env: {
