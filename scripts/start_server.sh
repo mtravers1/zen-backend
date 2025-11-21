@@ -21,9 +21,7 @@ fi
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
   echo "--- Loading environment variables from .env file ---"
-  set -a # Automatically export all variables from now on
-  source .env
-  set +a # Stop automatically exporting
+  export $(cat .env | sed 's/#.*//g' | xargs)
 fi
 
 # DEPLOYMENT_ENV is set by the export above.
