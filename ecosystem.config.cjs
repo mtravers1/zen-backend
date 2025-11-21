@@ -36,8 +36,8 @@ module.exports = {
       env: {
         PLAID_ENV: "production",
       },
-      error_file: "./api-error.log",
-      out_file: "./api-out.log",
+      error_file: "/var/log/zentavos/api-error.log",
+      out_file: "/var/log/zentavos/api-out.log",
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
     {
