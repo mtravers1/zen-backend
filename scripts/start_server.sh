@@ -30,4 +30,7 @@ sleep 5
 echo "--- Displaying latest logs from PM2 ---"
 pm2 logs ${DEPLOYMENT_ENV} --lines 100 --nostream
 
+echo "--- Displaying final PM2 status ---"
+pm2 list
+
 pm2 save
