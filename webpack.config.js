@@ -39,7 +39,7 @@ export default {
   plugins: [
     new TerserPlugin({
       terserOptions: {
-        ecma: 2020,
+        ecma: 2022,
       },
     }),
     new CopyWebpackPlugin({
