@@ -95,6 +95,10 @@ jobs:
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_PROD }}|g" .env
+
+          echo "--- .env contents ---"
+          cat .env
+
           cd ..
       - name: Debug GCP/KMS Variables
         run: |
@@ -155,6 +159,8 @@ jobs:
             cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             bash ./scripts/start_server.sh
+            echo "--- Displaying api-out.log and aip-error.log ---"
+            timeout 120 tail -f /var/log/zentavos/api-out.log /var/log/zentavos/api-error.log || true
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
