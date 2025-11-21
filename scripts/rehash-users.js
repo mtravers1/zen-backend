@@ -19,11 +19,27 @@ dotenv.config();
  */
 const rehashUsers = async () => {
   const isDryRun = process.argv.includes('--dry-run');
+  const limitArg = process.argv.find(arg => arg.startsWith('--limit='));
+  const userIdArg = process.argv.find(arg => arg.startsWith('--user-id='));
+  const authUidArg = process.argv.find(arg => arg.startsWith('--auth-uid='));
+
+  const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : null;
+  const userId = userIdArg ? userIdArg.split('=')[1] : null;
+  const authUid = authUidArg ? authUidArg.split('=')[1] : null;
+
+  let errorCount = 0; // Declare errorCount in the outer scope
 
   try {
     console.log('--- Starting User Email Hash Migration ---');
     if (isDryRun) {
       console.log('\n*** DRY RUN MODE ENABLED: No changes will be saved to the database. ***\n');
+    }
+    if (userId) {
+      console.log(`*** SINGLE USER MODE (ID): Processing user with _id: ${userId} ***\n`);
+    } else if (authUid) {
+      console.log(`*** SINGLE USER MODE (Auth UID): Processing user with authUid: ${authUid} ***\n`);
+    } else if (limit) {
+      console.log(`*** LIMIT MODE: Processing a maximum of ${limit} user(s). ***\n`);
     }
 
     if (!process.env.HASH_SALT) {
@@ -35,11 +51,23 @@ const rehashUsers = async () => {
     await connectDB();
     console.log('Database connection successful.');
 
-    const users = await User.find({});
-    console.log(`Found ${users.length} users to process.`);
+    let query;
+    if (userId) {
+      query = User.find({ _id: userId });
+    } else if (authUid) {
+      query = User.find({ authUid: authUid });
+    } else {
+      query = User.find({});
+      if (limit) {
+        query = query.limit(limit); // Correctly chain the limit
+      }
+    }
+
+    const users = await query;
+    
+    console.log(`Found ${users.length} user(s) to process.`);
 
     let successCount = 0;
-    let errorCount = 0;
     const changes = [];
 
     for (const user of users) {
