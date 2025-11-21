@@ -3,9 +3,15 @@ set -e
 
 # Ensure the port is free before starting a new process
 echo "--- Ensuring port 3002 is free ---"
-# Use lsof to find the PID on TCP port 3002 and kill it.
-# The command is wrapped to prevent errors if the port is already free.
-lsof -t -i:3002 | xargs -r kill -9 || true
+
+# Find PID using ss and kill it. Robustly handles no process found.
+PID_TO_KILL=$(ss -lptn 'sport = :3002' 2>/dev/null | awk -F'pid=' '{print $2}' | cut -d',' -f1)
+if [ -n "$PID_TO_KILL" ]; then
+  echo "Killing process $PID_TO_KILL on port 3002"
+  kill -9 "$PID_TO_KILL" || true
+else
+  echo "Port 3002 is already free."
+fi
 
 # Navigate to the app directory if it exists
 if [ -d "/home/zentavos/zentavos_api" ]; then
