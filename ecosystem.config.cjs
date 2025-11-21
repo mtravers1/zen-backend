@@ -29,7 +29,7 @@ module.exports = {
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
     {
-      name: "stg",
+      name: "staging",
       script: "./index.js",
       watch: false,
       node_args: "-r dotenv/config",
