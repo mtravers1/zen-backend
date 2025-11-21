@@ -1,5 +1,17 @@
 #!/bin/bash
 set -e
+
+# Ensure the port is free before starting a new process
+echo "--- Ensuring port 3002 is free ---"
+fuser -k 3002/tcp || true
+
+# Navigate to the app directory if it exists
+if [ -d "/home/zentavos/zentavos_api" ]; then
+  cd /home/zentavos/zentavos_api || exit
+fi
+
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
 set -x # Print every command to the log *before* it runs (SUPER HELPFUL)
 
 echo "--- DEBUG: Starting deployment script ---"
