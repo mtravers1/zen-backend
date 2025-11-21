@@ -95,8 +95,22 @@ jobs:
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
-          sed -i -e "/\"type\"\:.*/d" package.json
           cd ..
+      - name: Debug GCP/KMS Variables
+        run: |
+          echo "GCP_PROJECT_ID_STG: ${{ vars.GCP_PROJECT_ID_STG }}"
+          echo "GCS_BUCKET_NAME_STG: ${{ vars.GCS_BUCKET_NAME_STG }}"
+          echo "LEGACY_GCS_BUCKET_NAME_STG: ${{ vars.LEGACY_GCS_BUCKET_NAME_STG }}"
+          echo "LEGACY_GCS_ENVIRONMENT_FOLDER_STG: ${{ vars.LEGACY_GCS_ENVIRONMENT_FOLDER_STG }}"
+          echo "GCP_KEY_LOCATION_STG: ${{ vars.GCP_KEY_LOCATION_STG }}"
+          echo "GCP_KEY_RING_STG: ${{ vars.GCP_KEY_RING_STG }}"
+          echo "GCP_KEY_NAME_STG: ${{ vars.GCP_KEY_NAME_STG }}"
+          echo "HASH_SALT_STG: ${{ secrets.HASH_SALT_STG }}"
+          echo "STORAGE_SERVICE_ACCOUNT_STG: ${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}"
+          echo "KMS_SERVICE_ACCOUNT_STG: ${{ secrets.KMS_SERVICE_ACCOUNT_STG }}"
+          echo "FIREBASE_SERVICE_ACCOUNT_STG: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}"
+          echo "FIREBASE_API_KEY_STG: ${{ secrets.FIREBASE_API_KEY_STG }}"
+          echo "GOOGLE_CLIENT_ID_STG: ${{ secrets.GOOGLE_CLIENT_ID_STG }}"
       - name: Create ServiceAccountKey.json
         uses: actions/github-script@v6
         env:
