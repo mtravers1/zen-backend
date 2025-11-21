@@ -81,9 +81,13 @@ jobs:
           sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS\=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_DEV }}|g" .env
           sed -i -e "s|GROQ_AI_MODEL\=.*|GROQ_AI_MODEL\=${{ vars.GROQ_AI_MODEL }}|g" .env
           sed -i -e "s|GROQ_API_KEY\=.*|GROQ_API_KEY\=${{ secrets.GROQ_API_KEY }}|g" .env
-          sed -i -e "s|IAP_CERTIFICATE\=.*|IAP_CERTIFICATE\=${{ secrets.IAP_CERTIFICATE }}|g" .env
-          sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID }}|g" .env
-          sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID }}|g" .env
+          sed -i -e "s|IAP_CERTIFICATE\=.*|IAP_CERTIFICATE\=${{ secrets.IAP_CERTIFICATE_DEV }}|g" .env
+          sed -i -e "s|ISSUER_ID\=.*|ISSUER_ID\=${{ secrets.ISSUER_ID_DEV }}|g" .env
+          sed -i -e "s|KEY_ID\=.*|KEY_ID\=${{ secrets.KEY_ID_DEV }}|g" .env
+          sed -i -e "s|APPLE_SHARED_SECRET\=.*|APPLE_SHARED_SECRET\=${{ secrets.APPLE_SHARED_SECRET_DEV }}|g" .env
+          sed -i -e "s|APPLE_SANDBOX_EMAIL\=.*|APPLE_SANDBOX_EMAIL\=${{ secrets.APPLE_SANDBOX_EMAIL_DEV }}|g" .env
+          sed -i -e "s|APPLE_SANDBOX_PASSWORD\=.*|APPLE_SANDBOX_PASSWORD\=${{ secrets.APPLE_SANDBOX_PASSWORD_DEV }}|g" .env
+          sed -i -e "s|APPLE_CLIENT_ID\=.*|APPLE_CLIENT_ID\=${{ secrets.APPLE_CLIENT_ID_DEV }}|g" .env
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_DEV }}|g" .env
           sed -i -e "s|GOOGLE_CLIENT_ID\=.*|GOOGLE_CLIENT_ID\=${{ secrets.GOOGLE_CLIENT_ID_DEV }}|g" .env
