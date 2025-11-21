@@ -155,6 +155,8 @@ jobs:
             cd ${{ vars.DEPLOYMENT_PATH }}
             chmod +x scripts/start_server.sh
             bash ./scripts/start_server.sh
+            echo "--- Displaying api-out.log and aip-error.log ---"
+            timeout 120 tail -f /var/log/zentavos/api-out.log /var/log/zentavos/api-error.log
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
