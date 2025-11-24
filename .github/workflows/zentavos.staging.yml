@@ -94,6 +94,8 @@ jobs:
           sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
+          sed -i -e "s|PLAID_APPLE_REVIEWER_EMAIL\=.*|PLAID_APPLE_REVIEWER_EMAIL\=${{ secrets.PLAID_APPLE_REVIEWER_EMAIL_STG }}|g" .env
+          sed -i -e "s|PLAID_GOOGLE_REVIEWER_EMAIL\=.*|PLAID_GOOGLE_REVIEWER_EMAIL\=${{ secrets.PLAID_GOOGLE_REVIEWER_EMAIL_STG }}|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
 
           echo "--- .env contents ---"
