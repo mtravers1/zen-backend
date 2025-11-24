@@ -349,22 +349,80 @@ const getInstitutions = async () => {
 };
 
 const getTransactions = async (email, uid) => {
-  const tokens = await getUserAccessTokens(email, uid);
-  if (!tokens.length) return [];
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
 
-  const plaidClient = getPlaidClient();
-  const transactionsPromises = tokens.map(async (token) => {
-    const response = await plaidClient.transactionsSync({
-      access_token: token.accessToken,
-      count: 500,
-    });
-    return response.data.added;
-  });
+  const accounts = await PlaidAccount.find({ owner_id: user._id });
+  if (!accounts.length) {
+    return [];
+  }
 
-  const transactionsArray = await Promise.all(transactionsPromises);
-  const transactions = transactionsArray.flat();
+  const accountIds = accounts.map((acc) => acc._id);
 
-  return transactions;
+  const transactions = await Transaction.find({
+    accountId: { $in: accountIds },
+  }).sort({ transactionDate: -1 });
+
+  if (!transactions.length) {
+    return [];
+  }
+
+  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
+
+  const decryptedTransactions = await Promise.all(
+    transactions.map(async (transaction) => {
+      const transObj = transaction.toObject();
+      const { plaidTransactionId } = transObj;
+
+      // Fields to decrypt
+      const amount = await safeDecrypt(transObj.amount, {
+        transaction_id: plaidTransactionId,
+        field: "amount",
+      });
+      const name = await safeDecrypt(transObj.merchant.name, {
+        transaction_id: plaidTransactionId,
+        field: "name",
+      });
+      const merchantName = await safeDecrypt(transObj.merchant.merchantName, {
+        transaction_id: plaidTransactionId,
+        field: "merchant_name",
+      });
+      const accountType = await safeDecrypt(transObj.accountType, {
+        transaction_id: plaidTransactionId,
+        field: "account_type",
+      });
+      const transactionCode = transObj.transactionCode
+        ? await safeDecrypt(transObj.transactionCode, {
+            transaction_id: plaidTransactionId,
+            field: "transaction_code",
+          })
+        : null;
+      const tags = transObj.tags
+        ? await safeDecrypt(transObj.tags, {
+            transaction_id: plaidTransactionId,
+            field: "tags",
+          })
+        : null;
+
+      return {
+        ...transObj,
+        amount,
+        merchant: {
+          ...transObj.merchant,
+          name,
+          merchantName,
+        },
+        accountType,
+        transactionCode,
+        tags,
+      };
+    }),
+  );
+
+  return decryptedTransactions;
 };
 
 const getTransactionsWithAccessToken = async (accessToken) => {
