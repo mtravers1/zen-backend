@@ -7,19 +7,6 @@ import Trips from "../database/models/Trips.js";
 import upgradeResponseService from "./upgradeResponse.service.js";
 
 const checkUserRole = async (user) => {
-  // Check if the user is an Apple or Google reviewer to grant them a high-tier role.
-  const appleReviewerEmail = process.env.PLAID_APPLE_REVIEWER_EMAIL;
-  const googleReviewerEmail = process.env.PLAID_GOOGLE_REVIEWER_EMAIL;
-  const userEmail = user?.email?.find((e) => e.isPrimary)?.email;
-
-  if (
-    userEmail &&
-    ((appleReviewerEmail && userEmail === appleReviewerEmail) ||
-      (googleReviewerEmail && userEmail === googleReviewerEmail))
-  ) {
-    return "Tycoon"; // Grant the highest customer-facing tier for review.
-  }
-
   if (!user.account_type) {
     user.account_type = "Free";
     await User.findByIdAndUpdate(
