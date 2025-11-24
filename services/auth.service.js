@@ -70,6 +70,18 @@ const _createUser = async (authUid, userData) => {
       )
     : [];
 
+  // Determine account type based on email (for reviewers)
+  let accountType = "Free";
+  const appleReviewerEmail = process.env.PLAID_APPLE_REVIEWER_EMAIL;
+  const googleReviewerEmail = process.env.PLAID_GOOGLE_REVIEWER_EMAIL;
+
+  if (
+    (appleReviewerEmail && email === appleReviewerEmail) ||
+    (googleReviewerEmail && email === googleReviewerEmail)
+  ) {
+    accountType = "Tycoon";
+  }
+
   const newUser = new User({
     _id: userId,
     authUid,
@@ -90,7 +102,7 @@ const _createUser = async (authUid, userData) => {
     ],
     emailHash: hashEmail(email),
     role: userData.role || "individual",
-    account_type: "Free",
+    account_type: accountType,
     profilePhotoUrl: userData.profilePhotoUrl
       ? await safeEncrypt(userData.profilePhotoUrl, {
           field: "profilePhotoUrl",
