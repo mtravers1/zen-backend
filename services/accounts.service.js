@@ -1464,6 +1464,11 @@ const getTransactions = async (
         const transactions = [];
 
         for (const transaction of transactionsResponse) {
+          // Skip transaction if 'amount' is still encrypted (i.e., a string)
+          if (typeof transaction.amount === 'string') {
+            continue;
+          }
+
           const decryptedAmount = await safeDecrypt(transaction.amount, {
             transaction_id: transaction._id,
             field: "amount",
@@ -1693,6 +1698,11 @@ const getTransactionsByAccount = async (
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
+    // Skip transaction if 'amount' is still encrypted (i.e., a string)
+    if (typeof transaction.amount === 'string') {
+      continue;
+    }
+
     const decryptedAmount = await safeDecrypt(transaction.amount, {
       transaction_id: transaction._id,
 
