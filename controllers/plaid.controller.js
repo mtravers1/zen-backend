@@ -16,22 +16,14 @@ const createLinkToken = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { isAndroid, accountId, screen, mode, access_token } = req.body;
-
-    // Determine the Plaid environment on the backend.
-    // This is a security measure to ensure clients can't arbitrarily choose the environment.
-    // If the user's email matches one designated for review (Apple or Google),
-    // force the environment to sandbox. Otherwise, use the default environment.
-    let plaidEnvironment = process.env.PLAID_ENV || "development";
-    const appleReviewerEmail = process.env.PLAID_APPLE_REVIEWER_EMAIL;
-    const googleReviewerEmail = process.env.PLAID_GOOGLE_REVIEWER_EMAIL;
-
-    if (
-      (appleReviewerEmail && email === appleReviewerEmail) ||
-      (googleReviewerEmail && email === googleReviewerEmail)
-    ) {
-      plaidEnvironment = "sandbox";
-    }
+    const {
+      isAndroid,
+      accountId,
+      screen,
+      mode,
+      access_token,
+      plaidEnvironment,
+    } = req.body;
 
     const linkToken = await structuredLogger.withContext(
       "createLinkToken",
@@ -39,12 +31,7 @@ const createLinkToken = async (req, res) => {
         user_id: uid,
         email,
         request_id: requestId,
-        metadata: {
-          isAndroid,
-          accountId,
-          screen,
-          plaidEnvironment, // Log the determined environment
-        },
+        metadata: { isAndroid, accountId, screen, plaidEnvironment },
       },
       async () => {
         return await plaidService.createLinkToken(
