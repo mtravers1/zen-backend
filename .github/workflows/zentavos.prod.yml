@@ -151,6 +151,9 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
+      - name: Restart nginx
+        run: |
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no 'sudo systemctl restart nginx'
       - name: Restart API service
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
