@@ -219,6 +219,19 @@ const addAccount = async (accessToken, email, uid) => {
         }
       }
 
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          await plaidService.updateInvestmentTransactions(
+            accountsResponse.item.item_id,
+          );
+        } catch (error) {
+          console.error(
+            "Error updating investment transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
       const nextCursor = transactionsResponse
         ? transactionsResponse.next_cursor
         : null;
