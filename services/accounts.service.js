@@ -1933,7 +1933,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
   const deac = await getDecryptedAccount(account, dek, uid);
 
-  const access_token = await getOldestAccessToken({
+  const access_token = await getNewestAccessToken({
     userId: user._id,
     institutionId: deac.institution_id,
   });
