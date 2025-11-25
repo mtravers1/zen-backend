@@ -107,8 +107,8 @@ export const getStartOfWeek = (date) => {
   return d.toISOString().split("T")[0]; // YYYY-MM-DD
 };
 
-export const getNewestAccessToken = async (find) => {
-  const accessTokens = await AccessToken.find(find).sort({ createdAt: -1 });
+export const getOldestAccessToken = async (find) => {
+  const accessTokens = await AccessToken.find(find).sort({ createdAt: 1 });
   if (accessTokens.length > 1) {
     console.error("Multiple access tokens found for query: ", find);
   }

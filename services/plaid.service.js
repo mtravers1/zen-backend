@@ -10,7 +10,7 @@ import {
   getUserDek,
 } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
-import { getNewestAccessToken } from "./utils/accounts.js";
+import { getOldestAccessToken } from "./utils/accounts.js";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
@@ -189,7 +189,7 @@ const saveAccessToken = async (
         field: "accessToken",
       });
       // Check if access token already exists for this itemId
-      const existingToken = await getNewestAccessToken({ itemId });
+      const existingToken = await getOldestAccessToken({ itemId });
 
       if (existingToken) {
         structuredLogger.logSuccess("access_token_already_exists", {
@@ -466,7 +466,7 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await getNewestAccessToken({ itemId });
+  const access = await getOldestAccessToken({ itemId });
 
   if (!access) {
     return;
@@ -588,7 +588,7 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 
 const updateTransactions = async (item) => {
   console.log("Updating transactions for item:", item);
-  const accessInfo = await getNewestAccessToken({ itemId: item });
+  const accessInfo = await getOldestAccessToken({ itemId: item });
   if (!accessInfo) return;
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
@@ -861,7 +861,7 @@ const updateInvestmentTransactions = async (item) => {
       structuredLogger.logOperationStart("update_investment_transactions", {
         item_id: item,
       });
-      const accessInfo = await getNewestAccessToken({ itemId: item });
+      const accessInfo = await getOldestAccessToken({ itemId: item });
       if (!accessInfo) return;
       const userId = accessInfo.userId;
       const user = await User.findById(userId);
