@@ -17,7 +17,7 @@ import {
 } from "../database/encryption.js";
 import {
   calculateWeeklyTotals,
-  getOldestAccessToken,
+  getNewestAccessToken,
   groupByWeek,
 } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
@@ -214,6 +214,19 @@ const addAccount = async (accessToken, email, uid) => {
         } catch (error) {
           console.error(
             "Error fetching liabilities:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          await plaidService.updateInvestmentTransactions(
+            accountsResponse.item.item_id,
+          );
+        } catch (error) {
+          console.error(
+            "Error updating investment transactions:",
             error.response?.data || error,
           );
         }
@@ -1920,7 +1933,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
   const deac = await getDecryptedAccount(account, dek, uid);
 
-  const access_token = await getOldestAccessToken({
+  const access_token = await getNewestAccessToken({
     userId: user._id,
     institutionId: deac.institution_id,
   });
@@ -2680,7 +2693,7 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
-  getOldestAccessToken,
+  getNewestAccessToken,
 };
 
 export default accountsService;
