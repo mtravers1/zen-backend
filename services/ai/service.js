@@ -273,20 +273,31 @@ class AIService {
         profileIds: profiles.map((p) => ({ id: p.id, name: p.name })),
       });
 
-      // Find the specific profile
-      const profile = profiles.find((p) => p.id.toString() === profileId);
+      // Find the specific profile if profileId is provided
+      let profile;
+      if (profileId) {
+        profile = profiles.find((p) => p.id.toString() === profileId);
+        if (!profile) {
+          console.warn(`[AI Service] ⚠️ Profile not found for ID: ${profileId}. Attempting to default.`);
+        }
+      }
+
+      // If no profile was found OR no profileId was provided, default to the personal profile or the first one.
+      if (!profile) {
+        profile = profiles.find(p => p.isPersonal) || profiles[0];
+        if (profile) {
+          console.log(`[AI Service] ✅ Defaulted to profile: ${profile.name} (${profile.id})`);
+        }
+      }
 
       if (!profile) {
-        console.error(`[AI Service] ❌ Profile not found for ID: ${profileId}`);
-        console.log(
-          `[AI Service] Available profiles:`,
-          profiles.map((p) => ({ id: p.id.toString(), name: p.name })),
-        );
+        // This only happens if the user has NO profiles at all.
+        console.error(`[AI Service] ❌ No profiles found for user UID: ${uid}`);
         return {
-          text: "Profile not found. Please select a valid profile.",
-          data: { error: "Profile not found" },
+          text: "It looks like you haven\'t set up any profiles yet. Please create a profile to get started.",
+          data: { error: "No profiles found for user" },
           error: true,
-          errorMessage: "Profile not found",
+          errorMessage: "No profiles found for user",
           source: "profile_error",
           requestId: requestId,
           timestamp: new Date().toISOString(),
