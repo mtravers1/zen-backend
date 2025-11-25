@@ -25,6 +25,7 @@ import structuredLogger from "../lib/structuredLogger.js";
 import {
   createSafeEncrypt,
   createSafeDecrypt,
+  safeDecryptNumericValue,
 } from "../lib/encryptionHelper.js";
 
 const addAccount = async (accessToken, email, uid) => {
@@ -1477,15 +1478,14 @@ const getTransactions = async (
         const transactions = [];
 
         for (const transaction of transactionsResponse) {
-          // Skip transaction if 'amount' is still encrypted (i.e., a string)
-          if (typeof transaction.amount === 'string') {
-            continue;
-          }
-
-          const decryptedAmount = await safeDecrypt(transaction.amount, {
+          const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
             transaction_id: transaction._id,
             field: "amount",
           });
+
+          if (decryptedAmount === null) {
+            continue;
+          }
           const decryptedName = await safeDecrypt(transaction.name, {
             transaction_id: transaction._id,
             field: "name",
@@ -1512,12 +1512,12 @@ const getTransactions = async (
             );
           }
 
-          const decryptedFees = await safeDecrypt(transaction.fees, {
+          const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
             transaction_id: transaction._id,
             field: "fees",
           });
 
-          const decryptedPrice = await safeDecrypt(transaction.price, {
+          const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
             transaction_id: transaction._id,
             field: "price",
           });
@@ -1531,8 +1531,8 @@ const getTransactions = async (
             transaction_id: transaction._id,
             field: "subtype",
           });
-          const decryptedQuantity = await safeDecrypt(
-            transaction.quantity,
+          const decryptedQuantity = await safeDecryptNumericValue(
+            transaction.quantity, safeDecrypt,
             { transaction_id: transaction._id, field: "quantity" },
           );
 
@@ -1711,82 +1711,64 @@ const getTransactionsByAccount = async (
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
-    // Skip transaction if 'amount' is still encrypted (i.e., a string)
-    if (typeof transaction.amount === 'string') {
-      continue;
-    }
-
-    const decryptedAmount = await safeDecrypt(transaction.amount, {
+    const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
       transaction_id: transaction._id,
-
       field: "amount",
     });
 
-              const decryptedName = await safeDecrypt(transaction.name, {
+    if (decryptedAmount === null) {
+      continue;
+    }
 
-                transaction_id: transaction._id,
+    const decryptedName = await safeDecrypt(transaction.name, {
+      transaction_id: transaction._id,
+      field: "name",
+    });
 
-                field: "name",
-
-              });
-
-              const decryptedAccountType = await safeDecrypt(
-
-                transaction.accountType,
-
-                { transaction_id: transaction._id, field: "accountType" },
-
-              );
+    const decryptedAccountType = await safeDecrypt(
+      transaction.accountType,
+      { transaction_id: transaction._id, field: "accountType" },
+    );
 
     let decryptedMerchantName;
-
     let decryptedMerchantMerchantName;
-
     if (transaction.merchant) {
       decryptedMerchantName = await safeDecrypt(
         transaction.merchant.name,
-
         { transaction_id: transaction._id, field: "merchant.name" },
       );
 
       decryptedMerchantMerchantName = await safeDecrypt(
         transaction.merchant.merchantName,
-
         {
           transaction_id: transaction._id,
-
           field: "merchant.merchantName",
         },
       );
     }
 
-    const decryptedFees = await safeDecrypt(transaction.fees, {
+    const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
       transaction_id: transaction._id,
-
       field: "fees",
     });
 
-    const decryptedPrice = await safeDecrypt(transaction.price, {
+    const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
       transaction_id: transaction._id,
-
       field: "price",
     });
 
     const decryptedType = await safeDecrypt(transaction.type, {
       transaction_id: transaction._id,
-
       field: "type",
     });
 
     const decryptedSubtype = await safeDecrypt(transaction.subtype, {
       transaction_id: transaction._id,
-
       field: "subtype",
     });
 
-    const decryptedQuantity = await safeDecrypt(transaction.quantity, {
+    const decryptedQuantity = await safeDecryptNumericValue(transaction.quantity, safeDecrypt, {
       transaction_id: transaction._id,
-
       field: "quantity",
     });
 
