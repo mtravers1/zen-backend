@@ -17,7 +17,7 @@ import {
 } from "../database/encryption.js";
 import {
   calculateWeeklyTotals,
-  getOldestAccessToken,
+  getNewestAccessToken,
   groupByWeek,
 } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
@@ -2693,7 +2693,7 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
-  getOldestAccessToken,
+  getNewestAccessToken,
 };
 
 export default accountsService;
