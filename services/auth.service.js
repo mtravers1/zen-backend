@@ -20,7 +20,7 @@ import {
   getUserDek,
 } from "../database/encryption.js";
 import plaidService from "./plaid.service.js";
-import { getOldestAccessToken } from "./utils/accounts.js";
+import { getNewestAccessToken } from "./utils/accounts.js";
 
 import {
   createSafeEncrypt,
@@ -337,7 +337,7 @@ const deleteUser = async (uid) => {
     await Business.deleteMany({
       userId: user._id,
     });
-    const accessToken = await getOldestAccessToken({ userId: user._id });
+    const accessToken = await getNewestAccessToken({ userId: user._id });
     const decryptedAccessToken = await safeDecrypt(
       accessToken.accessToken,
       { user_id: user._id, field: "accessToken" },
