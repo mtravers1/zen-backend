@@ -250,10 +250,91 @@ const checkEmail = async (email, method) => {
       throw error;
     }
 
+    const dek = await getUserDek(user.authUid);
+    const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+
+    const decryptedFirstName = await safeDecrypt(user.name.firstName, {
+      user_id: user._id,
+      field: "firstName",
+    });
+    const decryptedLastName = await safeDecrypt(user.name.lastName, {
+      user_id: user._id,
+      field: "lastName",
+    });
+    const decryptedMiddleName = user.name.middleName
+      ? await safeDecrypt(user.name.middleName, {
+          user_id: user._id,
+          field: "middleName",
+        })
+      : null;
+    const decryptedPhones =
+      user.phones && user.phones.length > 0
+        ? await Promise.all(
+            user.phones.map(async (phoneData) => {
+              return {
+                phone: await safeDecrypt(phoneData.phone, {
+                  user_id: user._id,
+                  field: "phone",
+                }),
+                phoneType: phoneData.phoneType,
+              };
+            })
+          )
+        : [];
+    let decryptedPhotoUrl;
+    if (user.profilePhotoUrl) {
+      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+        user_id: user._id,
+        field: "profilePhotoUrl",
+      });
+    }
+
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        }),
+      );
+    } else {
+      emails = [
+        {
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+    }
+
+    const retrievedUser = {
+      id: user._id,
+      _id: user._id,
+      email: emails[0]?.email,
+      phone: decryptedPhones,
+      role: user.role,
+      account_type: user.account_type,
+      profilePhotoUrl: decryptedPhotoUrl,
+      name: {
+        firstName: decryptedFirstName,
+        lastName: decryptedLastName,
+        middleName: decryptedMiddleName,
+      },
+    };
+
     structuredLogger.logSuccess("auth_service_check_email", {
       email: normalizedEmail,
     });
-    return user;
+    return retrievedUser;
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "auth_service_check_email",

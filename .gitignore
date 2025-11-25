@@ -86,7 +86,7 @@ config/zentavos-d6c79-24978c4e7fff.json
 # Added by Gemini
 private.pem
 tests/service-accounts/
-tests/jest.setup.js
+
 
 # Key files
 keys_*.key
