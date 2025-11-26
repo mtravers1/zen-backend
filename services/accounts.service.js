@@ -1980,7 +1980,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: profileId })
     .lean()
     .exec();
 
@@ -2003,11 +2003,11 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let liabilityPlaid;
   let accountPlaid;
 
-  if (deac.account_type === "credit") {
+  if (deac.account_type === "credit" && liab && liab.length > 0) {
     liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
   }
 
-  if (deac.account_type === "loan") {
+  if (deac.account_type === "loan" && liab && liab.length > 0) {
     liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek, uid);
   }
 
