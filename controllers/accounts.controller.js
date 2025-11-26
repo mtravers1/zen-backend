@@ -139,6 +139,9 @@ const getAccountDetails = async (req, res) => {
   try {
     const { accountId, profileId } = req.params;
     const uid = req.user.uid;
+    console.log(
+      `[getAccountDetails] accountId: ${accountId}, profileId: ${profileId}, uid: ${uid}`,
+    );
 
     const accountData = await accountsService.getAccountDetails(
       accountId,
@@ -147,8 +150,8 @@ const getAccountDetails = async (req, res) => {
     );
     res.status(200).send(accountData);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send({ message: error.message });
+    console.error("Error in getAccountDetails controller:", error);
+    res.status(500).send({ message: error.message, error: error });
   }
 };
 
