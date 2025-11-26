@@ -1541,6 +1541,16 @@ const getTransactions = async (
             { transaction_id: transaction._id, field: "securityId" },
           );
 
+          const decryptedDescription = await safeDecrypt(transaction.description, {
+            transaction_id: transaction._id,
+            field: "description",
+          });
+
+          const decryptedNotes = await safeDecrypt(transaction.notes, {
+            transaction_id: transaction._id,
+            field: "notes",
+          });
+
           transactions.push({
             ...transaction,
             amount: decryptedAmount,
@@ -1557,6 +1567,8 @@ const getTransactions = async (
             quantity: decryptedQuantity,
             securityId: decryptedSecurityId,
             accountType: decryptedAccountType,
+            description: decryptedDescription,
+            notes: decryptedNotes,
           });
         }
         transactions.forEach((transaction) => {
@@ -1772,6 +1784,16 @@ const getTransactionsByAccount = async (
       field: "quantity",
     });
 
+    const decryptedDescription = await safeDecrypt(transaction.description, {
+        transaction_id: transaction._id,
+        field: "description",
+    });
+
+    const decryptedNotes = await safeDecrypt(transaction.notes, {
+        transaction_id: transaction._id,
+        field: "notes",
+    });
+
     allTransactions.push({
       ...transaction,
 
@@ -1798,6 +1820,8 @@ const getTransactionsByAccount = async (
       quantity: decryptedQuantity,
 
       accountType: decryptedAccountType,
+      description: decryptedDescription,
+      notes: decryptedNotes,
     });
   }
 
@@ -2245,6 +2269,13 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     plaidWeeklyTransactions.creditTransactions,
     plaidWeeklyTransactions.allTransactions,
   );
+
+  const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
+  let liabilityPlaid = null;
+  if (plaidAccount.account_type === "credit") {
+    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+  }
+
   //----------WEEKLY-cashflow-chart calculations
 
   if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
@@ -2576,6 +2607,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     averageDailyNet,
     weeklyCashFlow,
     weeklyCashFlowChartData: resultWeeklyCashFlowwCharts,
+    liabilityPlaid,
   };
 };
 
