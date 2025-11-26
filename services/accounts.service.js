@@ -2005,6 +2005,13 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let liabilityPlaid;
   let accountPlaid;
 
+  try {
+    const plaidData = await plaidService.getAccountsWithAccessToken(decryptAccessToken);
+    accountPlaid = plaidData.accounts.find(a => a.account_id === account.plaid_account_id);
+  } catch (error) {
+    console.error("Error fetching account data from Plaid:", error.response?.data || error.message);
+  }
+
   if (deac.account_type === "credit" && liab && liab.length > 0) {
     liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
   }
@@ -2251,9 +2258,14 @@ async function getDecryptedAccount(account, dek, uid) {
 
   for (const field of binaryFields) {
     if (account[field]) {
-      decryptedAccount[field] = await safeDecrypt(account[field], {
-        field: field,
-      });
+      try {
+        decryptedAccount[field] = await safeDecrypt(account[field], {
+          field: field,
+        });
+      } catch (error) {
+        console.error(`Failed to decrypt field: ${field}`, error);
+        throw error;
+      }
     }
   }
 
