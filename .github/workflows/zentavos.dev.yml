@@ -8,9 +8,8 @@ on:
   workflow_dispatch:
     inputs:
       migration_args:
-        description: 'Arguments for the migration script (e.g., --user-id=...)'
+        description: 'Arguments for the migration script (e.g., --user-id=... or --no-dry-run)'
         required: false
-        default: '--dry-run'
 
 env:
   DEPLOYMENT_NAME: dev

@@ -37,18 +37,26 @@ const isBase64 = (str) => {
 }
 
 async function migrate() {
+  const args = process.argv.slice(2);
   const isCI = process.env.CI === 'true';
-  const manualVerification = process.argv.includes('--manual-verification') && !isCI;
-  const testRun = process.argv.includes('--test-run');
-  const userId = (process.argv.find(arg => arg.startsWith('--user-id=')) || '').split('=')[1];
-  const firebaseUid = (process.argv.find(arg => arg.startsWith('--firebase-uid=')) || '').split('=')[1];
+  const manualVerification = args.includes('--manual-verification') && !isCI;
+  const testRun = args.includes('--test-run');
+  const noDryRun = args.includes('--no-dry-run');
+  const isDryRun = !noDryRun;
+
+  const userId = (args.find(arg => arg.startsWith('--user-id=')) || '').split('=')[1];
+  const firebaseUid = (args.find(arg => arg.startsWith('--firebase-uid=')) || '').split('=')[1];
+  
   let dryRunLimit = 0;
-  const dryRunArg = process.argv.find(arg => arg.startsWith('--dry-run'));
-  if (dryRunArg) {
-    const parts = dryRunArg.split('=');
-    dryRunLimit = parts.length > 1 ? parseInt(parts[1], 10) : 5; // Default to 5 if no number specified
+  if (isDryRun) {
+    const dryRunArg = args.find(arg => arg.startsWith('--dry-run'));
+    if (dryRunArg) {
+        const parts = dryRunArg.split('=');
+        dryRunLimit = parts.length > 1 ? parseInt(parts[1], 10) : 5;
+    } else {
+        dryRunLimit = 5; // Default limit for dry run
+    }
   }
-  const isDryRun = dryRunLimit > 0;
 
   const changesToEncrypt = [];
   const failedDecryptions = [];
