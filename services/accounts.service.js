@@ -280,10 +280,11 @@ const addAccount = async (accessToken, email, uid) => {
           name = await safeEncrypt(transaction.name);
         }
 
+        const encryptedMerchantCategory = await safeEncrypt(transaction.category?.[0]);
         const merchant = {
           merchantName: merchantName,
           name: name,
-          merchantCategory: transaction.category?.[0],
+          merchantCategory: encryptedMerchantCategory,
           website: transaction.website,
           logo: transaction.logo_url,
         };
@@ -300,6 +301,8 @@ const addAccount = async (accessToken, email, uid) => {
           encryptedAccountType = await safeEncrypt(accountType);
         }
 
+        const encryptedTags = await safeEncrypt(transaction.category);
+
         const newTransaction = new Transaction({
           accountId: account._id,
           plaidTransactionId: transaction.transaction_id,
@@ -311,7 +314,7 @@ const addAccount = async (accessToken, email, uid) => {
           merchant: merchant,
           description: null,
           transactionCode: transactionCode,
-          tags: transaction.category,
+          tags: encryptedTags,
           accountType: encryptedAccountType,
         });
 
@@ -1497,6 +1500,7 @@ const getTransactions = async (
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
+          let decryptedMerchantCategory;
           if (transaction.merchant) {
             decryptedMerchantName = await safeDecrypt(
               transaction.merchant.name,
@@ -1508,6 +1512,14 @@ const getTransactions = async (
               {
                 transaction_id: transaction._id,
                 field: "merchant.merchantName",
+              },
+            );
+
+            decryptedMerchantCategory = await safeDecrypt(
+              transaction.merchant.merchantCategory,
+              {
+                transaction_id: transaction._id,
+                field: "merchant.merchantCategory",
               },
             );
           }
@@ -1564,6 +1576,7 @@ const getTransactions = async (
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
+              merchantCategory: decryptedMerchantCategory,
             },
             fees: decryptedFees,
             price: decryptedPrice,
@@ -1750,17 +1763,26 @@ const getTransactionsByAccount = async (
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
+    let decryptedMerchantCategory;
     if (transaction.merchant) {
-      decryptedMerchantName = await safeDecrypt(
-        transaction.merchant.name,
-        { transaction_id: transaction._id, field: "merchant.name" },
-      );
+      decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
+        transaction_id: transaction._id,
+        field: "merchant.name",
+      });
 
       decryptedMerchantMerchantName = await safeDecrypt(
         transaction.merchant.merchantName,
         {
           transaction_id: transaction._id,
           field: "merchant.merchantName",
+        },
+      );
+
+      decryptedMerchantCategory = await safeDecrypt(
+        transaction.merchant.merchantCategory,
+        {
+          transaction_id: transaction._id,
+          field: "merchant.merchantCategory",
         },
       );
     }
@@ -1818,6 +1840,7 @@ const getTransactionsByAccount = async (
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
+        merchantCategory: decryptedMerchantCategory,
       },
 
       fees: decryptedFees,
