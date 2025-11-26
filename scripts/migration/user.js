@@ -28,7 +28,8 @@ async function migrateUsers(user, encryptIfPlaintext, documentId) {
       user.annualIncome = await encryptIfPlaintext(user.annualIncome, { field: 'user.annualIncome' }, documentId);
     }
     if (user.maritalStatus) {
-      user.maritalStatus = await encryptIfPlaintext(user.maritalStatus, { field: 'user.maritalStatus' }, documentId);
+      user.encryptedMaritalStatus = await encryptIfPlaintext(user.maritalStatus, { field: 'user.maritalStatus' }, documentId);
+      user.maritalStatus = undefined;
     }
     if (user.occupation) {
       user.occupation = await encryptIfPlaintext(user.occupation, { field: 'user.occupation' }, documentId);

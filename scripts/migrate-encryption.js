@@ -25,6 +25,14 @@ async function prompt(question) {
   });
 }
 
+const isBase64 = (str) => {
+  if (typeof str !== 'string') {
+    return false;
+  }
+  const base64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  return base64Regex.test(str);
+}
+
 async function migrate() {
   const manualVerification = process.argv.includes('--manual-verification');
   const testRun = process.argv.includes('--test-run');
@@ -81,44 +89,44 @@ async function migrate() {
       }
 
       try {
-        const decryptedValue = await safeDecrypt(value, context);
-
-        if (decryptedValue === value) {
-          // This indicates decryption failed and safeDecrypt returned the original value.
-          // This could be because the value is already encrypted with a different key, or it is plaintext.
-
-          // To distinguish, we try to encrypt and see if it's different.
-          // A better approach would be to have a flag or metadata.
-          if (isDryRun) {
-            changesToEncrypt.push({
+        await safeDecrypt(value, context);
+        return value; // Already encrypted and decrypted successfully
+      } catch (error) {
+        if (error instanceof DecryptionError) {
+          // This could be a plaintext value or a real decryption failure.
+          if (isBase64(value)) {
+            // If it's a base64 string, it's likely an encrypted value that failed to decrypt.
+            failedDecryptions.push({
               userId: user._id.toString(),
               documentId: documentId.toString(),
               field: context.field,
-              plaintextValue: value,
+              encryptedValue: value,
+              error: error.message,
             });
-          }
-
-          if (manualVerification) {
-            const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
-            if (answer.toLowerCase() !== 'y') {
-              return value; // Skip encryption
+            return value; // Return original value
+          } else {
+            // If it's not a base64 string, it's likely plaintext.
+            if (isDryRun) {
+              changesToEncrypt.push({
+                userId: user._id.toString(),
+                documentId: documentId.toString(),
+                field: context.field,
+                plaintextValue: value,
+              });
+              return value;
             }
+            if (manualVerification) {
+              const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
+              if (answer.toLowerCase() !== 'y') {
+                return value; // Skip encryption
+              }
+            }
+            return await safeEncrypt(value, context);
           }
-          return await safeEncrypt(value, context);
-
+        } else {
+          // Some other unexpected error
+          throw error;
         }
-        return value; // Already encrypted
-      } catch (error) {
-        failedDecryptions.push({
-          userId: user._id.toString(),
-          documentId: documentId.toString(),
-          field: context.field,
-          encryptedValue: value,
-          error: error.message,
-        });
-        // We don't rethrow the error, as we want to continue the migration
-        // and report all failures at the end.
-        return value;
       }
     };
 

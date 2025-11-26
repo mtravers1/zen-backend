@@ -156,6 +156,9 @@ const userSchema = new Schema({
   encryptedSSN: {
     type: String,
   },
+  encryptedMaritalStatus: {
+    type: String,
+  },
   dependents: {
     type: Number,
   },
