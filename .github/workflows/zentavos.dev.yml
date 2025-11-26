@@ -99,6 +99,7 @@ jobs:
           sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
+          sed -i -e "s|DEBUG_ENCRYPTION\=.*|DEBUG_ENCRYPTION\=${{ vars.DEBUG_ENCRYPTION_DEV }}|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV }}|g" .env
 
           echo "--- .env contents ---"
@@ -243,6 +244,7 @@ jobs:
           sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
+          sed -i -e "s|DEBUG_ENCRYPTION\=.*|DEBUG_ENCRYPTION\=${{ vars.DEBUG_ENCRYPTION_DEV }}|g" .env
           sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME\=.*|USER_ENCRYPTION_KEY_BUCKET_NAME\=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_DEV }}|g" .env
       - name: VPN config
         env:
