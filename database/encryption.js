@@ -479,7 +479,7 @@ async function decryptValue(cipherTextBase64, deks) {
       return JSON.parse(decrypted);
     } catch (e) {
       console.warn(
-        `⚠️ Decryption failed with one of the keys. Trying next key...`,
+        `⚠️ Decryption failed with one of the keys. Trying next key...`, e
       );
     }
   }

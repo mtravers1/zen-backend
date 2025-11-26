@@ -91,17 +91,23 @@ async function migrate() {
     const safeDecrypt = createSafeDecrypt(user.authUid, dek);
 
     const encryptIfPlaintext = async (value, context, documentId) => {
+      console.log(`[encryptIfPlaintext] Processing field: ${context.field}, value: ${value}`);
       if (value === null || value === undefined || value === '') {
         return value;
       }
 
       try {
         await safeDecrypt(value, context);
+        console.log(`[encryptIfPlaintext] Field ${context.field} is already encrypted.`);
         return value; // Already encrypted and decrypted successfully
       } catch (error) {
         if (error instanceof DecryptionError) {
-          // This could be a plaintext value or a real decryption failure.
-          if (isBase64(value)) {
+          console.log(`[encryptIfPlaintext] Field ${context.field} failed initial decryption. Error: ${error.message}`);
+          const isValBase64 = isBase64(value);
+          console.log(`[encryptIfPlaintext] Field ${context.field} isBase64: ${isValBase64}`);
+
+          if (isValBase64) {
+            console.log(`[encryptIfPlaintext] Field ${context.field} is base64, assuming encrypted but corrupted.`);
             // If it's a base64 string, it's likely an encrypted value that failed to decrypt.
             failedDecryptions.push({
               userId: user._id.toString(),
@@ -115,6 +121,7 @@ async function migrate() {
             }
             return value; // Return original value
           } else {
+            console.log(`[encryptIfPlaintext] Field ${context.field} is not base64, assuming plaintext.`);
             // If it's not a base64 string, it's likely plaintext.
             if (isDryRun) {
               changesToEncrypt.push({
@@ -134,7 +141,7 @@ async function migrate() {
             return await safeEncrypt(value, context);
           }
         } else {
-          // Some other unexpected error
+          console.error(`[encryptIfPlaintext] Field ${context.field} encountered an unexpected error.`);
           throw error;
         }
       }
@@ -193,18 +200,24 @@ async function refreshPlaidAccounts(accountIds) {
       const safeEncrypt = createSafeEncrypt(user.authUid, dek);
 
       let decryptedAccessToken;
-      try {
-        decryptedAccessToken = await safeDecrypt(plaidAccount.accessToken, {
-          field: 'plaidAccount.accessToken',
-        });
-      } catch (error) {
-        if (error instanceof DecryptionError && !isBase64(plaidAccount.accessToken)) {
-          decryptedAccessToken = plaidAccount.accessToken;
-        } else {
-          throw error;
+      console.log('[PLAID_REFRESH] Is access token base64?', isBase64(plaidAccount.accessToken));
+      if (isBase64(plaidAccount.accessToken)) {
+        console.log('[PLAID_REFRESH] Attempting to decrypt access token...');
+        try {
+          decryptedAccessToken = await safeDecrypt(plaidAccount.accessToken);
+          console.log('[PLAID_REFRESH] Decryption call completed.');
+        } catch (error) {
+          console.error(
+            `[PLAID_REFRESH] Decryption of access token failed for account ${accountId}.`,
+            error,
+          );
+          continue; // Skip to the next account
         }
+      } else {
+        decryptedAccessToken = plaidAccount.accessToken;
       }
 
+      console.log(`[PLAID_REFRESH] Decrypted access token (first 10 chars): ${decryptedAccessToken.substring(0, 10)}`);
       const accountsResponse = await plaidService.getAccountsWithAccessToken(decryptedAccessToken);
       const accounts = accountsResponse.accounts;
       const plaidAccountData = accounts.find(a => a.account_id === plaidAccount.plaid_account_id);
