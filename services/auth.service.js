@@ -90,6 +90,7 @@ const _createUser = async (authUid, userData) => {
     ],
     emailHash: hashEmail(email),
     role: userData.role || "individual",
+    account_type: "Free",
     profilePhotoUrl: userData.profilePhotoUrl
       ? await safeEncrypt(userData.profilePhotoUrl, {
           field: "profilePhotoUrl",
