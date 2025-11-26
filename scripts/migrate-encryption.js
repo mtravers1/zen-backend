@@ -8,6 +8,8 @@ import migratePlaidAccounts from './migration/plaidAccount.js';
 import migrateTransactions from './migration/transaction.js';
 import migrateTrips from './migration/trip.js';
 import structuredLogger from '../lib/structuredLogger.js';
+import PlaidAccount from '../database/models/PlaidAccount.js';
+import plaidService from '../services/plaid.service.js';
 import crypto from 'crypto';
 import readline from 'readline';
 
@@ -50,6 +52,7 @@ async function migrate() {
 
   const changesToEncrypt = [];
   const failedDecryptions = [];
+  const accountsToRefresh = new Set();
 
   await connectDB();
 
@@ -107,6 +110,9 @@ async function migrate() {
               encryptedValue: value,
               error: error.message,
             });
+            if (context.field.startsWith('plaidAccount')) {
+              accountsToRefresh.add(documentId.toString());
+            }
             return value; // Return original value
           } else {
             // If it's not a base64 string, it's likely plaintext.
@@ -157,8 +163,71 @@ async function migrate() {
     console.table(failedDecryptions);
   }
 
+  if (accountsToRefresh.size > 0) {
+    await refreshPlaidAccounts(accountsToRefresh);
+  }
+
   rl.close();
   process.exit(0);
+}
+
+async function refreshPlaidAccounts(accountIds) {
+  console.log('\n--- Refreshing Plaid Accounts ---');
+  for (const accountId of accountIds) {
+    try {
+      console.log(`Refreshing account: ${accountId}`);
+      const plaidAccount = await PlaidAccount.findById(accountId);
+      if (!plaidAccount) {
+        console.error(`Plaid account not found: ${accountId}`);
+        continue;
+      }
+
+      const user = await User.findById(plaidAccount.owner_id);
+      if (!user) {
+        console.error(`User not found for plaid account: ${accountId}`);
+        continue;
+      }
+
+      const dek = await getUserDek(user.authUid);
+      const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+      const safeEncrypt = createSafeEncrypt(user.authUid, dek);
+
+      let decryptedAccessToken;
+      try {
+        decryptedAccessToken = await safeDecrypt(plaidAccount.accessToken, {
+          field: 'plaidAccount.accessToken',
+        });
+      } catch (error) {
+        if (error instanceof DecryptionError && !isBase64(plaidAccount.accessToken)) {
+          decryptedAccessToken = plaidAccount.accessToken;
+        } else {
+          throw error;
+        }
+      }
+
+      const accountsResponse = await plaidService.getAccountsWithAccessToken(decryptedAccessToken);
+      const accounts = accountsResponse.accounts;
+      const plaidAccountData = accounts.find(a => a.account_id === plaidAccount.plaid_account_id);
+
+      if (plaidAccountData) {
+        plaidAccount.account_name = await safeEncrypt(plaidAccountData.name, { account_id: plaidAccount._id, field: 'account_name' });
+        plaidAccount.account_official_name = await safeEncrypt(plaidAccountData.official_name, { account_id: plaidAccount._id, field: 'account_official_name' });
+        plaidAccount.account_type = await safeEncrypt(plaidAccountData.type, { account_id: plaidAccount._id, field: 'account_type' });
+        plaidAccount.account_subtype = await safeEncrypt(plaidAccountData.subtype, { account_id: plaidAccount._id, field: 'account_subtype' });
+        plaidAccount.currentBalance = await safeEncrypt(plaidAccountData.balances.current, { account_id: plaidAccount._id, field: 'currentBalance' });
+        plaidAccount.availableBalance = await safeEncrypt(plaidAccountData.balances.available, { account_id: plaidAccount._id, field: 'availableBalance' });
+        plaidAccount.mask = await safeEncrypt(plaidAccountData.mask, { account_id: plaidAccount._id, field: 'mask' });
+
+        await plaidAccount.save();
+        console.log(`Account refreshed successfully: ${accountId}`);
+      } else {
+        console.error(`Could not find matching account data from Plaid for account: ${accountId}`);
+      }
+
+    } catch (error) {
+      console.error(`Failed to refresh account ${accountId}:`, error);
+    }
+  }
 }
 
 migrate();
