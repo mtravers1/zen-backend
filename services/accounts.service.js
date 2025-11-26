@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import plaidService from "./plaid.service.js";
 import { storage, filesBucketName } from "../lib/storageClient.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
@@ -682,6 +683,8 @@ const getAccounts = async (profile, uid) => {
     { uid, profile_id: profile.id },
     async () => {
                 const dek = await getUserDek(uid);
+                const dekHash = crypto.createHash('sha256').update(dek[0]).digest('hex');
+                console.log(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
                 const safeDecrypt = createSafeDecrypt(uid, dek);
       
                 const plaidIds = profile.plaidAccounts;      const plaidAccountsResponse = await PlaidAccount.find({
