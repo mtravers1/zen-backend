@@ -1504,6 +1504,8 @@ const getTransactions = async (
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
           let decryptedMerchantCategory;
+          let decryptedMerchantLogo;
+          let decryptedMerchantWebsite;
           if (transaction.merchant) {
             decryptedMerchantName = await safeDecrypt(
               transaction.merchant.name,
@@ -1524,6 +1526,16 @@ const getTransactions = async (
                 transaction_id: transaction._id,
                 field: "merchant.merchantCategory",
               },
+            );
+
+            decryptedMerchantLogo = await safeDecrypt(
+              transaction.merchant.logo,
+              { transaction_id: transaction._id, field: "merchant.logo" },
+            );
+
+            decryptedMerchantWebsite = await safeDecrypt(
+              transaction.merchant.website,
+              { transaction_id: transaction._id, field: "merchant.website" },
             );
           }
 
@@ -1580,6 +1592,8 @@ const getTransactions = async (
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
               merchantCategory: decryptedMerchantCategory,
+              logo: decryptedMerchantLogo,
+              website: decryptedMerchantWebsite,
             },
             fees: decryptedFees,
             price: decryptedPrice,
