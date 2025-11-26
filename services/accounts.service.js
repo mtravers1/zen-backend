@@ -679,6 +679,31 @@ const removeAccount = async (accountId, email) => {
   await Liability.deleteMany({ accountId });
 };
 
+const removeAccountByUid = async (accountId, uid) => {
+  const user = await User.findOne({
+    authUid: uid,
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const plaidAccounts = user.plaidAccounts;
+
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  if (!account) {
+    console.log(`Account with plaid_account_id ${accountId} not found.`);
+    return;
+  }
+  user.plaidAccounts = plaidAccounts.filter(
+    (id) => id.toString() !== account._id.toString(),
+  );
+
+  await user.save();
+
+  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
+  await Transaction.deleteMany({ plaidAccountId: accountId });
+  await Liability.deleteMany({ accountId });
+};
+
 const getAccounts = async (profile, uid) => {
   return await structuredLogger.withContext(
     "get_accounts",
@@ -2770,6 +2795,7 @@ const accountsService = {
   generateSignedUrl,
   getProfileTransactions,
   removeAccount,
+  removeAccountByUid,
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
