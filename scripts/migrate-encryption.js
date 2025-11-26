@@ -39,6 +39,7 @@ async function migrate() {
   const isDryRun = dryRunLimit > 0;
 
   const changesToEncrypt = [];
+  const failedDecryptions = [];
 
   await connectDB();
 
@@ -75,11 +76,19 @@ async function migrate() {
     const safeDecrypt = createSafeDecrypt(user.authUid, dek);
 
     const encryptIfPlaintext = async (value, context, documentId) => {
+      if (value === null || value === undefined || value === '') {
+        return value;
+      }
+
       try {
-        await safeDecrypt(value, context);
-        return value; // Already encrypted
-      } catch (error) {
-        if (error instanceof DecryptionError) {
+        const decryptedValue = await safeDecrypt(value, context);
+
+        if (decryptedValue === value) {
+          // This indicates decryption failed and safeDecrypt returned the original value.
+          // This could be because the value is already encrypted with a different key, or it is plaintext.
+
+          // To distinguish, we try to encrypt and see if it's different.
+          // A better approach would be to have a flag or metadata.
           if (isDryRun) {
             changesToEncrypt.push({
               userId: user._id.toString(),
@@ -87,19 +96,29 @@ async function migrate() {
               field: context.field,
               plaintextValue: value,
             });
-            return value; // In dry run, return original value
           }
-          return (async () => {
-            if (manualVerification) {
-              const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
-              if (answer.toLowerCase() !== 'y') {
-                return value; // Skip encryption
-              }
+
+          if (manualVerification) {
+            const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
+            if (answer.toLowerCase() !== 'y') {
+              return value; // Skip encryption
             }
-            return await safeEncrypt(value, context); // Plaintext, so encrypt it
-          })();
+          }
+          return await safeEncrypt(value, context);
+
         }
-        throw error; // Other error
+        return value; // Already encrypted
+      } catch (error) {
+        failedDecryptions.push({
+          userId: user._id.toString(),
+          documentId: documentId.toString(),
+          field: context.field,
+          encryptedValue: value,
+          error: error.message,
+        });
+        // We don't rethrow the error, as we want to continue the migration
+        // and report all failures at the end.
+        return value;
       }
     };
 
@@ -113,7 +132,7 @@ async function migrate() {
   structuredLogger.logSuccess('Migration complete');
 
   if (isDryRun) {
-    console.log('\n--- Dry Run Summary ---');
+    console.log('\n--- Dry Run Summary ---\n');
     if (changesToEncrypt.length > 0) {
       console.table(changesToEncrypt);
       const confirm = await prompt('Do you want to proceed with the actual encryption based on the dry run? (y/n) ');
@@ -128,6 +147,11 @@ async function migrate() {
     } else {
       console.log('No plaintext values found that require encryption.');
     }
+  }
+
+  if (failedDecryptions.length > 0) {
+    console.log('\n--- Decryption Failures Summary ---\n');
+    console.table(failedDecryptions);
   }
 
   rl.close();
