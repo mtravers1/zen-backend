@@ -12,7 +12,7 @@
     "mongodb": "docker-compose up",
     "build": "webpack --config webpack.config.js",
     "test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand",
-    "migrate:encryption": "node scripts/migrate-encryption.js"
+    "migrate:encryption": "node -r dotenv/config scripts/migrate-encryption.js"
   },
   "author": "",
   "license": "ISC",

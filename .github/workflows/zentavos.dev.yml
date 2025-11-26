@@ -276,10 +276,5 @@ jobs:
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ vars.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
-            echo "--- .env file content on server ---"
-            cat .env
-            export $(cat .env | xargs)
-            echo "--- Environment variables on server ---"
-            env
             npm run migrate:encryption -- ${{ github.event.inputs.migration_args }}
           EOF
