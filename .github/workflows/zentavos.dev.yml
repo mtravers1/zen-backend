@@ -256,6 +256,16 @@ jobs:
           echo_config: false
           username: ${{ secrets.OVPN_USERNAME }}
           password: ${{ secrets.OVPN_PASSWORD }}
+      - name: rsync .env file
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          switches: -avzr --delete --no-times --omit-dir-times --no-perms --no-owner --no-group --chmod=D755,F664
+          path: ./.env
+          remote_path: ${{ vars.DEPLOYMENT_PATH }}/.env
+          remote_host: ${{ vars.DEPLOYMENT_HOST_DEV }}
+          remote_user: ${{ secrets.DEPLOYMENT_USER_DEV }}
+          remote_key: ${{ secrets.DEPLOYMENT_KEY_DEV }}
+          remote_port: ${{ secrets.DEPLOYMENT_PORT }}
       - name: SSH config
         env:
           PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_DEV }}
@@ -269,4 +279,3 @@ jobs:
             export $(cat .env | xargs)
             npm run migrate:encryption -- ${{ github.event.inputs.migration_args }}
           EOF
-
