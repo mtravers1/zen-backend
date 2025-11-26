@@ -8,6 +8,7 @@ import migratePlaidAccounts from './migration/plaidAccount.js';
 import migrateTransactions from './migration/transaction.js';
 import migrateTrips from './migration/trip.js';
 import structuredLogger from '../lib/structuredLogger.js';
+import crypto from 'crypto';
 import readline from 'readline';
 
 import { spawnSync } from 'child_process';
@@ -71,6 +72,8 @@ async function migrate() {
     let dek;
     try {
       dek = await getUserDek(user.authUid);
+      const dekHash = crypto.createHash('sha256').update(dek[0]).digest('hex');
+      console.error(`[DEK_HASH] Migration script for user ${user._id}: ${dekHash}`);
     } catch (error) {
       if (error.message.includes('DEK not found')) {
         // TODO: Add admin alert mechanism

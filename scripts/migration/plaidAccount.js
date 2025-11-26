@@ -11,6 +11,8 @@ async function migratePlaidAccounts(user, encryptIfPlaintext, documentId) {
       account.accessToken = await encryptIfPlaintext(account.accessToken, { field: 'plaidAccount.accessToken' }, documentId);
       account.account_name = await encryptIfPlaintext(account.account_name, { field: 'plaidAccount.account_name' }, documentId);
       account.account_official_name = await encryptIfPlaintext(account.account_official_name, { field: 'plaidAccount.account_official_name' }, documentId);
+      account.account_type = await encryptIfPlaintext(account.account_type, { field: 'plaidAccount.account_type' }, documentId);
+      account.account_subtype = await encryptIfPlaintext(account.account_subtype, { field: 'plaidAccount.account_subtype' }, documentId);
       account.currentBalance = await encryptIfPlaintext(account.currentBalance, { field: 'plaidAccount.currentBalance' }, documentId);
       account.availableBalance = await encryptIfPlaintext(account.availableBalance, { field: 'plaidAccount.availableBalance' }, documentId);
       account.mask = await encryptIfPlaintext(account.mask, { field: 'plaidAccount.mask' }, documentId);
