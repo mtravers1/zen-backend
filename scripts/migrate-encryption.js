@@ -34,7 +34,8 @@ const isBase64 = (str) => {
 }
 
 async function migrate() {
-  const manualVerification = process.argv.includes('--manual-verification');
+  const isCI = process.env.CI === 'true';
+  const manualVerification = process.argv.includes('--manual-verification') && !isCI;
   const testRun = process.argv.includes('--test-run');
   const userId = (process.argv.find(arg => arg.startsWith('--user-id=')) || '').split('=')[1];
   const firebaseUid = (process.argv.find(arg => arg.startsWith('--firebase-uid=')) || '').split('=')[1];
@@ -143,14 +144,16 @@ async function migrate() {
     console.log('\n--- Dry Run Summary ---\n');
     if (changesToEncrypt.length > 0) {
       console.table(changesToEncrypt);
-      const confirm = await prompt('Do you want to proceed with the actual encryption based on the dry run? (y/n) ');
-      if (confirm.toLowerCase() === 'y') {
-        console.log('Proceeding with actual encryption...');
-        // Re-run the script without the --dry-run flag
-        const args = process.argv.filter(arg => !arg.startsWith('--dry-run'));
-        spawnSync(process.argv[0], args.slice(1), { stdio: 'inherit' });
-      } else {
-        console.log('Dry run complete. No changes applied.');
+      if (!isCI) {
+        const confirm = await prompt('Do you want to proceed with the actual encryption based on the dry run? (y/n) ');
+        if (confirm.toLowerCase() === 'y') {
+          console.log('Proceeding with actual encryption...');
+          // Re-run the script without the --dry-run flag
+          const args = process.argv.filter(arg => !arg.startsWith('--dry-run'));
+          spawnSync(process.argv[0], args.slice(1), { stdio: 'inherit' });
+        } else {
+          console.log('Dry run complete. No changes applied.');
+        }
       }
     } else {
       console.log('No plaintext values found that require encryption.');
