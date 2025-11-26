@@ -1980,7 +1980,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: profileId })
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id })
     .lean()
     .exec();
 
