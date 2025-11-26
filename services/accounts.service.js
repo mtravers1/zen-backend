@@ -282,12 +282,14 @@ const addAccount = async (accessToken, email, uid) => {
         }
 
         const encryptedMerchantCategory = await safeEncrypt(transaction.category?.[0]);
+        const encryptedWebsite = await safeEncrypt(transaction.website);
+        const encryptedLogo = await safeEncrypt(transaction.logo_url);
         const merchant = {
           merchantName: merchantName,
           name: name,
           merchantCategory: encryptedMerchantCategory,
-          website: transaction.website,
-          logo: transaction.logo_url,
+          website: encryptedWebsite,
+          logo: encryptedLogo,
         };
 
         let transactionCode;
