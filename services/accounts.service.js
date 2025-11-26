@@ -1551,6 +1551,11 @@ const getTransactions = async (
             field: "notes",
           });
 
+          const decryptedTags = await safeDecrypt(transaction.tags, {
+            transaction_id: transaction._id,
+            field: "tags",
+          });
+
           transactions.push({
             ...transaction,
             amount: decryptedAmount,
@@ -1569,6 +1574,7 @@ const getTransactions = async (
             accountType: decryptedAccountType,
             description: decryptedDescription,
             notes: decryptedNotes,
+            tags: decryptedTags,
           });
         }
         transactions.forEach((transaction) => {
@@ -1794,6 +1800,11 @@ const getTransactionsByAccount = async (
         field: "notes",
     });
 
+    const decryptedTags = await safeDecrypt(transaction.tags, {
+        transaction_id: transaction._id,
+        field: "tags",
+    });
+
     allTransactions.push({
       ...transaction,
 
@@ -1822,6 +1833,7 @@ const getTransactionsByAccount = async (
       accountType: decryptedAccountType,
       description: decryptedDescription,
       notes: decryptedNotes,
+      tags: decryptedTags,
     });
   }
 
