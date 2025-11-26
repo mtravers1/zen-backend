@@ -4,7 +4,7 @@ import structuredLogger from '../../lib/structuredLogger.js';
 import { getUserDek } from '../../database/encryption.js';
 import { createSafeEncrypt } from '../../lib/encryptionHelper.js';
 
-async function migratePlaidAccounts(user, encryptIfPlaintext, documentId) {
+async function migratePlaidAccounts(user, encryptIfPlaintext, documentId, isDryRun) {
   const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
   for (const account of plaidAccounts) {
     try {
@@ -17,7 +17,9 @@ async function migratePlaidAccounts(user, encryptIfPlaintext, documentId) {
       account.availableBalance = await encryptIfPlaintext(account.availableBalance, { field: 'plaidAccount.availableBalance' }, account._id);
       account.mask = await encryptIfPlaintext(account.mask, { field: 'plaidAccount.mask' }, account._id);
 
-      await account.save();
+      if (!isDryRun) {
+        await account.save();
+      }
       structuredLogger.logSuccess('PlaidAccount migrated successfully', { accountId: account._id });
     } catch (error) {
       structuredLogger.logErrorBlock(error, { accountId: account._id, error: error.message });

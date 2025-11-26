@@ -1,7 +1,7 @@
 import User from '../../database/models/User.js';
 import structuredLogger from '../../lib/structuredLogger.js';
 
-async function migrateUsers(user, encryptIfPlaintext, documentId) {
+async function migrateUsers(user, encryptIfPlaintext, documentId, isDryRun) {
   try {
     // Encrypt User fields
     if (user.name) {
@@ -50,7 +50,9 @@ async function migrateUsers(user, encryptIfPlaintext, documentId) {
       }
     }
 
-    await user.save();
+    if (!isDryRun) {
+      await user.save();
+    }
     structuredLogger.logSuccess('User migrated successfully', { userId: user._id });
   } catch (error) {
     structuredLogger.logErrorBlock(error, { userId: user._id, error: error.message });

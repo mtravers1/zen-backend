@@ -104,50 +104,44 @@ async function migrate() {
         return value;
       }
 
+      if (!isBase64(value)) {
+        console.log(`[encryptIfPlaintext] Field ${context.field} is not base64, assuming plaintext.`);
+        if (isDryRun) {
+          changesToEncrypt.push({
+            userId: user._id.toString(),
+            documentId: documentId.toString(),
+            field: context.field,
+            plaintextValue: value,
+          });
+          return value;
+        }
+        if (manualVerification) {
+          const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
+          if (answer.toLowerCase() !== 'y') {
+            return value; // Skip encryption
+          }
+        }
+        return await safeEncrypt(value, context);
+      }
+
       try {
         await safeDecrypt(value, context);
         console.log(`[encryptIfPlaintext] Field ${context.field} is already encrypted.`);
         return value; // Already encrypted and decrypted successfully
       } catch (error) {
         if (error instanceof DecryptionError) {
-          console.log(`[encryptIfPlaintext] Field ${context.field} failed initial decryption. Error: ${error.message}`);
-          const isValBase64 = isBase64(value);
-          console.log(`[encryptIfPlaintext] Field ${context.field} isBase64: ${isValBase64}`);
-
-          if (isValBase64) {
-            console.log(`[encryptIfPlaintext] Field ${context.field} is base64, assuming encrypted but corrupted.`);
-            // If it's a base64 string, it's likely an encrypted value that failed to decrypt.
-            failedDecryptions.push({
-              userId: user._id.toString(),
-              documentId: documentId.toString(),
-              field: context.field,
-              encryptedValue: value,
-              error: error.message,
-            });
-            if (context.field.startsWith('plaidAccount')) {
-              accountsToRefresh.add(documentId.toString());
-            }
-            return value; // Return original value
-          } else {
-            console.log(`[encryptIfPlaintext] Field ${context.field} is not base64, assuming plaintext.`);
-            // If it's not a base64 string, it's likely plaintext.
-            if (isDryRun) {
-              changesToEncrypt.push({
-                userId: user._id.toString(),
-                documentId: documentId.toString(),
-                field: context.field,
-                plaintextValue: value,
-              });
-              return value;
-            }
-            if (manualVerification) {
-              const answer = await prompt(`Found plaintext value in '${context.field}': "${value}". Encrypt it? (y/n) `);
-              if (answer.toLowerCase() !== 'y') {
-                return value; // Skip encryption
-              }
-            }
-            return await safeEncrypt(value, context);
+          console.log(`[encryptIfPlaintext] Field ${context.field} is base64, but failed decryption (corrupted).`);
+          failedDecryptions.push({
+            userId: user._id.toString(),
+            documentId: documentId.toString(),
+            field: context.field,
+            encryptedValue: value,
+            error: error.message,
+          });
+          if (context.field.startsWith('plaidAccount')) {
+            accountsToRefresh.add(documentId.toString());
           }
+          return value; // Return original value
         } else {
           console.error(`[encryptIfPlaintext] Field ${context.field} encountered an unexpected error.`);
           throw error;
@@ -155,11 +149,11 @@ async function migrate() {
       }
     };
 
-    await migrateUsers(user, encryptIfPlaintext, user._id);
-    await migrateBusinesses(user, encryptIfPlaintext, user._id);
-    await migratePlaidAccounts(user, encryptIfPlaintext, user._id);
-    await migrateTransactions(user, encryptIfPlaintext, user._id);
-    await migrateTrips(user, encryptIfPlaintext, user._id);
+    await migrateUsers(user, encryptIfPlaintext, user._id, isDryRun);
+    await migrateBusinesses(user, encryptIfPlaintext, user._id, isDryRun);
+    await migratePlaidAccounts(user, encryptIfPlaintext, user._id, isDryRun);
+    await migrateTransactions(user, encryptIfPlaintext, user._id, isDryRun);
+    await migrateTrips(user, encryptIfPlaintext, user._id, isDryRun);
   }
 
   structuredLogger.logSuccess('Migration complete');

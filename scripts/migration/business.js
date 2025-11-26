@@ -4,7 +4,7 @@ import structuredLogger from '../../lib/structuredLogger.js';
 import { getUserDek } from '../../database/encryption.js';
 import { createSafeEncrypt } from '../../lib/encryptionHelper.js';
 
-async function migrateBusinesses(user, encryptIfPlaintext, documentId) {
+async function migrateBusinesses(user, encryptIfPlaintext, documentId, isDryRun) {
   const businesses = await Business.find({ userId: user._id });
   for (const business of businesses) {
     try {
@@ -88,7 +88,9 @@ async function migrateBusinesses(user, encryptIfPlaintext, documentId) {
         }
       }
 
-      await business.save();
+      if (!isDryRun) {
+        await business.save();
+      }
       structuredLogger.logSuccess('Business migrated successfully', { businessId: business._id });
     } catch (error) {
       structuredLogger.logErrorBlock(error, { businessId: business._id, error: error.message });
