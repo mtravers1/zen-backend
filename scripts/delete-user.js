@@ -118,6 +118,15 @@ const deleteUser = async (uid) => {
     console.log("Deleting businesses...");
     await Business.deleteMany({ userId: user._id });
 
+    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
+
+    console.log("Deleting transactions...");
+    await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
+
+    console.log("Deleting liabilities...");
+    await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
     await User.deleteOne({ authUid: uid });
@@ -188,6 +197,21 @@ const main = async () => {
     if(businesses.length > 0) {
         console.log('- Delete businesses from the database:');
         console.table(businesses.map(b => ({ id: b._id, name: b.name, userId: b.userId })));
+    }
+
+    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
+
+    const transactions = await Transaction.find({ plaidAccountId: { $in: plaidAccountIds } }).limit(5);
+    if(transactions.length > 0) {
+        console.log('- Delete transactions from the database:');
+        console.table(transactions.map(t => ({ id: t._id, plaidAccountId: t.plaidAccountId, transactionDate: t.transactionDate })));
+    }
+
+    const liabilities = await Liability.find({ accountId: { $in: plaidAccountIds } }).limit(5);
+    if(liabilities.length > 0) {
+        console.log('- Delete liabilities from the database:');
+        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
     }
 
     console.log('- Permanently delete the user from the database');
