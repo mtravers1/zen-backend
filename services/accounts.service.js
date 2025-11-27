@@ -57,6 +57,7 @@ const addAccount = async (accessToken, email, uid) => {
       let savedAccounts = [];
       const accountTypes = {};
       const existingAccounts = [];
+      const allAccounts = [];
 
       for (let account of accounts) {
         const hashAccountName = hashValue(account.name);
@@ -74,6 +75,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         if (existingAccount) {
           existingAccounts.push(existingAccount);
+          allAccounts.push(existingAccount);
           continue;
         }
 
@@ -166,6 +168,7 @@ const addAccount = async (accessToken, email, uid) => {
         await user.save();
         await newAccount.save();
         savedAccounts.push(newAccount);
+        allAccounts.push(newAccount);
       }
 
       const responseExistingAccounts = await Promise.all(
@@ -259,10 +262,7 @@ const addAccount = async (accessToken, email, uid) => {
           plaid_account_id: transaction.account_id,
         });
 
-        if (!accountType || !existingAccount) {
-          continue;
-        }
-        const account = savedAccounts.find(
+        const account = allAccounts.find(
           (account) => account.plaid_account_id === transaction.account_id,
         );
 
@@ -338,7 +338,7 @@ const addAccount = async (accessToken, email, uid) => {
         if (existingTransaction) continue;
 
         const accountType = accountTypes[transaction.account_id];
-        const account = savedAccounts.find(
+        const account = allAccounts.find(
           (account) => account.plaid_account_id === transaction.account_id,
         );
 
