@@ -2052,7 +2052,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek, uid);
   }
 
-  let investmentData;
+  let investmentData = null;
 
   if (deac.account_type === "investment") {
     try {
@@ -2078,7 +2078,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     account: deac,
     accountPlaid: accountPlaid,
     liabilityPlaid: liabilityPlaid,
-    investmentData: investmentData,
+    investmentData: investmentData || { holdings: [] },
   };
   return { ...result };
 };
