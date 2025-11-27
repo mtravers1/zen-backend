@@ -2094,6 +2094,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
 
   const liabilitiesList = liabilities[0];
+  if (!liabilitiesList) return null;
   const safeDecrypt = createSafeDecrypt(uid, dek);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
@@ -2368,10 +2369,12 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     plaidWeeklyTransactions.allTransactions,
   );
 
-  const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
-    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+    const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
+    if (liab && liab.length > 0) {
+        liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+    }
   }
 
   //----------WEEKLY-cashflow-chart calculations
