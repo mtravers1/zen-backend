@@ -337,10 +337,17 @@ const addAccount = async (accessToken, email, uid) => {
 
         if (existingTransaction) continue;
 
-        const accountType = accountTypes[transaction.account_id];
         const account = allAccounts.find(
           (account) => account.plaid_account_id === transaction.account_id,
         );
+
+        if (!account) {
+          console.error(
+            `Could not find account for transaction ${transaction.investment_transaction_id} with account_id ${transaction.account_id}`,
+          );
+          continue;
+        }
+
 
         const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
         const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
