@@ -23,5 +23,6 @@ router.post("/add-photo", controller.addAccountPhoto);
 router.post("/get-photo", controller.getAccountPhoto);
 
 router.get("/photo/:fileName", controller.serveAccountPhoto);
+router.get("/investment-transactions/:accountId", controller.getInvestmentTransactionsByAccount);
 
 export default router;

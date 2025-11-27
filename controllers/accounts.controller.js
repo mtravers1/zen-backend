@@ -228,7 +228,22 @@ const accountsController = {
   getAccountPhoto,
   getProfileTransactions,
   getCashFlowsByPlaidAccount,
+  getInvestmentTransactionsByAccount,
   serveAccountPhoto,
+};
+
+const getInvestmentTransactionsByAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const uid = req.user.uid;
+    const transactions = await accountsService.getInvestmentTransactionsByAccount(
+      accountId,
+      uid,
+    );
+    res.status(200).send(transactions);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 };
 
 export default accountsController;

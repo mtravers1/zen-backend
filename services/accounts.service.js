@@ -2807,9 +2807,63 @@ const accountsService = {
   removeAccount,
   removeAccountByUid,
   getCashFlowsByPlaidAccount,
+  getInvestmentTransactionsByAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
   getNewestAccessToken,
+};
+
+const getInvestmentTransactionsByAccount = async (accountId, uid) => {
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+    .lean()
+    .exec();
+
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  const transactionsResponse = await Transaction.find({
+    plaidAccountId: account.plaid_account_id,
+    isInvestment: true,
+  })
+    .sort({ transactionDate: -1 })
+    .lean();
+
+  let allTransactions = [];
+  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
+
+  for (const transaction of transactionsResponse) {
+    const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
+      transaction_id: transaction._id,
+      field: "amount",
+    });
+
+    if (decryptedAmount === null) {
+      continue;
+    }
+
+    const decryptedName = await safeDecrypt(transaction.name, {
+      transaction_id: transaction._id,
+      field: "name",
+    });
+
+    const decryptedType = await safeDecrypt(transaction.type, {
+      transaction_id: transaction._id,
+      field: "type",
+    });
+
+    allTransactions.push({
+      _id: transaction._id,
+      transaction_id: transaction.plaidTransactionId,
+      date: transaction.transactionDate,
+      name: decryptedName,
+      amount: decryptedAmount,
+      type: decryptedType,
+    });
+  }
+
+  return allTransactions;
 };
 
 export default accountsService;
