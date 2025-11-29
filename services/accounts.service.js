@@ -1497,6 +1497,9 @@ const getTransactions = async (
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
+          let merchantCategory;
+          let merchantLogo;
+          let merchantWebsite;
           if (transaction.merchant) {
             decryptedMerchantName = await safeDecrypt(
               transaction.merchant.name,
@@ -1510,6 +1513,9 @@ const getTransactions = async (
                 field: "merchant.merchantName",
               },
             );
+            merchantCategory = transaction.merchant.merchantCategory;
+            merchantLogo = transaction.merchant.logo;
+            merchantWebsite = transaction.merchant.website;
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -1564,6 +1570,9 @@ const getTransactions = async (
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
+              merchantCategory: merchantCategory,
+              logo: merchantLogo,
+              website: merchantWebsite,
             },
             fees: decryptedFees,
             price: decryptedPrice,
@@ -1750,6 +1759,9 @@ const getTransactionsByAccount = async (
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
+    let merchantCategory;
+    let merchantLogo;
+    let merchantWebsite;
     if (transaction.merchant) {
       decryptedMerchantName = await safeDecrypt(
         transaction.merchant.name,
@@ -1763,7 +1775,9 @@ const getTransactionsByAccount = async (
           field: "merchant.merchantName",
         },
       );
-    }
+      merchantCategory = transaction.merchant.merchantCategory;
+      merchantLogo = transaction.merchant.logo;
+      merchantWebsite = transaction.merchant.website;
 
     const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
       transaction_id: transaction._id,
@@ -1818,6 +1832,9 @@ const getTransactionsByAccount = async (
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
+        merchantCategory: merchantCategory,
+        logo: merchantLogo,
+        website: merchantWebsite,
       },
 
       fees: decryptedFees,
