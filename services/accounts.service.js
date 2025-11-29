@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from "crypto";
 import plaidService from "./plaid.service.js";
 import { storage, filesBucketName } from "../lib/storageClient.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
@@ -97,10 +97,10 @@ const addAccount = async (accessToken, email, uid) => {
         let encryptedOfficialName;
 
         if (account.official_name) {
-          encryptedOfficialName = await safeEncrypt(
-            account.official_name,
-            { account_id: account.account_id, field: "official_name" },
-          );
+          encryptedOfficialName = await safeEncrypt(account.official_name, {
+            account_id: account.account_id,
+            field: "official_name",
+          });
         }
 
         const encryptedType = await safeEncrypt(account.type, {
@@ -113,10 +113,10 @@ const addAccount = async (accessToken, email, uid) => {
           field: "subtype",
         });
 
-        const encryptedInstitutionName = await safeEncrypt(
-          institutionName,
-          { account_id: account.account_id, field: "institutionName" },
-        );
+        const encryptedInstitutionName = await safeEncrypt(institutionName, {
+          account_id: account.account_id,
+          field: "institutionName",
+        });
 
         let encryptedCurrentBalance;
         let encryptedAvailableBalance;
@@ -281,7 +281,9 @@ const addAccount = async (accessToken, email, uid) => {
           name = await safeEncrypt(transaction.name);
         }
 
-        const encryptedMerchantCategory = await safeEncrypt(transaction.category?.[0]);
+        const encryptedMerchantCategory = await safeEncrypt(
+          transaction.category?.[0],
+        );
         const encryptedWebsite = transaction.website;
         const encryptedLogo = transaction.logo_url;
         const merchant = {
@@ -348,23 +350,40 @@ const addAccount = async (accessToken, email, uid) => {
           continue;
         }
 
+        const encryptedAmount = await safeEncrypt(transaction.amount, {
+          context: { transactionKind: "investment", field: "amount" },
+        });
+        const encryptedAccountType = await safeEncrypt(accountType, {
+          context: { transactionKind: "investment", field: "accountType" },
+        });
 
-        const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
-        const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
+        const name = await safeEncrypt(transaction.name, {
+          context: { transactionKind: "investment", field: "name" },
+        });
 
-        const name = await safeEncrypt(transaction.name, { context: { transactionKind: 'investment', field: 'name' } });
+        const fees = await safeEncrypt(transaction.fees, {
+          context: { transactionKind: "investment", field: "fees" },
+        });
 
-        const fees = await safeEncrypt(transaction.fees, { context: { transactionKind: 'investment', field: 'fees' } });
+        const price = await safeEncrypt(transaction.price, {
+          context: { transactionKind: "investment", field: "price" },
+        });
 
-        const price = await safeEncrypt(transaction.price, { context: { transactionKind: 'investment', field: 'price' } });
+        const quantity = await safeEncrypt(transaction.quantity, {
+          context: { transactionKind: "investment", field: "quantity" },
+        });
 
-        const quantity = await safeEncrypt(transaction.quantity, { context: { transactionKind: 'investment', field: 'quantity' } });
+        const securityId = await safeEncrypt(transaction.security_id, {
+          context: { transactionKind: "investment", field: "securityId" },
+        });
 
-        const securityId = await safeEncrypt(transaction.security_id, { context: { transactionKind: 'investment', field: 'securityId' } });
+        const type = await safeEncrypt(transaction.type, {
+          context: { transactionKind: "investment", field: "type" },
+        });
 
-        const type = await safeEncrypt(transaction.type, { context: { transactionKind: 'investment', field: 'type' } });
-
-        const subtype = await safeEncrypt(transaction.subtype, { context: { transactionKind: 'investment', field: 'subtype' } });
+        const subtype = await safeEncrypt(transaction.subtype, {
+          context: { transactionKind: "investment", field: "subtype" },
+        });
 
         const newTransaction = new Transaction({
           accountId: account._id,
@@ -554,9 +573,7 @@ const addAccount = async (accessToken, email, uid) => {
                 if (item.servicer_address)
                   encryptedServicerAddress = {
                     city: await safeEncrypt(item.servicer_address?.city),
-                    country: await safeEncrypt(
-                      item.servicer_address?.country,
-                    ),
+                    country: await safeEncrypt(item.servicer_address?.country),
                     postalCode: await safeEncrypt(
                       item.servicer_address?.postal_code,
                     ),
@@ -716,12 +733,13 @@ const getAccounts = async (profile, uid) => {
     "get_accounts",
     { uid, profile_id: profile.id },
     async () => {
-                const dek = await getUserDek(uid);
-                const dekHash = crypto.createHash('sha256').update(dek[0]).digest('hex');
-                console.error(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
-                const safeDecrypt = createSafeDecrypt(uid, dek);
-      
-                const plaidIds = profile.plaidAccounts;      const plaidAccountsResponse = await PlaidAccount.find({
+      const dek = await getUserDek(uid);
+      const dekHash = crypto.createHash("sha256").update(dek[0]).digest("hex");
+      console.error(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
+
+      const plaidIds = profile.plaidAccounts;
+      const plaidAccountsResponse = await PlaidAccount.find({
         _id: { $in: plaidIds },
       })
         .lean()
@@ -992,13 +1010,11 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         transaction_id: transaction._id,
         field: "amount",
       });
-                    const decryptedAccountType = await safeDecrypt(
-      
-                      transaction.accountType,
-      
-                      { transaction_id: transaction._id, field: "accountType" },
-      
-                    );
+      const decryptedAccountType = await safeDecrypt(
+        transaction.accountType,
+
+        { transaction_id: transaction._id, field: "accountType" },
+      );
 
       transactions.push({
         ...transaction,
@@ -1518,10 +1534,14 @@ const getTransactions = async (
         const transactions = [];
 
         for (const transaction of transactionsResponse) {
-          const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "amount",
-          });
+          const decryptedAmount = await safeDecryptNumericValue(
+            transaction.amount,
+            safeDecrypt,
+            {
+              transaction_id: transaction._id,
+              field: "amount",
+            },
+          );
 
           if (decryptedAmount === null) {
             continue;
@@ -1559,15 +1579,23 @@ const getTransactions = async (
             merchantWebsite = transaction.merchant.website;
           }
 
-          const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "fees",
-          });
+          const decryptedFees = await safeDecryptNumericValue(
+            transaction.fees,
+            safeDecrypt,
+            {
+              transaction_id: transaction._id,
+              field: "fees",
+            },
+          );
 
-          const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "price",
-          });
+          const decryptedPrice = await safeDecryptNumericValue(
+            transaction.price,
+            safeDecrypt,
+            {
+              transaction_id: transaction._id,
+              field: "price",
+            },
+          );
 
           const decryptedType = await safeDecrypt(transaction.type, {
             transaction_id: transaction._id,
@@ -1579,7 +1607,8 @@ const getTransactions = async (
             field: "subtype",
           });
           const decryptedQuantity = await safeDecryptNumericValue(
-            transaction.quantity, safeDecrypt,
+            transaction.quantity,
+            safeDecrypt,
             { transaction_id: transaction._id, field: "quantity" },
           );
 
@@ -1588,10 +1617,13 @@ const getTransactions = async (
             { transaction_id: transaction._id, field: "securityId" },
           );
 
-          const decryptedDescription = await safeDecrypt(transaction.description, {
-            transaction_id: transaction._id,
-            field: "description",
-          });
+          const decryptedDescription = await safeDecrypt(
+            transaction.description,
+            {
+              transaction_id: transaction._id,
+              field: "description",
+            },
+          );
 
           const decryptedNotes = await safeDecrypt(transaction.notes, {
             transaction_id: transaction._id,
@@ -1724,10 +1756,10 @@ const getProfileTransactions = async (
       plaidAccount.availableBalance,
       { account_id: plaidAccount._id, field: "availableBalance" },
     );
-    const decryptedAccountType = await safeDecrypt(
-      plaidAccount.account_type,
-      { account_id: plaidAccount._id, field: "account_type" },
-    );
+    const decryptedAccountType = await safeDecrypt(plaidAccount.account_type, {
+      account_id: plaidAccount._id,
+      field: "account_type",
+    });
     const decryptedAccountSubtype = await safeDecrypt(
       plaidAccount.account_subtype,
       { account_id: plaidAccount._id, field: "account_subtype" },
@@ -1779,10 +1811,14 @@ const getTransactionsByAccount = async (
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
-      transaction_id: transaction._id,
-      field: "amount",
-    });
+    const decryptedAmount = await safeDecryptNumericValue(
+      transaction.amount,
+      safeDecrypt,
+      {
+        transaction_id: transaction._id,
+        field: "amount",
+      },
+    );
 
     if (decryptedAmount === null) {
       continue;
@@ -1793,10 +1829,10 @@ const getTransactionsByAccount = async (
       field: "name",
     });
 
-    const decryptedAccountType = await safeDecrypt(
-      transaction.accountType,
-      { transaction_id: transaction._id, field: "accountType" },
-    );
+    const decryptedAccountType = await safeDecrypt(transaction.accountType, {
+      transaction_id: transaction._id,
+      field: "accountType",
+    });
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
@@ -1822,15 +1858,23 @@ const getTransactionsByAccount = async (
       merchantWebsite = transaction.merchant.website;
     }
 
-    const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
-      transaction_id: transaction._id,
-      field: "fees",
-    });
+    const decryptedFees = await safeDecryptNumericValue(
+      transaction.fees,
+      safeDecrypt,
+      {
+        transaction_id: transaction._id,
+        field: "fees",
+      },
+    );
 
-    const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
-      transaction_id: transaction._id,
-      field: "price",
-    });
+    const decryptedPrice = await safeDecryptNumericValue(
+      transaction.price,
+      safeDecrypt,
+      {
+        transaction_id: transaction._id,
+        field: "price",
+      },
+    );
 
     const decryptedType = await safeDecrypt(transaction.type, {
       transaction_id: transaction._id,
@@ -1842,24 +1886,28 @@ const getTransactionsByAccount = async (
       field: "subtype",
     });
 
-    const decryptedQuantity = await safeDecryptNumericValue(transaction.quantity, safeDecrypt, {
-      transaction_id: transaction._id,
-      field: "quantity",
-    });
+    const decryptedQuantity = await safeDecryptNumericValue(
+      transaction.quantity,
+      safeDecrypt,
+      {
+        transaction_id: transaction._id,
+        field: "quantity",
+      },
+    );
 
     const decryptedDescription = await safeDecrypt(transaction.description, {
-        transaction_id: transaction._id,
-        field: "description",
+      transaction_id: transaction._id,
+      field: "description",
     });
 
     const decryptedNotes = await safeDecrypt(transaction.notes, {
-        transaction_id: transaction._id,
-        field: "notes",
+      transaction_id: transaction._id,
+      field: "notes",
     });
 
     const decryptedTags = await safeDecrypt(transaction.tags, {
-        transaction_id: transaction._id,
-        field: "tags",
+      transaction_id: transaction._id,
+      field: "tags",
     });
 
     allTransactions.push({
@@ -2000,7 +2048,10 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id })
+  const account = await PlaidAccount.findOne({
+    plaid_account_id: accountId,
+    owner_id: user._id,
+  })
     .lean()
     .exec();
 
@@ -2024,10 +2075,16 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let accountPlaid;
 
   try {
-    const plaidData = await plaidService.getAccountsWithAccessToken(decryptAccessToken);
-    accountPlaid = plaidData.accounts.find(a => a.account_id === account.plaid_account_id);
+    const plaidData =
+      await plaidService.getAccountsWithAccessToken(decryptAccessToken);
+    accountPlaid = plaidData.accounts.find(
+      (a) => a.account_id === account.plaid_account_id,
+    );
   } catch (error) {
-    console.error("Error fetching account data from Plaid:", error.response?.data || error.message);
+    console.error(
+      "Error fetching account data from Plaid:",
+      error.response?.data || error.message,
+    );
   }
 
   if (deac.account_type === "credit" && liab && liab.length > 0) {
@@ -2078,7 +2135,6 @@ const getAccountDetails = async (accountId, profileId, uid) => {
  */
 
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
-
   const liabilitiesList = liabilities[0];
   if (!liabilitiesList) return null;
   const safeDecrypt = createSafeDecrypt(uid, dek);
@@ -2100,10 +2156,9 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
-        liabilitiesList[field],
-        { field: field },
-      );
+      decryptedLiabilities[field] = await safeDecrypt(liabilitiesList[field], {
+        field: field,
+      });
     }
   }
   if (Array.isArray(liabilitiesList.aprs)) {
@@ -2170,10 +2225,9 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   ];
   for (const field of binaryFields) {
     if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
-        liabilitiesList[field],
-        { field: field },
-      );
+      decryptedLiabilities[field] = await safeDecrypt(liabilitiesList[field], {
+        field: field,
+      });
     }
   }
   // Handle nested objects for property_address, interest_rate, loan_status, repayment_plan, servicer_address
@@ -2357,9 +2411,13 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
-    const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
+    const liab = await Liability.find({
+      accountId: plaidAccount.plaid_account_id,
+    })
+      .lean()
+      .exec();
     if (liab && liab.length > 0) {
-        liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+      liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
     }
   }
 
@@ -2410,12 +2468,13 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const transactions = [];
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
+    const decryptedAmount = await safeDecrypt(transaction.amount, {
+      context: { resource: "transaction", field: "amount" },
+    });
 
-    const decryptedAccountType = await safeDecrypt(
-      transaction.accountType,
-      { context: { resource: 'transaction', field: 'accountType' } }
-    );
+    const decryptedAccountType = await safeDecrypt(transaction.accountType, {
+      context: { resource: "transaction", field: "accountType" },
+    });
 
     transactions.push({
       ...transaction,
@@ -2744,19 +2803,18 @@ const getCashFlowsWeekly = async (profile, uid) => {
   for (const plaidAccount of plaidAccountsResponse) {
     const decryptedCurrentBalance = await safeDecrypt(
       plaidAccount.currentBalance,
-      { context: { accountId: plaidAccount._id, field: 'currentBalance' } },
+      { context: { accountId: plaidAccount._id, field: "currentBalance" } },
     );
     const decryptedAvailableBalance = await safeDecrypt(
       plaidAccount.availableBalance,
-      { context: { accountId: plaidAccount._id, field: 'availableBalance' } },
+      { context: { accountId: plaidAccount._id, field: "availableBalance" } },
     );
-    const decryptedAccountType = await safeDecrypt(
-      plaidAccount.account_type,
-      { context: { accountId: plaidAccount._id, field: 'account_type' } },
-    );
+    const decryptedAccountType = await safeDecrypt(plaidAccount.account_type, {
+      context: { accountId: plaidAccount._id, field: "account_type" },
+    });
     const decryptedAccountSubtype = await safeDecrypt(
       plaidAccount.account_subtype,
-      { context: { accountId: plaidAccount._id, field: 'account_subtype' } },
+      { context: { accountId: plaidAccount._id, field: "account_subtype" } },
     );
     plaidAccounts.push({
       ...plaidAccount,
@@ -2820,10 +2878,14 @@ const getInvestmentTransactionsByAccount = async (accountId, uid) => {
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
-      transaction_id: transaction._id,
-      field: "amount",
-    });
+    const decryptedAmount = await safeDecryptNumericValue(
+      transaction.amount,
+      safeDecrypt,
+      {
+        transaction_id: transaction._id,
+        field: "amount",
+      },
+    );
 
     if (decryptedAmount === null) {
       continue;

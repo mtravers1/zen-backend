@@ -45,6 +45,7 @@
     "nodemailer": "^6.9.16",
     "ollama": "^0.5.15",
     "plaid": "^37.0.0",
+    "prettier": "^3.7.3",
     "supertest": "^7.1.4"
   },
   "devDependencies": {
