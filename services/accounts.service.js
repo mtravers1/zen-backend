@@ -1537,7 +1537,6 @@ const getTransactions = async (
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
-<<<<<<< HEAD
           let merchantCategory;
           let merchantLogo;
           let merchantWebsite;
@@ -1554,7 +1553,6 @@ const getTransactions = async (
                 field: "merchant.merchantName",
               },
             );
-<<<<<<< HEAD
 
             merchantCategory = transaction.merchant.merchantCategory;
             merchantLogo = transaction.merchant.logo;
@@ -1613,7 +1611,6 @@ const getTransactions = async (
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
-<<<<<<< HEAD
               merchantCategory: merchantCategory,
               logo: merchantLogo,
               website: merchantWebsite,
@@ -1803,7 +1800,6 @@ const getTransactionsByAccount = async (
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
-<<<<<<< HEAD
     let merchantCategory;
     let merchantLogo;
     let merchantWebsite;
@@ -1820,7 +1816,6 @@ const getTransactionsByAccount = async (
           field: "merchant.merchantName",
         },
       );
-<<<<<<< HEAD
 
       merchantCategory = transaction.merchant.merchantCategory;
       merchantLogo = transaction.merchant.logo;
@@ -1879,7 +1874,6 @@ const getTransactionsByAccount = async (
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
-<<<<<<< HEAD
         merchantCategory: merchantCategory,
         logo: merchantLogo,
         website: merchantWebsite,

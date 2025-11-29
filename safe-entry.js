@@ -1,4 +1,9 @@
 
+import dotenv from 'dotenv';
+import { verifyEnvironmentVariables } from './scripts/verify-env.js';
+
+dotenv.config();
+
 const requiredEnv = [
   'MONGODB_URI',
   'MONGODB_USER',
@@ -64,11 +69,6 @@ console.log("---------------------------------");
  * 2. If verification passes, it imports and starts the main server.
  * This prevents the application from crashing during module loading due to misconfiguration.
  */
-
-import dotenv from 'dotenv';
-dotenv.config();
-
-import { verifyEnvironmentVariables } from './scripts/verify-env.js';
 
 // 1. Run the environment check.
 // The verifyEnvironmentVariables function will call process.exit(1) if checks fail.
