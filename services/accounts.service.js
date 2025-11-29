@@ -287,9 +287,9 @@ const addAccount = async (accessToken, email, uid) => {
         const merchant = {
           merchantName: merchantName,
           name: name,
-          merchantCategory: encryptedMerchantCategory,
-          website: encryptedWebsite,
-          logo: encryptedLogo,
+          merchantCategory: merchantCategory,
+          website: website,
+          logo: logo,
         };
 
         let transactionCode;
