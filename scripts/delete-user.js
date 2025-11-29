@@ -214,6 +214,11 @@ const main = async () => {
         console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
     }
 
+    if(liabilities.length > 0) {
+        console.log('- Delete liabilities from the database:');
+        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
+    }
+
     console.log('- Permanently delete the user from the database');
     console.log('- Delete the user from Firebase');
     console.log('To execute the deletion, run the script with the --no-dry-run flag.');
