@@ -92,3 +92,7 @@ tests/service-accounts/
 keys_*.key
 *.key
 *.keyServiceAccountKey-Dev.json
+
+# Dump files
+debug-dump.json
+user-dump.json

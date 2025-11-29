@@ -27,14 +27,7 @@ async function migrateUsers(user, encryptIfPlaintext, documentId, isDryRun) {
     if (user.annualIncome) {
       user.annualIncome = await encryptIfPlaintext(user.annualIncome, { field: 'user.annualIncome' }, documentId);
     }
-        if (user.maritalStatus) {
-          // Case 1: Old field exists. Migrate it to the new field.
-          user.encryptedMaritalStatus = await encryptIfPlaintext(user.maritalStatus, { field: 'user.maritalStatus' }, documentId);
-          user.maritalStatus = undefined; // We should still remove the old field after migration
-        } else if (user.encryptedMaritalStatus) {
-          // Case 2: New field exists (potentially with plaintext). Encrypt it in-place.
-          user.encryptedMaritalStatus = await encryptIfPlaintext(user.encryptedMaritalStatus, { field: 'user.encryptedMaritalStatus' }, documentId);
-        }    if (user.occupation) {
+    if (user.occupation) {
       user.occupation = await encryptIfPlaintext(user.occupation, { field: 'user.occupation' }, documentId);
     }
     if (user.dependents) {
