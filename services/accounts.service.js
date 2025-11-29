@@ -1820,6 +1820,7 @@ const getTransactionsByAccount = async (
       merchantCategory = transaction.merchant.merchantCategory;
       merchantLogo = transaction.merchant.logo;
       merchantWebsite = transaction.merchant.website;
+    }
 
     const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
       transaction_id: transaction._id,
