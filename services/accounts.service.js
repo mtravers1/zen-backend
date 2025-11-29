@@ -2836,26 +2836,6 @@ const getCashFlowsWeekly = async (profile, uid) => {
   return { weeklyCashFlow: result };
 };
 
-const accountsService = {
-  addAccount,
-  getAccounts,
-  getAccountDetails,
-  getCashFlows,
-  getCashFlowsWeekly,
-  getUserTransactions,
-  getTransactionsByAccount,
-  getAllUserAccounts,
-  generateUploadUrl,
-  generateSignedUrl,
-  getProfileTransactions,
-  removeAccount,
-  removeAccountByUid,
-  getCashFlowsByPlaidAccount,
-  getInvestmentTransactionsByAccount,
-  formatTransactionsWithSigns,
-  formatAccountsBalances,
-  getNewestAccessToken,
-};
 
 const getInvestmentTransactionsByAccount = async (accountId, uid) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
@@ -2912,6 +2892,27 @@ const getInvestmentTransactionsByAccount = async (accountId, uid) => {
   }
 
   return allTransactions;
+};
+
+const accountsService = {
+  addAccount,
+  getAccounts,
+  getAccountDetails,
+  getCashFlows,
+  getCashFlowsWeekly,
+  getUserTransactions,
+  getTransactionsByAccount,
+  getAllUserAccounts,
+  generateUploadUrl,
+  generateSignedUrl,
+  getProfileTransactions,
+  removeAccount,
+  removeAccountByUid,
+  getCashFlowsByPlaidAccount,
+  getInvestmentTransactionsByAccount,
+  formatTransactionsWithSigns,
+  formatAccountsBalances,
+  getNewestAccessToken,
 };
 
 export default accountsService;
