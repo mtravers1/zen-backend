@@ -282,8 +282,8 @@ const addAccount = async (accessToken, email, uid) => {
         }
 
         const encryptedMerchantCategory = await safeEncrypt(transaction.category?.[0]);
-        const encryptedWebsite = await safeEncrypt(transaction.website);
-        const encryptedLogo = await safeEncrypt(transaction.logo_url);
+        const encryptedWebsite = transaction.website;
+        const encryptedLogo = transaction.logo_url;
         const merchant = {
           merchantName: merchantName,
           name: name,
@@ -1562,15 +1562,9 @@ const getTransactions = async (
               },
             );
 
-            decryptedMerchantLogo = await safeDecrypt(
-              transaction.merchant.logo,
-              { transaction_id: transaction._id, field: "merchant.logo" },
-            );
+            decryptedMerchantLogo = transaction.merchant.logo;
 
-            decryptedMerchantWebsite = await safeDecrypt(
-              transaction.merchant.website,
-              { transaction_id: transaction._id, field: "merchant.website" },
-            );
+            decryptedMerchantWebsite = transaction.merchant.website;
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
