@@ -393,239 +393,173 @@ const addAccount = async (accessToken, email, uid) => {
         transactionsByAccount[transaction.account_id].push(newTransaction._id);
       }
 
-      if (liabilitiesResponse) {
-        Object.entries(liabilitiesResponse.liabilities).forEach(
-          ([key, value]) => {
-            if (Array.isArray(value)) {
-              value.forEach(async (item) => {
-                //if accountid is not in savedaccounts, then skip
-                if (
-                  !savedAccounts.find(
-                    (account) => account.plaid_account_id === item.account_id,
-                  )
-                )
-                  return;
-
-                const encryptedAccountNumber = await safeEncrypt(
-                  item.account_number,
-                );
-
-                const encryptedLastPaymentAmount = await safeEncrypt(
-                  item.last_payment_amount,
-                );
-
-                const encryptedLastPaymentDate = await safeEncrypt(
-                  item.last_payment_date,
-                );
-
-                const encryptedNextPaymentDueDate = await safeEncrypt(
-                  item.next_payment_due_date,
-                );
-
-                const encryptedMinimumPaymentAmount = await safeEncrypt(
-                  item.minimum_payment_amount,
-                );
-
-                const encryptedLastStatementBalance = await safeEncrypt(
-                  item.last_statement_balance,
-                );
-
-                const encryptedLastStatementIssueDate = await safeEncrypt(
-                  item.last_statement_issue_date,
-                );
-
-                const encryptedIsOverdue = await safeEncrypt(item.is_overdue);
-
-                const encryptedAprs = item.aprs
-                  ? await Promise.all(
-                      item.aprs.map(async (apr) => ({
-                        aprPercentage: await safeEncrypt(apr.apr_percentage),
-                        aprType: await safeEncrypt(apr.apr_type),
-                        balanceSubjectToApr: await safeEncrypt(
-                          apr.balance_subject_to_apr,
-                        ),
-                        interestChargeAmount: await safeEncrypt(
-                          apr.interest_charge_amount,
-                        ),
-                      })),
+            if (liabilitiesResponse) {
+              for (const [key, value] of Object.entries(
+                liabilitiesResponse.liabilities,
+              )) {
+                if (Array.isArray(value)) {
+                  for (const item of value) {
+                    //if accountid is not in savedaccounts, then skip
+                    if (
+                      !savedAccounts.find(
+                        (account) => account.plaid_account_id === item.account_id,
+                      )
                     )
-                  : undefined;
-
-                const encryptedLoanTypeDescription = await safeEncrypt(
-                  item.loan_type_description,
-                );
-
-                const encryptedLoanTerm = await safeEncrypt(item.loan_term);
-
-                const encryptedMaturityDate = await safeEncrypt(
-                  item.maturity_date,
-                );
-
-                const encryptedNextMonthlyPayment = await safeEncrypt(
-                  item.next_monthly_payment,
-                );
-
-                const encryptedOriginationDate = await safeEncrypt(
-                  item.origination_date,
-                );
-
-                const encryptedOriginationPrincipalAmount = await safeEncrypt(
-                  item.origination_principal_amount,
-                );
-
-                const encryptedPastDueAmount = await safeEncrypt(
-                  item.past_due_amount,
-                );
-
-                const encryptedEscrowBalance = await safeEncrypt(
-                  item.escrow_balance,
-                );
-
-                const encryptedHasPmi = await safeEncrypt(item.has_pmi);
-
-                const encryptedHasPrepaymentPenalty = await safeEncrypt(
-                  item.has_prepayment_penalty,
-                );
-                let encryptedPropertyAddress;
-                if (item.property_address) {
-                  encryptedPropertyAddress = {
-                    city: await safeEncrypt(item.property_address?.city),
-                    country: await safeEncrypt(item.property_address?.country),
-                    postalCode: await safeEncrypt(
-                      item.property_address?.postal_code,
-                    ),
-                    region: await safeEncrypt(item.property_address?.region),
-                    street: await safeEncrypt(item.property_address?.street),
-                  };
+                      continue;
+      
+                    const encryptedAccountNumber = await safeEncrypt(
+                      item.account_number,
+                    );
+      
+                    const encryptedLastPaymentAmount = await safeEncrypt(
+                      item.last_payment_amount,
+                    );
+      
+                    const encryptedMinimumPaymentAmount = await safeEncrypt(
+                      item.minimum_payment_amount,
+                    );
+      
+                    const encryptedLastStatementBalance = await safeEncrypt(
+                      item.last_statement_balance,
+                    );
+      
+                    const encryptedLoanTypeDescription = await safeEncrypt(
+                      item.loan_type_description,
+                    );
+      
+                    const encryptedLoanTerm = await safeEncrypt(item.loan_term);
+      
+                    const encryptedNextMonthlyPayment = await safeEncrypt(
+                      item.next_monthly_payment,
+                    );
+      
+                    const encryptedOriginationPrincipalAmount = await safeEncrypt(
+                      item.origination_principal_amount,
+                    );
+      
+                    const encryptedPastDueAmount = await safeEncrypt(
+                      item.past_due_amount,
+                    );
+      
+                    const encryptedEscrowBalance = await safeEncrypt(
+                      item.escrow_balance,
+                    );
+      
+                    const encryptedHasPmi = await safeEncrypt(item.has_pmi);
+      
+                    const encryptedHasPrepaymentPenalty = await safeEncrypt(
+                      item.has_prepayment_penalty,
+                    );
+                    let encryptedPropertyAddress;
+                    if (item.property_address) {
+                      encryptedPropertyAddress = {
+                        city: await safeEncrypt(item.property_address?.city),
+                        country: await safeEncrypt(item.property_address?.country),
+                        postalCode: await safeEncrypt(
+                          item.property_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.property_address?.region),
+                        street: await safeEncrypt(item.property_address?.street),
+                      };
+                    }
+      
+                    const encryptedGuarantor = await safeEncrypt(item.guarantor);
+      
+                    const encryptedLoanName = await safeEncrypt(item.loan_name);
+      
+                    const encryptedOutstandingInterestAmount = await safeEncrypt(
+                      item.outstanding_interest_amount,
+                    );
+                    const encryptedPaymentReferenceNumber = await safeEncrypt(
+                      item.payment_reference_number,
+                    );
+                    const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
+                    let encryptedRepaymentPlan;
+                    if (item.repayment_plan) {
+                      encryptedRepaymentPlan = {
+                        type: await safeEncrypt(item.repayment_plan?.type),
+                        description: await safeEncrypt(
+                          item.repayment_plan?.description,
+                        ),
+                      };
+                    }
+                    const encryptedSequenceNumber = await safeEncrypt(
+                      item.sequence_number,
+                    );
+                    let encryptedServicerAddress;
+                    if (item.servicer_address)
+                      encryptedServicerAddress = {
+                        city: await safeEncrypt(item.servicer_address?.city),
+                        country: await safeEncrypt(
+                          item.servicer_address?.country,
+                        ),
+                        postalCode: await safeEncrypt(
+                          item.servicer_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.servicer_address?.region),
+                        street: await safeEncrypt(item.servicer_address?.street),
+                      };
+                    const encryptedYtdInterestPaid = await safeEncrypt(
+                      item.ytd_interest_paid,
+                    );
+                    const encryptedYtdPrincipalPaid = await safeEncrypt(
+                      item.ytd_principal_paid,
+                    );
+      
+                    const liability = new Liability({
+                      liabilityType: key,
+                      accountId: item.account_id,
+                      accountNumber: encryptedAccountNumber,
+                      lastPaymentAmount: encryptedLastPaymentAmount,
+                      lastPaymentDate: item.last_payment_date,
+                      nextPaymentDueDate: item.next_payment_due_date,
+                      minimumPaymentAmount: encryptedMinimumPaymentAmount,
+                      lastStatementBalance: encryptedLastStatementBalance,
+                      lastStatementIssueDate: item.last_statement_issue_date,
+                      isOverdue: item.is_overdue,
+      
+                      // Credit-specific fields
+                      aprs: item.aprs,
+      
+                      // Mortgage-specific fields
+                      loanTypeDescription: encryptedLoanTypeDescription,
+                      loanTerm: encryptedLoanTerm,
+                      maturityDate: item.maturity_date,
+                      nextMonthlyPayment: encryptedNextMonthlyPayment,
+                      originationDate: item.origination_date,
+                      originationPrincipalAmount:
+                        encryptedOriginationPrincipalAmount,
+                      pastDueAmount: encryptedPastDueAmount,
+                      escrowBalance: encryptedEscrowBalance,
+                      hasPmi: encryptedHasPmi,
+                      hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+                      propertyAddress: encryptedPropertyAddress,
+                      interestRate: item.interest_rate,
+      
+                      // Student-specific fields
+                      disbursementDates: item.disbursement_dates,
+                      expectedPayoffDate: item.expected_payoff_date,
+                      guarantor: encryptedGuarantor,
+                      interestRatePercentage: item.interest_rate_percentage,
+                      loanName: encryptedLoanName,
+      
+                      // Loan status
+                      loanStatus: item.loan_status,
+                      outstandingInterestAmount: encryptedOutstandingInterestAmount,
+                      paymentReferenceNumber: encryptedPaymentReferenceNumber,
+                      pslfStatus: encryptedPslfStatus,
+                      repaymentPlan: encryptedRepaymentPlan,
+                      sequenceNumber: encryptedSequenceNumber,
+                      servicerAddress: encryptedServicerAddress,
+                      ytdInterestPaid: encryptedYtdInterestPaid,
+                      ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+                    });
+      
+                    await liability.save();
+                  }
                 }
-
-                let encryptedInterestRate;
-                if (item.servicer_address) {
-                  encryptedInterestRate = {
-                    percentage: await safeEncrypt(
-                      item.interest_rate?.percentage,
-                    ),
-                    type: await safeEncrypt(item.interest_rate?.type),
-                  };
-                }
-
-                const encryptedDisbursementDates = await safeEncrypt(
-                  item.disbursement_dates,
-                );
-
-                const encryptedExpectedPayoffDate = await safeEncrypt(
-                  item.expected_payoff_date,
-                );
-
-                const encryptedGuarantor = await safeEncrypt(item.guarantor);
-
-                const encryptedInterestRatePercentage = await safeEncrypt(
-                  item.interest_rate_percentage,
-                );
-
-                const encryptedLoanName = await safeEncrypt(item.loan_name);
-                let encryptedLoanStatus;
-                if (item.loan_status) {
-                  encryptedLoanStatus = {
-                    endDate: await safeEncrypt(item.loan_status?.end_date),
-                    type: await safeEncrypt(item.loan_status?.type),
-                  };
-                }
-                const encryptedOutstandingInterestAmount = await safeEncrypt(
-                  item.outstanding_interest_amount,
-                );
-                const encryptedPaymentReferenceNumber = await safeEncrypt(
-                  item.payment_reference_number,
-                );
-                const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
-                let encryptedRepaymentPlan;
-                if (item.repayment_plan) {
-                  encryptedRepaymentPlan = {
-                    type: await safeEncrypt(item.repayment_plan?.type),
-                    description: await safeEncrypt(
-                      item.repayment_plan?.description,
-                    ),
-                  };
-                }
-                const encryptedSequenceNumber = await safeEncrypt(
-                  item.sequence_number,
-                );
-                let encryptedServicerAddress;
-                if (item.servicer_address)
-                  encryptedServicerAddress = {
-                    city: await safeEncrypt(item.servicer_address?.city),
-                    country: await safeEncrypt(
-                      item.servicer_address?.country,
-                    ),
-                    postalCode: await safeEncrypt(
-                      item.servicer_address?.postal_code,
-                    ),
-                    region: await safeEncrypt(item.servicer_address?.region),
-                    street: await safeEncrypt(item.servicer_address?.street),
-                  };
-                const encryptedYtdInterestPaid = await safeEncrypt(
-                  item.ytd_interest_paid,
-                );
-                const encryptedYtdPrincipalPaid = await safeEncrypt(
-                  item.ytd_principal_paid,
-                );
-
-                const liability = new Liability({
-                  liabilityType: key,
-                  accountId: item.account_id,
-                  accountNumber: encryptedAccountNumber,
-                  lastPaymentAmount: encryptedLastPaymentAmount,
-                  lastPaymentDate: encryptedLastPaymentDate,
-                  nextPaymentDueDate: encryptedNextPaymentDueDate,
-                  minimumPaymentAmount: encryptedMinimumPaymentAmount,
-                  lastStatementBalance: encryptedLastStatementBalance,
-                  lastStatementIssueDate: encryptedLastStatementIssueDate,
-                  isOverdue: encryptedIsOverdue,
-
-                  // Credit-specific fields
-                  aprs: encryptedAprs,
-
-                  // Mortgage-specific fields
-                  loanTypeDescription: encryptedLoanTypeDescription,
-                  loanTerm: encryptedLoanTerm,
-                  maturityDate: encryptedMaturityDate,
-                  nextMonthlyPayment: encryptedNextMonthlyPayment,
-                  originationDate: encryptedOriginationDate,
-                  originationPrincipalAmount:
-                    encryptedOriginationPrincipalAmount,
-                  pastDueAmount: encryptedPastDueAmount,
-                  escrowBalance: encryptedEscrowBalance,
-                  hasPmi: encryptedHasPmi,
-                  hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
-                  propertyAddress: encryptedPropertyAddress,
-                  interestRate: encryptedInterestRate,
-
-                  // Student-specific fields
-                  disbursementDates: encryptedDisbursementDates,
-                  expectedPayoffDate: encryptedExpectedPayoffDate,
-                  guarantor: encryptedGuarantor,
-                  interestRatePercentage: encryptedInterestRatePercentage,
-                  loanName: encryptedLoanName,
-
-                  // Loan status
-                  loanStatus: encryptedLoanStatus,
-                  outstandingInterestAmount: encryptedOutstandingInterestAmount,
-                  paymentReferenceNumber: encryptedPaymentReferenceNumber,
-                  pslfStatus: encryptedPslfStatus,
-                  repaymentPlan: encryptedRepaymentPlan,
-                  sequenceNumber: encryptedSequenceNumber,
-                  servicerAddress: encryptedServicerAddress,
-                  ytdInterestPaid: encryptedYtdInterestPaid,
-                  ytdPrincipalPaid: encryptedYtdPrincipalPaid,
-                });
-
-                await liability.save();
-              });
+              }
             }
-          },
-        );
-      }
-
       const internalTransfers =
         await plaidService.detectInternalTransfers(transactions);
 
@@ -2073,6 +2007,23 @@ const getAccountDetails = async (accountId, profileId, uid) => {
  * @returns {Object} Decrypted liability object including core identifiers, decrypted binary fields (when present), and a decrypted `aprs` array with `aprPercentage`, `aprType`, `balanceSubjectToApr`, and `interestChargeAmount` entries.
  */
 
+async function flexibleDecrypt(value, safeDecrypt, context) {
+  // If value is not a string or does not contain ':', it's likely not encrypted
+  if (typeof value !== 'string' || !value.includes(':')) {
+    return value;
+  }
+
+  try {
+    const decryptedValue = await safeDecrypt(value, context);
+    return decryptedValue;
+  } catch (error) {
+    // If decryption fails, it might be a plaintext value that coincidentally contained a ':'.
+    // Log the error and return the original value.
+    // console.error(`Decryption failed for context ${JSON.stringify(context)}. Returning original value.`, error);
+    return value;
+  }
+}
+
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
 
   const liabilitiesList = liabilities[0];
@@ -2081,7 +2032,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
-    accountNumber: liabilitiesList.accountNumber,
+    accountNumber: await flexibleDecrypt(liabilitiesList.accountNumber, safeDecrypt, { field: 'accountNumber' }),
   };
   const binaryFields = [
     "lastPaymentAmount",
@@ -2094,9 +2045,10 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
     "isOverdue",
   ];
   for (const field of binaryFields) {
-    if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
+    if (liabilitiesList[field] !== undefined) {
+      decryptedLiabilities[field] = await flexibleDecrypt(
         liabilitiesList[field],
+        safeDecrypt,
         { field: field },
       );
     }
@@ -2111,8 +2063,8 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
         "balanceSubjectToApr",
         "interestChargeAmount",
       ]) {
-        if (aprItem[key]) {
-          decryptedAprItem[key] = await safeDecrypt(aprItem[key], {
+        if (aprItem[key] !== undefined) {
+          decryptedAprItem[key] = await flexibleDecrypt(aprItem[key], safeDecrypt, {
             field: `aprs.${key}`,
           });
         }
@@ -2128,7 +2080,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
  *
  * @param {Array} liabilities - Array whose first element is the stored loan liability object containing encrypted fields and nested objects (e.g., property_address, interest_rate, loan_status, repayment_plan, servicer_address).
  * @param {Buffer|string} dek - Data encryption key (DEK) used to decrypt the liability's encrypted values.
- * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, interestRate, loanStatus, repaymentPlan, servicerAddress) when present.
+ * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, InterestRate, LoanStatus, RepaymentPlan, ServicerAddress) when present.
  */
 
 async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
@@ -2137,7 +2089,7 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
-    accountNumber: liabilitiesList.accountNumber,
+    accountNumber: await flexibleDecrypt(liabilitiesList.accountNumber, safeDecrypt, { field: 'accountNumber' }),
   };
   const binaryFields = [
     "lastPaymentAmount",
@@ -2163,9 +2115,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
     "interestRatePercentage",
   ];
   for (const field of binaryFields) {
-    if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
+    if (liabilitiesList[field] !== undefined) {
+      decryptedLiabilities[field] = await flexibleDecrypt(
         liabilitiesList[field],
+        safeDecrypt,
         { field: field },
       );
     }
@@ -2174,9 +2127,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.property_address) {
     decryptedLiabilities.propertyAddress = {};
     for (const key of ["city", "country", "postalCode", "region", "street"]) {
-      if (liabilitiesList.property_address[key]) {
-        decryptedLiabilities.propertyAddress[key] = await safeDecrypt(
+      if (liabilitiesList.property_address[key] !== undefined) {
+        decryptedLiabilities.propertyAddress[key] = await flexibleDecrypt(
           liabilitiesList.property_address[key],
+          safeDecrypt,
           { field: `propertyAddress.${key}` },
         );
       }
@@ -2186,9 +2140,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.interest_rate) {
     decryptedLiabilities.interestRate = {};
     for (const key of ["percentage", "type"]) {
-      if (liabilitiesList.interest_rate[key]) {
-        decryptedLiabilities.interestRate[key] = await safeDecrypt(
+      if (liabilitiesList.interest_rate[key] !== undefined) {
+        decryptedLiabilities.interestRate[key] = await flexibleDecrypt(
           liabilitiesList.interest_rate[key],
+          safeDecrypt,
           { field: `interestRate.${key}` },
         );
       }
@@ -2198,9 +2153,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.loan_status) {
     decryptedLiabilities.loanStatus = {};
     for (const key of ["endDate", "type"]) {
-      if (liabilitiesList.loan_status[key]) {
-        decryptedLiabilities.loanStatus[key] = await safeDecrypt(
+      if (liabilitiesList.loan_status[key] !== undefined) {
+        decryptedLiabilities.loanStatus[key] = await flexibleDecrypt(
           liabilitiesList.loan_status[key],
+          safeDecrypt,
           { field: `loanStatus.${key}` },
         );
       }
@@ -2210,9 +2166,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.repayment_plan) {
     decryptedLiabilities.repaymentPlan = {};
     for (const key of ["type", "description"]) {
-      if (liabilitiesList.repayment_plan[key]) {
-        decryptedLiabilities.repaymentPlan[key] = await safeDecrypt(
+      if (liabilitiesList.repayment_plan[key] !== undefined) {
+        decryptedLiabilities.repaymentPlan[key] = await flexibleDecrypt(
           liabilitiesList.repayment_plan[key],
+          safeDecrypt,
           { field: `repaymentPlan.${key}` },
         );
       }
@@ -2222,9 +2179,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.servicer_address) {
     decryptedLiabilities.servicerAddress = {};
     for (const key of ["city", "country", "postalCode", "region", "street"]) {
-      if (liabilitiesList.servicer_address[key]) {
-        decryptedLiabilities.servicerAddress[key] = await safeDecrypt(
+      if (liabilitiesList.servicer_address[key] !== undefined) {
+        decryptedLiabilities.servicerAddress[key] = await flexibleDecrypt(
           liabilitiesList.servicer_address[key],
+          safeDecrypt,
           { field: `servicerAddress.${key}` },
         );
       }
