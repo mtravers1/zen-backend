@@ -2084,7 +2084,6 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
     accountNumber: liabilitiesList.accountNumber,
   };
   const binaryFields = [
-    "accountId",
     "lastPaymentAmount",
     "lastPaymentDate",
     "lastPaymentDueDate",
@@ -2141,7 +2140,6 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
     accountNumber: liabilitiesList.accountNumber,
   };
   const binaryFields = [
-    "accountId",
     "lastPaymentAmount",
     "lastPaymentDate",
     "lastPaymentDueDate",
