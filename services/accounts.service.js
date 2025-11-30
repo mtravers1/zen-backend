@@ -2042,14 +2042,12 @@ const getAccountDetails = async (accountId, profileId, uid) => {
         await plaidService.getInvestmentsHoldingsWithAccessToken(
           decryptAccessToken,
         );
-      console.log("investment holdings data from plaid:", JSON.stringify(data, null, 2));
       investmentData = summarizeHoldingsByAccountId(
         data.holdings,
         data.securities,
         data.accounts,
         deac.plaid_account_id,
       );
-      console.log("summarized investment data:", JSON.stringify(investmentData, null, 2));
     } catch (error) {
       console.error(
         "Error fetching investment data:",
