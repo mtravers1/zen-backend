@@ -685,11 +685,11 @@ const updateTransactions = async (item) => {
               field: "name",
             })
           : null;
-        const encryptedMerchantCategory = transaction.category?.[0] ? await safeEncrypt(transaction.category[0]) : null;
+        const merchantCategory = transaction.category?.[0];
         const merchant = {
           merchantName: encryptedMerchantName,
           name: encryptedName,
-          merchantCategory: encryptedMerchantCategory,
+          merchantCategory: merchantCategory,
           website: transaction.website ? transaction.website : null,
           logo: transaction.logo_url ? transaction.logo_url : null,
         };
