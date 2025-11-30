@@ -1554,17 +1554,11 @@ const getTransactions = async (
               },
             );
 
-            decryptedMerchantCategory = await safeDecrypt(
-              transaction.merchant.merchantCategory,
-              {
-                transaction_id: transaction._id,
-                field: "merchant.merchantCategory",
-              },
-            );
+            merchantCategory = transaction.merchant.merchantCategory;
 
-            decryptedMerchantLogo = transaction.merchant.logo;
+            merchantLogo = transaction.merchant.logo;
 
-            decryptedMerchantWebsite = transaction.merchant.website;
+            merchantWebsite = transaction.merchant.website;
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -1808,7 +1802,7 @@ const getTransactionsByAccount = async (
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
-    let decryptedMerchantCategory;
+    let merchantCategory;
     if (transaction.merchant) {
       decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
         transaction_id: transaction._id,
@@ -1823,13 +1817,7 @@ const getTransactionsByAccount = async (
         },
       );
 
-      decryptedMerchantCategory = await safeDecrypt(
-        transaction.merchant.merchantCategory,
-        {
-          transaction_id: transaction._id,
-          field: "merchant.merchantCategory",
-        },
-      );
+      merchantCategory = transaction.merchant.merchantCategory;
     }
 
     const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -1885,7 +1873,7 @@ const getTransactionsByAccount = async (
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
-        merchantCategory: decryptedMerchantCategory,
+        merchantCategory: merchantCategory,
       },
 
       fees: decryptedFees,
