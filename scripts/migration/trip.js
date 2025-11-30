@@ -1,7 +1,7 @@
 import Trips from '../../database/models/Trips.js';
 import structuredLogger from '../../lib/structuredLogger.js';
 
-async function migrateTrips(user, encryptIfPlaintext, documentId) {
+async function migrateTrips(user, encryptIfPlaintext, documentId, isDryRun) {
   const trips = await Trips.find({ user: user._id });
   for (const trip of trips) {
     try {
@@ -38,7 +38,9 @@ async function migrateTrips(user, encryptIfPlaintext, documentId) {
         trip.metadata = newMetadata;
       }
 
-      await trip.save();
+      if (!isDryRun) {
+        await trip.save();
+      }
       structuredLogger.logSuccess('Trip migrated successfully', { tripId: trip._id });
     } catch (error) {
       structuredLogger.logErrorBlock(error, { tripId: trip._id, error: error.message });

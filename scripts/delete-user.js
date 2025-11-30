@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 import admin from "../lib/firebaseAdmin.js";
 import User from "../database/models/User.js";
@@ -17,8 +16,10 @@ import {
 } from "../database/encryption.js";
 import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 import plaidService from "../services/plaid.service.js";
-import { getOldestAccessToken } from "../services/utils/accounts.js";
+import { getNewestAccessToken } from "../services/utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
 const findAndRenameDekFiles = async (user, uid) => {
   const bucketKey = user._id.toString();
@@ -72,33 +73,36 @@ const deleteUser = async (uid) => {
     // 2. Rename all instances of the DEK file in primary and legacy buckets.
     await findAndRenameDekFiles(user, uid);
 
-        try {
+    try {
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
-      const accessToken = await getOldestAccessToken({ userId: user._id });
-      if (accessToken) {
-        const decryptedAccessToken = await safeDecrypt(accessToken.accessToken, {
-          user_id: user._id,
-          field: "accessToken",
-        });
+      const accessTokens = await AccessToken.find({ userId: user._id });
 
-        if (decryptedAccessToken) {
-          try {
-            console.log("Invalidating Plaid access token...");
-            await plaidService.invalidateAccessToken(decryptedAccessToken);
-          } catch (plaidError) {
-            console.error(`Failed to invalidate Plaid access token for itemId: ${accessToken.itemId}. Continuing with user deletion. Error: ${plaidError.message}`);
-          }
-        } else {
-          structuredLogger.logErrorBlock(
-            new Error("Decrypted access token is null"),
-            {
-              operation: "deleteUserScript",
+      for (const accessToken of accessTokens) {
+        if (accessToken.accessToken) {
+            const decryptedAccessToken = await safeDecrypt(accessToken.accessToken, {
               user_id: user._id,
               field: "accessToken",
-              warning: "Skipping invalidateAccessToken call due to null token",
+            });
+
+            if (decryptedAccessToken) {
+              try {
+                console.log(`Invalidating Plaid access token for itemID: ${accessToken.itemId}...`);
+                await plaidService.invalidateAccessToken(decryptedAccessToken);
+              } catch (plaidError) {
+                console.error(`Failed to invalidate Plaid access token for itemId: ${accessToken.itemId}. Continuing with user deletion. Error: ${plaidError.message}`);
+              }
+            } else {
+              structuredLogger.logErrorBlock(
+                new Error("Decrypted access token is null"),
+                {
+                  operation: "deleteUserScript",
+                  user_id: user._id,
+                  field: "accessToken",
+                  warning: "Skipping invalidateAccessToken call due to null token",
+                }
+              );
             }
-          );
         }
       }
     } catch (dekError) {
@@ -113,6 +117,15 @@ const deleteUser = async (uid) => {
 
     console.log("Deleting businesses...");
     await Business.deleteMany({ userId: user._id });
+
+    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
+
+    console.log("Deleting transactions...");
+    await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
+
+    console.log("Deleting liabilities...");
+    await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
 
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
@@ -132,5 +145,88 @@ const deleteUser = async (uid) => {
   }
 };
 
-const uid = process.argv[2];
-deleteUser(uid);
+const main = async () => {
+  const argv = yargs(hideBin(process.argv))
+    .usage('Usage: $0 --firebase-uid <uid> [options]')
+    .option('firebase-uid', {
+        alias: 'f',
+        describe: 'The user\'s Firebase UID',
+        type: 'string',
+        demandOption: true,
+    })
+    .option('dry-run', {
+      describe: 'Perform a dry run without deleting the user',
+      type: 'boolean',
+      default: true,
+    })
+    .help()
+    .argv;
+
+  const uid = argv.firebaseUid;
+  const dryRun = argv.dryRun;
+
+  if (dryRun) {
+    console.log('*** DRY RUN ***');
+    await connectDB();
+    const user = await User.findOne({ authUid: uid });
+    if (!user) {
+      console.log(`User with UID: ${uid} not found.`);
+      await mongoose.disconnect();
+      return;
+    }
+
+    console.log(`User found: ${user._id}`);
+    console.log('This script will perform the following actions:');
+    console.log('- Soft-delete the user');
+    console.log('- Rename DEK files');
+    console.log('- Invalidate Plaid access token');
+
+    const accessTokens = await AccessToken.find({ userId: user._id }).limit(5);
+    if(accessTokens.length > 0) {
+        console.log('- Delete access tokens from the database:');
+        console.table(accessTokens.map(t => ({ id: t._id, itemId: t.itemId, userId: t.userId })));
+    }
+
+    const files = await Files.find({ userId: user._id }).limit(5);
+    if(files.length > 0) {
+        console.log('- Delete files from the database:');
+        console.table(files.map(f => ({ id: f._id, filename: f.filename, userId: f.userId })));
+    }
+
+    const businesses = await Business.find({ userId: user._id }).limit(5);
+    if(businesses.length > 0) {
+        console.log('- Delete businesses from the database:');
+        console.table(businesses.map(b => ({ id: b._id, name: b.name, userId: b.userId })));
+    }
+
+    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
+
+    const transactions = await Transaction.find({ plaidAccountId: { $in: plaidAccountIds } }).limit(5);
+    if(transactions.length > 0) {
+        console.log('- Delete transactions from the database:');
+        console.table(transactions.map(t => ({ id: t._id, plaidAccountId: t.plaidAccountId, transactionDate: t.transactionDate })));
+    }
+
+    const liabilities = await Liability.find({ accountId: { $in: plaidAccountIds } }).limit(5);
+    if(liabilities.length > 0) {
+        console.log('- Delete liabilities from the database:');
+        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
+    }
+
+    if(liabilities.length > 0) {
+        console.log('- Delete liabilities from the database:');
+        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
+    }
+
+    console.log('- Permanently delete the user from the database');
+    console.log('- Delete the user from Firebase');
+    console.log('To execute the deletion, run the script with the --no-dry-run flag.');
+    await mongoose.disconnect();
+    return;
+  }
+  
+  await deleteUser(uid);
+};
+
+main();

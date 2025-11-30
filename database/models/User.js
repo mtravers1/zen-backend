@@ -156,6 +156,7 @@ const userSchema = new Schema({
   encryptedSSN: {
     type: String,
   },
+
   dependents: {
     type: Number,
   },

@@ -5,7 +5,7 @@ import structuredLogger from '../../lib/structuredLogger.js';
 import { getUserDek } from '../../database/encryption.js';
 import { createSafeEncrypt } from '../../lib/encryptionHelper.js';
 
-async function migrateTransactions(user, encryptIfPlaintext, documentId) {
+async function migrateTransactions(user, encryptIfPlaintext, documentId, isDryRun) {
   const accounts = await PlaidAccount.find({ owner_id: user._id });
   const accountIds = accounts.map(a => a._id);
   const transactions = await Transaction.find({ accountId: { $in: accountIds } });
@@ -31,7 +31,9 @@ async function migrateTransactions(user, encryptIfPlaintext, documentId) {
         transaction.tags = await Promise.all(transaction.tags.map(t => encryptIfPlaintext(t, { field: 'transaction.tags' }, documentId)));
       }
 
-      await transaction.save();
+      if (!isDryRun) {
+        await transaction.save();
+      }
       structuredLogger.logSuccess('Transaction migrated successfully', { transactionId: transaction._id });
     } catch (error) {
       structuredLogger.logErrorBlock(error, { transactionId: transaction._id, error: error.message });

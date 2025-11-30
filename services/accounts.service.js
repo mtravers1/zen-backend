@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import plaidService from "./plaid.service.js";
 import { storage, filesBucketName } from "../lib/storageClient.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
@@ -56,6 +57,7 @@ const addAccount = async (accessToken, email, uid) => {
       let savedAccounts = [];
       const accountTypes = {};
       const existingAccounts = [];
+      const allAccounts = [];
 
       for (let account of accounts) {
         const hashAccountName = hashValue(account.name);
@@ -73,6 +75,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         if (existingAccount) {
           existingAccounts.push(existingAccount);
+          allAccounts.push(existingAccount);
           continue;
         }
 
@@ -165,6 +168,7 @@ const addAccount = async (accessToken, email, uid) => {
         await user.save();
         await newAccount.save();
         savedAccounts.push(newAccount);
+        allAccounts.push(newAccount);
       }
 
       const responseExistingAccounts = await Promise.all(
@@ -258,10 +262,7 @@ const addAccount = async (accessToken, email, uid) => {
           plaid_account_id: transaction.account_id,
         });
 
-        if (!accountType || !existingAccount) {
-          continue;
-        }
-        const account = savedAccounts.find(
+        const account = allAccounts.find(
           (account) => account.plaid_account_id === transaction.account_id,
         );
 
@@ -280,12 +281,15 @@ const addAccount = async (accessToken, email, uid) => {
           name = await safeEncrypt(transaction.name);
         }
 
+        const merchantCategory = transaction.category?.[0];
+        const website = transaction.website;
+        const logo = transaction.logo_url;
         const merchant = {
           merchantName: merchantName,
           name: name,
-          merchantCategory: transaction.category?.[0],
-          website: transaction.website,
-          logo: transaction.logo_url,
+          merchantCategory: merchantCategory,
+          website: website,
+          logo: logo,
         };
 
         let transactionCode;
@@ -300,6 +304,8 @@ const addAccount = async (accessToken, email, uid) => {
           encryptedAccountType = await safeEncrypt(accountType);
         }
 
+        const encryptedTags = await safeEncrypt(transaction.category);
+
         const newTransaction = new Transaction({
           accountId: account._id,
           plaidTransactionId: transaction.transaction_id,
@@ -311,7 +317,7 @@ const addAccount = async (accessToken, email, uid) => {
           merchant: merchant,
           description: null,
           transactionCode: transactionCode,
-          tags: transaction.category,
+          tags: encryptedTags,
           accountType: encryptedAccountType,
         });
 
@@ -331,10 +337,17 @@ const addAccount = async (accessToken, email, uid) => {
 
         if (existingTransaction) continue;
 
-        const accountType = accountTypes[transaction.account_id];
-        const account = savedAccounts.find(
+        const account = allAccounts.find(
           (account) => account.plaid_account_id === transaction.account_id,
         );
+
+        if (!account) {
+          console.error(
+            `Could not find account for transaction ${transaction.investment_transaction_id} with account_id ${transaction.account_id}`,
+          );
+          continue;
+        }
+
 
         const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
         const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
@@ -673,12 +686,39 @@ const removeAccount = async (accountId, email) => {
   await Liability.deleteMany({ accountId });
 };
 
+const removeAccountByUid = async (accountId, uid) => {
+  const user = await User.findOne({
+    authUid: uid,
+  });
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const plaidAccounts = user.plaidAccounts;
+
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  if (!account) {
+    console.log(`Account with plaid_account_id ${accountId} not found.`);
+    return;
+  }
+  user.plaidAccounts = plaidAccounts.filter(
+    (id) => id.toString() !== account._id.toString(),
+  );
+
+  await user.save();
+
+  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
+  await Transaction.deleteMany({ plaidAccountId: accountId });
+  await Liability.deleteMany({ accountId });
+};
+
 const getAccounts = async (profile, uid) => {
   return await structuredLogger.withContext(
     "get_accounts",
     { uid, profile_id: profile.id },
     async () => {
                 const dek = await getUserDek(uid);
+                const dekHash = crypto.createHash('sha256').update(dek[0]).digest('hex');
+                console.error(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
                 const safeDecrypt = createSafeDecrypt(uid, dek);
       
                 const plaidIds = profile.plaidAccounts;      const plaidAccountsResponse = await PlaidAccount.find({
@@ -1497,6 +1537,9 @@ const getTransactions = async (
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
+          let merchantCategory;
+          let merchantLogo;
+          let merchantWebsite;
           if (transaction.merchant) {
             decryptedMerchantName = await safeDecrypt(
               transaction.merchant.name,
@@ -1510,6 +1553,12 @@ const getTransactions = async (
                 field: "merchant.merchantName",
               },
             );
+
+            merchantCategory = transaction.merchant.merchantCategory;
+
+            merchantLogo = transaction.merchant.logo;
+
+            merchantWebsite = transaction.merchant.website;
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -1564,6 +1613,9 @@ const getTransactions = async (
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
+              merchantCategory: transaction.merchant.merchantCategory,
+              logo: transaction.merchant.logo,
+              website: transaction.merchant.website,
             },
             fees: decryptedFees,
             price: decryptedPrice,
@@ -1750,11 +1802,12 @@ const getTransactionsByAccount = async (
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
+    let merchantCategory;
     if (transaction.merchant) {
-      decryptedMerchantName = await safeDecrypt(
-        transaction.merchant.name,
-        { transaction_id: transaction._id, field: "merchant.name" },
-      );
+      decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
+        transaction_id: transaction._id,
+        field: "merchant.name",
+      });
 
       decryptedMerchantMerchantName = await safeDecrypt(
         transaction.merchant.merchantName,
@@ -1763,6 +1816,8 @@ const getTransactionsByAccount = async (
           field: "merchant.merchantName",
         },
       );
+
+      merchantCategory = transaction.merchant.merchantCategory;
     }
 
     const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -1818,6 +1873,7 @@ const getTransactionsByAccount = async (
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
+        merchantCategory: merchantCategory,
       },
 
       fees: decryptedFees,
@@ -1940,7 +1996,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id })
     .lean()
     .exec();
 
@@ -1963,15 +2019,22 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   let liabilityPlaid;
   let accountPlaid;
 
-  if (deac.account_type === "credit") {
+  try {
+    const plaidData = await plaidService.getAccountsWithAccessToken(decryptAccessToken);
+    accountPlaid = plaidData.accounts.find(a => a.account_id === account.plaid_account_id);
+  } catch (error) {
+    console.error("Error fetching account data from Plaid:", error.response?.data || error.message);
+  }
+
+  if (deac.account_type === "credit" && liab && liab.length > 0) {
     liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
   }
 
-  if (deac.account_type === "loan") {
+  if (deac.account_type === "loan" && liab && liab.length > 0) {
     liabilityPlaid = await getDecryptedLiabilitiesLoan(liab, dek, uid);
   }
 
-  let investmentData;
+  let investmentData = null;
 
   if (deac.account_type === "investment") {
     try {
@@ -1997,7 +2060,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     account: deac,
     accountPlaid: accountPlaid,
     liabilityPlaid: liabilityPlaid,
-    investmentData: investmentData,
+    investmentData: investmentData || { holdings: [] },
   };
   return { ...result };
 };
@@ -2013,6 +2076,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
 
   const liabilitiesList = liabilities[0];
+  if (!liabilitiesList) return null;
   const safeDecrypt = createSafeDecrypt(uid, dek);
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
@@ -2209,9 +2273,14 @@ async function getDecryptedAccount(account, dek, uid) {
 
   for (const field of binaryFields) {
     if (account[field]) {
-      decryptedAccount[field] = await safeDecrypt(account[field], {
-        field: field,
-      });
+      try {
+        decryptedAccount[field] = await safeDecrypt(account[field], {
+          field: field,
+        });
+      } catch (error) {
+        console.error(`Failed to decrypt field: ${field}`, error);
+        throw error;
+      }
     }
   }
 
@@ -2282,10 +2351,12 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     plaidWeeklyTransactions.allTransactions,
   );
 
-  const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
-    liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+    const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
+    if (liab && liab.length > 0) {
+        liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+    }
   }
 
   //----------WEEKLY-cashflow-chart calculations
@@ -2716,6 +2787,7 @@ const accountsService = {
   generateSignedUrl,
   getProfileTransactions,
   removeAccount,
+  removeAccountByUid,
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
