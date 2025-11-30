@@ -458,11 +458,17 @@ const getLoanLiabilitiesWithAccessToken = async (accessToken) => {
 };
 
 const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
+  console.log("Fetching investment holdings with access token:", accessToken);
   const plaidClient = getPlaidClient();
-  const response = await plaidClient.investmentsHoldingsGet({
-    access_token: accessToken,
-  });
-  return response.data;
+  try {
+    const response = await plaidClient.investmentsHoldingsGet({
+      access_token: accessToken,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching investment holdings:", JSON.stringify(error.response.data, null, 2));
+    throw error;
+  }
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
