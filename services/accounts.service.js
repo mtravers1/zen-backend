@@ -1781,32 +1781,50 @@ const getTransactionsByAccount = async (
       continue;
     }
 
-    const decryptedName = await safeDecrypt(transaction.name, {
-      transaction_id: transaction._id,
-      field: "name",
-    });
+    let decryptedName = null;
+    try {
+      decryptedName = await safeDecrypt(transaction.name, {
+        transaction_id: transaction._id,
+        field: "name",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt name for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedAccountType = await safeDecrypt(
-      transaction.accountType,
-      { transaction_id: transaction._id, field: "accountType" },
-    );
+    let decryptedAccountType = null;
+    try {
+      decryptedAccountType = await safeDecrypt(
+        transaction.accountType,
+        { transaction_id: transaction._id, field: "accountType" },
+      );
+    } catch (e) {
+      console.error(`Failed to decrypt accountType for transaction ${transaction._id}:`, e);
+    }
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
     let merchantCategory;
     if (transaction.merchant) {
-      decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
-        transaction_id: transaction._id,
-        field: "merchant.name",
-      });
-
-      decryptedMerchantMerchantName = await safeDecrypt(
-        transaction.merchant.merchantName,
-        {
+      try {
+        decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
           transaction_id: transaction._id,
-          field: "merchant.merchantName",
-        },
-      );
+          field: "merchant.name",
+        });
+      } catch (e) {
+        console.error(`Failed to decrypt merchant.name for transaction ${transaction._id}:`, e);
+      }
+
+      try {
+        decryptedMerchantMerchantName = await safeDecrypt(
+          transaction.merchant.merchantName,
+          {
+            transaction_id: transaction._id,
+            field: "merchant.merchantName",
+          },
+        );
+      } catch (e) {
+        console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
+      }
 
       merchantCategory = transaction.merchant.merchantCategory;
     }
@@ -1821,35 +1839,76 @@ const getTransactionsByAccount = async (
       field: "price",
     });
 
-    const decryptedType = await safeDecrypt(transaction.type, {
-      transaction_id: transaction._id,
-      field: "type",
-    });
+    let decryptedType = null;
+    try {
+      decryptedType = await safeDecrypt(transaction.type, {
+        transaction_id: transaction._id,
+        field: "type",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedSubtype = await safeDecrypt(transaction.subtype, {
-      transaction_id: transaction._id,
-      field: "subtype",
-    });
+    let decryptedSubtype = null;
+    try {
+      decryptedSubtype = await safeDecrypt(transaction.subtype, {
+        transaction_id: transaction._id,
+        field: "subtype",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt subtype for transaction ${transaction._id}:`, e);
+    }
 
     const decryptedQuantity = await safeDecryptNumericValue(transaction.quantity, safeDecrypt, {
       transaction_id: transaction._id,
       field: "quantity",
     });
 
-    const decryptedDescription = await safeDecrypt(transaction.description, {
-        transaction_id: transaction._id,
-        field: "description",
-    });
+    let decryptedSecurityId = null;
+    try {
+      decryptedSecurityId = await safeDecrypt(
+        transaction.securityId,
+        { transaction_id: transaction._id, field: "securityId" },
+      );
+    } catch (e) {
+      console.error(`Failed to decrypt securityId for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedNotes = await safeDecrypt(transaction.notes, {
-        transaction_id: transaction._id,
-        field: "notes",
-    });
+    let decryptedDescription = null;
+    try {
+      if (transaction.description) {
+        decryptedDescription = await safeDecrypt(transaction.description, {
+            transaction_id: transaction._id,
+            field: "description",
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to decrypt description for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedTags = await safeDecrypt(transaction.tags, {
-        transaction_id: transaction._id,
-        field: "tags",
-    });
+    let decryptedNotes = null;
+    try {
+      if (transaction.notes) {
+        decryptedNotes = await safeDecrypt(transaction.notes, {
+            transaction_id: transaction._id,
+            field: "notes",
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to decrypt notes for transaction ${transaction._id}:`, e);
+    }
+
+    let decryptedTags = null;
+    try {
+      if (transaction.tags) {
+        decryptedTags = await safeDecrypt(transaction.tags, {
+            transaction_id: transaction._id,
+            field: "tags",
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to decrypt tags for transaction ${transaction._id}:`, e);
+    }
 
     allTransactions.push({
       ...transaction,
@@ -1858,14 +1917,14 @@ const getTransactionsByAccount = async (
 
       name: decryptedName,
 
-      merchant: {
+      merchant: transaction.merchant ? {
         ...transaction.merchant,
 
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
         merchantCategory: merchantCategory,
-      },
+      } : null,
 
       fees: decryptedFees,
 
