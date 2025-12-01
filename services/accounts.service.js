@@ -1534,10 +1534,12 @@ const getTransactions = async (
             field: "notes",
           });
 
-          const decryptedTags = await safeDecrypt(transaction.tags, {
-            transaction_id: transaction._id,
-            field: "tags",
-          });
+          const decryptedTags = transaction.tags
+            ? await safeDecrypt(transaction.tags, {
+                transaction_id: transaction._id,
+                field: "tags",
+              })
+            : transaction.tags;
 
           transactions.push({
             ...transaction,
