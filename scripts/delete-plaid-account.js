@@ -2,10 +2,14 @@ import mongoose from "mongoose";
 import connectDB from "../database/database.js";
 import accountsService from "../services/accounts.service.js";
 import User from "../database/models/User.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
+import Transaction from "../database/models/Transaction.js";
+import { getUserDek } from "../database/encryption.js";
+import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 
-const deletePlaidAccount = async (accountId, userId, isDryRun) => {
-  if (!accountId || !userId) {
-    console.error("Account ID and User ID (Firebase UID or Database ID) are required.");
+const deletePlaidAccount = async (accountId, userIdentifier, isDryRun) => {
+  if (!accountId || !userIdentifier) {
+    console.error("Account ID and User Identifier (--user-id or --firebase-uid) are required.");
     process.exit(1);
   }
 
@@ -15,21 +19,57 @@ const deletePlaidAccount = async (accountId, userId, isDryRun) => {
 
     let user;
     let uid;
-    // Check if userId is a mongoose ObjectId
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      user = await User.findById(userId);
-      uid = user.authUid;
-    } else {
-      user = await User.findOne({ authUid: userId });
-      uid = userId;
+    // Determine if userIdentifier is a mongoose ObjectId or a Firebase UID
+    if (mongoose.Types.ObjectId.isValid(userIdentifier)) {
+      user = await User.findById(userIdentifier);
+      if (user) uid = user.authUid;
+    } else { // Assume it's a Firebase UID
+      user = await User.findOne({ authUid: userIdentifier });
+      uid = userIdentifier;
     }
 
     if (!user) {
-      throw new Error(`User not found with ID: ${userId}`);
+      throw new Error(`User not found with identifier: ${userIdentifier}`);
     }
 
     if (isDryRun) {
-      console.log(`--DRY RUN-- Would delete Plaid account ${accountId} for user with uid ${uid}`);
+      console.log(`--DRY RUN-- Preparing to show records for Plaid account ${accountId} for user with uid ${uid}`);
+
+      const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id });
+      if (!account) {
+        console.log("No Plaid account found to delete.");
+      } else {
+        const dek = await getUserDek(uid);
+        const safeDecrypt = createSafeDecrypt(uid, dek);
+        
+        const decryptedAccountName = await safeDecrypt(account.account_name, { field: 'account_name' });
+        const decryptedInstitutionName = await safeDecrypt(account.institution_name, { field: 'institution_name' });
+
+        console.log("\nAccount to be deleted:");
+        console.table([{
+          _id: account._id.toString(),
+          plaid_account_id: account.plaid_account_id,
+          account_name: decryptedAccountName,
+          institution_name: decryptedInstitutionName,
+        }]);
+
+        const transactions = await Transaction.find({ accountId: account._id });
+        if (transactions.length > 0) {
+          const decryptedTransactions = await Promise.all(transactions.map(async (t) => {
+            const amount = await safeDecrypt(t.amount, { field: 'amount' });
+            return {
+              _id: t._id.toString(),
+              plaidTransactionId: t.plaidTransactionId,
+              transactionDate: t.transactionDate,
+              amount: amount,
+            };
+          }));
+          console.log("\nAssociated transactions to be deleted:");
+          console.table(decryptedTransactions);
+        } else {
+          console.log("No associated transactions found to delete.");
+        }
+      }
     } else {
       await accountsService.removeAccountByUid(accountId, uid);
       console.log(`Plaid account ${accountId} for user with uid ${uid} deleted successfully.`);
@@ -44,8 +84,29 @@ const deletePlaidAccount = async (accountId, userId, isDryRun) => {
   }
 };
 
-const accountId = process.argv[2];
-const userId = process.argv[3];
-const isDryRun = process.argv[4] !== "--no-dry-run";
+const parseArgs = () => {
+  let accountId = null;
+  let userId = null;
+  let firebaseUid = null;
+  let isDryRun = true; // Default to dry run
 
-deletePlaidAccount(accountId, userId, isDryRun);
+  for (const arg of process.argv.slice(2)) {
+    if (arg.startsWith("--account-id=")) {
+      accountId = arg.split("=")[1];
+    } else if (arg.startsWith("--user-id=")) {
+      userId = arg.split("=")[1];
+    } else if (arg.startsWith("--firebase-uid=")) {
+      firebaseUid = arg.split("=")[1];
+    } else if (arg === "--no-dry-run") {
+      isDryRun = false;
+    }
+  }
+
+  // Prioritize firebaseUid if both are provided
+  const userIdentifier = firebaseUid || userId;
+
+  return { accountId, userIdentifier, isDryRun };
+};
+
+const { accountId, userIdentifier, isDryRun } = parseArgs();
+deletePlaidAccount(accountId, userIdentifier, isDryRun);

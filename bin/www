@@ -27,6 +27,7 @@ import connectDB from "../database/database.js";
      * Create HTTP server.
      */
     const server = http.createServer(app);
+    server.timeout = 120000; // 2 minutes
 
     /**
      * Listen on provided port, on all network interfaces.
