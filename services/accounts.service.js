@@ -2008,20 +2008,21 @@ const getAccountDetails = async (accountId, profileId, uid) => {
  */
 
 async function flexibleDecrypt(value, safeDecrypt, context) {
-  // If value is not a string or does not contain ':', it's likely not encrypted
-  if (typeof value !== 'string' || !value.includes(':')) {
+  if (value === null || value === undefined) {
     return value;
   }
 
-  try {
-    const decryptedValue = await safeDecrypt(value, context);
-    return decryptedValue;
-  } catch (error) {
-    // If decryption fails, it might be a plaintext value that coincidentally contained a ':'.
-    // Log the error and return the original value.
-    // console.error(`Decryption failed for context ${JSON.stringify(context)}. Returning original value.`, error);
-    return value;
+  if (typeof value === 'string') {
+    try {
+      return await safeDecrypt(value, context);
+    } catch (e) {
+      // If decryption fails, assume it's a plaintext value and return it.
+      return value;
+    }
   }
+
+  // If it's not a string (e.g., a number, boolean, or object from new data), return it directly.
+  return value;
 }
 
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
@@ -2123,13 +2124,13 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
       );
     }
   }
-  // Handle nested objects for property_address, interest_rate, loan_status, repayment_plan, servicer_address
-  if (liabilitiesList.property_address) {
+  // Handle nested objects for propertyAddress, interestRate, loanStatus, repayment_plan, servicer_address
+  if (liabilitiesList.propertyAddress) {
     decryptedLiabilities.propertyAddress = {};
     for (const key of ["city", "country", "postalCode", "region", "street"]) {
-      if (liabilitiesList.property_address[key] !== undefined) {
+      if (liabilitiesList.propertyAddress[key] !== undefined) {
         decryptedLiabilities.propertyAddress[key] = await flexibleDecrypt(
-          liabilitiesList.property_address[key],
+          liabilitiesList.propertyAddress[key],
           safeDecrypt,
           { field: `propertyAddress.${key}` },
         );
@@ -2137,12 +2138,12 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
     }
   }
 
-  if (liabilitiesList.interest_rate) {
+  if (liabilitiesList.interestRate) {
     decryptedLiabilities.interestRate = {};
     for (const key of ["percentage", "type"]) {
-      if (liabilitiesList.interest_rate[key] !== undefined) {
+      if (liabilitiesList.interestRate[key] !== undefined) {
         decryptedLiabilities.interestRate[key] = await flexibleDecrypt(
-          liabilitiesList.interest_rate[key],
+          liabilitiesList.interestRate[key],
           safeDecrypt,
           { field: `interestRate.${key}` },
         );
@@ -2150,12 +2151,12 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
     }
   }
 
-  if (liabilitiesList.loan_status) {
+  if (liabilitiesList.loanStatus) {
     decryptedLiabilities.loanStatus = {};
     for (const key of ["endDate", "type"]) {
-      if (liabilitiesList.loan_status[key] !== undefined) {
+      if (liabilitiesList.loanStatus[key] !== undefined) {
         decryptedLiabilities.loanStatus[key] = await flexibleDecrypt(
-          liabilitiesList.loan_status[key],
+          liabilitiesList.loanStatus[key],
           safeDecrypt,
           { field: `loanStatus.${key}` },
         );
@@ -2748,6 +2749,8 @@ const accountsService = {
   formatTransactionsWithSigns,
   formatAccountsBalances,
   getNewestAccessToken,
+  getDecryptedLiabilitiesLoan,
+  getDecryptedLiabilitiesCredit,
 };
 
 export default accountsService;
