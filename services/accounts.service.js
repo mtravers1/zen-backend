@@ -1524,15 +1524,20 @@ const getTransactions = async (
             { transaction_id: transaction._id, field: "securityId" },
           );
 
-          const decryptedDescription = await safeDecrypt(transaction.description, {
-            transaction_id: transaction._id,
-            field: "description",
-          });
+          console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
+          const decryptedDescription = transaction.description
+            ? await safeDecrypt(transaction.description, {
+                transaction_id: transaction._id,
+                field: "description",
+              })
+            : transaction.description;
 
-          const decryptedNotes = await safeDecrypt(transaction.notes, {
-            transaction_id: transaction._id,
-            field: "notes",
-          });
+          const decryptedNotes = transaction.notes
+            ? await safeDecrypt(transaction.notes, {
+                transaction_id: transaction._id,
+                field: "notes",
+              })
+            : transaction.notes;
 
           const decryptedTags = transaction.tags
             ? await safeDecrypt(transaction.tags, {
