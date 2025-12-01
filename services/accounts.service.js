@@ -1600,14 +1600,14 @@ const getTransactions = async (
             ...transaction,
             amount: decryptedAmount,
             name: decryptedName,
-            merchant: {
+            merchant: transaction.merchant ? {
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
               merchantCategory: transaction.merchant.merchantCategory,
               logo: transaction.merchant.logo,
               website: transaction.merchant.website,
-            },
+            } : null,
             fees: decryptedFees,
             price: decryptedPrice,
             type: decryptedType,
