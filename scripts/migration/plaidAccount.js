@@ -17,6 +17,21 @@ async function migratePlaidAccounts(user, encryptIfPlaintext, documentId, isDryR
       account.availableBalance = await encryptIfPlaintext(account.availableBalance, { field: 'plaidAccount.availableBalance' }, account._id);
       account.mask = await encryptIfPlaintext(account.mask, { field: 'plaidAccount.mask' }, account._id);
 
+      const dek = await getUserDek(user.authUid, { noCache: true }); // Bypassing cache to ensure we get a fresh DEK
+      const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+
+      // Ensure required hash fields exist for legacy documents before saving
+      if (!account.hashAccountMask || !account.hashAccountName || !account.hashAccountInstitutionId) {
+        console.log(`[MIGRATE_TRACE] Hash fields missing for account ${account._id}. Regenerating...`);
+        const decryptedMask = await safeDecrypt(account.mask, { field: 'plaidAccount.mask' });
+        const decryptedAccountName = await safeDecrypt(account.account_name, { field: 'plaidAccount.account_name' });
+
+        // institution_id is not encrypted, so we can use it directly
+        account.hashAccountMask = hashValue(decryptedMask);
+        account.hashAccountName = hashValue(decryptedAccountName);
+        account.hashAccountInstitutionId = hashValue(account.institution_id);
+      }
+
       if (!isDryRun) {
         await account.save();
       }
