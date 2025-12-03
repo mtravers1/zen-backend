@@ -101,8 +101,8 @@ const createLinkToken = async (
         },
         // NOTE: For update mode, Plaid documentation suggests omitting products array
         // Testing with products first - may need to remove for update mode if issues arise
-        products: mode === "update" ? [] : ["transactions", "investments", "liabilities"],
-        // optional_products: ["investments", "liabilities"],
+        products: ["transactions"],
+        optional_products: ["investments", "liabilities"],
         hosted_link: {
           // is_mobile_app: true,
           completion_redirect_uri: "myapp://hosted-link-complete",
