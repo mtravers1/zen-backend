@@ -55,7 +55,7 @@ const addAccount = async (accessToken, email, uid) => {
       ] = await Promise.allSettled([
         plaidService.getAccountsWithAccessToken(accessToken),
         plaidService.getTransactionsWithAccessToken(accessToken),
-        plaidService.getIdentityWithAccessToken(accessToken),
+
         plaidService.getInvestmentTransactionsWithAccessToken(accessToken),
         plaidService.getLoanLiabilitiesWithAccessToken(accessToken),
       ]);
