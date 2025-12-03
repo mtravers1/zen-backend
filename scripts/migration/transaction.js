@@ -18,7 +18,7 @@ async function migrateTransactions(user, encryptIfPlaintext, documentId, isDryRu
         transaction.merchant.merchantName = await encryptIfPlaintext(transaction.merchant.merchantName, { field: 'transaction.merchant.merchantName' }, documentId);
         transaction.merchant.name = await encryptIfPlaintext(transaction.merchant.name, { field: 'transaction.merchant.name' }, documentId);
       }
-      transaction.currency = await encryptIfPlaintext(transaction.currency, { field: 'transaction.currency' }, documentId);
+
       transaction.description = await encryptIfPlaintext(transaction.description, { field: 'transaction.description' }, documentId);
       transaction.name = await encryptIfPlaintext(transaction.name, { field: 'transaction.name' }, documentId);
       transaction.fees = await encryptIfPlaintext(transaction.fees, { field: 'transaction.fees' }, documentId);
