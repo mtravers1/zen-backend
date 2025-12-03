@@ -1586,7 +1586,7 @@ const getTransactions = async (
 
           let decryptedTags = null;
           try {
-            if (transaction.tags) {
+            if (transaction.tags && typeof transaction.tags === 'string') {
               decryptedTags = await safeDecrypt(transaction.tags, {
                   transaction_id: transaction._id,
                   field: "tags",
@@ -1900,7 +1900,7 @@ const getTransactionsByAccount = async (
 
     let decryptedTags = null;
     try {
-      if (transaction.tags) {
+      if (transaction.tags && typeof transaction.tags === 'string') {
         decryptedTags = await safeDecrypt(transaction.tags, {
             transaction_id: transaction._id,
             field: "tags",
