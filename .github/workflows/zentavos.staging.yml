@@ -267,7 +267,7 @@ jobs:
 
   migrate_encryption:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event.inputs.migration_args != ''
     steps:
       - name: Install OpenVPN
         uses: awalsh128/cache-apt-pkgs-action@latest
