@@ -104,7 +104,7 @@ async function migrate() {
         return value;
       }
 
-      if (!isBase64(value)) {
+      if (!isBase64(value) || value.length < 48) { // 48 is a safe minimum length for a b64 string encoding a 32+ byte value
         console.log(`[encryptIfPlaintext] Field ${context.field} is not base64, assuming plaintext.`);
         if (isDryRun) {
           changesToEncrypt.push({
