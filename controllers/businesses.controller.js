@@ -10,8 +10,8 @@ const addBusiness = async (req, res) => {
       uid,
       "create_business",
     );
-    if (!permission.allowed) {
-      return res.status(403).json(permission.response);
+    if (!permission.success) {
+      return res.status(403).json(permission);
     }
 
     const response = await businessService.addBusinesses(data, email, uid);
