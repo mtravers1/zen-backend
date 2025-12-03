@@ -36,7 +36,6 @@ const addAccount = async (accessToken, email, uid) => {
     async () => {
       const dek = await getUserDek(uid);
       const safeEncrypt = createSafeEncrypt(uid, dek);
-      const safeDecrypt = createSafeDecrypt(uid, dek);
 
       const user = await User.findOne({
         authUid: uid,
@@ -46,12 +45,24 @@ const addAccount = async (accessToken, email, uid) => {
       }
       const userId = user._id.toString();
       const userType = user.role;
-      const accountsResponse =
-        await plaidService.getAccountsWithAccessToken(accessToken);
 
-      const accounts = accountsResponse.accounts;
-      const institutionId = accountsResponse.item.institution_id;
-      const institutionName = accountsResponse.item.institution_name;
+      const [
+        accountsResponse,
+        transactionsResponse,
+        identityResponse,
+        investmentsResponse,
+        liabilitiesResponse,
+      ] = await Promise.allSettled([
+        plaidService.getAccountsWithAccessToken(accessToken),
+        plaidService.getTransactionsWithAccessToken(accessToken),
+        plaidService.getIdentityWithAccessToken(accessToken),
+        plaidService.getInvestmentTransactionsWithAccessToken(accessToken),
+        plaidService.getLoanLiabilitiesWithAccessToken(accessToken),
+      ]);
+
+      const accounts = accountsResponse.value.accounts;
+      const institutionId = accountsResponse.value.item.institution_id;
+      const institutionName = accountsResponse.value.item.institution_name;
 
       const userAccounts = user.plaidAccounts;
       let savedAccounts = [];
@@ -62,7 +73,7 @@ const addAccount = async (accessToken, email, uid) => {
       for (let account of accounts) {
         const hashAccountName = hashValue(account.name);
         const hashAccountInstitutionId = hashValue(
-          accountsResponse.item.institution_id,
+          accountsResponse.value.item.institution_id,
         );
         const hashAccountMask = hashValue(account.mask);
 
@@ -139,7 +150,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         const newAccount = new PlaidAccount({
           owner_id: userId,
-          itemId: accountsResponse.item.item_id,
+          itemId: accountsResponse.value.item.item_id,
           accessToken: encryptedToken,
           owner_type: userType,
           plaid_account_id: account.account_id,
@@ -183,68 +194,14 @@ const addAccount = async (accessToken, email, uid) => {
         }),
       );
 
-      let transactionsResponse;
-      let investmentTransactionsResponse;
-      let liabilitiesResponse;
-      if (accountsResponse.item.products.includes("transactions")) {
-        try {
-          transactionsResponse =
-            await plaidService.getTransactionsWithAccessToken(accessToken);
-        } catch (error) {
-          console.error(
-            "Error fetching transactions:",
-            error.response?.data || error,
-          );
-        }
-      }
-
-      if (accountsResponse.item.products.includes("investments")) {
-        try {
-          investmentTransactionsResponse =
-            await plaidService.getInvestmentTransactionsWithAccessToken(
-              accessToken,
-            );
-        } catch (error) {
-          console.error(
-            "Error fetching investment transactions:",
-            error.response?.data || error,
-          );
-        }
-      }
-
-      if (accountsResponse.item.products.includes("liabilities")) {
-        try {
-          liabilitiesResponse =
-            await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
-        } catch (error) {
-          console.error(
-            "Error fetching liabilities:",
-            error.response?.data || error,
-          );
-        }
-      }
-
-      if (accountsResponse.item.products.includes("investments")) {
-        try {
-          await plaidService.updateInvestmentTransactions(
-            accountsResponse.item.item_id,
-          );
-        } catch (error) {
-          console.error(
-            "Error updating investment transactions:",
-            error.response?.data || error,
-          );
-        }
-      }
-
-      const nextCursor = transactionsResponse
-        ? transactionsResponse.next_cursor
+      const nextCursor = transactionsResponse.value
+        ? transactionsResponse.value.next_cursor
         : null;
-      const transactions = transactionsResponse
-        ? transactionsResponse.added
+      const transactions = transactionsResponse.value
+        ? transactionsResponse.value.added
         : [];
-      const investmentTransactions = investmentTransactionsResponse
-        ? investmentTransactionsResponse.investment_transactions
+      const investmentTransactions = investmentTransactionsResponse.value
+        ? investmentTransactionsResponse.value.investment_transactions
         : [];
 
       const transactionsByAccount = {};
@@ -534,9 +491,11 @@ const addAccount = async (accessToken, email, uid) => {
                 const encryptedOutstandingInterestAmount = await safeEncrypt(
                   item.outstanding_interest_amount,
                 );
+
                 const encryptedPaymentReferenceNumber = await safeEncrypt(
                   item.payment_reference_number,
                 );
+
                 const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
                 let encryptedRepaymentPlan;
                 if (item.repayment_plan) {
@@ -1526,14 +1485,25 @@ const getTransactions = async (
           if (decryptedAmount === null) {
             continue;
           }
-          const decryptedName = await safeDecrypt(transaction.name, {
-            transaction_id: transaction._id,
-            field: "name",
-          });
-          const decryptedAccountType = await safeDecrypt(
-            transaction.accountType,
-            { transaction_id: transaction._id, field: "accountType" },
-          );
+          let decryptedName = null;
+          try {
+            decryptedName = await safeDecrypt(transaction.name, {
+              transaction_id: transaction._id,
+              field: "name",
+            });
+          } catch (e) {
+            console.error(`Failed to decrypt name for transaction ${transaction._id}:`, e);
+          }
+          
+          let decryptedAccountType = null;
+          try {
+            decryptedAccountType = await safeDecrypt(
+              transaction.accountType,
+              { transaction_id: transaction._id, field: "accountType" },
+            );
+          } catch (e) {
+            console.error(`Failed to decrypt accountType for transaction ${transaction._id}:`, e);
+          }
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
@@ -1541,18 +1511,26 @@ const getTransactions = async (
           let merchantLogo;
           let merchantWebsite;
           if (transaction.merchant) {
-            decryptedMerchantName = await safeDecrypt(
-              transaction.merchant.name,
-              { transaction_id: transaction._id, field: "merchant.name" },
-            );
+            try {
+              decryptedMerchantName = await safeDecrypt(
+                transaction.merchant.name,
+                { transaction_id: transaction._id, field: "merchant.name" },
+              );
+            } catch (e) {
+              console.error(`Failed to decrypt merchant.name for transaction ${transaction._id}:`, e);
+            }
 
-            decryptedMerchantMerchantName = await safeDecrypt(
-              transaction.merchant.merchantName,
-              {
-                transaction_id: transaction._id,
-                field: "merchant.merchantName",
-              },
-            );
+            try {
+              decryptedMerchantMerchantName = await safeDecrypt(
+                transaction.merchant.merchantName,
+                {
+                  transaction_id: transaction._id,
+                  field: "merchant.merchantName",
+                },
+              );
+            } catch (e) {
+              console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
+            }
 
             merchantCategory = transaction.merchant.merchantCategory;
 
@@ -1571,34 +1549,65 @@ const getTransactions = async (
             field: "price",
           });
 
-          const decryptedType = await safeDecrypt(transaction.type, {
-            transaction_id: transaction._id,
-            field: "type",
-          });
+          let decryptedType = null;
+          try {
+            decryptedType = await safeDecrypt(transaction.type, {
+              transaction_id: transaction._id,
+              field: "type",
+            });
+          } catch (e) {
+            console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
+          }
 
-          const decryptedSubtype = await safeDecrypt(transaction.subtype, {
-            transaction_id: transaction._id,
-            field: "subtype",
-          });
+          let decryptedSubtype = null;
+          try {
+            decryptedSubtype = await safeDecrypt(transaction.subtype, {
+              transaction_id: transaction._id,
+              field: "subtype",
+            });
+          } catch (e) {
+            console.error(`Failed to decrypt subtype for transaction ${transaction._id}:`, e);
+          }
+
           const decryptedQuantity = await safeDecryptNumericValue(
             transaction.quantity, safeDecrypt,
             { transaction_id: transaction._id, field: "quantity" },
           );
 
-          const decryptedSecurityId = await safeDecrypt(
-            transaction.securityId,
-            { transaction_id: transaction._id, field: "securityId" },
-          );
+          let decryptedSecurityId = null;
+          try {
+            decryptedSecurityId = await safeDecrypt(
+              transaction.securityId,
+              { transaction_id: transaction._id, field: "securityId" },
+            );
+          } catch (e) {
+            console.error(`Failed to decrypt securityId for transaction ${transaction._id}:`, e);
+          }
 
-          const decryptedDescription = await safeDecrypt(transaction.description, {
-            transaction_id: transaction._id,
-            field: "description",
-          });
+          console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
+          let decryptedDescription = null;
+          try {
+            if (transaction.description) {
+              decryptedDescription = await safeDecrypt(transaction.description, {
+                  transaction_id: transaction._id,
+                  field: "description",
+              });
+            }
+          } catch (e) {
+            console.error(`Failed to decrypt description for transaction ${transaction._id}:`, e);
+          }
 
-          const decryptedNotes = await safeDecrypt(transaction.notes, {
-            transaction_id: transaction._id,
-            field: "notes",
-          });
+          let decryptedNotes = null;
+          try {
+            if (transaction.notes) {
+              decryptedNotes = await safeDecrypt(transaction.notes, {
+                  transaction_id: transaction._id,
+                  field: "notes",
+              });
+            }
+          } catch (e) {
+            console.error(`Failed to decrypt notes for transaction ${transaction._id}:`, e);
+          }
 
           let decryptedTags = null;
           try {
@@ -1616,14 +1625,14 @@ const getTransactions = async (
             ...transaction,
             amount: decryptedAmount,
             name: decryptedName,
-            merchant: {
+            merchant: transaction.merchant ? {
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
               merchantCategory: transaction.merchant.merchantCategory,
               logo: transaction.merchant.logo,
               website: transaction.merchant.website,
-            },
+            } : null,
             fees: decryptedFees,
             price: decryptedPrice,
             type: decryptedType,
@@ -1797,32 +1806,50 @@ const getTransactionsByAccount = async (
       continue;
     }
 
-    const decryptedName = await safeDecrypt(transaction.name, {
-      transaction_id: transaction._id,
-      field: "name",
-    });
+    let decryptedName = null;
+    try {
+      decryptedName = await safeDecrypt(transaction.name, {
+        transaction_id: transaction._id,
+        field: "name",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt name for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedAccountType = await safeDecrypt(
-      transaction.accountType,
-      { transaction_id: transaction._id, field: "accountType" },
-    );
+    let decryptedAccountType = null;
+    try {
+      decryptedAccountType = await safeDecrypt(
+        transaction.accountType,
+        { transaction_id: transaction._id, field: "accountType" },
+      );
+    } catch (e) {
+      console.error(`Failed to decrypt accountType for transaction ${transaction._id}:`, e);
+    }
 
     let decryptedMerchantName;
     let decryptedMerchantMerchantName;
     let merchantCategory;
     if (transaction.merchant) {
-      decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
-        transaction_id: transaction._id,
-        field: "merchant.name",
-      });
-
-      decryptedMerchantMerchantName = await safeDecrypt(
-        transaction.merchant.merchantName,
-        {
+      try {
+        decryptedMerchantName = await safeDecrypt(transaction.merchant.name, {
           transaction_id: transaction._id,
-          field: "merchant.merchantName",
-        },
-      );
+          field: "merchant.name",
+        });
+      } catch (e) {
+        console.error(`Failed to decrypt merchant.name for transaction ${transaction._id}:`, e);
+      }
+
+      try {
+        decryptedMerchantMerchantName = await safeDecrypt(
+          transaction.merchant.merchantName,
+          {
+            transaction_id: transaction._id,
+            field: "merchant.merchantName",
+          },
+        );
+      } catch (e) {
+        console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
+      }
 
       merchantCategory = transaction.merchant.merchantCategory;
     }
@@ -1837,30 +1864,64 @@ const getTransactionsByAccount = async (
       field: "price",
     });
 
-    const decryptedType = await safeDecrypt(transaction.type, {
-      transaction_id: transaction._id,
-      field: "type",
-    });
+    let decryptedType = null;
+    try {
+      decryptedType = await safeDecrypt(transaction.type, {
+        transaction_id: transaction._id,
+        field: "type",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedSubtype = await safeDecrypt(transaction.subtype, {
-      transaction_id: transaction._id,
-      field: "subtype",
-    });
+    let decryptedSubtype = null;
+    try {
+      decryptedSubtype = await safeDecrypt(transaction.subtype, {
+        transaction_id: transaction._id,
+        field: "subtype",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt subtype for transaction ${transaction._id}:`, e);
+    }
 
     const decryptedQuantity = await safeDecryptNumericValue(transaction.quantity, safeDecrypt, {
       transaction_id: transaction._id,
       field: "quantity",
     });
 
-    const decryptedDescription = await safeDecrypt(transaction.description, {
-        transaction_id: transaction._id,
-        field: "description",
-    });
+    let decryptedSecurityId = null;
+    try {
+      decryptedSecurityId = await safeDecrypt(
+        transaction.securityId,
+        { transaction_id: transaction._id, field: "securityId" },
+      );
+    } catch (e) {
+      console.error(`Failed to decrypt securityId for transaction ${transaction._id}:`, e);
+    }
 
-    const decryptedNotes = await safeDecrypt(transaction.notes, {
-        transaction_id: transaction._id,
-        field: "notes",
-    });
+    let decryptedDescription = null;
+    try {
+      if (transaction.description) {
+        decryptedDescription = await safeDecrypt(transaction.description, {
+            transaction_id: transaction._id,
+            field: "description",
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to decrypt description for transaction ${transaction._id}:`, e);
+    }
+
+    let decryptedNotes = null;
+    try {
+      if (transaction.notes) {
+        decryptedNotes = await safeDecrypt(transaction.notes, {
+            transaction_id: transaction._id,
+            field: "notes",
+        });
+      }
+    } catch (e) {
+      console.error(`Failed to decrypt notes for transaction ${transaction._id}:`, e);
+    }
 
     let decryptedTags = null;
     try {
@@ -1881,14 +1942,14 @@ const getTransactionsByAccount = async (
 
       name: decryptedName,
 
-      merchant: {
+      merchant: transaction.merchant ? {
         ...transaction.merchant,
 
         name: decryptedMerchantName,
 
         merchantName: decryptedMerchantMerchantName,
         merchantCategory: merchantCategory,
-      },
+      } : null,
 
       fees: decryptedFees,
 
@@ -2087,6 +2148,24 @@ const getAccountDetails = async (accountId, profileId, uid) => {
  * @returns {Object} Decrypted liability object including core identifiers, decrypted binary fields (when present), and a decrypted `aprs` array with `aprPercentage`, `aprType`, `balanceSubjectToApr`, and `interestChargeAmount` entries.
  */
 
+async function flexibleDecrypt(value, safeDecrypt, context) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return await safeDecrypt(value, context);
+    } catch (e) {
+      // If decryption fails, assume it's a plaintext value and return it.
+      return value;
+    }
+  }
+
+  // If it's not a string (e.g., a number, boolean, or object from new data), return it directly.
+  return value;
+}
+
 async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
 
   const liabilitiesList = liabilities[0];
@@ -2095,10 +2174,9 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
-    accountNumber: liabilitiesList.accountNumber,
+    accountNumber: await flexibleDecrypt(liabilitiesList.accountNumber, safeDecrypt, { field: 'accountNumber' }),
   };
   const binaryFields = [
-    "accountId",
     "lastPaymentAmount",
     "lastPaymentDate",
     "lastPaymentDueDate",
@@ -2109,9 +2187,10 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
     "isOverdue",
   ];
   for (const field of binaryFields) {
-    if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
+    if (liabilitiesList[field] !== undefined) {
+      decryptedLiabilities[field] = await flexibleDecrypt(
         liabilitiesList[field],
+        safeDecrypt,
         { field: field },
       );
     }
@@ -2126,8 +2205,8 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
         "balanceSubjectToApr",
         "interestChargeAmount",
       ]) {
-        if (aprItem[key]) {
-          decryptedAprItem[key] = await safeDecrypt(aprItem[key], {
+        if (aprItem[key] !== undefined) {
+          decryptedAprItem[key] = await flexibleDecrypt(aprItem[key], safeDecrypt, {
             field: `aprs.${key}`,
           });
         }
@@ -2143,7 +2222,7 @@ async function getDecryptedLiabilitiesCredit(liabilities, dek, uid) {
  *
  * @param {Array} liabilities - Array whose first element is the stored loan liability object containing encrypted fields and nested objects (e.g., property_address, interest_rate, loan_status, repayment_plan, servicer_address).
  * @param {Buffer|string} dek - Data encryption key (DEK) used to decrypt the liability's encrypted values.
- * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, interestRate, loanStatus, repaymentPlan, servicerAddress) when present.
+ * @returns {Object} An object representing the decrypted loan liability, including top-level fields (_id, liabilityType, accountNumber), decrypted scalar fields (e.g., loanTerm, maturityDate, interestRatePercentage), and decrypted nested objects (propertyAddress, InterestRate, LoanStatus, RepaymentPlan, ServicerAddress) when present.
  */
 
 async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
@@ -2152,10 +2231,9 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   const decryptedLiabilities = {
     _id: liabilitiesList._id,
     liabilityType: liabilitiesList.liabilityType,
-    accountNumber: liabilitiesList.accountNumber,
+    accountNumber: await flexibleDecrypt(liabilitiesList.accountNumber, safeDecrypt, { field: 'accountNumber' }),
   };
   const binaryFields = [
-    "accountId",
     "lastPaymentAmount",
     "lastPaymentDate",
     "lastPaymentDueDate",
@@ -2179,44 +2257,48 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
     "interestRatePercentage",
   ];
   for (const field of binaryFields) {
-    if (liabilitiesList[field]) {
-      decryptedLiabilities[field] = await safeDecrypt(
+    if (liabilitiesList[field] !== undefined) {
+      decryptedLiabilities[field] = await flexibleDecrypt(
         liabilitiesList[field],
+        safeDecrypt,
         { field: field },
       );
     }
   }
-  // Handle nested objects for property_address, interest_rate, loan_status, repayment_plan, servicer_address
-  if (liabilitiesList.property_address) {
+  // Handle nested objects for propertyAddress, interestRate, loanStatus, repayment_plan, servicer_address
+  if (liabilitiesList.propertyAddress) {
     decryptedLiabilities.propertyAddress = {};
     for (const key of ["city", "country", "postalCode", "region", "street"]) {
-      if (liabilitiesList.property_address[key]) {
-        decryptedLiabilities.propertyAddress[key] = await safeDecrypt(
-          liabilitiesList.property_address[key],
+      if (liabilitiesList.propertyAddress[key] !== undefined) {
+        decryptedLiabilities.propertyAddress[key] = await flexibleDecrypt(
+          liabilitiesList.propertyAddress[key],
+          safeDecrypt,
           { field: `propertyAddress.${key}` },
         );
       }
     }
   }
 
-  if (liabilitiesList.interest_rate) {
+  if (liabilitiesList.interestRate) {
     decryptedLiabilities.interestRate = {};
     for (const key of ["percentage", "type"]) {
-      if (liabilitiesList.interest_rate[key]) {
-        decryptedLiabilities.interestRate[key] = await safeDecrypt(
-          liabilitiesList.interest_rate[key],
+      if (liabilitiesList.interestRate[key] !== undefined) {
+        decryptedLiabilities.interestRate[key] = await flexibleDecrypt(
+          liabilitiesList.interestRate[key],
+          safeDecrypt,
           { field: `interestRate.${key}` },
         );
       }
     }
   }
 
-  if (liabilitiesList.loan_status) {
+  if (liabilitiesList.loanStatus) {
     decryptedLiabilities.loanStatus = {};
     for (const key of ["endDate", "type"]) {
-      if (liabilitiesList.loan_status[key]) {
-        decryptedLiabilities.loanStatus[key] = await safeDecrypt(
-          liabilitiesList.loan_status[key],
+      if (liabilitiesList.loanStatus[key] !== undefined) {
+        decryptedLiabilities.loanStatus[key] = await flexibleDecrypt(
+          liabilitiesList.loanStatus[key],
+          safeDecrypt,
           { field: `loanStatus.${key}` },
         );
       }
@@ -2226,9 +2308,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.repayment_plan) {
     decryptedLiabilities.repaymentPlan = {};
     for (const key of ["type", "description"]) {
-      if (liabilitiesList.repayment_plan[key]) {
-        decryptedLiabilities.repaymentPlan[key] = await safeDecrypt(
+      if (liabilitiesList.repayment_plan[key] !== undefined) {
+        decryptedLiabilities.repaymentPlan[key] = await flexibleDecrypt(
           liabilitiesList.repayment_plan[key],
+          safeDecrypt,
           { field: `repaymentPlan.${key}` },
         );
       }
@@ -2238,9 +2321,10 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
   if (liabilitiesList.servicer_address) {
     decryptedLiabilities.servicerAddress = {};
     for (const key of ["city", "country", "postalCode", "region", "street"]) {
-      if (liabilitiesList.servicer_address[key]) {
-        decryptedLiabilities.servicerAddress[key] = await safeDecrypt(
+      if (liabilitiesList.servicer_address[key] !== undefined) {
+        decryptedLiabilities.servicerAddress[key] = await flexibleDecrypt(
           liabilitiesList.servicer_address[key],
+          safeDecrypt,
           { field: `servicerAddress.${key}` },
         );
       }
@@ -2806,6 +2890,8 @@ const accountsService = {
   formatTransactionsWithSigns,
   formatAccountsBalances,
   getNewestAccessToken,
+  getDecryptedLiabilitiesLoan,
+  getDecryptedLiabilitiesCredit,
 };
 
 export default accountsService;
