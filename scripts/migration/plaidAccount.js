@@ -1,7 +1,8 @@
 import PlaidAccount from '../../database/models/PlaidAccount.js';
 import User from '../../database/models/User.js';
 import structuredLogger from '../../lib/structuredLogger.js';
-import { getUserDek } from '../../database/encryption.js';
+import { getUserDek, hashValue } from '../../database/encryption.js';
+import { createSafeDecrypt } from '../../lib/encryptionHelper.js';
 import { createSafeEncrypt } from '../../lib/encryptionHelper.js';
 
 async function migratePlaidAccounts(user, encryptIfPlaintext, documentId, isDryRun) {
