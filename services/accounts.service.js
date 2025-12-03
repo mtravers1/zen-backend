@@ -394,17 +394,20 @@ const addAccount = async (accessToken, email, uid) => {
       }
 
             if (liabilitiesResponse) {
+              console.log('[DEBUG-LIABILITY] Entered liability processing block.');
               for (const [key, value] of Object.entries(
                 liabilitiesResponse.liabilities,
               )) {
                 if (Array.isArray(value)) {
                   for (const item of value) {
+                    console.log('[DEBUG-LIABILITY] Processing liability item:', JSON.stringify(item, null, 2));
+                    const matchingAccount = savedAccounts.find(
+                      (account) => account.plaid_account_id === item.account_id,
+                    );
+                    console.log(`[DEBUG-LIABILITY] Matching account found: ${!!matchingAccount}`);
+
                     //if accountid is not in savedaccounts, then skip
-                    if (
-                      !savedAccounts.find(
-                        (account) => account.plaid_account_id === item.account_id,
-                      )
-                    )
+                    if (!matchingAccount)
                       continue;
       
                     const encryptedAccountNumber = await safeEncrypt(
