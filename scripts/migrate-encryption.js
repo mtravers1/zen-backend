@@ -61,6 +61,7 @@ async function migrate() {
   const changesToEncrypt = [];
   const failedDecryptions = [];
   const accountsToRefresh = new Set();
+  const migrationStats = { fieldsEncrypted: 0 };
 
   await connectDB();
 
@@ -121,6 +122,7 @@ async function migrate() {
             return value; // Skip encryption
           }
         }
+        migrationStats.fieldsEncrypted++;
         return await safeEncrypt(value, context);
       }
 
@@ -170,6 +172,17 @@ async function migrate() {
   if (failedDecryptions.length > 0) {
     console.log('\n--- Decryption Failures Summary ---\n');
     console.table(failedDecryptions);
+  }
+
+  if (!isDryRun) {
+    const summary = {
+      'Users Processed': users.length,
+      'Fields Encrypted': migrationStats.fieldsEncrypted,
+      'Corrupted Fields Found': failedDecryptions.length,
+      'Plaid Accounts Refreshed': accountsToRefresh.size,
+    }
+    console.log('\n--- Live Run Summary ---\n');
+    console.table(summary);
   }
 
   if (accountsToRefresh.size > 0) {
