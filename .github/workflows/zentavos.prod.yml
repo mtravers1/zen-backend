@@ -282,6 +282,9 @@ jobs:
             cd ${{ vars.DEPLOYMENT_PATH }}
             npm run migrate:encryption -- ${{ github.event.inputs.migration_args }}
           EOF
+          rm -f private_key.pem # Remove the private key file after use for security
+          rm -f client.ovpn # Remove ovpn file after use for security
+
 
   delete_user:
     runs-on: ubuntu-latest
@@ -369,3 +372,5 @@ jobs:
             cd ${{ vars.DEPLOYMENT_PATH }}
             npm run delete-user -- ${{ github.event.inputs.delete_user_args }}
           EOF
+          rm -f private_key.pem # Remove the private key file after use for security
+          rm -f client.ovpn # Remove ovpn file after use for security
