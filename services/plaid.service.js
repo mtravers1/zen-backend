@@ -776,10 +776,10 @@ const updateTransactions = async (item) => {
                 $set: {
                   amount: encryptedAmount,
                   transactionDate: transaction.date,
-                  tags: await safeEncrypt(transaction.category, {
+                  tags: transaction.category ? await safeEncrypt(transaction.category, {
               transaction_id: transaction.transaction_id,
               field: "tags",
-            }),
+            }) : null,
                   pending_transaction_id: transaction.pending_transaction_id,
                   pending: transaction.pending,
                 },

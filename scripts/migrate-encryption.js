@@ -61,6 +61,7 @@ async function migrate() {
   const changesToEncrypt = [];
   const failedDecryptions = [];
   const accountsToRefresh = new Set();
+  const migrationStats = { fieldsEncrypted: 0 };
 
   await connectDB();
 
@@ -104,7 +105,7 @@ async function migrate() {
         return value;
       }
 
-      if (!isBase64(value)) {
+      if (!isBase64(value) || value.length < 48) { // 48 is a safe minimum length for a b64 string encoding a 32+ byte value
         console.log(`[encryptIfPlaintext] Field ${context.field} is not base64, assuming plaintext.`);
         if (isDryRun) {
           changesToEncrypt.push({
@@ -121,6 +122,7 @@ async function migrate() {
             return value; // Skip encryption
           }
         }
+        migrationStats.fieldsEncrypted++;
         return await safeEncrypt(value, context);
       }
 
@@ -158,18 +160,33 @@ async function migrate() {
 
   structuredLogger.logSuccess('Migration complete');
 
-  if (isDryRun) {
-    console.log('\n--- Dry Run Summary ---\n');
-    if (changesToEncrypt.length > 0) {
-      console.table(changesToEncrypt);
-    } else {
-      console.log('No plaintext values found that require encryption.');
-    }
-  }
-
+  // Always show Decryption Failures if they exist
   if (failedDecryptions.length > 0) {
     console.log('\n--- Decryption Failures Summary ---\n');
     console.table(failedDecryptions);
+  }
+
+  // Unified Summary Table for both Dry and Live runs
+  const summaryTitle = isDryRun ? '--- Dry Run Final Summary ---' : '--- Live Run Final Summary ---';
+  const summaryData = {
+    'Users Processed': users.length,
+    'Corrupted Fields Found': failedDecryptions.length,
+  };
+
+  if (isDryRun) {
+    summaryData['Fields Flagged for Encryption'] = changesToEncrypt.length;
+    console.log(`\n${summaryTitle}\n`);
+    console.table(summaryData);
+    // Optionally still show the detailed list for dry runs
+    if (changesToEncrypt.length > 0) {
+        console.log('\n--- Details of Fields to be Encrypted ---\n');
+        console.table(changesToEncrypt);
+    }
+  } else {
+    summaryData['Fields Actually Encrypted'] = migrationStats.fieldsEncrypted;
+    summaryData['Plaid Accounts Refreshed'] = accountsToRefresh.size;
+    console.log(`\n${summaryTitle}\n`);
+    console.table(summaryData);
   }
 
   if (accountsToRefresh.size > 0) {

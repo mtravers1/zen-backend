@@ -9,6 +9,7 @@ import Business from "../database/models/Businesses.js";
 import AccessToken from "../database/models/AccessToken.js";
 import Files from "../database/models/Files.js";
 import Trips from "../database/models/Trips.js";
+import VerificationCode from "../database/models/VerificationCode.js";
 import connectDB from "../database/database.js";
 import {
   getUserDek,
@@ -121,11 +122,23 @@ const deleteUser = async (uid) => {
     const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
     const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
 
+    console.log("Deleting plaid accounts...");
+    await PlaidAccount.deleteMany({ owner_id: user._id });
+
     console.log("Deleting transactions...");
     await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
 
     console.log("Deleting liabilities...");
     await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+
+    console.log("Deleting assets...");
+    await Assets.deleteMany({ userId: user._id });
+
+    console.log("Deleting trips...");
+    await Trips.deleteMany({ userId: user._id });
+
+    console.log("Deleting verification codes...");
+    await VerificationCode.deleteMany({ userId: user._id });
 
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
@@ -200,6 +213,10 @@ const main = async () => {
     }
 
     const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    if (plaidAccounts.length > 0) {
+        console.log('- Delete plaid accounts from the database:');
+        console.table(plaidAccounts.map(p => ({ id: p._id, name: p.name, owner_id: p.owner_id })));
+    }
     const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
 
     const transactions = await Transaction.find({ plaidAccountId: { $in: plaidAccountIds } }).limit(5);
@@ -214,9 +231,22 @@ const main = async () => {
         console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
     }
 
-    if(liabilities.length > 0) {
-        console.log('- Delete liabilities from the database:');
-        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
+    const assets = await Assets.find({ userId: user._id }).limit(5);
+    if(assets.length > 0) {
+        console.log('- Delete assets from the database:');
+        console.table(assets.map(a => ({ id: a._id, name: a.name, userId: a.userId })));
+    }
+
+    const trips = await Trips.find({ userId: user._id }).limit(5);
+    if(trips.length > 0) {
+        console.log('- Delete trips from the database:');
+        console.table(trips.map(t => ({ id: t._id, name: t.name, userId: t.userId })));
+    }
+
+    const verificationCodes = await VerificationCode.find({ userId: user._id }).limit(5);
+    if(verificationCodes.length > 0) {
+        console.log('- Delete verification codes from the database:');
+        console.table(verificationCodes.map(v => ({ id: v._id, code: v.code, userId: v.userId })));
     }
 
     console.log('- Permanently delete the user from the database');

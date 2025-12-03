@@ -108,7 +108,10 @@ export const getStartOfWeek = (date) => {
 };
 
 export const getNewestAccessToken = async (find) => {
-  const accessTokens = await AccessToken.find(find).sort({ createdAt: -1 });
+  const accessTokens = await AccessToken.find({
+    ...find,
+    isAccessTokenExpired: { $ne: true },
+  }).sort({ createdAt: -1 });
   if (accessTokens.length > 1) {
     console.error("Multiple access tokens found for query: ", find);
   }
