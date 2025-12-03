@@ -36,6 +36,7 @@ const addAccount = async (accessToken, email, uid) => {
     async () => {
       const dek = await getUserDek(uid);
       const safeEncrypt = createSafeEncrypt(uid, dek);
+      const safeDecrypt = createSafeDecrypt(uid, dek);
 
       const user = await User.findOne({
         authUid: uid,
@@ -45,24 +46,12 @@ const addAccount = async (accessToken, email, uid) => {
       }
       const userId = user._id.toString();
       const userType = user.role;
+      const accountsResponse =
+        await plaidService.getAccountsWithAccessToken(accessToken);
 
-      const [
-        accountsResponse,
-        transactionsResponse,
-        identityResponse,
-        investmentsResponse,
-        liabilitiesResponse,
-      ] = await Promise.allSettled([
-        plaidService.getAccountsWithAccessToken(accessToken),
-        plaidService.getTransactionsWithAccessToken(accessToken),
-
-        plaidService.getInvestmentTransactionsWithAccessToken(accessToken),
-        plaidService.getLoanLiabilitiesWithAccessToken(accessToken),
-      ]);
-
-      const accounts = accountsResponse.value.accounts;
-      const institutionId = accountsResponse.value.item.institution_id;
-      const institutionName = accountsResponse.value.item.institution_name;
+      const accounts = accountsResponse.accounts;
+      const institutionId = accountsResponse.item.institution_id;
+      const institutionName = accountsResponse.item.institution_name;
 
       const userAccounts = user.plaidAccounts;
       let savedAccounts = [];
@@ -73,7 +62,7 @@ const addAccount = async (accessToken, email, uid) => {
       for (let account of accounts) {
         const hashAccountName = hashValue(account.name);
         const hashAccountInstitutionId = hashValue(
-          accountsResponse.value.item.institution_id,
+          accountsResponse.item.institution_id,
         );
         const hashAccountMask = hashValue(account.mask);
 
@@ -150,7 +139,7 @@ const addAccount = async (accessToken, email, uid) => {
 
         const newAccount = new PlaidAccount({
           owner_id: userId,
-          itemId: accountsResponse.value.item.item_id,
+          itemId: accountsResponse.item.item_id,
           accessToken: encryptedToken,
           owner_type: userType,
           plaid_account_id: account.account_id,
@@ -194,14 +183,68 @@ const addAccount = async (accessToken, email, uid) => {
         }),
       );
 
-      const nextCursor = transactionsResponse.value
-        ? transactionsResponse.value.next_cursor
+      let transactionsResponse;
+      let investmentTransactionsResponse;
+      let liabilitiesResponse;
+      if (accountsResponse.item.products.includes("transactions")) {
+        try {
+          transactionsResponse =
+            await plaidService.getTransactionsWithAccessToken(accessToken);
+        } catch (error) {
+          console.error(
+            "Error fetching transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          investmentTransactionsResponse =
+            await plaidService.getInvestmentTransactionsWithAccessToken(
+              accessToken,
+            );
+        } catch (error) {
+          console.error(
+            "Error fetching investment transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("liabilities")) {
+        try {
+          liabilitiesResponse =
+            await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+        } catch (error) {
+          console.error(
+            "Error fetching liabilities:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          await plaidService.updateInvestmentTransactions(
+            accountsResponse.item.item_id,
+          );
+        } catch (error) {
+          console.error(
+            "Error updating investment transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      const nextCursor = transactionsResponse
+        ? transactionsResponse.next_cursor
         : null;
-      const transactions = transactionsResponse.value
-        ? transactionsResponse.value.added
+      const transactions = transactionsResponse
+        ? transactionsResponse.added
         : [];
-      const investmentTransactions = investmentTransactionsResponse.value
-        ? investmentTransactionsResponse.value.investment_transactions
+      const investmentTransactions = investmentTransactionsResponse
+        ? investmentTransactionsResponse.investment_transactions
         : [];
 
       const transactionsByAccount = {};
@@ -350,241 +393,173 @@ const addAccount = async (accessToken, email, uid) => {
         transactionsByAccount[transaction.account_id].push(newTransaction._id);
       }
 
-      if (liabilitiesResponse) {
-        Object.entries(liabilitiesResponse.liabilities).forEach(
-          ([key, value]) => {
-            if (Array.isArray(value)) {
-              value.forEach(async (item) => {
-                //if accountid is not in savedaccounts, then skip
-                if (
-                  !savedAccounts.find(
-                    (account) => account.plaid_account_id === item.account_id,
-                  )
-                )
-                  return;
-
-                const encryptedAccountNumber = await safeEncrypt(
-                  item.account_number,
-                );
-
-                const encryptedLastPaymentAmount = await safeEncrypt(
-                  item.last_payment_amount,
-                );
-
-                const encryptedLastPaymentDate = await safeEncrypt(
-                  item.last_payment_date,
-                );
-
-                const encryptedNextPaymentDueDate = await safeEncrypt(
-                  item.next_payment_due_date,
-                );
-
-                const encryptedMinimumPaymentAmount = await safeEncrypt(
-                  item.minimum_payment_amount,
-                );
-
-                const encryptedLastStatementBalance = await safeEncrypt(
-                  item.last_statement_balance,
-                );
-
-                const encryptedLastStatementIssueDate = await safeEncrypt(
-                  item.last_statement_issue_date,
-                );
-
-                const encryptedIsOverdue = await safeEncrypt(item.is_overdue);
-
-                const encryptedAprs = item.aprs
-                  ? await Promise.all(
-                      item.aprs.map(async (apr) => ({
-                        aprPercentage: await safeEncrypt(apr.apr_percentage),
-                        aprType: await safeEncrypt(apr.apr_type),
-                        balanceSubjectToApr: await safeEncrypt(
-                          apr.balance_subject_to_apr,
-                        ),
-                        interestChargeAmount: await safeEncrypt(
-                          apr.interest_charge_amount,
-                        ),
-                      })),
+            if (liabilitiesResponse) {
+              for (const [key, value] of Object.entries(
+                liabilitiesResponse.liabilities,
+              )) {
+                if (Array.isArray(value)) {
+                  for (const item of value) {
+                    //if accountid is not in savedaccounts, then skip
+                    if (
+                      !savedAccounts.find(
+                        (account) => account.plaid_account_id === item.account_id,
+                      )
                     )
-                  : undefined;
-
-                const encryptedLoanTypeDescription = await safeEncrypt(
-                  item.loan_type_description,
-                );
-
-                const encryptedLoanTerm = await safeEncrypt(item.loan_term);
-
-                const encryptedMaturityDate = await safeEncrypt(
-                  item.maturity_date,
-                );
-
-                const encryptedNextMonthlyPayment = await safeEncrypt(
-                  item.next_monthly_payment,
-                );
-
-                const encryptedOriginationDate = await safeEncrypt(
-                  item.origination_date,
-                );
-
-                const encryptedOriginationPrincipalAmount = await safeEncrypt(
-                  item.origination_principal_amount,
-                );
-
-                const encryptedPastDueAmount = await safeEncrypt(
-                  item.past_due_amount,
-                );
-
-                const encryptedEscrowBalance = await safeEncrypt(
-                  item.escrow_balance,
-                );
-
-                const encryptedHasPmi = await safeEncrypt(item.has_pmi);
-
-                const encryptedHasPrepaymentPenalty = await safeEncrypt(
-                  item.has_prepayment_penalty,
-                );
-                let encryptedPropertyAddress;
-                if (item.property_address) {
-                  encryptedPropertyAddress = {
-                    city: await safeEncrypt(item.property_address?.city),
-                    country: await safeEncrypt(item.property_address?.country),
-                    postalCode: await safeEncrypt(
-                      item.property_address?.postal_code,
-                    ),
-                    region: await safeEncrypt(item.property_address?.region),
-                    street: await safeEncrypt(item.property_address?.street),
-                  };
+                      continue;
+      
+                    const encryptedAccountNumber = await safeEncrypt(
+                      item.account_number,
+                    );
+      
+                    const encryptedLastPaymentAmount = await safeEncrypt(
+                      item.last_payment_amount,
+                    );
+      
+                    const encryptedMinimumPaymentAmount = await safeEncrypt(
+                      item.minimum_payment_amount,
+                    );
+      
+                    const encryptedLastStatementBalance = await safeEncrypt(
+                      item.last_statement_balance,
+                    );
+      
+                    const encryptedLoanTypeDescription = await safeEncrypt(
+                      item.loan_type_description,
+                    );
+      
+                    const encryptedLoanTerm = await safeEncrypt(item.loan_term);
+      
+                    const encryptedNextMonthlyPayment = await safeEncrypt(
+                      item.next_monthly_payment,
+                    );
+      
+                    const encryptedOriginationPrincipalAmount = await safeEncrypt(
+                      item.origination_principal_amount,
+                    );
+      
+                    const encryptedPastDueAmount = await safeEncrypt(
+                      item.past_due_amount,
+                    );
+      
+                    const encryptedEscrowBalance = await safeEncrypt(
+                      item.escrow_balance,
+                    );
+      
+                    const encryptedHasPmi = await safeEncrypt(item.has_pmi);
+      
+                    const encryptedHasPrepaymentPenalty = await safeEncrypt(
+                      item.has_prepayment_penalty,
+                    );
+                    let encryptedPropertyAddress;
+                    if (item.property_address) {
+                      encryptedPropertyAddress = {
+                        city: await safeEncrypt(item.property_address?.city),
+                        country: await safeEncrypt(item.property_address?.country),
+                        postalCode: await safeEncrypt(
+                          item.property_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.property_address?.region),
+                        street: await safeEncrypt(item.property_address?.street),
+                      };
+                    }
+      
+                    const encryptedGuarantor = await safeEncrypt(item.guarantor);
+      
+                    const encryptedLoanName = await safeEncrypt(item.loan_name);
+      
+                    const encryptedOutstandingInterestAmount = await safeEncrypt(
+                      item.outstanding_interest_amount,
+                    );
+                    const encryptedPaymentReferenceNumber = await safeEncrypt(
+                      item.payment_reference_number,
+                    );
+                    const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
+                    let encryptedRepaymentPlan;
+                    if (item.repayment_plan) {
+                      encryptedRepaymentPlan = {
+                        type: await safeEncrypt(item.repayment_plan?.type),
+                        description: await safeEncrypt(
+                          item.repayment_plan?.description,
+                        ),
+                      };
+                    }
+                    const encryptedSequenceNumber = await safeEncrypt(
+                      item.sequence_number,
+                    );
+                    let encryptedServicerAddress;
+                    if (item.servicer_address)
+                      encryptedServicerAddress = {
+                        city: await safeEncrypt(item.servicer_address?.city),
+                        country: await safeEncrypt(
+                          item.servicer_address?.country,
+                        ),
+                        postalCode: await safeEncrypt(
+                          item.servicer_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.servicer_address?.region),
+                        street: await safeEncrypt(item.servicer_address?.street),
+                      };
+                    const encryptedYtdInterestPaid = await safeEncrypt(
+                      item.ytd_interest_paid,
+                    );
+                    const encryptedYtdPrincipalPaid = await safeEncrypt(
+                      item.ytd_principal_paid,
+                    );
+      
+                    const liability = new Liability({
+                      liabilityType: key,
+                      accountId: item.account_id,
+                      accountNumber: encryptedAccountNumber,
+                      lastPaymentAmount: encryptedLastPaymentAmount,
+                      lastPaymentDate: item.last_payment_date,
+                      nextPaymentDueDate: item.next_payment_due_date,
+                      minimumPaymentAmount: encryptedMinimumPaymentAmount,
+                      lastStatementBalance: encryptedLastStatementBalance,
+                      lastStatementIssueDate: item.last_statement_issue_date,
+                      isOverdue: item.is_overdue,
+      
+                      // Credit-specific fields
+                      aprs: item.aprs,
+      
+                      // Mortgage-specific fields
+                      loanTypeDescription: encryptedLoanTypeDescription,
+                      loanTerm: encryptedLoanTerm,
+                      maturityDate: item.maturity_date,
+                      nextMonthlyPayment: encryptedNextMonthlyPayment,
+                      originationDate: item.origination_date,
+                      originationPrincipalAmount:
+                        encryptedOriginationPrincipalAmount,
+                      pastDueAmount: encryptedPastDueAmount,
+                      escrowBalance: encryptedEscrowBalance,
+                      hasPmi: encryptedHasPmi,
+                      hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+                      propertyAddress: encryptedPropertyAddress,
+                      interestRate: item.interest_rate,
+      
+                      // Student-specific fields
+                      disbursementDates: item.disbursement_dates,
+                      expectedPayoffDate: item.expected_payoff_date,
+                      guarantor: encryptedGuarantor,
+                      interestRatePercentage: item.interest_rate_percentage,
+                      loanName: encryptedLoanName,
+      
+                      // Loan status
+                      loanStatus: item.loan_status,
+                      outstandingInterestAmount: encryptedOutstandingInterestAmount,
+                      paymentReferenceNumber: encryptedPaymentReferenceNumber,
+                      pslfStatus: encryptedPslfStatus,
+                      repaymentPlan: encryptedRepaymentPlan,
+                      sequenceNumber: encryptedSequenceNumber,
+                      servicerAddress: encryptedServicerAddress,
+                      ytdInterestPaid: encryptedYtdInterestPaid,
+                      ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+                    });
+      
+                    await liability.save();
+                  }
                 }
-
-                let encryptedInterestRate;
-                if (item.servicer_address) {
-                  encryptedInterestRate = {
-                    percentage: await safeEncrypt(
-                      item.interest_rate?.percentage,
-                    ),
-                    type: await safeEncrypt(item.interest_rate?.type),
-                  };
-                }
-
-                const encryptedDisbursementDates = await safeEncrypt(
-                  item.disbursement_dates,
-                );
-
-                const encryptedExpectedPayoffDate = await safeEncrypt(
-                  item.expected_payoff_date,
-                );
-
-                const encryptedGuarantor = await safeEncrypt(item.guarantor);
-
-                const encryptedInterestRatePercentage = await safeEncrypt(
-                  item.interest_rate_percentage,
-                );
-
-                const encryptedLoanName = await safeEncrypt(item.loan_name);
-                let encryptedLoanStatus;
-                if (item.loan_status) {
-                  encryptedLoanStatus = {
-                    endDate: await safeEncrypt(item.loan_status?.end_date),
-                    type: await safeEncrypt(item.loan_status?.type),
-                  };
-                }
-                const encryptedOutstandingInterestAmount = await safeEncrypt(
-                  item.outstanding_interest_amount,
-                );
-
-                const encryptedPaymentReferenceNumber = await safeEncrypt(
-                  item.payment_reference_number,
-                );
-
-                const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
-                let encryptedRepaymentPlan;
-                if (item.repayment_plan) {
-                  encryptedRepaymentPlan = {
-                    type: await safeEncrypt(item.repayment_plan?.type),
-                    description: await safeEncrypt(
-                      item.repayment_plan?.description,
-                    ),
-                  };
-                }
-                const encryptedSequenceNumber = await safeEncrypt(
-                  item.sequence_number,
-                );
-                let encryptedServicerAddress;
-                if (item.servicer_address)
-                  encryptedServicerAddress = {
-                    city: await safeEncrypt(item.servicer_address?.city),
-                    country: await safeEncrypt(
-                      item.servicer_address?.country,
-                    ),
-                    postalCode: await safeEncrypt(
-                      item.servicer_address?.postal_code,
-                    ),
-                    region: await safeEncrypt(item.servicer_address?.region),
-                    street: await safeEncrypt(item.servicer_address?.street),
-                  };
-                const encryptedYtdInterestPaid = await safeEncrypt(
-                  item.ytd_interest_paid,
-                );
-                const encryptedYtdPrincipalPaid = await safeEncrypt(
-                  item.ytd_principal_paid,
-                );
-
-                const liability = new Liability({
-                  liabilityType: key,
-                  accountId: item.account_id,
-                  accountNumber: encryptedAccountNumber,
-                  lastPaymentAmount: encryptedLastPaymentAmount,
-                  lastPaymentDate: encryptedLastPaymentDate,
-                  nextPaymentDueDate: encryptedNextPaymentDueDate,
-                  minimumPaymentAmount: encryptedMinimumPaymentAmount,
-                  lastStatementBalance: encryptedLastStatementBalance,
-                  lastStatementIssueDate: encryptedLastStatementIssueDate,
-                  isOverdue: encryptedIsOverdue,
-
-                  // Credit-specific fields
-                  aprs: encryptedAprs,
-
-                  // Mortgage-specific fields
-                  loanTypeDescription: encryptedLoanTypeDescription,
-                  loanTerm: encryptedLoanTerm,
-                  maturityDate: encryptedMaturityDate,
-                  nextMonthlyPayment: encryptedNextMonthlyPayment,
-                  originationDate: encryptedOriginationDate,
-                  originationPrincipalAmount:
-                    encryptedOriginationPrincipalAmount,
-                  pastDueAmount: encryptedPastDueAmount,
-                  escrowBalance: encryptedEscrowBalance,
-                  hasPmi: encryptedHasPmi,
-                  hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
-                  propertyAddress: encryptedPropertyAddress,
-                  interestRate: encryptedInterestRate,
-
-                  // Student-specific fields
-                  disbursementDates: encryptedDisbursementDates,
-                  expectedPayoffDate: encryptedExpectedPayoffDate,
-                  guarantor: encryptedGuarantor,
-                  interestRatePercentage: encryptedInterestRatePercentage,
-                  loanName: encryptedLoanName,
-
-                  // Loan status
-                  loanStatus: encryptedLoanStatus,
-                  outstandingInterestAmount: encryptedOutstandingInterestAmount,
-                  paymentReferenceNumber: encryptedPaymentReferenceNumber,
-                  pslfStatus: encryptedPslfStatus,
-                  repaymentPlan: encryptedRepaymentPlan,
-                  sequenceNumber: encryptedSequenceNumber,
-                  servicerAddress: encryptedServicerAddress,
-                  ytdInterestPaid: encryptedYtdInterestPaid,
-                  ytdPrincipalPaid: encryptedYtdPrincipalPaid,
-                });
-
-                await liability.save();
-              });
+              }
             }
-          },
-        );
-      }
-
       const internalTransfers =
         await plaidService.detectInternalTransfers(transactions);
 
