@@ -160,29 +160,33 @@ async function migrate() {
 
   structuredLogger.logSuccess('Migration complete');
 
-  if (isDryRun) {
-    console.log('\n--- Dry Run Summary ---\n');
-    if (changesToEncrypt.length > 0) {
-      console.table(changesToEncrypt);
-    } else {
-      console.log('No plaintext values found that require encryption.');
-    }
-  }
-
+  // Always show Decryption Failures if they exist
   if (failedDecryptions.length > 0) {
     console.log('\n--- Decryption Failures Summary ---\n');
     console.table(failedDecryptions);
   }
 
-  if (!isDryRun) {
-    const summary = {
-      'Users Processed': users.length,
-      'Fields Encrypted': migrationStats.fieldsEncrypted,
-      'Corrupted Fields Found': failedDecryptions.length,
-      'Plaid Accounts Refreshed': accountsToRefresh.size,
+  // Unified Summary Table for both Dry and Live runs
+  const summaryTitle = isDryRun ? '--- Dry Run Final Summary ---' : '--- Live Run Final Summary ---';
+  const summaryData = {
+    'Users Processed': users.length,
+    'Corrupted Fields Found': failedDecryptions.length,
+  };
+
+  if (isDryRun) {
+    summaryData['Fields Flagged for Encryption'] = changesToEncrypt.length;
+    console.log(`\n${summaryTitle}\n`);
+    console.table(summaryData);
+    // Optionally still show the detailed list for dry runs
+    if (changesToEncrypt.length > 0) {
+        console.log('\n--- Details of Fields to be Encrypted ---\n');
+        console.table(changesToEncrypt);
     }
-    console.log('\n--- Live Run Summary ---\n');
-    console.table(summary);
+  } else {
+    summaryData['Fields Actually Encrypted'] = migrationStats.fieldsEncrypted;
+    summaryData['Plaid Accounts Refreshed'] = accountsToRefresh.size;
+    console.log(`\n${summaryTitle}\n`);
+    console.table(summaryData);
   }
 
   if (accountsToRefresh.size > 0) {
