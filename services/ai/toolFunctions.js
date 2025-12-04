@@ -364,8 +364,7 @@ export const toolFunctions = (context) => ({
       );
 
       const transactions = await accountsService.getProfileTransactions(
-        profile.email,
-        profile.id,
+        profile,
         uid,
       );
 

@@ -1689,13 +1689,10 @@ const getUserTransactions = async (
 };
 
 const getProfileTransactions = async (
-  email,
-  profileId,
+  profile,
   uid,
   pagination = { paginate: false },
 ) => {
-  const profiles = await businessService.getUserProfiles(email, uid);
-  const profile = profiles.find((p) => String(p.id) === profileId);
   if (!profile) {
     throw new Error("Profile not found");
   }
