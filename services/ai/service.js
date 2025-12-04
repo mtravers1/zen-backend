@@ -265,6 +265,7 @@ class AIService {
       }
 
       const profiles = await businessService.getUserProfiles(userEmail, uid);
+      console.log('[AI Service] Profiles:', profiles);
       console.log(`[AI Service] ✅ Profiles retrieved:`, {
         profileCount: profiles.length,
         profileIds: profiles.map((p) => ({ id: p.id, name: p.name })),
