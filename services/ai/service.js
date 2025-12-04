@@ -227,6 +227,7 @@ class AIService {
       // Get user and profile information
       console.log(`[AI Service] 👤 Getting user information for UID: ${uid}`);
       const user = await User.findOne({ authUid: uid });
+      console.log('[AI Service] User:', user);
 
       if (!user) {
         console.error(`[AI Service] ❌ User not found for UID: ${uid}`);
