@@ -352,7 +352,7 @@ When a user asks for specific financial data, you MUST use the available tools:
 - "money" = show total cash balance across accounts
 
 **RESPONSE FORMAT:**
-Always return JSON in this exact format:
+Your final response must be a single JSON object, not a tool call. The JSON object should have the following structure:
 {
   "response": "Your answer using real data from tools",
   "data": [tool results],
