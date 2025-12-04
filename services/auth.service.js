@@ -100,7 +100,6 @@ const _createUser = async (authUid, userData) => {
   });
 
   const savedUser = await newUser.save();
-  console.log('User created successfully:', savedUser);
   if (!savedUser) {
     throw new Error("User could not be saved to the database.");
   }
@@ -118,7 +117,6 @@ const signInOrCreate = async (uid, userData) => {
     structuredLogger.logOperationStart("auth_service_signin_or_create", {
       user_id: uid,
     });
-    console.log('signInOrCreate called with uid:', uid);
 
     let user = await User.findOne({
       authUid: uid,

@@ -342,7 +342,7 @@ When a user asks for specific financial data, you MUST use the available tools:
 - "What's my cash flow?" → CALL getCashFlows()
 
 **TRANSACTION ANALYSIS:**
-- If the user asks for a summary or specific analysis of transactions (e.g., "most frequent merchant", "total number of transactions", "average spending"), you MUST call `getProfileTransactions()` with appropriate filters, then analyze the returned data to provide the requested summary or insight. Do NOT just return the raw list of transactions.
+- If the user asks for a summary or specific analysis of transactions (e.g., "most frequent merchant", "total number of transactions", "average spending"), you MUST call getProfileTransactions() with appropriate filters, then analyze the returned data to provide the requested summary or insight. Do NOT just return the raw list of transactions.
 
 **QUESTION INTERPRETATION:**
 - "balance" = total account balances across all accounts
