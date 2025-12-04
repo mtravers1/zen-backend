@@ -375,30 +375,9 @@ export const toolFunctions = (context) => ({
         return [];
       }
 
-      console.log(
-        `[AI][getProfileTransactions] Found ${transactions.length} transactions for profile ${profile.id}`,
-      );
-
-      const filteredTransactions = filterTransactions(transactions, filters);
-      const fixedTransactions =
-        accountsService.formatTransactionsWithSigns(filteredTransactions);
-      const cleanedData = fixedTransactions.map(
-        ({
-          _id,
-          accountId,
-          accountType,
-          plaidTransactionId,
-          pending,
-          pending_transaction_id,
-          internalReference,
-          created_at,
-          __v,
-          institutionName,
-          institutionId,
-          ...rest
-        }) => rest,
-      );
-
+      if (filters.intent === 'count') {
+        return { count: cleanedData.length };
+      }
       return cleanedData;
     } catch (error) {
       console.error("[AI][getProfileTransactions] Error:", error);
