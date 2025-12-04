@@ -209,7 +209,9 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
     files = await getFilesWithRetry(bucket, prefix);
   }
 
-  if (files.length === 0) {
+  const activeFiles = files.filter(file => !file.name.endsWith('.deleted'));
+
+  if (activeFiles.length === 0) {
     console.log(
       `⚠️ DEK files not found for bucket key: ${bucketKey} in bucket ${bucket.name}`,
     );
@@ -217,7 +219,7 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
   }
 
   console.log(
-    `✅ ${files.length} DEK file(s) found, downloading and decrypting...`,
+    `✅ ${activeFiles.length} DEK file(s) found, downloading and decrypting...`,
   );
 
   const deks = [];
@@ -228,7 +230,7 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
     process.env.GCP_KEY_RING,
     process.env.GCP_KEY_NAME,
   );
-  for (const file of files) {
+  for (const file of activeFiles) {
     try {
       const [encryptedDEK] = await file.download();
       const [decryptResponse] = await kmsClient.decrypt({
