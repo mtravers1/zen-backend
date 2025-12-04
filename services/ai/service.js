@@ -227,7 +227,6 @@ class AIService {
       // Get user and profile information
       console.log(`[AI Service] 👤 Getting user information for UID: ${uid}`);
       const user = await User.findOne({ authUid: uid });
-      console.log('[AI Service] User:', user);
 
       if (!user) {
         console.error(`[AI Service] ❌ User not found for UID: ${uid}`);
@@ -266,7 +265,6 @@ class AIService {
       }
 
       const profiles = await businessService.getUserProfiles(userEmail, uid);
-      console.log('[AI Service] Profiles:', profiles);
       console.log(`[AI Service] ✅ Profiles retrieved:`, {
         profileCount: profiles.length,
         profileIds: profiles.map((p) => ({ id: p.id, name: p.name })),
