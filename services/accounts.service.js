@@ -1693,6 +1693,7 @@ const getProfileTransactions = async (
   uid,
   pagination = { paginate: false },
 ) => {
+  console.log('[AI] getProfileTransactions called');
   if (!profile) {
     throw new Error("Profile not found");
   }
@@ -1732,6 +1733,7 @@ const getProfileTransactions = async (
     });
   }
 
+  console.log('[AI] getProfileTransactions finished');
   return await getTransactions(plaidAccounts, uid, pagination);
 };
 
