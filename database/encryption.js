@@ -24,22 +24,25 @@ async function getKmsClient() {
         "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
       );
     }
-    let kmsCredentials;
     try {
-      kmsCredentials = JSON.parse(
+      const kmsCredentials = JSON.parse(
         Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
       );
+      const auth = new GoogleAuth({
+        credentials: kmsCredentials,
+        scopes: "https://www.googleapis.com/auth/cloud-platform",
+      });
+      kmsClientInstance = new KeyManagementServiceClient({
+        auth,
+        projectId: process.env.GCP_PROJECT_ID,
+      });
+      console.log("✅ KMS client initialized");
     } catch (error) {
-      console.error("❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable.", error);
+      console.error("❌ CRITICAL: Failed to initialize KMS client.", error);
       throw new Error(
-        "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
+        "❌ CRITICAL: Failed to initialize KMS client. Ensure KMS_SERVICE_ACCOUNT is a valid base64 encoded JSON string.",
       );
     }
-    kmsClientInstance = new KeyManagementServiceClient({
-      credentials: kmsCredentials,
-      projectId: process.env.GCP_PROJECT_ID,
-    });
-    console.log("✅ KMS client initialized");
   }
   return kmsClientInstance;
 }
