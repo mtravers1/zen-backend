@@ -1,6 +1,6 @@
 import fs from "fs";
+import path from "path";
 import crypto from "crypto";
-import { GoogleAuth } from "google-auth-library";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { storage, keysBucketName } from "../lib/storageClient.js";
@@ -13,8 +13,6 @@ class DecryptionError extends Error {
   }
 }
 
-
-
 let kmsClientInstance;
 async function getKmsClient() {
   if (!kmsClientInstance) {
@@ -25,15 +23,18 @@ async function getKmsClient() {
       );
     }
     try {
-      const kmsCredentials = JSON.parse(
-        Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
-      );
-      const auth = new GoogleAuth({
-        credentials: kmsCredentials,
-        scopes: "https://www.googleapis.com/auth/cloud-platform",
-      });
+      const kmsCredentials = Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8");
+
+      // Create a temporary file with the credentials
+      const tempDir = path.join(process.cwd(), 'tmp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      const tempFilePath = path.join(tempDir, 'gcp-kms-credentials.json');
+      fs.writeFileSync(tempFilePath, kmsCredentials);
+
       kmsClientInstance = new KeyManagementServiceClient({
-        auth,
+        keyFilename: tempFilePath,
         projectId: process.env.GCP_PROJECT_ID,
       });
       console.log("✅ KMS client initialized");
@@ -46,8 +47,6 @@ async function getKmsClient() {
   }
   return kmsClientInstance;
 }
-
-
 
 /**
  * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
@@ -77,8 +76,6 @@ async function getBucket(bucketName) {
     );
   }
 }
-
-
 
 // DEK cache in memory
 const dekCache = new LimitedMap(1000);
