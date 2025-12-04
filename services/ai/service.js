@@ -96,10 +96,7 @@ class AIService {
       validation.errors.push("User ID is required");
     }
 
-    if (!profileId) {
-      validation.isValid = false;
-      validation.errors.push("Profile ID is required");
-    }
+
 
     // Optional fields with type validation
     if (incomingMessages !== undefined && !Array.isArray(incomingMessages)) {
