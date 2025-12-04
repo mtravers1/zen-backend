@@ -1,4 +1,5 @@
 import accountsService from "../services/accounts.service.js";
+import businessService from "../services/businesses.service.js";
 
 const addAccount = async (req, res) => {
   try {
@@ -98,9 +99,16 @@ const getProfileTransactions = async (req, res) => {
     const uid = req.user.uid;
     const { profileId } = req.params;
     const { page = 1, limit = 50, paginate = false } = req.query;
+
+    const profiles = await businessService.getUserProfiles(email, uid);
+    const profile = profiles.find((p) => p.id.toString() === profileId);
+
+    if (!profile) {
+      return res.status(404).send({ message: "Profile not found" });
+    }
+
     const transactions = await accountsService.getProfileTransactions(
-      email,
-      profileId,
+      profile,
       uid,
       {
         page: parseInt(page),
