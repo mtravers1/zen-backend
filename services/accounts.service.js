@@ -2773,9 +2773,11 @@ const formatTransactionsWithSigns = (transactions) => {
     } else if (transaction.accountType === "investment") {
       transaction.amount = Math.abs(transaction.amount);
     }
-    delete transaction.merchant._id;
-    delete transaction.merchant.website;
-    delete transaction.merchant.logo;
+    if (transaction.merchant) {
+      delete transaction.merchant._id;
+      delete transaction.merchant.website;
+      delete transaction.merchant.logo;
+    }
   }
   return transactions;
 };
