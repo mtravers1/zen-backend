@@ -33,6 +33,19 @@ const findAndRenameDekFiles = async (user, uid) => {
 
     if ((await dekFile.exists())[0]) {
       const newDekFilePath = `${dekFilePath}.deleted`;
+      const newDekFile = bucket.file(newDekFilePath);
+      try {
+        await newDekFile.getMetadata();
+        // if we are here, the file exists
+        console.log(`DEK file ${newDekFilePath} already exists. Skipping rename.`);
+        return;
+      } catch (e) {
+        if (e.code !== 404) {
+          // an error other than "not found"
+          throw e;
+        }
+        // if we are here, the file does not exist, so we can copy.
+      }
       console.log(`Renaming DEK file in ${bucket.name} from ${dekFilePath} to ${newDekFilePath}...`);
       await dekFile.copy(newDekFilePath);
       console.log("DEK file renamed successfully.");
