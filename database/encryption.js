@@ -29,7 +29,10 @@ async function getKmsClient() {
         Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
       );
       const auth = new GoogleAuth({
-        credentials: kmsCredentials,
+        credentials: {
+          ...kmsCredentials,
+          universe_domain: "googleapis.com",
+        },
         scopes: "https://www.googleapis.com/auth/cloud-platform",
       });
       kmsClientInstance = new KeyManagementServiceClient({
