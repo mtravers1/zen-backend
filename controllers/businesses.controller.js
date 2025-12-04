@@ -1,10 +1,19 @@
 import businessService from "../services/businesses.service.js";
+import permissionService from "../services/permissions.service.js";
 
 const addBusiness = async (req, res) => {
   try {
     const data = req.body;
     const email = req.user.email;
     const uid = req.user.uid;
+    const permission = await permissionService.canPerformAction(
+      uid,
+      "create_business",
+    );
+    if (!permission.success) {
+      return res.status(403).json(permission);
+    }
+
     const response = await businessService.addBusinesses(data, email, uid);
     res.status(201).json(response);
   } catch (error) {
