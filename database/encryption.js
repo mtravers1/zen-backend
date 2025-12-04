@@ -24,7 +24,7 @@ async function getKmsClient() {
         "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
       );
     }
-    let kmsCredentials;
+    console.log('KMS_SERVICE_ACCOUNT:', process.env.KMS_SERVICE_ACCOUNT);
     try {
       kmsCredentials = JSON.parse(
         Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
