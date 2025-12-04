@@ -1,6 +1,6 @@
 import fs from "fs";
-import path from "path";
 import crypto from "crypto";
+import { GoogleAuth } from "google-auth-library";
 import { LimitedMap } from "../lib/limitedMap.js";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
 import { storage, keysBucketName } from "../lib/storageClient.js";
@@ -13,6 +13,8 @@ class DecryptionError extends Error {
   }
 }
 
+
+
 let kmsClientInstance;
 async function getKmsClient() {
   if (!kmsClientInstance) {
@@ -22,31 +24,27 @@ async function getKmsClient() {
         "❌ CRITICAL: KMS_SERVICE_ACCOUNT environment variable is not set or is empty.",
       );
     }
+    let kmsCredentials;
     try {
-      const kmsCredentials = Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8");
-
-      // Create a temporary file with the credentials
-      const tempDir = path.join(process.cwd(), 'tmp');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      const tempFilePath = path.join(tempDir, 'gcp-kms-credentials.json');
-      fs.writeFileSync(tempFilePath, kmsCredentials);
-
-      kmsClientInstance = new KeyManagementServiceClient({
-        keyFilename: tempFilePath,
-        projectId: process.env.GCP_PROJECT_ID,
-      });
-      console.log("✅ KMS client initialized");
+      kmsCredentials = JSON.parse(
+        Buffer.from(kmsServiceAccountB64, "base64").toString("utf-8"),
+      );
     } catch (error) {
-      console.error("❌ CRITICAL: Failed to initialize KMS client.", error);
+      console.error("❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable.", error);
       throw new Error(
-        "❌ CRITICAL: Failed to initialize KMS client. Ensure KMS_SERVICE_ACCOUNT is a valid base64 encoded JSON string.",
+        "❌ CRITICAL: Failed to parse KMS_SERVICE_ACCOUNT environment variable. Ensure it is a valid base64 encoded JSON string.",
       );
     }
+    kmsClientInstance = new KeyManagementServiceClient({
+      credentials: kmsCredentials,
+      projectId: process.env.GCP_PROJECT_ID,
+    });
+    console.log("✅ KMS client initialized");
   }
   return kmsClientInstance;
 }
+
+
 
 /**
  * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
@@ -76,6 +74,8 @@ async function getBucket(bucketName) {
     );
   }
 }
+
+
 
 // DEK cache in memory
 const dekCache = new LimitedMap(1000);

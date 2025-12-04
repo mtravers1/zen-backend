@@ -283,7 +283,6 @@ const getUserProfiles = async (email, uid) => {
 
     const personalProfile = {
       id: user._id,
-      email,
       name,
       nameParts: {
         firstName: decryptedFirstName,
@@ -454,7 +453,6 @@ const getUserProfiles = async (email, uid) => {
 
       const businessProfile = {
         id: business._id,
-        email,
         name: decryptedName,
         photo: decryptedBusinessLogo,
         plaidAccounts: business.plaidAccountIds,
