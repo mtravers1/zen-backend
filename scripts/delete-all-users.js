@@ -163,11 +163,23 @@ const deleteUser = async (user) => {
 
 const main = async () => {
   const argv = yargs(hideBin(process.argv))
-    .usage('Usage: $0 [--confirmed-delete-users]')
+    .usage('Usage: $0 [--confirmed-delete-users | --dry-run]')
     .option('confirmed-delete-users', {
         describe: 'Confirm that you want to delete all users from the database',
         type: 'boolean',
-        default: false,
+    })
+    .option('dry-run', {
+        describe: 'Perform a dry run without deleting the users',
+        type: 'boolean',
+    })
+    .check((argv) => {
+      if (argv.confirmedDeleteUsers && argv.dryRun) {
+        throw new Error('You cannot specify both --confirmed-delete-users and --dry-run.');
+      }
+      if (!argv.confirmedDeleteUsers && !argv.dryRun) {
+        throw new Error('You must specify either --confirmed-delete-users or --dry-run.');
+      }
+      return true;
     })
     .help()
     .argv;
@@ -178,17 +190,17 @@ const main = async () => {
 
     const users = await User.find({});
 
-    if (argv.confirmedDeleteUsers === true) {
+    if (argv.dryRun) {
+      console.log('*** DRY RUN ***');
+      console.log(`Found ${users.length} users that will be deleted:`);
+      console.table(users.map(u => ({ id: u._id, authUid: u.authUid, email: u.email })));
+      console.log('To execute the deletion, run the script with the --confirmed-delete-users flag.');
+    } else if (argv.confirmedDeleteUsers) {
       console.log(`Found ${users.length} users to delete.`);
       for (const user of users) {
         await deleteUser(user);
       }
       console.log('All users have been deleted.');
-    } else {
-      console.log('*** DRY RUN ***');
-      console.log(`Found ${users.length} users that will be deleted:`);
-      console.table(users.map(u => ({ id: u._id, authUid: u.authUid, email: u.email })));
-      console.log('To execute the deletion, run the script with the --confirmed-delete-users flag.');
     }
 
   } catch (error) {
