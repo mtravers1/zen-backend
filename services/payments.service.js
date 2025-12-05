@@ -342,126 +342,106 @@ const updateUserFromRTDN = async (
   state,
   subscriptionDetails,
 ) => {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 5000; // 5 seconds
+  // First, try to find the user with the incoming purchase token.
+  let user = await User.findOne({ "subscription_metadata.purchaseToken": purchaseToken });
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  // If not found, check for a linked token.
+  if (!user) {
     try {
-      console.log(`📝 [RTDN] Updating user from state: ${state} (Attempt ${attempt})`);
+      console.log(`[RTDN] User not found for purchaseToken, checking for linked token...`);
+      const subDetails = await getSubscriptionDetails(purchaseToken);
 
-      // Find user by purchaseToken stored in subscription_metadata
-      let user = await User.findOne({
-        "subscription_metadata.purchaseToken": purchaseToken,
-      });
+      if (subDetails && subDetails.linkedPurchaseToken) {
+        console.log(`[RTDN] Found linked purchase token: ${subDetails.linkedPurchaseToken}`);
+        user = await User.findOne({ "subscription_metadata.purchaseToken": subDetails.linkedPurchaseToken });
 
-      // If user found, proceed with the update
-      if (user) {
-        console.log(`👤 [RTDN] Found user: ${user._id}`);
-
-        // Get normalized environment from NODE_ENV
-        const environment = normalizeEnvironment();
-
-        const productId = subscriptionDetails.lineItems?.[0]?.productId;
-        const expiryTime = subscriptionDetails.lineItems?.[0]?.expiryTime;
-        const autoRenewing =
-          subscriptionDetails.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled ||
-          false;
-
-        // Map productId to plan name
-        const planMappings = PRODUCT_MAPPINGS[environment]?.android;
-        const planName = planMappings?.[productId] || "Free";
-
-        console.log(`📦 [RTDN] Product: ${productId} → Plan: ${planName}`);
-
-        // Handle different subscription states
-        switch (state) {
-          case "purchased":
-          case "renewed":
-          case "recovered":
-          case "restarted":
-            // Activate subscription
-            user.account_type = planName;
-            user.subscription_metadata = {
-              purchaseToken,
-              productId,
-              expiryTime,
-              autoRenewing,
-              state: "active",
-              lastUpdated: new Date().toISOString(),
-            };
-            break;
-
-          case "canceled":
-            // Mark as canceled but keep access until expiry
-            user.subscription_metadata = {
-              ...user.subscription_metadata,
-              state: "canceled",
-              autoRenewing: false,
-              lastUpdated: new Date().toISOString(),
-            };
-            // Don't change account_type yet - user still has access
-            break;
-
-          case "expired":
-          case "revoked":
-            // Downgrade to Free
-            user.account_type = "Free";
-            user.subscription_metadata = {
-              ...user.subscription_metadata,
-              state: state,
-              lastUpdated: new Date().toISOString(),
-            };
-            break;
-
-          case "paused":
-          case "on_hold":
-          case "grace_period":
-            // Keep current plan but mark state
-            user.subscription_metadata = {
-              ...user.subscription_metadata,
-              state: state,
-              lastUpdated: new Date().toISOString(),
-            };
-            break;
-
-          default:
-            console.warn(`⚠️ [RTDN] Unhandled state: ${state}`);
+        if (user) {
+          console.log(`[RTDN] Found user via linked token. Updating to new token.`);
+          user.subscription_metadata.purchaseToken = purchaseToken;
         }
-
-        await user.save();
-        console.log(`✅ [RTDN] User ${user._id} updated successfully`);
-        return; // Exit the function successfully
       }
-
-      // If user not found, log and prepare for retry
-      console.warn(
-        `⚠️ [RTDN] User not found for purchaseToken: ${purchaseToken.substring(
-          0,
-          20,
-        )}... (Attempt ${attempt})`,
-      );
-
-      if (attempt < MAX_RETRIES) {
-        console.log(`[RTDN] Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      }
-    } catch (error) {
-      console.error(`❌ [RTDN] Error updating user (Attempt ${attempt}):`, error);
-      // If there's an error, we should still retry if possible
-      if (attempt < MAX_RETRIES) {
-        console.log(`[RTDN] Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      } else {
-        throw error; // Throw error after last attempt
-      }
+    } catch (err) {
+      console.error("❌ [RTDN] Error while checking for linked purchase token:", err.message);
     }
   }
 
+  // If the user is found (either directly or via linked token), update subscription.
+  if (user) {
+    try {
+      console.log(`👤 [RTDN] Found user: ${user._id}. Updating subscription...`);
+      // Get normalized environment from NODE_ENV
+      const environment = normalizeEnvironment();
+
+      const productId = subscriptionDetails.lineItems?.[0]?.productId;
+      const expiryTime = subscriptionDetails.lineItems?.[0]?.expiryTime;
+      const autoRenewing =
+        subscriptionDetails.lineItems?.[0]?.autoRenewingPlan?.autoRenewEnabled ||
+        false;
+
+      const planMappings = PRODUCT_MAPPINGS[environment]?.android;
+      const planName = planMappings?.[productId] || "Free";
+
+      console.log(`📦 [RTDN] Product: ${productId} → Plan: ${planName}`);
+
+      switch (state) {
+        case "purchased":
+        case "renewed":
+        case "recovered":
+        case "restarted":
+          user.account_type = planName;
+          user.subscription_metadata = {
+            purchaseToken,
+            productId,
+            expiryTime,
+            autoRenewing,
+            state: "active",
+            lastUpdated: new Date().toISOString(),
+          };
+          break;
+        case "canceled":
+          user.subscription_metadata = {
+            ...user.subscription_metadata,
+            state: "canceled",
+            autoRenewing: false,
+            lastUpdated: new Date().toISOString(),
+          };
+          break;
+        case "expired":
+        case "revoked":
+          user.account_type = "Free";
+          user.subscription_metadata = {
+            ...user.subscription_metadata,
+            state: state,
+            lastUpdated: new Date().toISOString(),
+          };
+          break;
+        case "paused":
+        case "on_hold":
+        case "grace_period":
+          user.subscription_metadata = {
+            ...user.subscription_metadata,
+            state: state,
+            lastUpdated: new Date().toISOString(),
+          };
+          break;
+        default:
+          console.warn(`⚠️ [RTDN] Unhandled state: ${state}`);
+      }
+
+      await user.save();
+      console.log(`✅ [RTDN] User ${user._id} updated successfully`);
+      return;
+    } catch (error) {
+      console.error(`❌ [RTDN] Error updating user:`, error);
+    }
+  }
+
+  // If user is still not found after all checks, log the failure.
   console.error(
-    `❌ [RTDN] Failed to update user for purchaseToken: ${purchaseToken.substring(
+    `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
       0,
       20,
-    )}... after ${MAX_RETRIES} attempts.`,
+    )}... after all checks.`,
   );
 };
 

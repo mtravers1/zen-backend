@@ -98,7 +98,7 @@ jobs:
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_DEV }}|g" .env
           sed -i -e "s|GOOGLE_CLIENT_ID\=.*|GOOGLE_CLIENT_ID\=${{ secrets.GOOGLE_CLIENT_ID_DEV }}|g" .env
-          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
+          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_DEV }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|DEBUG_ENCRYPTION\=.*|DEBUG_ENCRYPTION\=${{ vars.DEBUG_ENCRYPTION_DEV }}|g" .env
@@ -244,7 +244,7 @@ jobs:
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_DEV }}|g" .env
           sed -i -e "s|GOOGLE_CLIENT_ID\=.*|GOOGLE_CLIENT_ID\=${{ secrets.GOOGLE_CLIENT_ID_DEV }}|g" .env
-          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}|g" .env
+          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT\=.*|GOOGLE_PLAY_SERVICE_ACCOUNT\=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_DEV }}|g" .env
           sed -i -e "s|BUNDLEID\=.*|BUNDLEID\=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT\=.*|ENVIRONMENT\=$DEPLOYMENT_NAME|g" .env
           sed -i -e "s|DEBUG_ENCRYPTION\=.*|DEBUG_ENCRYPTION\=${{ vars.DEBUG_ENCRYPTION_DEV }}|g" .env
