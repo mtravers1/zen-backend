@@ -356,6 +356,21 @@ const updateUserFromRTDN = async (
       });
       console.log(`📝 [RTDN] purchaseToken after findOne: ${purchaseToken}`);
 
+      // If user is not found, check for a linked purchase token.
+      if (!user) {
+        console.log(`[RTDN] User not found for purchaseToken, checking for linked token...`);
+        const subDetails = await getSubscriptionDetails(purchaseToken);
+        if (subDetails && subDetails.linkedPurchaseToken) {
+          console.log(`[RTDN] Found linked purchase token: ${subDetails.linkedPurchaseToken}`);
+          user = await User.findOne({ "subscription_metadata.purchaseToken": subDetails.linkedPurchaseToken });
+          if (user) {
+            console.log(`[RTDN] Found user via linked token. Updating to new token.`);
+            user.subscription_metadata.purchaseToken = purchaseToken;
+            // The rest of the subscription details will be updated below
+          }
+        }
+      }
+      
       // If user found, proceed with the update
       if (user) {
         console.log(`👤 [RTDN] Found user: ${user._id}`);
