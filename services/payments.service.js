@@ -347,12 +347,14 @@ const updateUserFromRTDN = async (
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
+      console.log(`📝 [RTDN] Received purchaseToken: ${purchaseToken}`);
       console.log(`📝 [RTDN] Updating user from state: ${state} (Attempt ${attempt})`);
 
       // Find user by purchaseToken stored in subscription_metadata
       let user = await User.findOne({
         "subscription_metadata.purchaseToken": purchaseToken,
       });
+      console.log(`📝 [RTDN] purchaseToken after findOne: ${purchaseToken}`);
 
       // If user found, proceed with the update
       if (user) {
