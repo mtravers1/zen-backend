@@ -84,7 +84,6 @@ jobs:
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|GCS_CMEK_ACCOUNT\=.*|GCS_CMEK_ACCOUNT\=${{ secrets.GCS_CMEK_ACCOUNT_STG }}|g" .env
           # --- End GCP/KMS/Encryption Variables ---
           sed -i -e "s|AI_URL\=.*|AI_URL\=${{ secrets.AI_URL }}|g" .env
           sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=${{ vars.AI_MODEL }}|g" .env
@@ -230,7 +229,6 @@ jobs:
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|GCS_CMEK_ACCOUNT\=.*|GCS_CMEK_ACCOUNT\=${{ secrets.GCS_CMEK_ACCOUNT_STG }}|g" .env
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_STG }}|g" .env
       - name: VPN config
@@ -320,7 +318,6 @@ jobs:
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|GCS_CMEK_ACCOUNT\=.*|GCS_CMEK_ACCOUNT\=${{ secrets.GCS_CMEK_ACCOUNT_STG }}|g" .env
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_STG }}|g" .env
       - name: VPN config
@@ -411,7 +408,6 @@ jobs:
           sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
           sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
           sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|GCS_CMEK_ACCOUNT\=.*|GCS_CMEK_ACCOUNT\=${{ secrets.GCS_CMEK_ACCOUNT_STG }}|g" .env
           # --- End GCP/KMS/Encryption Variables ---
           sed -i -e "s|AI_URL\=.*|AI_URL\=${{ secrets.AI_URL }}|g" .env
           sed -i -e "s|AI_MODEL\=.*|AI_MODEL\=${{ vars.AI_MODEL }}|g" .env
