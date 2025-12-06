@@ -287,10 +287,9 @@ jobs:
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
-
-  wipe_all_data:
+  delete_user:
     runs-on: ubuntu-latest
-    if: github.event.inputs.wipe_all_data_args != ''
+    if: github.event.inputs.delete_user_args != ''
     steps:
       - name: Install OpenVPN
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -368,11 +367,11 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
-      - name: Run wipe-all-user-data script
+      - name: Run delete-user script
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ vars.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
-            bash scripts/wipe-all-user-data.sh ${{ github.event.inputs.wipe_all_data_args }}
+            npm run delete-user -- ${{ github.event.inputs.delete_user_args }}
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
