@@ -10,6 +10,9 @@ on:
       migration_args:
         description: 'Arguments for the migration script (e.g., --user-id=... or --no-dry-run)'
         required: false
+      delete_user_args:
+        description: 'Arguments for the delete-user script (e.g., --firebase-uid <uid> --no-dry-run)'
+        required: false
       wipe_all_data_args:
         description: 'Arguments for the wipe-all-user-data script. Use --no-dry-run to execute.'
         required: false
