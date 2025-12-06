@@ -71,8 +71,6 @@ const deleteUser = async (user) => {
 
   try {
     console.log(`Deleting user: ${user._id} (${uid})`);
-    const userIdOrString = { $in: [user._id, user._id.toString()] };
-
 
     // 1. Soft-delete the user first to make the operation more robust.
     console.log("Soft-deleting user...");
@@ -86,7 +84,7 @@ const deleteUser = async (user) => {
     try {
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
-      const accessTokens = await AccessToken.find({ userId: userIdOrString });
+      const accessTokens = await AccessToken.find({ userId: user._id });
 
       for (const accessToken of accessTokens) {
         if (accessToken.accessToken) {
@@ -120,37 +118,34 @@ const deleteUser = async (user) => {
     }
 
     console.log("Deleting access tokens...");
-    await AccessToken.deleteMany({ userId: userIdOrString });
+    await AccessToken.deleteMany({ userId: user._id });
 
     console.log("Deleting files...");
-    await Files.deleteMany({ userId: userIdOrString });
+    await Files.deleteMany({ userId: user._id });
 
     console.log("Deleting businesses...");
-    await Business.deleteMany({ userId: userIdOrString });
+    await Business.deleteMany({ userId: user._id });
 
-    const plaidAccounts = await PlaidAccount.find({ owner_id: userIdOrString });
+    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
     const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
 
     console.log("Deleting plaid accounts...");
-    await PlaidAccount.deleteMany({ owner_id: userIdOrString });
+    await PlaidAccount.deleteMany({ owner_id: user._id });
 
-    if (plaidAccountIds.length > 0) {
-      console.log("Deleting transactions...");
-      await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
+    console.log("Deleting transactions...");
+    await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
 
-      console.log("Deleting liabilities...");
-      await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
-    }
+    console.log("Deleting liabilities...");
+    await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
 
     console.log("Deleting assets...");
-    await Assets.deleteMany({ userId: userIdOrString });
+    await Assets.deleteMany({ userId: user._id });
 
     console.log("Deleting trips...");
-    await Trips.deleteMany({ user: userIdOrString });
+    await Trips.deleteMany({ userId: user._id });
 
     console.log("Deleting verification codes...");
-    const userEmails = user.email.map(e => e.email);
-    await VerificationCode.deleteMany({ email: { $in: userEmails } });
+    await VerificationCode.deleteMany({ userId: user._id });
 
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
