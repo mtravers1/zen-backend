@@ -30,6 +30,7 @@ const generateUploadUrl = async (fileName, mimeType) => {
         action: "write",
         expires: Date.now() + 15 * 60 * 1000,
         contentType: mimeType,
+        kmsKeyName: process.env.GCS_CMEK_KEY_NAME,
       });
     return url;
   } catch (error) {
@@ -49,6 +50,7 @@ const generateImageUploadUrl = async (fileName, mimeType) => {
         action: "write",
         expires: Date.now() + 15 * 60 * 1000,
         contentType: mimeType,
+        kmsKeyName: process.env.GCS_CMEK_KEY_NAME,
       });
     return url;
   } catch (error) {
