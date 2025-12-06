@@ -10,12 +10,11 @@ on:
       migration_args:
         description: 'Arguments for the migration script (e.g., --user-id=... or --no-dry-run)'
         required: false
-      delete_user_args:
-        description: 'Arguments for the delete-user script (e.g., --firebase-uid <uid> --no-dry-run)'
+      wipe_all_data_args:
+        description: 'Arguments for the wipe-all-user-data script. Use --no-dry-run to execute.'
         required: false
-      delete_all_users_args:
-        description: 'Arguments for the delete-all-users script (e.g., --confirmed-delete-users)'
-        required: false
+        type: string
+        default: '--dry-run'
 
 env:
   DEPLOYMENT_NAME: staging
@@ -179,9 +178,9 @@ jobs:
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
 
-  delete_user:
+  wipe_all_data:
     runs-on: ubuntu-latest
-    if: github.event.inputs.delete_user_args != ''
+    if: github.event.inputs.wipe_all_data_args != ''
     steps:
       - name: Install OpenVPN
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -259,18 +258,18 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
-      - name: Run delete-user script
+      - name: Run wipe-all-user-data script
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
-            npm run delete-user -- ${{ github.event.inputs.delete_user_args }}
+            bash scripts/wipe-all-user-data.sh ${{ github.event.inputs.wipe_all_data_args }}
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
 
-  delete_all_users:
+  wipe_all_data:
     runs-on: ubuntu-latest
-    if: github.event.inputs.delete_all_users_args != ''
+    if: github.event.inputs.wipe_all_data_args != ''
     steps:
       - name: Install OpenVPN
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -302,7 +301,7 @@ jobs:
           sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_STG }}|g" .env
           sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_STG }}|g" .env
           sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_STG }}|g" .env
-          sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=sandbox|g" .env
+          sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=staging|g" .env
           sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ vars.GCP_PROJECT_ID_STG }}|g" .env
           sed -i -e "s|GCS_DEK_BUCKET_NAME\=.*|GCS_DEK_BUCKET_NAME\=${{ vars.GCS_DEK_BUCKET_NAME_STG }}|g" .env
           sed -i -e "s|GCS_FILES_BUCKET_NAME\=.*|GCS_FILES_BUCKET_NAME\=${{ vars.GCS_FILES_BUCKET_NAME_STG }}|g" .env
@@ -348,11 +347,11 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
           chmod 600 private_key.pem # Set the appropriate permissions for the key file
-      - name: Run delete-all-users script
+      - name: Run wipe-all-user-data script
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
-            npm run delete-all-users -- ${{ github.event.inputs.delete_all_users_args }}
+            bash scripts/wipe-all-user-data.sh ${{ github.event.inputs.wipe_all_data_args }}
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security
