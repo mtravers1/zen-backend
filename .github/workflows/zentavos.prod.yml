@@ -16,8 +16,6 @@ on:
       wipe_all_data_args:
         description: 'Arguments for the wipe-all-user-data script. Use --no-dry-run to execute.'
         required: false
-        type: string
-        default: '--dry-run'
 
 env:
   DEPLOYMENT_NAME: prod
