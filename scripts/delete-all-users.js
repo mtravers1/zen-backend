@@ -17,7 +17,6 @@ import {
 } from "../database/encryption.js";
 import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 import plaidService from "../services/plaid.service.js";
-import { getNewestAccessToken } from "../services/utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -34,6 +33,7 @@ const findAndRenameDekFiles = async (user, uid) => {
     if ((await dekFile.exists())[0]) {
       const newDekFilePath = `${dekFilePath}.deleted`;
       const newDekFile = bucket.file(newDekFilePath);
+
       try {
         await newDekFile.getMetadata();
         console.log(`DEK file already copied to ${newDekFilePath}. Skipping.`);
@@ -62,21 +62,17 @@ const findAndRenameDekFiles = async (user, uid) => {
   await searchAndUpdate(legacyBucket, uid);
 };
 
-const deleteUser = async (uid) => {
+const deleteUser = async (user) => {
+  const uid = user.authUid;
   if (!uid) {
-    console.error("UID is required.");
-    process.exit(1);
+    console.error("User has no authUid, skipping.");
+    return;
   }
 
   try {
-    await connectDB();
-    console.log("Database connected.");
+    console.log(`Deleting user: ${user._id} (${uid})`);
+    const userIdOrString = { $in: [user._id, user._id.toString()] };
 
-    const user = await User.findOne({ authUid: uid });
-    if (!user) {
-      throw new Error("User not found");
-    }
-    console.log(`User found: ${user._id}`);
 
     // 1. Soft-delete the user first to make the operation more robust.
     console.log("Soft-deleting user...");
@@ -90,7 +86,7 @@ const deleteUser = async (uid) => {
     try {
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
-      const accessTokens = await AccessToken.find({ userId: user._id });
+      const accessTokens = await AccessToken.find({ userId: userIdOrString });
 
       for (const accessToken of accessTokens) {
         if (accessToken.accessToken) {
@@ -124,38 +120,41 @@ const deleteUser = async (uid) => {
     }
 
     console.log("Deleting access tokens...");
-    await AccessToken.deleteMany({ userId: user._id });
+    await AccessToken.deleteMany({ userId: userIdOrString });
 
     console.log("Deleting files...");
-    await Files.deleteMany({ userId: user._id });
+    await Files.deleteMany({ userId: userIdOrString });
 
     console.log("Deleting businesses...");
-    await Business.deleteMany({ userId: user._id });
+    await Business.deleteMany({ userId: userIdOrString });
 
-    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
+    const plaidAccounts = await PlaidAccount.find({ owner_id: userIdOrString });
     const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
 
     console.log("Deleting plaid accounts...");
-    await PlaidAccount.deleteMany({ owner_id: user._id });
+    await PlaidAccount.deleteMany({ owner_id: userIdOrString });
 
-    console.log("Deleting transactions...");
-    await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
+    if (plaidAccountIds.length > 0) {
+      console.log("Deleting transactions...");
+      await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
 
-    console.log("Deleting liabilities...");
-    await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+      console.log("Deleting liabilities...");
+      await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+    }
 
     console.log("Deleting assets...");
-    await Assets.deleteMany({ userId: user._id });
+    await Assets.deleteMany({ userId: userIdOrString });
 
     console.log("Deleting trips...");
-    await Trips.deleteMany({ userId: user._id });
+    await Trips.deleteMany({ user: userIdOrString });
 
     console.log("Deleting verification codes...");
-    await VerificationCode.deleteMany({ userId: user._id });
+    const userEmails = user.email.map(e => e.email);
+    await VerificationCode.deleteMany({ email: { $in: userEmails } });
 
     // 4. Permanently delete user from the database.
     console.log("Permanently deleting user from database...");
-    await User.deleteOne({ authUid: uid });
+    await User.deleteOne({ _id: user._id });
 
     // 5. Delete user from Firebase as the very last step.
     console.log("Deleting user from Firebase...");
@@ -163,113 +162,58 @@ const deleteUser = async (uid) => {
 
     console.log("User deleted successfully.");
   } catch (error) {
-    console.error("Error deleting user:", error);
+    console.error(`Error deleting user ${user._id}:`, error);
+  }
+};
+
+const main = async () => {
+  const argv = yargs(hideBin(process.argv))
+    .usage('Usage: $0 [--confirmed-delete-users | --dry-run]')
+    .option('confirmed-delete-users', {
+        describe: 'Confirm that you want to delete all users from the database',
+        type: 'boolean',
+    })
+    .option('dry-run', {
+        describe: 'Perform a dry run without deleting the users',
+        type: 'boolean',
+    })
+    .check((argv) => {
+      if (argv.confirmedDeleteUsers && argv.dryRun) {
+        throw new Error('You cannot specify both --confirmed-delete-users and --dry-run.');
+      }
+      if (!argv.confirmedDeleteUsers && !argv.dryRun) {
+        throw new Error('You must specify either --confirmed-delete-users or --dry-run.');
+      }
+      return true;
+    })
+    .help()
+    .argv;
+
+  try {
+    await connectDB();
+    console.log("Database connected.");
+
+    const users = await User.find({});
+
+    if (argv.dryRun) {
+      console.log('*** DRY RUN ***');
+      console.log(`Found ${users.length} users that will be deleted:`);
+      console.table(users.map(u => ({ id: u._id, authUid: u.authUid, email: u.email })));
+      console.log('To execute the deletion, run the script with the --confirmed-delete-users flag.');
+    } else if (argv.confirmedDeleteUsers) {
+      console.log(`Found ${users.length} users to delete.`);
+      for (const user of users) {
+        await deleteUser(user);
+      }
+      console.log('All users have been deleted.');
+    }
+
+  } catch (error) {
+    console.error("Error during user deletion process:", error);
     process.exit(1);
   } finally {
     await mongoose.disconnect();
     console.log("Database disconnected.");
   }
 };
-
-const main = async () => {
-  const argv = yargs(hideBin(process.argv))
-    .usage('Usage: $0 --firebase-uid <uid> [options]')
-    .option('firebase-uid', {
-        alias: 'f',
-        describe: 'The user\'s Firebase UID',
-        type: 'string',
-        demandOption: true,
-    })
-    .option('dry-run', {
-      describe: 'Perform a dry run without deleting the user',
-      type: 'boolean',
-      default: true,
-    })
-    .help()
-    .argv;
-
-  const uid = argv.firebaseUid;
-  const dryRun = argv.dryRun;
-
-  if (dryRun) {
-    console.log('*** DRY RUN ***');
-    await connectDB();
-    const user = await User.findOne({ authUid: uid });
-    if (!user) {
-      console.log(`User with UID: ${uid} not found.`);
-      await mongoose.disconnect();
-      return;
-    }
-
-    console.log(`User found: ${user._id}`);
-    console.log('This script will perform the following actions:');
-    console.log('- Soft-delete the user');
-    console.log('- Rename DEK files');
-    console.log('- Invalidate Plaid access token');
-
-    const accessTokens = await AccessToken.find({ userId: user._id }).limit(5);
-    if(accessTokens.length > 0) {
-        console.log('- Delete access tokens from the database:');
-        console.table(accessTokens.map(t => ({ id: t._id, itemId: t.itemId, userId: t.userId })));
-    }
-
-    const files = await Files.find({ userId: user._id }).limit(5);
-    if(files.length > 0) {
-        console.log('- Delete files from the database:');
-        console.table(files.map(f => ({ id: f._id, filename: f.filename, userId: f.userId })));
-    }
-
-    const businesses = await Business.find({ userId: user._id }).limit(5);
-    if(businesses.length > 0) {
-        console.log('- Delete businesses from the database:');
-        console.table(businesses.map(b => ({ id: b._id, name: b.name, userId: b.userId })));
-    }
-
-    const plaidAccounts = await PlaidAccount.find({ owner_id: user._id });
-    if (plaidAccounts.length > 0) {
-        console.log('- Delete plaid accounts from the database:');
-        console.table(plaidAccounts.map(p => ({ id: p._id, name: p.name, owner_id: p.owner_id })));
-    }
-    const plaidAccountIds = plaidAccounts.map(account => account.plaid_account_id);
-
-    const transactions = await Transaction.find({ plaidAccountId: { $in: plaidAccountIds } }).limit(5);
-    if(transactions.length > 0) {
-        console.log('- Delete transactions from the database:');
-        console.table(transactions.map(t => ({ id: t._id, plaidAccountId: t.plaidAccountId, transactionDate: t.transactionDate })));
-    }
-
-    const liabilities = await Liability.find({ accountId: { $in: plaidAccountIds } }).limit(5);
-    if(liabilities.length > 0) {
-        console.log('- Delete liabilities from the database:');
-        console.table(liabilities.map(l => ({ id: l._id, accountId: l.accountId, liabilityType: l.liabilityType })));
-    }
-
-    const assets = await Assets.find({ userId: user._id }).limit(5);
-    if(assets.length > 0) {
-        console.log('- Delete assets from the database:');
-        console.table(assets.map(a => ({ id: a._id, name: a.name, userId: a.userId })));
-    }
-
-    const trips = await Trips.find({ userId: user._id }).limit(5);
-    if(trips.length > 0) {
-        console.log('- Delete trips from the database:');
-        console.table(trips.map(t => ({ id: t._id, name: t.name, userId: t.userId })));
-    }
-
-    const verificationCodes = await VerificationCode.find({ userId: user._id }).limit(5);
-    if(verificationCodes.length > 0) {
-        console.log('- Delete verification codes from the database:');
-        console.table(verificationCodes.map(v => ({ id: v._id, code: v.code, userId: v.userId })));
-    }
-
-    console.log('- Permanently delete the user from the database');
-    console.log('- Delete the user from Firebase');
-    console.log('To execute the deletion, run the script with the --no-dry-run flag.');
-    await mongoose.disconnect();
-    return;
-  }
-  
-  await deleteUser(uid);
-};
-
 main();

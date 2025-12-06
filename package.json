@@ -13,7 +13,8 @@
     "build": "webpack --config webpack.config.js",
     "test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand",
     "migrate:encryption": "node -r dotenv/config scripts/migrate-encryption.js",
-    "delete-user": "node -r dotenv/config scripts/delete-user.js"
+    "delete-user": "node -r dotenv/config scripts/delete-user.js",
+    "delete-all-users": "node -r dotenv/config scripts/delete-all-users.js"
   },
   "author": "",
   "license": "ISC",
