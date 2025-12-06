@@ -16,8 +16,6 @@ on:
       wipe_all_data_args:
         description: 'Arguments for the wipe-all-user-data script. Use --no-dry-run to execute.'
         required: false
-        type: string
-
 
 env:
   DEPLOYMENT_NAME: staging

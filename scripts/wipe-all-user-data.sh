@@ -2,9 +2,19 @@
 
 set -e
 
+if [ -z "$1" ]; then
+  echo "Usage: $0 [--dry-run | --no-dry-run]"
+  exit 1
+fi
+
 DRY_RUN=true
 if [ "$1" == "--no-dry-run" ]; then
   DRY_RUN=false
+elif [ "$1" == "--dry-run" ]; then
+  DRY_RUN=true
+else
+  echo "Usage: $0 [--dry-run | --no-dry-run]"
+  exit 1
 fi
 
 if [ "$DRY_RUN" = true ]; then
