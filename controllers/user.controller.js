@@ -308,7 +308,7 @@ const updateUserInfo = async (req, res) => {
       updateData["name.suffix"] = await safeEncrypt(suffix, { field: "suffix" });
     }
     if (photoUrl !== undefined) {
-      updateData.profilePhotoUrl = photoUrl; // photoUrl is not encrypted
+      updateData.profilePhotoUrl = await safeEncrypt(photoUrl, { field: "profilePhotoUrl" });
     }
 
     // Update user
