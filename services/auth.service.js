@@ -21,6 +21,7 @@ import {
 } from "../database/encryption.js";
 import plaidService from "./plaid.service.js";
 import { getNewestAccessToken } from "./utils/accounts.js";
+import accountsService from "./accounts.service.js";
 
 import {
   createSafeEncrypt,
@@ -1073,12 +1074,9 @@ const signIn = async (email, password) => {
               field: "phone",
             })
           : null;
-      let decryptedPhotoUrl;
-      if (user.profilePhotoUrl) {
-        decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
-          user_id: user._id,
-          field: "profilePhotoUrl",
-        });
+      let finalProfilePhotoUrl = decryptedPhotoUrl;
+      if (decryptedPhotoUrl) {
+        finalProfilePhotoUrl = await accountsService.generateSignedUrl(decryptedPhotoUrl);
       }
 
       let emails = [];
@@ -1284,7 +1282,7 @@ const getOwnUserProfile = async (uid) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
-      profilePhotoUrl: decryptedPhotoUrl,
+      profilePhotoUrl: finalProfilePhotoUrl,
       name: {
         firstName: decryptedFirstName,
         lastName: decryptedLastName,
