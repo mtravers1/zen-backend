@@ -46,14 +46,14 @@ const getGooglePlayAccessToken = async () => {
   }
 };
 
-const validatePayment = async (platform, receipt, uid) => {
+const validatePayment = async (platform, receipt, uid, appleClient, appleSandboxClient) => {
   const user = await User.findOne({ authUid: uid });
   try {
     let result;
     let parsedReceipt = null;
 
     if (platform === "ios") {
-      result = await validateApple(receipt);
+      result = await validateApple(receipt, appleClient, appleSandboxClient);
     } else if (platform === "android") {
       // Parse receipt to extract purchaseToken
       parsedReceipt =
@@ -161,7 +161,7 @@ const updateUserSubscription = async (
   }
 };
 
-const validateApple = async (receipt) => {
+const validateApple = async (receipt, appleClient, appleSandboxClient) => {
   if (!receipt || typeof receipt !== "string") {
     console.error("❌ Invalid receipt: not a string");
     return { valid: false };
@@ -173,22 +173,42 @@ const validateApple = async (receipt) => {
     "exclude-old-transactions": true,
   };
 
-  const response = await fetch(APPLE_SANDBOX_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let validationResult;
 
-  const text = await response.text();
+  // 1. Try production environment first
   try {
-    const result = JSON.parse(text);
-    console.log("🍏 Apple Receipt Validation Result:", result);
-    return result;
-  } catch (e) {
-    console.error("❌ Could not parse Apple response:", text);
-    return { valid: false, parseError: text };
+    const productionResponse = await appleClient.verifyReceipt({
+      receiptData: receipt,
+      excludeOldTransactions: true,
+    });
+    validationResult = productionResponse.data;
+  } catch (error) {
+    if (error.response && error.response.data && error.response.data.status === 21007) {
+      console.warn("⚠️ Apple receipt validation failed in production (21007: Sandbox receipt used in production). Retrying with sandbox.");
+      // If sandbox receipt used in production, try sandbox environment
+      try {
+        const sandboxResponse = await appleSandboxClient.verifyReceipt({
+          receiptData: receipt,
+          excludeOldTransactions: true,
+        });
+        validationResult = sandboxResponse.data;
+      } catch (sandboxError) {
+        console.error("❌ Apple receipt validation failed in sandbox:", sandboxError);
+        return { valid: false, error: sandboxError.message };
+      }
+    } else {
+      console.error("❌ Apple receipt validation failed in production:", error);
+      return { valid: false, error: error.message };
+    }
   }
-};
+
+  if (validationResult && validationResult.status === 0) {
+    console.log("🍏 Apple Receipt Validation Result:", validationResult);
+    return validationResult;
+  } else {
+    console.error("❌ Apple Receipt Validation Failed:", validationResult);
+    return { valid: false, error: validationResult?.status };
+  }
 
 const validateAndroid = async (receipt) => {
   console.log("🤖 Validating Android receipt...");
