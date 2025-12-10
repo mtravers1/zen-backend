@@ -196,8 +196,14 @@ const getAvailablePlans = async (req, res) => {
     );
     console.log("🚀 [SUBSCRIPTIONS] First plan example:", sortedPlans[0]);
 
+    const legal = {
+      privacyPolicyUrl: "https://zentavos.com/privacy-policy",
+      termsOfUseUrl: "https://zentavos.com/terms-of-service",
+    };
+
     res.status(200).json({
       plans: sortedPlans,
+      legal,
     });
   } catch (error) {
     console.error("🚀 [SUBSCRIPTIONS] ERROR in getAvailablePlans:", error);
