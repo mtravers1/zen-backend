@@ -26,7 +26,15 @@ const client = new AppStoreServerAPIClient(
   KEY_ID,
   ISSUER_ID,
   BUNLDE_ID,
-  environment,
+  Environment.PRODUCTION,
+);
+
+const sandboxClient = new AppStoreServerAPIClient(
+  PRIVATE_KEY,
+  KEY_ID,
+  ISSUER_ID,
+  BUNLDE_ID,
+  Environment.SANDBOX,
 );
 
 const verifyReceipts = async (req, res) => {
@@ -38,6 +46,8 @@ const verifyReceipts = async (req, res) => {
       data.platform,
       data.receipt,
       uid,
+      client, 
+      sandboxClient,
     );
     res.status(201).json(response);
   } catch (error) {
