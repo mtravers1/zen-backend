@@ -1074,11 +1074,18 @@ const signIn = async (email, password) => {
               field: "phone",
             })
           : null;
-      let finalProfilePhotoUrl = decryptedPhotoUrl;
-      if (decryptedPhotoUrl) {
-        finalProfilePhotoUrl = await accountsService.generateSignedUrl(decryptedPhotoUrl);
-      }
-
+          let decryptedPhotoUrl = null;
+          if (user.profilePhotoUrl) {
+            decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+              user_id: user._id,
+              field: "profilePhotoUrl",
+            });
+          }
+      
+          let finalProfilePhotoUrl = null;
+          if (decryptedPhotoUrl) {
+            finalProfilePhotoUrl = await accountsService.generateSignedUrl(decryptedPhotoUrl);
+          }
       let emails = [];
       if (Array.isArray(user.email)) {
         emails = await Promise.all(
