@@ -209,6 +209,7 @@ const validateApple = async (receipt, appleClient, appleSandboxClient) => {
     console.error("❌ Apple Receipt Validation Failed:", validationResult);
     return { valid: false, error: validationResult?.status };
   }
+};
 
 const validateAndroid = async (receipt) => {
   console.log("🤖 Validating Android receipt...");
@@ -461,9 +462,8 @@ const updateUserFromRTDN = async (
     `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
       0,
       20,
-    )}... after all checks.`,
+    )}... after all checks.`
   );
-};
 };
 
 
