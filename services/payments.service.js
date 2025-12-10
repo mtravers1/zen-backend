@@ -464,6 +464,7 @@ const updateUserFromRTDN = async (
     )}... after all checks.`,
   );
 };
+};
 
 
 
