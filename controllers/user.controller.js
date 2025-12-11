@@ -309,12 +309,7 @@ const updateUserInfo = async (req, res) => {
       updateData["name.suffix"] = await safeEncrypt(suffix, { field: "suffix" });
     }
     if (photoFileName !== undefined) {
-      const gcsFilesBucketName = process.env.GCS_FILES_BUCKET_NAME;
-      if (!gcsFilesBucketName) {
-        throw new Error("GCS_FILES_BUCKET_NAME environment variable is not set.");
-      }
-      const fullGCSUrl = `https://storage.googleapis.com/${gcsFilesBucketName}/${photoFileName}`;
-      updateData.profilePhotoUrl = await safeEncrypt(fullGCSUrl, { field: "profilePhotoUrl" });
+      updateData.profilePhotoUrl = await safeEncrypt(photoFileName, { field: "profilePhotoUrl" });
     }
 
     // Update user
@@ -354,18 +349,7 @@ const serveProfilePhoto = async (req, res) => {
 
     // Decrypt the photo URL
     const dek = await getUserDek(user.authUid);
-    const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
-
-    // Extract filename from the decrypted URL
-    const gcsFilesBucketName = process.env.GCS_FILES_BUCKET_NAME;
-    if (!gcsFilesBucketName) {
-      throw new Error("GCS_FILES_BUCKET_NAME environment variable is not set.");
-    }
-    const prefix = `https://storage.googleapis.com/${gcsFilesBucketName}/`;
-    if (!decryptedPhotoUrl.startsWith(prefix)) {
-      throw new Error("Invalid profile photo URL format.");
-    }
-    const fileName = decryptedPhotoUrl.substring(prefix.length);
+    const fileName = await decryptValue(user.profilePhotoUrl, dek);
 
     if (!fileName) {
       return res.status(500).send({ message: "Could not extract filename from URL" });
