@@ -150,6 +150,7 @@ const VALID_ROUTE_PATTERNS = [
   /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
   /^\/api\/users\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/users\/[a-zA-Z0-9\-_]+\/method$/,
+  /^\/api\/users\/photo\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/ai\/status\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/ai\/cancel\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/security\/blacklist\/[\d\.]+$/, // For DELETE /api/security/blacklist/:ip
