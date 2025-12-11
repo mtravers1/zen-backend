@@ -142,6 +142,7 @@ app.use((req, res, next) => {
   const shouldExclude =
     excludedPaths.includes(req.path) ||
     req.path.startsWith("/api/account/photo/") ||
+    req.path.startsWith("/api/users/photo/") ||
     (process.env.NODE_ENV === "development" && req.path.startsWith("/dev"));
 
   if (shouldExclude) {
