@@ -77,12 +77,13 @@ const generateImageUrl = async (req, res) => {
     const randomBytes = crypto.randomBytes(16).toString("hex");
     const extension = fileName.split(".").pop();
     const uniqueFileName = `${randomBytes}.${extension}`;
+    const objectName = `profilePhotos/${uniqueFileName}`;
 
     const url = await filesService.generateImageUploadUrl(
-      uniqueFileName,
+      objectName,
       mimeType,
     );
-    res.status(200).send({ uploadUrl: url, newFileName: uniqueFileName });
+    res.status(200).send({ uploadUrl: url, newFileName: objectName });
   } catch (error) {
     console.log(error);
     res.status(500).send({ message: error.message });

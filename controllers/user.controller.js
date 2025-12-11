@@ -357,9 +357,15 @@ const serveProfilePhoto = async (req, res) => {
     const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
 
     // Extract filename from the decrypted URL
-    // Assuming URL format: https://storage.googleapis.com/<bucket-name>/<filename>
-    const urlParts = decryptedPhotoUrl.split("/");
-    const fileName = urlParts[urlParts.length - 1];
+    const gcsFilesBucketName = process.env.GCS_FILES_BUCKET_NAME;
+    if (!gcsFilesBucketName) {
+      throw new Error("GCS_FILES_BUCKET_NAME environment variable is not set.");
+    }
+    const prefix = `https://storage.googleapis.com/${gcsFilesBucketName}/`;
+    if (!decryptedPhotoUrl.startsWith(prefix)) {
+      throw new Error("Invalid profile photo URL format.");
+    }
+    const fileName = decryptedPhotoUrl.substring(prefix.length);
 
     if (!fileName) {
       return res.status(500).send({ message: "Could not extract filename from URL" });
