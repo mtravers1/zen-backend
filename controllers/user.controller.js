@@ -373,8 +373,6 @@ const serveProfilePhoto = async (req, res) => {
 
     const signedUrl = await filesService.generateSignedUrl(fileName);
 
-    console.log("✅ [USER CONTROLLER] Generated Signed URL:", signedUrl);
-
     if (!signedUrl) {
       return res.status(404).send({ message: "Photo not found or access denied" });
     }
