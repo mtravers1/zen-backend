@@ -1081,11 +1081,7 @@ const signIn = async (email, password) => {
               field: "profilePhotoUrl",
             });
           }
-      
-          let finalProfilePhotoUrl = null;
-          if (decryptedPhotoUrl) {
-            finalProfilePhotoUrl = await accountsService.generateSignedUrl(decryptedPhotoUrl);
-          }
+
       let emails = [];
       if (Array.isArray(user.email)) {
         emails = await Promise.all(
@@ -1289,7 +1285,7 @@ const getOwnUserProfile = async (uid) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
-      profilePhotoUrl: finalProfilePhotoUrl,
+      profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,
         lastName: decryptedLastName,
