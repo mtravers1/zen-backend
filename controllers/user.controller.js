@@ -1,3 +1,4 @@
+import filesService from "../services/files.service.js";
 import { createSafeEncrypt } from "../lib/encryptionHelper.js";
 import User from "../database/models/User.js";
 import {
@@ -337,6 +338,41 @@ const updateUserInfo = async (req, res) => {
   }
 };
 
+const serveProfilePhoto = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+
+    if (!user || !user.profilePhotoUrl) {
+      return res.status(404).send({ message: "Profile photo not found" });
+    }
+
+    // Decrypt the photo URL
+    const dek = await getUserDek(user.authUid);
+    const decryptedPhotoUrl = await decryptValue(user.profilePhotoUrl, dek);
+
+    // Extract filename from the decrypted URL
+    // Assuming URL format: https://storage.googleapis.com/<bucket-name>/<filename>
+    const urlParts = decryptedPhotoUrl.split("/");
+    const fileName = urlParts[urlParts.length - 1];
+
+    if (!fileName) {
+      return res.status(500).send({ message: "Could not extract filename from URL" });
+    }
+
+    const signedUrl = await filesService.generateSignedUrl(fileName);
+
+    if (!signedUrl) {
+      return res.status(404).send({ message: "Photo not found or access denied" });
+    }
+
+    res.redirect(signedUrl);
+  } catch (error) {
+    console.error("[USER CONTROLLER] Error serving profile photo:", error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const userController = {
   listUsers,
   getUserById,
@@ -344,6 +380,7 @@ const userController = {
   updateUserInfo,
   getMyUser, // ← Added for compatibility
   checkUserPermission, // ← Added for compatibility
+  serveProfilePhoto,
 };
 
 export default userController;

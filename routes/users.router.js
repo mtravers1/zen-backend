@@ -21,4 +21,7 @@ router.get("/getMyUser", userController.getMyUser);
 /* POST check user permission (for compatibility) */
 router.post("/checkPermission", userController.checkUserPermission);
 
+/* GET user profile photo */
+router.get("/photo/:userId", userController.serveProfilePhoto);
+
 export default router;
