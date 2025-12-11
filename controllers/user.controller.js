@@ -263,7 +263,7 @@ const checkUserPermission = async (req, res) => {
  */
 const updateUserInfo = async (req, res) => {
   const { userId } = req.params;
-  const { firstName, lastName, middleName, prefix, suffix, photoUrl } =
+  const { firstName, lastName, middleName, prefix, suffix, photoFileName } =
     req.body;
 
   try {
@@ -308,8 +308,13 @@ const updateUserInfo = async (req, res) => {
     if (suffix !== undefined) {
       updateData["name.suffix"] = await safeEncrypt(suffix, { field: "suffix" });
     }
-    if (photoUrl !== undefined) {
-      updateData.profilePhotoUrl = await safeEncrypt(photoUrl, { field: "profilePhotoUrl" });
+    if (photoFileName !== undefined) {
+      const gcsFilesBucketName = process.env.GCS_FILES_BUCKET_NAME;
+      if (!gcsFilesBucketName) {
+        throw new Error("GCS_FILES_BUCKET_NAME environment variable is not set.");
+      }
+      const fullGCSUrl = `https://storage.googleapis.com/${gcsFilesBucketName}/${photoFileName}`;
+      updateData.profilePhotoUrl = await safeEncrypt(fullGCSUrl, { field: "profilePhotoUrl" });
     }
 
     // Update user
