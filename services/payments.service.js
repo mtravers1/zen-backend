@@ -175,31 +175,26 @@ const validateApple = async (receipt, appleClient, appleSandboxClient) => {
 
   let validationResult;
 
-  // 1. Try production environment first
   try {
-    const productionResponse = await appleClient.verifyReceipt({
-      receiptData: receipt,
-      excludeOldTransactions: true,
+    const response = await fetch(APPLE_PRODUCTION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
-    validationResult = productionResponse.data;
-  } catch (error) {
-    if (error.response && error.response.data && error.response.data.status === 21007) {
+    validationResult = await response.json();
+
+    if (validationResult.status === 21007) {
       console.warn("⚠️ Apple receipt validation failed in production (21007: Sandbox receipt used in production). Retrying with sandbox.");
-      // If sandbox receipt used in production, try sandbox environment
-      try {
-        const sandboxResponse = await appleSandboxClient.verifyReceipt({
-          receiptData: receipt,
-          excludeOldTransactions: true,
-        });
-        validationResult = sandboxResponse.data;
-      } catch (sandboxError) {
-        console.error("❌ Apple receipt validation failed in sandbox:", sandboxError);
-        return { valid: false, error: sandboxError.message };
-      }
-    } else {
-      console.error("❌ Apple receipt validation failed in production:", error);
-      return { valid: false, error: error.message };
+      const sandboxResponse = await fetch(APPLE_SANDBOX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      validationResult = await sandboxResponse.json();
     }
+  } catch (error) {
+    console.error("❌ Apple receipt validation failed:", error);
+    return { valid: false, error: error.message };
   }
 
   if (validationResult && validationResult.status === 0) {
