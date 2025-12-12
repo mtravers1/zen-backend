@@ -5,6 +5,7 @@ import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
+import filesService from "./files.service.js";
 
 import {
   encryptValue,
@@ -493,7 +494,7 @@ const getUserProfiles = async (email, uid) => {
 
     for (const profile of profiles) {
       if (profile.photo) {
-        profile.photo = await accountsService.generateSignedUrl(profile.photo);
+        profile.photo = await filesService.generateSignedUrl(profile.photo);
       }
     }
 
