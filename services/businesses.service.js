@@ -896,7 +896,9 @@ const checkAddBusinessLimit = async (uid) => {
   };
 
   const currentPlan = user.account_type || "Free";
-  const limit = planLimits[currentPlan];
+  // Extract the base plan name, removing any add-on suffixes
+  const basePlan = currentPlan.split('+')[0];
+  const limit = planLimits[basePlan];
 
   const businessCount = await Business.countDocuments({ userId: user._id.toString() });
 
