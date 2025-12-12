@@ -14,7 +14,8 @@ const addBusiness = async (req, res) => {
       return res.status(403).json(permission);
     }
 
-    const response = await businessService.addBusinesses(data.business, email, uid);
+    const businessList = Array.isArray(data.business) ? data.business : data;
+    const response = await businessService.addBusinesses(businessList, email, uid);
     res.status(201).json(response);
   } catch (error) {
     console.error(error);
