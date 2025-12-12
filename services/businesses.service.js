@@ -881,6 +881,45 @@ const deleteProfile = async (profileId, uid) => {
   }
 };
 
+const checkAddBusinessLimit = async (uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const planLimits = {
+    Free: 0,
+    Personal: 0,
+    Founder: 1,
+    Entrepreneur: 3,
+    Tycoon: Infinity,
+  };
+
+  const currentPlan = user.account_type || "Free";
+  // Extract the base plan name, removing any add-on suffixes
+  const basePlan = currentPlan.split('+')[0];
+  const limit = planLimits[basePlan];
+
+  const businessCount = await Business.countDocuments({ userId: user._id.toString() });
+
+  if (businessCount >= limit) {
+    return {
+      canAddBusiness: false,
+      reason: "limit_reached",
+      popupData: {
+        title: "Upgrade to Add More Businesses",
+        message: "You have reached the maximum number of business profiles for your current plan. Please upgrade your plan to add more.",
+        current_plan: currentPlan,
+        popup_type: "add_business_limit",
+      },
+    };
+  }
+
+  return {
+    canAddBusiness: true,
+  };
+};
+
 const businessService = {
   addBusinesses,
   getUserProfiles,
@@ -889,6 +928,7 @@ const businessService = {
   assignAccountToProfile,
   updateBusinessProfile,
   deleteProfile,
+  checkAddBusinessLimit,
 };
 
 export default businessService;

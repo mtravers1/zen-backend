@@ -114,6 +114,17 @@ const deleteProfile = async (req, res) => {
   }
 };
 
+const checkAddBusiness = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const response = await businessService.checkAddBusinessLimit(uid);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const businessController = {
   addBusiness,
   getUserProfiles,
@@ -122,6 +133,7 @@ const businessController = {
   assignAccountToProfile,
   updateBusinessProfile,
   deleteProfile,
+  checkAddBusiness,
 };
 
 export default businessController;
