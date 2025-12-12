@@ -209,6 +209,7 @@ const signInOrCreate = async (uid, userData) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
+      subscription_metadata: user.subscription_metadata,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,
@@ -1126,6 +1127,7 @@ const signIn = async (email, password) => {
         phone: decryptedPhone,
         role: user.role,
         account_type: user.account_type,
+        subscription_metadata: user.subscription_metadata,
         profilePhotoUrl: decryptedPhotoUrl,
         name: {
           firstName: decryptedFirstName,
@@ -1285,6 +1287,7 @@ const getOwnUserProfile = async (uid) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
+      subscription_metadata: user.subscription_metadata,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,

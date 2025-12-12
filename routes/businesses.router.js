@@ -6,6 +6,7 @@ const router = Router();
 router.post("/", businessController.addBusiness);
 router.post("/create", businessController.addBusiness);
 router.get("/", businessController.getUserProfiles);
+router.get("/check-add-business", businessController.checkAddBusiness);
 router.post("/assign", businessController.assignsAccountsToProfiles);
 router.post("/unlink", businessController.unlinkAccounts);
 router.post("/assign-account", businessController.assignAccountToProfile);

@@ -458,12 +458,13 @@ const updateUserFromRTDN = async (
   }
 
   // If user is still not found after all checks, log the failure.
-  console.error(
-    `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
-      0,
-      20,
-    )}... after all checks.`
-  );
+      console.error(
+        `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
+          0,
+          20,
+        )}... after all checks. Full details:`,
+        subscriptionDetails,
+      );
 };
 
 
