@@ -63,6 +63,7 @@ const VALID_ROUTES = new Set([
   "/api/business/assign",
   "/api/business/unlink",
   "/api/business/assign-account",
+  "/api/business/check-add-business",
 
   // Assets routes
   "/api/assets/addAsset",
