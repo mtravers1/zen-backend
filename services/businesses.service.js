@@ -31,7 +31,7 @@ const addBusinesses = async (businessList, email, uid) => {
 
   const usedColors = new Set();
   for (const businessData of businessList) {
-    if (businessData.name === "") continue;
+    if (businessData.legalName === "") continue;
     const ownership = {
       percentage: businessData.ownership,
     };
@@ -53,10 +53,10 @@ const addBusinesses = async (businessList, email, uid) => {
       }
     }
 
-    const encryptedName = await safeEncrypt(businessData.name, {
+    const encryptedName = await safeEncrypt(businessData.legalName, {
       field: "name",
     });
-    const encryptedIndustryDesc = await safeEncrypt(businessData.industry, {
+    const encryptedIndustryDesc = await safeEncrypt(businessData.industryDesc, {
       field: "industry",
     });
 
