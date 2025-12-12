@@ -290,7 +290,7 @@ const decodeSignedPayload = async (signedPayload) => {
 
     if (!originalTransactionId) throw new Error("No originalTransactionId");
 
-    const appAccountToken = await validateSubscription(originalTransactionId);
+    const appAccountToken = await validateSubscription(originalTransactionId, payload.data.environment);
     if (!appAccountToken) throw new Error("No appAccountToken");
     return {
       payload: payload,
@@ -303,8 +303,13 @@ const decodeSignedPayload = async (signedPayload) => {
   }
 };
 
-const validateSubscription = async (originalTransactionId) => {
-  const info = await client.getTransactionInfo(originalTransactionId);
+const validateSubscription = async (originalTransactionId, environment) => {
+  let info;
+  if (environment === "Sandbox") {
+    info = await sandboxClient.getTransactionInfo(originalTransactionId);
+  } else {
+    info = await client.getTransactionInfo(originalTransactionId);
+  }
   const splited = info.signedTransactionInfo.split(".");
   const signedTransactionInfo = JSON.parse(
     Buffer.from(splited[1], "base64").toString("utf-8"),
