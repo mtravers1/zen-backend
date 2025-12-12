@@ -386,6 +386,12 @@ const updateUserFromRTDN = async (
     }
   }
 
+  // If user still not found, try to find by external account ID
+  if (!user && subscriptionDetails.externalAccountIdentifiers && subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId) {
+    console.log(`[RTDN] User not found, trying to find by external account ID: ${subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId}`);
+    user = await User.findOne({ id_uuid: subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId });
+  }
+
   // If the user is found (either directly or via linked token), update subscription.
   if (user) {
     try {
