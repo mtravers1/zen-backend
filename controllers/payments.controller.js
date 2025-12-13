@@ -39,6 +39,7 @@ const sandboxClient = new AppStoreServerAPIClient(
 
 const verifyReceipts = async (req, res) => {
   console.log("Received receipt validation request:", JSON.stringify(req.body, null, 2));
+  console.log(`Receipt length: ${req.body.receipt ? req.body.receipt.length : 0}`);
   try {
     const data = req.body;
     const uid = req.user.uid;
