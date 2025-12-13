@@ -244,13 +244,13 @@ const validateAndroid = async (receipt) => {
   const accessToken = await getGooglePlayAccessToken();
   console.log("🔑 Got Google Play access token");
 
-  // Google Play API v2 endpoint (recommended as of 2025)
-  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
+  // Acknowledge the purchase
+  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
 
-  console.log("🔗 Calling Google Play API v2:", url);
+  console.log("🔗 Calling Google Play API v3 acknowledgement:", url);
 
   const response = await fetch(url, {
-    method: "GET",
+    method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
@@ -272,38 +272,7 @@ const validateAndroid = async (receipt) => {
     JSON.stringify(result, null, 2),
   );
 
-  // ACKNOWLEDGE the purchase if pending
-  if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
-    console.log("🔔 Acknowledging purchase...");
-    // Use correct acknowledgement endpoint as per official docs:
-    // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions/acknowledge
-    const acknowledgeUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
 
-    console.log(`🔗 Acknowledgement URL: ${acknowledgeUrl}`);
-    console.log(`🔗 ProductId: ${productId}, Token: ${purchaseToken}`);
-
-    const ackResponse = await fetch(acknowledgeUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (ackResponse.ok) {
-      console.log("✅ Purchase acknowledged successfully");
-    } else {
-      const ackError = await ackResponse.text();
-      console.error(
-        "❌ Failed to acknowledge purchase:",
-        ackResponse.status,
-        ackError,
-      );
-      console.error(
-        `❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`,
-      );
-    }
-  }
 
   // Transform Google Play v2 response to match expected format
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
