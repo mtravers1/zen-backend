@@ -162,50 +162,57 @@ const updateUserSubscription = async (
 };
 
 const validateApple = async (receipt, appleClient, appleSandboxClient) => {
-  if (!receipt || typeof receipt !== "string") {
-    console.error("❌ Invalid receipt: not a string");
-    return { valid: false };
-  }
-
-  // Clean the receipt string by removing any newline characters
-  const cleanedReceipt = receipt.replace(/(\r\n|\n|\r)/gm, "");
-
-  const body = {
-    "receipt-data": cleanedReceipt,
-    password: "d26cffb2aba74e87bc31fae2484cfd00",
-    "exclude-old-transactions": true,
-  };
-
-  let validationResult;
-
   try {
-    const response = await fetch(APPLE_PRODUCTION_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    validationResult = await response.json();
+    // The 'receipt' is a JWT signedPayload from the client
+    const [headerB64, payloadB64, signatureB64] = receipt.split('.');
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf-8'));
 
-    if (validationResult.status === 21007) {
-      console.warn("⚠️ Apple receipt validation failed in production (21007: Sandbox receipt used in production). Retrying with sandbox.");
-      const sandboxResponse = await fetch(APPLE_SANDBOX_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      validationResult = await sandboxResponse.json();
+    const transactionId = payload.transactionId;
+    if (!transactionId) {
+      throw new Error("No transactionId found in JWT payload");
     }
-  } catch (error) {
-    console.error("❌ Apple receipt validation failed:", error);
-    return { valid: false, error: error.message };
-  }
 
-  if (validationResult && validationResult.status === 0) {
-    console.log("🍏 Apple Receipt Validation Result:", validationResult);
-    return validationResult;
-  } else {
-    console.error("❌ Apple Receipt Validation Failed:", validationResult);
-    return { valid: false, error: validationResult?.status };
+    console.log(`Found transactionId: ${transactionId}`);
+
+    let transactionInfo;
+
+    try {
+      // Per Apple requirements, always try production first
+      console.log("Attempting validation with Apple Production client...");
+      transactionInfo = await appleClient.getTransactionInfo(transactionId);
+    } catch (e) {
+      // If production fails, try with sandbox client
+      console.warn(`Production validation failed: ${e.message}. Attempting with Apple Sandbox client...`);
+      try {
+        transactionInfo = await appleSandboxClient.getTransactionInfo(transactionId);
+      } catch (sandboxError) {
+        console.error(`Sandbox validation also failed: ${sandboxError.message}`);
+        throw sandboxError; // Throw the sandbox error if both fail
+      }
+    }
+
+    if (!transactionInfo) {
+      throw new Error("Could not retrieve transaction info from Apple");
+    }
+
+    // The response from getTransactionInfo needs to be decoded
+    const signedTransactionInfo_b64 = transactionInfo.signedTransactionInfo.split('.')[1];
+    const decodedTransaction = JSON.parse(Buffer.from(signedTransactionInfo_b64, 'base64').toString('utf-8'));
+
+    console.log("Successfully validated and decoded transaction from Apple.");
+
+    // Construct a response that is compatible with the existing updateUserSubscription function
+    return {
+      status: 0, // Success status
+      latest_receipt_info: [{
+        product_id: decodedTransaction.productId,
+        expires_date_ms: decodedTransaction.expiresDate,
+      }],
+    };
+
+  } catch (error) {
+    console.error("❌ Apple Receipt Validation Failed:", error);
+    return { valid: false, error: error.message };
   }
 };
 
