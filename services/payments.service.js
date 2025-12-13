@@ -167,8 +167,11 @@ const validateApple = async (receipt, appleClient, appleSandboxClient) => {
     return { valid: false };
   }
 
+  // Clean the receipt string by removing any newline characters
+  const cleanedReceipt = receipt.replace(/(\r\n|\n|\r)/gm, "");
+
   const body = {
-    "receipt-data": receipt,
+    "receipt-data": cleanedReceipt,
     password: "d26cffb2aba74e87bc31fae2484cfd00",
     "exclude-old-transactions": true,
   };
