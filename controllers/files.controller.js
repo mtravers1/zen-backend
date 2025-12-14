@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import filesService from "../services/files.service.js";
 import permissionsService from "../services/permissions.service.js";
 import storageService from "../services/storage.service.js";
@@ -62,11 +63,27 @@ const generateFileUrl = async (req, res) => {
   }
 };
 
-const genereteImageUrl = async (req, res) => {
+const generateImageUrl = async (req, res) => {
   try {
     const { fileName, mimeType } = req.body;
-    const url = await filesService.generateImageUploadUrl(fileName, mimeType);
-    res.status(200).send({ uploadUrl: url });
+
+    // Validate MIME type
+    const allowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedMimeTypes.includes(mimeType)) {
+      return res.status(400).send({ message: "Invalid file type." });
+    }
+
+    // Generate a unique filename to prevent collisions and enhance security
+    const randomBytes = crypto.randomBytes(16).toString("hex");
+    const extension = fileName.split(".").pop();
+    const uniqueFileName = `${randomBytes}.${extension}`;
+    const objectName = `profilePhotos/${uniqueFileName}`;
+
+    const url = await filesService.generateImageUploadUrl(
+      objectName,
+      mimeType,
+    );
+    res.status(200).send({ uploadUrl: url, newFileName: objectName });
   } catch (error) {
     console.log(error);
     res.status(500).send({ message: error.message });
@@ -165,7 +182,7 @@ const filesController = {
   deleteFiles,
   generateFileUrl,
   getFileUrl,
-  genereteImageUrl,
+  generateImageUrl,
   checkStorageLimit,
   getStorageStatus,
 };

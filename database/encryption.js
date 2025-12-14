@@ -455,6 +455,11 @@ async function decryptValue(cipherTextBase64, deks) {
   )
     return cipherTextBase64;
 
+  const isBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(cipherTextBase64);
+  if (!isBase64) {
+    return cipherTextBase64;
+  }
+
   for (const dek of deks) {
     try {
       // Decode the base64-encoded ciphertext

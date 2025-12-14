@@ -5,6 +5,7 @@ import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
+import filesService from "./files.service.js";
 
 import {
   encryptValue,
@@ -30,7 +31,7 @@ const addBusinesses = async (businessList, email, uid) => {
 
   const usedColors = new Set();
   for (const businessData of businessList) {
-    if (businessData.name === "") continue;
+    if (businessData.legalName === "") continue;
     const ownership = {
       percentage: businessData.ownership,
     };
@@ -52,10 +53,10 @@ const addBusinesses = async (businessList, email, uid) => {
       }
     }
 
-    const encryptedName = await safeEncrypt(businessData.name, {
+    const encryptedName = await safeEncrypt(businessData.legalName, {
       field: "name",
     });
-    const encryptedIndustryDesc = await safeEncrypt(businessData.industry, {
+    const encryptedIndustryDesc = await safeEncrypt(businessData.industryDesc, {
       field: "industry",
     });
 
@@ -284,6 +285,7 @@ const getUserProfiles = async (email, uid) => {
     const personalProfile = {
       id: user._id,
       name,
+      email,
       nameParts: {
         firstName: decryptedFirstName,
         lastName: decryptedLastName,
@@ -454,6 +456,7 @@ const getUserProfiles = async (email, uid) => {
       const businessProfile = {
         id: business._id,
         name: decryptedName,
+        email: null,
         photo: decryptedBusinessLogo,
         plaidAccounts: business.plaidAccountIds,
         isPersonal: false,
@@ -490,27 +493,9 @@ const getUserProfiles = async (email, uid) => {
     );
 
     for (const profile of profiles) {
-      const photoPath = profile.isPersonal
-        ? `profilePhotos/${email}.jpg`
-        : `profilePhotos/${profile.name}.jpg`;
-
-      let photo;
-      if (!profile.photo) {
-        photo = await accountsService.generateSignedUrl(photoPath);
+      if (profile.photo) {
+        profile.photo = await filesService.generateSignedUrl(profile.photo);
       }
-      profile.photo = photo ? photo : profile.photo;
-    }
-
-    for (const profile of profiles) {
-      const photoPath = profile.isPersonal
-        ? `profilePhotos/${email}.jpg`
-        : `profilePhotos/${profile.name}.jpg`;
-
-      let photo;
-      if (!profile.photo) {
-        photo = await accountsService.generateSignedUrl(photoPath);
-      }
-      profile.photo = photo ? photo : profile.photo;
     }
 
     return profiles;
@@ -896,6 +881,45 @@ const deleteProfile = async (profileId, uid) => {
   }
 };
 
+const checkAddBusinessLimit = async (uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const planLimits = {
+    Free: 0,
+    Personal: 0,
+    Founder: 1,
+    Entrepreneur: 3,
+    Tycoon: Infinity,
+  };
+
+  const currentPlan = user.account_type || "Free";
+  // Extract the base plan name, removing any add-on suffixes
+  const basePlan = currentPlan.split('+')[0];
+  const limit = planLimits[basePlan];
+
+  const businessCount = await Business.countDocuments({ userId: user._id.toString() });
+
+  if (businessCount >= limit) {
+    return {
+      canAddBusiness: false,
+      reason: "limit_reached",
+      popupData: {
+        title: "Upgrade to Add More Businesses",
+        message: "You have reached the maximum number of business profiles for your current plan. Please upgrade your plan to add more.",
+        current_plan: currentPlan,
+        popup_type: "add_business_limit",
+      },
+    };
+  }
+
+  return {
+    canAddBusiness: true,
+  };
+};
+
 const businessService = {
   addBusinesses,
   getUserProfiles,
@@ -904,6 +928,7 @@ const businessService = {
   assignAccountToProfile,
   updateBusinessProfile,
   deleteProfile,
+  checkAddBusinessLimit,
 };
 
 export default businessService;

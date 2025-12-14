@@ -54,7 +54,17 @@ app.use(decodeUserMiddleware);
 // Rate limiting for brute force protection
 const isProduction = process.env.NODE_ENV === "production";
 
-const limiter = rateLimit({
+const webhookLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 1000, // Allow a high number of requests for the webhook
+  message: {
+    error: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
   message: {
@@ -84,7 +94,12 @@ const limiter = rateLimit({
 // Apply rate limiting to all requests
 // Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
 app.set('trust proxy', 1);
-app.use(limiter);
+
+// Apply specific limiter for the webhook
+app.use("/api/payments/webhook/android", webhookLimiter);
+
+// Apply general limiter to all other routes
+app.use(generalLimiter);
 
 // Apply route validation middleware FIRST to block invalid routes and attacks
 app.use(routeValidationMiddleware);
@@ -142,6 +157,7 @@ app.use((req, res, next) => {
   const shouldExclude =
     excludedPaths.includes(req.path) ||
     req.path.startsWith("/api/account/photo/") ||
+    req.path.startsWith("/api/users/photo/") ||
     (process.env.NODE_ENV === "development" && req.path.startsWith("/dev"));
 
   if (shouldExclude) {

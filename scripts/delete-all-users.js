@@ -73,7 +73,6 @@ const deleteUser = async (user) => {
     console.log(`Deleting user: ${user._id} (${uid})`);
     const userIdOrString = { $in: [user._id, user._id.toString()] };
 
-
     // 1. Soft-delete the user first to make the operation more robust.
     console.log("Soft-deleting user...");
     user.deleted = true;

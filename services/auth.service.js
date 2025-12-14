@@ -21,6 +21,7 @@ import {
 } from "../database/encryption.js";
 import plaidService from "./plaid.service.js";
 import { getNewestAccessToken } from "./utils/accounts.js";
+import accountsService from "./accounts.service.js";
 
 import {
   createSafeEncrypt,
@@ -208,6 +209,7 @@ const signInOrCreate = async (uid, userData) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
+      subscription_metadata: user.subscription_metadata,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,
@@ -1073,13 +1075,13 @@ const signIn = async (email, password) => {
               field: "phone",
             })
           : null;
-      let decryptedPhotoUrl;
-      if (user.profilePhotoUrl) {
-        decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
-          user_id: user._id,
-          field: "profilePhotoUrl",
-        });
-      }
+          let decryptedPhotoUrl = null;
+          if (user.profilePhotoUrl) {
+            decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
+              user_id: user._id,
+              field: "profilePhotoUrl",
+            });
+          }
 
       let emails = [];
       if (Array.isArray(user.email)) {
@@ -1125,6 +1127,7 @@ const signIn = async (email, password) => {
         phone: decryptedPhone,
         role: user.role,
         account_type: user.account_type,
+        subscription_metadata: user.subscription_metadata,
         profilePhotoUrl: decryptedPhotoUrl,
         name: {
           firstName: decryptedFirstName,
@@ -1284,6 +1287,7 @@ const getOwnUserProfile = async (uid) => {
       phone: decryptedPhones,
       role: user.role,
       account_type: user.account_type,
+      subscription_metadata: user.subscription_metadata,
       profilePhotoUrl: decryptedPhotoUrl,
       name: {
         firstName: decryptedFirstName,

@@ -351,6 +351,7 @@ export async function callLLM({
       stream: true,
       tools,
       tool_choice: "auto",
+      max_tokens: 8192,
     });
 
     logWithContext("info", "response", "GROQ RESPONSE RECEIVED", {

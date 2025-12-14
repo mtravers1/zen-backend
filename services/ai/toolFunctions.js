@@ -364,8 +364,7 @@ export const toolFunctions = (context) => ({
       );
 
       const transactions = await accountsService.getProfileTransactions(
-        profile.email,
-        profile.id,
+        profile,
         uid,
       );
 
@@ -400,6 +399,9 @@ export const toolFunctions = (context) => ({
         }) => rest,
       );
 
+      if (filters.intent === 'count') {
+        return { count: cleanedData.length };
+      }
       return cleanedData;
     } catch (error) {
       console.error("[AI][getProfileTransactions] Error:", error);

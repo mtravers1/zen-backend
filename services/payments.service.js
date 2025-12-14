@@ -162,52 +162,57 @@ const updateUserSubscription = async (
 };
 
 const validateApple = async (receipt, appleClient, appleSandboxClient) => {
-  if (!receipt || typeof receipt !== "string") {
-    console.error("❌ Invalid receipt: not a string");
-    return { valid: false };
-  }
-
-  const body = {
-    "receipt-data": receipt,
-    password: "d26cffb2aba74e87bc31fae2484cfd00",
-    "exclude-old-transactions": true,
-  };
-
-  let validationResult;
-
-  // 1. Try production environment first
   try {
-    const productionResponse = await appleClient.verifyReceipt({
-      receiptData: receipt,
-      excludeOldTransactions: true,
-    });
-    validationResult = productionResponse.data;
-  } catch (error) {
-    if (error.response && error.response.data && error.response.data.status === 21007) {
-      console.warn("⚠️ Apple receipt validation failed in production (21007: Sandbox receipt used in production). Retrying with sandbox.");
-      // If sandbox receipt used in production, try sandbox environment
-      try {
-        const sandboxResponse = await appleSandboxClient.verifyReceipt({
-          receiptData: receipt,
-          excludeOldTransactions: true,
-        });
-        validationResult = sandboxResponse.data;
-      } catch (sandboxError) {
-        console.error("❌ Apple receipt validation failed in sandbox:", sandboxError);
-        return { valid: false, error: sandboxError.message };
-      }
-    } else {
-      console.error("❌ Apple receipt validation failed in production:", error);
-      return { valid: false, error: error.message };
-    }
-  }
+    // The 'receipt' is a JWT signedPayload from the client
+    const [headerB64, payloadB64, signatureB64] = receipt.split('.');
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf-8'));
 
-  if (validationResult && validationResult.status === 0) {
-    console.log("🍏 Apple Receipt Validation Result:", validationResult);
-    return validationResult;
-  } else {
-    console.error("❌ Apple Receipt Validation Failed:", validationResult);
-    return { valid: false, error: validationResult?.status };
+    const transactionId = payload.transactionId;
+    if (!transactionId) {
+      throw new Error("No transactionId found in JWT payload");
+    }
+
+    console.log(`Found transactionId: ${transactionId}`);
+
+    let transactionInfo;
+
+    try {
+      // Per Apple requirements, always try production first
+      console.log("Attempting validation with Apple Production client...");
+      transactionInfo = await appleClient.getTransactionInfo(transactionId);
+    } catch (e) {
+      // If production fails, try with sandbox client
+      console.warn(`Production validation failed: ${e.message}. Attempting with Apple Sandbox client...`);
+      try {
+        transactionInfo = await appleSandboxClient.getTransactionInfo(transactionId);
+      } catch (sandboxError) {
+        console.error(`Sandbox validation also failed: ${sandboxError.message}`);
+        throw sandboxError; // Throw the sandbox error if both fail
+      }
+    }
+
+    if (!transactionInfo) {
+      throw new Error("Could not retrieve transaction info from Apple");
+    }
+
+    // The response from getTransactionInfo needs to be decoded
+    const signedTransactionInfo_b64 = transactionInfo.signedTransactionInfo.split('.')[1];
+    const decodedTransaction = JSON.parse(Buffer.from(signedTransactionInfo_b64, 'base64').toString('utf-8'));
+
+    console.log("Successfully validated and decoded transaction from Apple.");
+
+    // Construct a response that is compatible with the existing updateUserSubscription function
+    return {
+      status: 0, // Success status
+      latest_receipt_info: [{
+        product_id: decodedTransaction.productId,
+        expires_date_ms: decodedTransaction.expiresDate,
+      }],
+    };
+
+  } catch (error) {
+    console.error("❌ Apple Receipt Validation Failed:", error);
+    return { valid: false, error: error.message };
   }
 };
 
@@ -239,13 +244,13 @@ const validateAndroid = async (receipt) => {
   const accessToken = await getGooglePlayAccessToken();
   console.log("🔑 Got Google Play access token");
 
-  // Google Play API v2 endpoint (recommended as of 2025)
-  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
+  // Acknowledge the purchase
+  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
 
-  console.log("🔗 Calling Google Play API v2:", url);
+  console.log("🔗 Calling Google Play API v3 acknowledgement:", url);
 
   const response = await fetch(url, {
-    method: "GET",
+    method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
@@ -267,38 +272,7 @@ const validateAndroid = async (receipt) => {
     JSON.stringify(result, null, 2),
   );
 
-  // ACKNOWLEDGE the purchase if pending
-  if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
-    console.log("🔔 Acknowledging purchase...");
-    // Use correct acknowledgement endpoint as per official docs:
-    // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions/acknowledge
-    const acknowledgeUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
 
-    console.log(`🔗 Acknowledgement URL: ${acknowledgeUrl}`);
-    console.log(`🔗 ProductId: ${productId}, Token: ${purchaseToken}`);
-
-    const ackResponse = await fetch(acknowledgeUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (ackResponse.ok) {
-      console.log("✅ Purchase acknowledged successfully");
-    } else {
-      const ackError = await ackResponse.text();
-      console.error(
-        "❌ Failed to acknowledge purchase:",
-        ackResponse.status,
-        ackError,
-      );
-      console.error(
-        `❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`,
-      );
-    }
-  }
 
   // Transform Google Play v2 response to match expected format
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
@@ -386,6 +360,12 @@ const updateUserFromRTDN = async (
     }
   }
 
+  // If user still not found, try to find by external account ID
+  if (!user && subscriptionDetails.externalAccountIdentifiers && subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId) {
+    console.log(`[RTDN] User not found, trying to find by external account ID: ${subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId}`);
+    user = await User.findOne({ id_uuid: subscriptionDetails.externalAccountIdentifiers.obfuscatedExternalAccountId });
+  }
+
   // If the user is found (either directly or via linked token), update subscription.
   if (user) {
     try {
@@ -458,12 +438,13 @@ const updateUserFromRTDN = async (
   }
 
   // If user is still not found after all checks, log the failure.
-  console.error(
-    `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
-      0,
-      20,
-    )}... after all checks.`
-  );
+      console.error(
+        `❌ [RTDN] Failed to find user for purchaseToken: ${purchaseToken.substring(
+          0,
+          20,
+        )}... after all checks. Full details:`,
+        subscriptionDetails,
+      );
 };
 
 

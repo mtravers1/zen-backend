@@ -66,7 +66,7 @@ export const toolDefinitions = [
     function: {
       name: "getProfileTransactions",
       description:
-        "Get transactions for the current profile, optionally filtered by date, amount, merchant, or account",
+        "Get transactions for the current profile, optionally filtered by date, amount, merchant, or account. If the user asks for the total number of transactions, count them and return the number.",
       parameters: {
         type: "object",
         properties: {
@@ -272,8 +272,6 @@ export const toolDefinitions = [
       parameters: {
         type: "object",
         properties: {
-          plaidAccountId: { type: "string", description: "Plaid account ID" },
-          uid: { type: "string", description: "User ID" },
           filters: {
             type: "object",
             description: "Optional filters to refine transaction results",
@@ -307,6 +305,10 @@ export const toolDefinitions = [
               isInvestment: {
                 type: "boolean",
                 description: "Filter investment transactions only",
+              },
+              intent: {
+                type: "string",
+                description: "The user's intent, e.g., 'count' or 'list'",
               },
             },
           },

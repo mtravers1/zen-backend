@@ -10,7 +10,7 @@ router.get("/storage-status", filesController.getStorageStatus);
 router.get("/getFolders/:profileId", filesController.getFolders);
 router.post("/add-file", filesController.generateFileUrl);
 router.post("/get-file", filesController.getFileUrl);
-router.post("/add-image", filesController.genereteImageUrl);
+router.post("/add-image", filesController.generateImageUrl);
 router.post("/delete-file", filesController.deleteFiles);
 
 export default router;

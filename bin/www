@@ -133,11 +133,5 @@ function _split(thing) {
 function onListening(app, server) {
   const addr = server.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
-
-  console.log("\nEndpoints:\n");
-  app._router.stack.forEach(_print.bind(null, []));
-
-  console.log("\nListening on " + bind + "...\n");
-
   debug("Listening on " + bind);
 }

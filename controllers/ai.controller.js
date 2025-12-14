@@ -81,15 +81,7 @@ const makeRequest = async (req, res) => {
       });
     }
 
-    if (!profileId) {
-      console.error(`[AI Controller] ❌ Missing profileId`);
-      return res.status(400).json({
-        text: "Profile ID is required",
-        data: { error: "Missing profileId" },
-        error: true,
-        errorMessage: "Profile ID is required",
-      });
-    }
+
 
     console.log(
       `[AI Controller] ✅ All required parameters validated successfully`,

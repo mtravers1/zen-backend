@@ -1689,13 +1689,11 @@ const getUserTransactions = async (
 };
 
 const getProfileTransactions = async (
-  email,
-  profileId,
+  profile,
   uid,
   pagination = { paginate: false },
 ) => {
-  const profiles = await businessService.getUserProfiles(email, uid);
-  const profile = profiles.find((p) => String(p.id) === profileId);
+  console.log('[AI] getProfileTransactions called');
   if (!profile) {
     throw new Error("Profile not found");
   }
@@ -1735,6 +1733,7 @@ const getProfileTransactions = async (
     });
   }
 
+  console.log('[AI] getProfileTransactions finished');
   return await getTransactions(plaidAccounts, uid, pagination);
 };
 
@@ -2774,9 +2773,11 @@ const formatTransactionsWithSigns = (transactions) => {
     } else if (transaction.accountType === "investment") {
       transaction.amount = Math.abs(transaction.amount);
     }
-    delete transaction.merchant._id;
-    delete transaction.merchant.website;
-    delete transaction.merchant.logo;
+    if (transaction.merchant) {
+      delete transaction.merchant._id;
+      delete transaction.merchant.website;
+      delete transaction.merchant.logo;
+    }
   }
   return transactions;
 };
