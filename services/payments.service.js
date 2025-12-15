@@ -226,8 +226,19 @@ const validateApple = async (receipt, appleClient, appleSandboxClient) => {
   }
 };
 
-const validateAndroid = async (parsedReceipt) => {
+const validateAndroid = async (receipt) => {
   console.log("🤖 Validating Android receipt...");
+
+  // Parse the receipt JSON string
+  let parsedReceipt;
+  try {
+    parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
+    console.log("📱 Parsed receipt:", parsedReceipt);
+  } catch (e) {
+    console.error("❌ Failed to parse receipt:", e);
+    throw new Error("Invalid receipt format");
+  }
+
   const { packageName, productId, purchaseToken } = parsedReceipt;
 
   if (!packageName || !productId || !purchaseToken) {
@@ -239,16 +250,70 @@ const validateAndroid = async (parsedReceipt) => {
     throw new Error("Missing required receipt fields");
   }
 
-  // Get subscription details
-  const subscriptionDetails = await getSubscriptionDetails(purchaseToken);
-  if (!subscriptionDetails) {
-    throw new Error("Failed to get subscription details");
+  // Get OAuth2 access token
+  const accessToken = await getGooglePlayAccessToken();
+  console.log("🔑 Got Google Play access token");
+
+  // Google Play API v2 endpoint (recommended as of 2025)
+  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`;
+
+  console.log("🔗 Calling Google Play API v2:", url);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("❌ Google Play API error:", response.status, errorText);
+    throw new Error(
+      `Failed to validate purchase: ${response.status} - ${errorText}`,
+    );
   }
 
+  const result = await response.json();
+  console.log("✅ Google Play validation result:", result);
   console.log(
     "🔍 [DETAILED] Full Google Play Response:",
-    JSON.stringify(subscriptionDetails, null, 2),
+    JSON.stringify(result, null, 2),
   );
+
+  // ACKNOWLEDGE the purchase if pending
+  if (result.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
+    console.log("🔔 Acknowledging purchase...");
+    // Use correct acknowledgement endpoint as per official docs:
+    // https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptions/acknowledge
+    const acknowledgeUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
+
+    console.log(`🔗 Acknowledgement URL: ${acknowledgeUrl}`);
+    console.log(`🔗 ProductId: ${productId}, Token: ${purchaseToken}`);
+
+    const ackResponse = await fetch(acknowledgeUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (ackResponse.ok) {
+      console.log("✅ Purchase acknowledged successfully");
+    } else {
+      const ackError = await ackResponse.text();
+      console.error(
+        "❌ Failed to acknowledge purchase:",
+        ackResponse.status,
+        ackError,
+      );
+      console.error(
+        `❌ Acknowledgement failed for productId: ${productId}, token: ${purchaseToken}`,
+      );
+    }
+  }
 
   // Transform Google Play v2 response to match expected format
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
@@ -256,13 +321,13 @@ const validateAndroid = async (parsedReceipt) => {
     status: 0,
     latest_receipt_info: [
       {
-        product_id: subscriptionDetails.lineItems?.[0]?.productId || productId,
-        expires_date_ms: subscriptionDetails.lineItems?.[0]?.expiryTime
-          ? new Date(subscriptionDetails.lineItems[0].expiryTime).getTime()
+        product_id: result.lineItems?.[0]?.productId || productId,
+        expires_date_ms: result.lineItems?.[0]?.expiryTime
+          ? new Date(result.lineItems[0].expiryTime).getTime()
           : Date.now() + 30 * 24 * 60 * 60 * 1000,
       },
     ],
-    subscriptionDetails, // Include full details for subscription_metadata
+    fullDetails: result, // Include full details for subscription_metadata
   };
 };
 
