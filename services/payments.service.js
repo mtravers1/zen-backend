@@ -1,3 +1,5 @@
+import User from "../database/models/User.js";
+import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
 import { GoogleAuth } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 import structuredLogger from "../lib/structuredLogger.js";
