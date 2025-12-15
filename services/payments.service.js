@@ -38,6 +38,11 @@ const getGooglePlayAccessToken = async () => {
   }
 
   try {
+    // GET THE CLIENT AND LOG THE EMAIL
+    // @ts-ignore
+    const client = await googlePlayAuth.getClient();
+    console.log("🚨 APP IS LOGGED IN AS: " + client.email); // <--- LOOK AT THIS LOG
+
     const tokenResponse = await googlePlayAuth.getAccessToken();
     return tokenResponse.token;
   } catch (error) {
