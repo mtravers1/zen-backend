@@ -35,8 +35,7 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
 // Get access token for Google Play API
 const getGooglePlayAccessToken = async () => {
   if (!googlePlayAuth) {
-    throw new Error("Google Play authentication not configured
-");
+    throw new Error("Google Play authentication not configured");
   }
 
   try {
