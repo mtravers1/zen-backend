@@ -144,16 +144,14 @@ const webhookHandler = async (event, signature = null, body = null) => {
         break;
 
       case "ITEM":
-        if (event.webhook_code === "ERROR") {
+        if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
           result = await structuredLogger.withContext(
-            "handleItemError",
+            "handleNewAccountsAvailable",
             {
               item_id: event.item_id,
-              error_code: event.error?.error_code,
-              error_message: event.error?.error_message,
             },
             async () => {
-              return await plaidService.handleItemError(event);
+              return await plaidService.updateTransactions(event.item_id);
             },
           );
         } else {
