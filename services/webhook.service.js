@@ -144,7 +144,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
         break;
 
       case "ITEM":
-        } else if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
+        if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
           result = await structuredLogger.withContext(
             "handleNewAccountsAvailable",
             {
