@@ -18,10 +18,9 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
-    googlePlayAuth = new GoogleAuth({
-      credentials: serviceAccount,
-      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
-    });
+    const auth = new GoogleAuth();
+    googlePlayAuth = auth.fromJSON(serviceAccount);
+    googlePlayAuth.scopes = ["https://www.googleapis.com/auth/androidpublisher"];
     console.log("✅ Google Play authentication configured");
   } catch (error) {
     console.error("❌ Failed to load Google Play Service Account:", error);
