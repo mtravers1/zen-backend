@@ -4,20 +4,28 @@ import { GoogleAuth } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
-console.log("RAW GOOGLE_PLAY_SERVICE_ACCOUNT from env:", process.env.GOOGLE_PLAY_SERVICE_ACCOUNT);
+let googlePlayAuth = null;
+if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
+  try {
+    const serviceAccountJson = Buffer.from(
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
+      "base64",
+    )
+      .toString("utf8")
+      .replace(/\n/g, "");
+    const serviceAccount = JSON.parse(serviceAccountJson);
 
-const APPLE_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
-const APPLE_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
-
-const keyPath = './google-play-sa.json';
-
-const googlePlayAuth = new GoogleAuth({
-  keyFile: keyPath,
-  scopes: ["https://www.googleapis.com/auth/androidpublisher"],
-});
-
-console.log(`✅ Google Play authentication configured with keyFile: ${keyPath}`);
-
+    googlePlayAuth = new GoogleAuth({
+      credentials: serviceAccount,
+      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+    });
+    console.log("✅ Google Play authentication configured");
+  } catch (error) {
+    console.error("❌ Failed to load Google Play Service Account:", error);
+  }
+} else {
+  console.warn("⚠️ GOOGLE_PLAY_SERVICE_ACCOUNT not configured");
+}
 
 // Get access token for Google Play API
 const getGooglePlayAccessToken = async () => {
