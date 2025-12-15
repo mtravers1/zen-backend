@@ -3,6 +3,8 @@ import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
 import { GoogleAuth } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 
+console.log("RAW GOOGLE_PLAY_SERVICE_ACCOUNT from env:", process.env.GOOGLE_PLAY_SERVICE_ACCOUNT);
+
 const APPLE_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
 
