@@ -46,10 +46,19 @@ const getGooglePlayAccessToken = async () => {
   try {
     const client = await googlePlayAuth.getClient();
     // @ts-ignore
-    structuredLogger.logOperationStart("getGooglePlayAccessToken", { serviceAccountEmail: client.email });
+    const clientEmail = client.email;
     const tokenResponse = await client.getAccessToken();
     // @ts-ignore
-    return tokenResponse.token;
+    const token = tokenResponse.token;
+
+    const logMessage = `🚨 ACCESS TOKEN (first 10, last 10, length): ${token.substring(0, 10)}...${token.substring(token.length - 10)} (${token.length})`
+
+    // Log to all three destinations
+    console.log(`[STDOUT] ${logMessage}`);
+    console.error(`[STDERR] ${logMessage}`);
+    structuredLogger.logOperationStart("getGooglePlayAccessToken", { serviceAccountEmail: clientEmail, tokenLog: logMessage });
+
+    return token;
   } catch (error) {
     structuredLogger.logErrorBlock(error, { operation: "getGooglePlayAccessToken" });
     throw new Error("Failed to authenticate with Google Play API");
