@@ -36,8 +36,7 @@ const getGooglePlayAccessToken = async () => {
   }
 
   try {
-    const client = await googlePlayAuth.getClient();
-    const tokenResponse = await client.getAccessToken();
+    const tokenResponse = await googlePlayAuth.getAccessToken();
     return tokenResponse.token;
   } catch (error) {
     console.error("❌ Failed to get Google Play access token:", error);
