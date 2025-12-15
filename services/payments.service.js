@@ -56,8 +56,7 @@ const validatePayment = async (platform, receipt, uid, appleClient, appleSandbox
       result = await validateApple(receipt, appleClient, appleSandboxClient);
     } else if (platform === "android") {
       // Parse receipt to extract purchaseToken
-      parsedReceipt =
-        typeof receipt === "string" ? JSON.parse(receipt) : receipt;
+      parsedReceipt = receipt;
       result = await validateAndroid(receipt);
     } else {
       return { message: "Invalid platform" };
@@ -69,7 +68,7 @@ const validatePayment = async (platform, receipt, uid, appleClient, appleSandbox
         result,
         platform,
         platform === "android" ? parsedReceipt?.purchaseToken : null,
-        platform === "android" ? result.fullDetails : null,
+        platform === "android" ? result.subscriptionDetails : null,
       );
       return { message: "Valid receipt" };
     } else {
@@ -86,7 +85,7 @@ const updateUserSubscription = async (
   data,
   platform,
   purchaseToken = null,
-  subscriptionDetails = null,
+  fullDetails = null,
 ) => {
   try {
     const productId = data.latest_receipt_info[0].product_id;
@@ -127,10 +126,10 @@ const updateUserSubscription = async (
     // Store subscription metadata for RTDN tracking
     if (purchaseToken && platform === "android") {
       const expiryTime =
-        subscriptionDetails?.lineItems?.[0]?.expiryTime ||
+        fullDetails?.lineItems?.[0]?.expiryTime ||
         new Date(parseInt(expiresDateMs)).toISOString();
       const autoRenewing =
-        subscriptionDetails?.lineItems?.[0]?.autoRenewingPlan
+        fullDetails?.lineItems?.[0]?.autoRenewingPlan
           ?.autoRenewEnabled !== false;
 
       user.subscription_metadata = {
@@ -141,7 +140,6 @@ const updateUserSubscription = async (
         state: "active",
         lastUpdated: new Date().toISOString(),
       };
-
       console.log(`📝 Stored subscription metadata for RTDN tracking`);
     }
 
@@ -222,7 +220,7 @@ const validateAndroid = async (receipt) => {
   // Parse the receipt JSON string
   let parsedReceipt;
   try {
-    parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
+    parsedReceipt = receipt;
     console.log("📱 Parsed receipt:", parsedReceipt);
   } catch (e) {
     console.error("❌ Failed to parse receipt:", e);
@@ -240,39 +238,16 @@ const validateAndroid = async (receipt) => {
     throw new Error("Missing required receipt fields");
   }
 
-  // Get OAuth2 access token
-  const accessToken = await getGooglePlayAccessToken();
-  console.log("🔑 Got Google Play access token");
-
-  // Acknowledge the purchase
-  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}:acknowledge`;
-
-  console.log("🔗 Calling Google Play API v3 acknowledgement:", url);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("❌ Google Play API error:", response.status, errorText);
-    throw new Error(
-      `Failed to validate purchase: ${response.status} - ${errorText}`,
-    );
+  // Get subscription details
+  const subscriptionDetails = await getSubscriptionDetails(purchaseToken);
+  if (!subscriptionDetails) {
+    throw new Error("Failed to get subscription details");
   }
 
-  const result = await response.json();
-  console.log("✅ Google Play validation result:", result);
   console.log(
     "🔍 [DETAILED] Full Google Play Response:",
-    JSON.stringify(result, null, 2),
+    JSON.stringify(subscriptionDetails, null, 2),
   );
-
-
 
   // Transform Google Play v2 response to match expected format
   // v2 API returns: { lineItems: [{ productId, expiryTime }], subscriptionState }
@@ -280,13 +255,13 @@ const validateAndroid = async (receipt) => {
     status: 0,
     latest_receipt_info: [
       {
-        product_id: result.lineItems?.[0]?.productId || productId,
-        expires_date_ms: result.lineItems?.[0]?.expiryTime
-          ? new Date(result.lineItems[0].expiryTime).getTime()
+        product_id: subscriptionDetails.lineItems?.[0]?.productId || productId,
+        expires_date_ms: subscriptionDetails.lineItems?.[0]?.expiryTime
+          ? new Date(subscriptionDetails.lineItems[0].expiryTime).getTime()
           : Date.now() + 30 * 24 * 60 * 60 * 1000,
       },
     ],
-    fullDetails: result, // Include full details for subscription_metadata
+    subscriptionDetails, // Include full details for subscription_metadata
   };
 };
 
