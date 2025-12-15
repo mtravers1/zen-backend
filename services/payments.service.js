@@ -56,7 +56,8 @@ const validatePayment = async (platform, receipt, uid, appleClient, appleSandbox
       result = await validateApple(receipt, appleClient, appleSandboxClient);
     } else if (platform === "android") {
       // Parse receipt to extract purchaseToken
-      parsedReceipt = receipt;
+      parsedReceipt =
+        typeof receipt === "string" ? JSON.parse(receipt) : receipt;
       result = await validateAndroid(receipt);
     } else {
       return { message: "Invalid platform" };
@@ -220,7 +221,7 @@ const validateAndroid = async (receipt) => {
   // Parse the receipt JSON string
   let parsedReceipt;
   try {
-    parsedReceipt = receipt;
+    parsedReceipt = typeof receipt === "string" ? JSON.parse(receipt) : receipt;
     console.log("📱 Parsed receipt:", parsedReceipt);
   } catch (e) {
     console.error("❌ Failed to parse receipt:", e);
