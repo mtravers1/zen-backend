@@ -134,6 +134,16 @@ jobs:
           script: |
             const fs = require('fs');
             fs.writeFileSync('dist/ServiceAccountKey.json', process.env.SERVICE_ACCOUNT_KEY);
+
+      - name: Create Google Play Service Account Key file
+        uses: actions/github-script@v6
+        env:
+          GOOGLE_PLAY_SA_KEY: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_PROD }}
+        with:
+          script: |
+            const fs = require('fs');
+            const key = Buffer.from(process.env.GOOGLE_PLAY_SA_KEY, 'base64').toString('utf8');
+            fs.writeFileSync('dist/google-play-sa.json', key);
       - name: VPN config
         env:
           OVPN_CONFIG: ${{ secrets.OVPN_CONFIG }}

@@ -1,6 +1,6 @@
 import User from "../database/models/User.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
-import { JWT } from "google-auth-library";
+import { GoogleAuth } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
@@ -9,34 +9,15 @@ console.log("RAW GOOGLE_PLAY_SERVICE_ACCOUNT from env:", process.env.GOOGLE_PLAY
 const APPLE_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
 
-// Load Google Play Service Account from environment variable
-let googlePlayAuth = null;
-if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
-  try {
-    const serviceAccountJson = Buffer.from(
-      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT,
-      "base64",
-    )
-      .toString("utf8")
-      .replace(/\n/g, "");
-    const serviceAccount = JSON.parse(serviceAccountJson);
-    console.log("🚨 FULL SERVICE ACCOUNT JSON (TEMPORARY - SECURITY RISK):", JSON.stringify(serviceAccount, null, 2)); // ADDED LINE
+const keyPath = './google-play-sa.json';
 
-    structuredLogger.logOperationStart("serviceAccountInitialization", { fullServiceAccount: serviceAccount }); // NEW LINE
+const googlePlayAuth = new GoogleAuth({
+  keyFile: keyPath,
+  scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+});
 
-    googlePlayAuth = new JWT({
-      email: serviceAccount.client_email,
-      key: serviceAccount.private_key,
-      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
-    });
+console.log(`✅ Google Play authentication configured with keyFile: ${keyPath}`);
 
-    console.log("✅ Google Play authentication configured directly with JWT client");
-  } catch (error) {
-    console.error("❌ Failed to load Google Play Service Account:", error);
-  }
-} else {
-  console.warn("⚠️ GOOGLE_PLAY_SERVICE_ACCOUNT not configured");
-}
 
 // Get access token for Google Play API
 const getGooglePlayAccessToken = async () => {
@@ -45,10 +26,10 @@ const getGooglePlayAccessToken = async () => {
   }
 
   try {
-    // googlePlayAuth is now the JWT client itself
+    const client = await googlePlayAuth.getClient();
     // @ts-ignore
-    const clientEmail = googlePlayAuth.email;
-    const tokenResponse = await googlePlayAuth.getAccessToken();
+    const clientEmail = client.email;
+    const tokenResponse = await client.getAccessToken();
     // @ts-ignore
     const token = tokenResponse.token;
 
@@ -65,6 +46,7 @@ const getGooglePlayAccessToken = async () => {
     throw new Error("Failed to authenticate with Google Play API");
   }
 };
+
 
 const validatePayment = async (platform, receipt, uid, appleClient, appleSandboxClient) => {
   const user = await User.findOne({ authUid: uid });
