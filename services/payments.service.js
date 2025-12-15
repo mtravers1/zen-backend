@@ -1,6 +1,6 @@
 import User from "../database/models/User.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
-import { GoogleAuth } from "google-auth-library";
+import { JWT } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
@@ -21,15 +21,13 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
-    googlePlayAuth = new GoogleAuth({
-      credentials: {
-        client_email: serviceAccount.client_email,
-        private_key: serviceAccount.private_key,
-      },
+    googlePlayAuth = new JWT({
+      email: serviceAccount.client_email,
+      key: serviceAccount.private_key,
       scopes: ["https://www.googleapis.com/auth/androidpublisher"],
     });
 
-    console.log("✅ Google Play authentication configured directly with credentials");
+    console.log("✅ Google Play authentication configured directly with JWT client");
   } catch (error) {
     console.error("❌ Failed to load Google Play Service Account:", error);
   }
@@ -44,10 +42,10 @@ const getGooglePlayAccessToken = async () => {
   }
 
   try {
-    const client = await googlePlayAuth.getClient();
+    // googlePlayAuth is now the JWT client itself
     // @ts-ignore
-    const clientEmail = client.email;
-    const tokenResponse = await client.getAccessToken();
+    const clientEmail = googlePlayAuth.email;
+    const tokenResponse = await googlePlayAuth.getAccessToken();
     // @ts-ignore
     const token = tokenResponse.token;
 
