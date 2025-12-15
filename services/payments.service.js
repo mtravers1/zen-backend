@@ -2,6 +2,7 @@ import User from "../database/models/User.js";
 import { PRODUCT_MAPPINGS } from "../constants/productMappings.js";
 import { GoogleAuth } from "google-auth-library";
 import { normalizeEnvironment } from "../utils/environment.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 console.log("RAW GOOGLE_PLAY_SERVICE_ACCOUNT from env:", process.env.GOOGLE_PLAY_SERVICE_ACCOUNT);
 
@@ -34,19 +35,16 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
 // Get access token for Google Play API
 const getGooglePlayAccessToken = async () => {
   if (!googlePlayAuth) {
-    throw new Error("Google Play authentication not configured");
+    throw new Error("Google Play authentication not configured
+");
   }
 
   try {
-    // GET THE CLIENT AND LOG THE EMAIL
-    // @ts-ignore
-    const client = await googlePlayAuth.getClient();
-    console.log("🚨 APP IS LOGGED IN AS: " + client.email); // <--- LOOK AT THIS LOG
-
+    structuredLogger.logOperationStart("getGooglePlayAccessToken", { serviceAccountEmail: googlePlayAuth.email });
     const tokenResponse = await googlePlayAuth.getAccessToken();
     return tokenResponse.token;
   } catch (error) {
-    console.error("❌ Failed to get Google Play access token:", error);
+    structuredLogger.logErrorBlock(error, { operation: "getGooglePlayAccessToken" });
     throw new Error("Failed to authenticate with Google Play API");
   }
 };
