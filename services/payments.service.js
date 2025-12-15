@@ -20,6 +20,9 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       .toString("utf8")
       .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
+    console.log("🚨 FULL SERVICE ACCOUNT JSON (TEMPORARY - SECURITY RISK):", JSON.stringify(serviceAccount, null, 2)); // ADDED LINE
+
+    structuredLogger.logOperationStart("serviceAccountInitialization", { fullServiceAccount: serviceAccount }); // NEW LINE
 
     googlePlayAuth = new JWT({
       email: serviceAccount.client_email,
