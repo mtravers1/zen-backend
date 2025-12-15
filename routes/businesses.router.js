@@ -11,7 +11,7 @@ router.get("/check-add-business", businessController.checkAddBusiness);
 router.post("/assign", businessController.assignsAccountsToProfiles);
 router.post("/unlink", businessController.unlinkAccounts);
 router.post("/assign-account", businessController.assignAccountToProfile);
-router.put(
+router.patch(
   "/profile/update/:profileId",
   businessController.updateBusinessProfile,
 );
