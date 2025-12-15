@@ -87,17 +87,17 @@ export const PRODUCT_MAPPINGS = {
     },
     android: {
       // Base subscription plans
-      "com.zentavos.stg.personal": "Personal",
-      "com.zentavos.stg.founder": "Founder",
-      "com.zentavos.stg.entrepreneur": "Entrepreneur",
-      "com.zentavos.stg.tycoon": "Tycoon",
+      "com.zentavos.zentavosuat.personal": "Personal",
+      "com.zentavos.zentavosuat.founder": "Founder",
+      "com.zentavos.zentavosuat.entrepreneur": "Entrepreneur",
+      "com.zentavos.zentavosuat.tycoon": "Tycoon",
 
       // Add-on plans +1 institution ($3 extra)
-      "com.zentavos.stg.personal.plus1": "Personal+1",
-      "com.zentavos.stg.founder.plus1": "Founder+1",
-      "com.zentavos.stg.entrepreneur.p1": "Entrepreneur+1",
-      "com.zentavos.stg.entrepreneur.p2": "Entrepreneur+2",
-      "com.zentavos.stg.tycoon.100gb": "Tycoon+100gb",
+      "com.zentavos.zentavosuat.personal.plus1": "Personal+1",
+      "com.zentavos.zentavosuat.founder.plus1": "Founder+1",
+      "com.zentavos.zentavosuat.entrepreneur.p1": "Entrepreneur+1",
+      "com.zentavos.zentavosuat.entrepreneur.p2": "Entrepreneur+2",
+      "com.zentavos.zentavosuat.tycoon.100gb": "Tycoon+100gb",
     },
   },
   prod: {
