@@ -110,6 +110,10 @@ jobs:
           echo "--- .env contents ---"
           cat .env
 
+          echo "--- GOOGLE_PLAY_SERVICE_ACCOUNT_STG debug ---"
+          echo "First 20 chars: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_STG:0:20 }}"
+          echo "Last 20 chars: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_STG: -20 }}"
+
           cd ..
       - name: Debug GCP/KMS Variables
         run: |
