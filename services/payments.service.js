@@ -21,10 +21,15 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
-    const auth = new GoogleAuth();
-    googlePlayAuth = auth.fromJSON(serviceAccount);
-    googlePlayAuth.scopes = ["https://www.googleapis.com/auth/androidpublisher"];
-    console.log("✅ Google Play authentication configured");
+    googlePlayAuth = new GoogleAuth({
+      credentials: {
+        client_email: serviceAccount.client_email,
+        private_key: serviceAccount.private_key,
+      },
+      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+    });
+
+    console.log("✅ Google Play authentication configured directly with credentials");
   } catch (error) {
     console.error("❌ Failed to load Google Play Service Account:", error);
   }
@@ -39,8 +44,11 @@ const getGooglePlayAccessToken = async () => {
   }
 
   try {
-    structuredLogger.logOperationStart("getGooglePlayAccessToken", { serviceAccountEmail: googlePlayAuth.email });
-    const tokenResponse = await googlePlayAuth.getAccessToken();
+    const client = await googlePlayAuth.getClient();
+    // @ts-ignore
+    structuredLogger.logOperationStart("getGooglePlayAccessToken", { serviceAccountEmail: client.email });
+    const tokenResponse = await client.getAccessToken();
+    // @ts-ignore
     return tokenResponse.token;
   } catch (error) {
     structuredLogger.logErrorBlock(error, { operation: "getGooglePlayAccessToken" });
