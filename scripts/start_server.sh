@@ -41,8 +41,8 @@ echo '--- DEBUG: Starting PM2 ---'
 
 
 
-echo "--> Stopping and deleting any existing PM2 process named '${DEPLOYMENT_ENV}' to ensure a clean environment..."
-pm2 delete "${DEPLOYMENT_ENV}" || true
+echo "--> Stopping and deleting ALL existing PM2 processes to ensure a clean environment..."
+pm2 delete all || true
 
 echo "--> Starting new PM2 process for '${DEPLOYMENT_ENV}'..."
 pm2 start ecosystem.config.cjs \
