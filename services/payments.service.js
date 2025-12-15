@@ -17,7 +17,6 @@ if (process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) {
       .toString("utf8")
       .replace(/\n/g, "");
     const serviceAccount = JSON.parse(serviceAccountJson);
-    console.log("✅ Loaded service account email:", serviceAccount.client_email);
 
     googlePlayAuth = new GoogleAuth({
       credentials: serviceAccount,
