@@ -44,6 +44,10 @@ const verifyReceipts = async (req, res) => {
     const data = req.body;
     const uid = req.user.uid;
 
+    if (!data.receipt) {
+      return res.status(400).json({ message: "Missing receipt" });
+    }
+
     const response = await paymentService.validatePayment(
       data.platform,
       data.receipt,
