@@ -747,9 +747,6 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         }
         updatePayload.formationDate = await safeEncrypt(formData.formationDate, { profile_id: profileId, field: "formationDate" });
     }
-    if (formData.businessTaxCode) {
-        updatePayload.businessCode = await safeEncrypt(formData.businessTaxCode, { profile_id: profileId, field: "businessTaxCode" });
-    }
     if (formData.taxId) {
         updatePayload.taxInformation = await safeEncrypt(formData.taxId, { profile_id: profileId, field: "taxInformation" });
     } else if (formData.taxInformation) {
@@ -770,7 +767,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         formData.businessOwnersDetails.map(async (owner) => ({
           name: await safeEncrypt(owner.name, { profile_id: profileId, field: "owner.name" }),
           email: owner.email ? await safeEncrypt(owner.email, { profile_id: profileId, field: "owner.email" }) : null,
-          percentOwned: owner.percentOwned,
+          percentOwned: owner.percentOwned === '' ? null : owner.percentOwned,
           position: owner.position,
         }))
       );
@@ -800,10 +797,16 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         );
     }
     if (formData.subsidiaries) {
-        console.warn("Warning: The 'subsidiaries' field should be an array of strings, not an array of objects.");
-        updatePayload.subsidiaries = await Promise.all(
-            formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" }))
-        );
+        if (formData.subsidiaries.length > 0 && typeof formData.subsidiaries[0] === 'object') {
+            console.warn("Warning: The 'subsidiaries' field should be an array of strings, not an array of objects.");
+            updatePayload.subsidiaries = await Promise.all(
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" }))
+            );
+        } else {
+            updatePayload.subsidiaries = await Promise.all(
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary, { profile_id: profileId, field: "subsidiary.name" }))
+            );
+        }
     }
     if (formData.businessOwners) {
         for (const owner of formData.businessOwners) {
