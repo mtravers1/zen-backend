@@ -794,6 +794,11 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         );
     }
     if (formData.businessOwners) {
+        for (const owner of formData.businessOwners) {
+            if (typeof owner !== 'string') {
+                throw new Error("Invalid owner format. Each owner must be a string.");
+            }
+        }
         updatePayload.businessOwners = await Promise.all(
             formData.businessOwners.map(async (owner) => await safeEncrypt(owner, { profile_id: profileId, field: "businessOwner" }))
         );
