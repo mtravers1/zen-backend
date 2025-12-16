@@ -64,9 +64,6 @@ async function migrateBusinesses(user, encryptIfPlaintext, documentId, isDryRun)
       if (business.payrollDetails) {
         business.payrollDetails = await encryptIfPlaintext(business.payrollDetails, { field: 'business.payrollDetails' }, business._id);
       }
-      if (business.formationDate) {
-        business.formationDate = await encryptIfPlaintext(business.formationDate, { field: 'business.formationDate' }, business._id);
-      }
       if (business.businessHours) {
         for (let i = 0; i < business.businessHours.length; i++) {
           business.businessHours[i] = await encryptIfPlaintext(business.businessHours[i], { field: `business.businessHours.${i}` }, business._id);

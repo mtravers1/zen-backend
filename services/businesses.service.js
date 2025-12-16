@@ -115,9 +115,7 @@ const addBusinesses = async (businessList, email, uid) => {
     const encryptedWebsite = businessData.website ? await safeEncrypt(businessData.website, {
         field: 'website',
     }) : null;
-    const encryptedFormationDate = businessData.formationDate ? await safeEncrypt(businessData.formationDate, {
-        field: 'formationDate',
-    }) : null;
+    const formationDate = businessData.formationDate ? new Date(businessData.formationDate) : null;
     const encryptedTaxInformation = businessData.taxInformation ? await safeEncrypt(businessData.taxInformation, {
         field: 'taxInformation',
     }) : null;
@@ -172,7 +170,7 @@ const addBusinesses = async (businessList, email, uid) => {
       subsidiaries: encryptedSubsidiaries,
       businessDescription: encryptedBusinessDescription,
       website: encryptedWebsite,
-      formationDate: encryptedFormationDate,
+      formationDate: formationDate,
       taxInformation: encryptedTaxInformation,
       legalName: encryptedLegalName,
       businessType: encryptedBusinessType,
@@ -413,12 +411,7 @@ const getUserProfiles = async (email, uid) => {
             field: "website",
           })
         : null;
-      const decryptedFormationDate = business.formationDate
-        ? await safeDecrypt(business.formationDate, {
-            business_id: business._id,
-            field: "formationDate",
-          })
-        : null;
+      const decryptedFormationDate = business.formationDate;
       const decryptedTaxInformation = business.taxInformation
         ? await safeDecrypt(business.taxInformation, {
             business_id: business._id,
@@ -741,11 +734,15 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         updatePayload.website = await safeEncrypt(formData.website, { profile_id: profileId, field: "website" });
     }
     if (formData.formationDate) {
-        const formationYear = new Date(formData.formationDate).getFullYear();
-        if (isNaN(formationYear) || formationYear < 1900) {
+        const formationDate = new Date(formData.formationDate);
+        if (isNaN(formationDate.getTime())) {
             throw new Error("Invalid formation date.");
         }
-        updatePayload.formationDate = await safeEncrypt(formData.formationDate, { profile_id: profileId, field: "formationDate" });
+        const formationYear = formationDate.getFullYear();
+        if (formationYear < 1900) {
+            throw new Error("Invalid formation date.");
+        }
+        updatePayload.formationDate = formationDate;
     }
     if (formData.taxId) {
         updatePayload.taxInformation = await safeEncrypt(formData.taxId, { profile_id: profileId, field: "taxInformation" });
