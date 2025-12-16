@@ -750,7 +750,9 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     if (formData.businessTaxCode) {
         updatePayload.businessCode = await safeEncrypt(formData.businessTaxCode, { profile_id: profileId, field: "businessTaxCode" });
     }
-    if (formData.taxInformation) {
+    if (formData.taxId) {
+        updatePayload.taxInformation = await safeEncrypt(formData.taxId, { profile_id: profileId, field: "taxInformation" });
+    } else if (formData.taxInformation) {
         updatePayload.taxInformation = await safeEncrypt(formData.taxInformation, { profile_id: profileId, field: "taxInformation" });
     }
 
