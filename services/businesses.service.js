@@ -737,6 +737,10 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         updatePayload.website = await safeEncrypt(formData.website, { profile_id: profileId, field: "website" });
     }
     if (formData.formationDate) {
+        const formationYear = new Date(formData.formationDate).getFullYear();
+        if (isNaN(formationYear) || formationYear < 1900) {
+            throw new Error("Invalid formation date.");
+        }
         updatePayload.formationDate = await safeEncrypt(formData.formationDate, { profile_id: profileId, field: "formationDate" });
     }
     if (formData.businessTaxCode) {
@@ -744,6 +748,10 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     }
     if (formData.taxInformation) {
         updatePayload.taxInformation = await safeEncrypt(formData.taxInformation, { profile_id: profileId, field: "taxInformation" });
+    }
+
+    if (formData.ownership && formData.ownership.percentage && typeof formData.ownership.percentage !== 'number') {
+        throw new Error("Invalid format for ownership percentage.");
     }
 
     if (formData.ownership && typeof formData.ownership.percentage === 'string' && formData.ownership.percentage.includes('[object Object]')) {
