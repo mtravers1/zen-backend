@@ -16,6 +16,9 @@ on:
       wipe_all_data_args:
         description: 'Arguments for the wipe-all-user-data script. Use --no-dry-run to execute.'
         required: false
+      normalize_business_userid_args:
+        description: 'Arguments for the business userId normalization script. Use --no-dry-run to execute.'
+        required: false
 
 env:
   DEPLOYMENT_NAME: staging
@@ -468,6 +471,95 @@ jobs:
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
             npm run migrate:encryption -- ${{ github.event.inputs.migration_args }}
+          EOF
+          rm -f private_key.pem # Remove the private key file after use for security
+          rm -f client.ovpn # Remove ovpn file after use for security
+
+  normalize_business_userid:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.normalize_business_userid_args != ''
+    steps:
+      - name: Install OpenVPN
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: openvpn openvpn-systemd-resolved rsync
+          version: 1.0
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ztv-build-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ztv-build-
+            ztv-
+      - name: Install dependencies
+        run: npm ci
+      - name: Replace environment variables
+        run: |
+          cp .env.sample .env
+          sed -i -e "s|MONGODB_URI\=.*|MONGODB_URI\=\'mongodb\:\/\/${{ secrets.MONGODB_URI_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_USER\=.*|MONGODB_USER\=\'${{ secrets.MONGODB_USER_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_PASS\=.*|MONGODB_PASS\=\'${{ secrets.MONGODB_PASS_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_DB\=.*|MONGODB_DB\=\'${{ secrets.MONGODB_DB_STG }}\'|g" .env
+          sed -i -e "s|APP_PORT\=.*|APP_PORT\=$APP_PORT|g" .env
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH\=.*|FIREBASE_SERVICE_ACCOUNT_PATH\=./ServiceAccountKey.json|g" .env
+          sed -i -e "s|PLAID_CLIENT_ID\=.*|PLAID_CLIENT_ID\=${{ secrets.PLAID_CLIENT_ID_STG }}|g" .env
+          sed -i -e "s|PLAID_SECRET\=.*|PLAID_SECRET\=${{ secrets.PLAID_SECRET_STG }}|g" .env
+          sed -i -e "s|PLAID_WEBHOOK_URL\=.*|PLAID_WEBHOOK_URL\=${{ secrets.PLAID_WEBHOOK_URL_STG }}|g" .env
+          sed -i -e "s|PLAID_ENV\=.*|PLAID_ENV\=staging|g" .env
+          sed -i -e "s|GCP_PROJECT_ID\=.*|GCP_PROJECT_ID\=${{ vars.GCP_PROJECT_ID_STG }}|g" .env
+          sed -i -e "s|GCS_DEK_BUCKET_NAME\=.*|GCS_DEK_BUCKET_NAME\=${{ vars.GCS_DEK_BUCKET_NAME_STG }}|g" .env
+          sed -i -e "s|GCS_FILES_BUCKET_NAME\=.*|GCS_FILES_BUCKET_NAME\=${{ vars.GCS_FILES_BUCKET_NAME_STG }}|g" .env
+          sed -i -e "s|LEGACY_GCS_BUCKET_NAME\=.*|LEGACY_GCS_BUCKET_NAME\=${{ vars.LEGACY_GCS_BUCKET_NAME_STG }}|g" .env
+          sed -i -e "s|LEGACY_GCS_ENVIRONMENT_FOLDER\=.*|LEGACY_GCS_ENVIRONMENT_FOLDER\=${{ vars.LEGACY_GCS_ENVIRONMENT_FOLDER_STG }}|g" .env
+          sed -i -e "s|GCP_KEY_LOCATION\=.*|GCP_KEY_LOCATION\=${{ vars.GCP_KEY_LOCATION_STG }}|g" .env
+          sed -i -e "s|GCP_KEY_RING\=.*|GCP_KEY_RING\=${{ vars.GCP_KEY_RING_STG }}|g" .env
+          sed -i -e "s|GCP_KEY_NAME\=.*|GCP_KEY_NAME\=${{ vars.GCP_KEY_NAME_STG }}|g" .env
+          sed -i -e "s|LEGACY_GCP_PROJECT_ID\=.*|LEGACY_GCP_PROJECT_ID\=${{ vars.LEGACY_GCP_PROJECT_ID }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_LOCATION\=.*|LEGACY_GCP_KEY_LOCATION\=${{ vars.LEGACY_GCP_KEY_LOCATION }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_RING\=.*|LEGACY_GCP_KEY_RING\=${{ vars.LEGACY_GCP_KEY_RING }}|g" .env
+          sed -i -e "s|LEGACY_GCP_KEY_NAME\=.*|LEGACY_GCP_KEY_NAME\=${{ vars.LEGACY_GCP_KEY_NAME }}|g" .env
+          sed -i -e "s|HASH_SALT\=.*|HASH_SALT\=${{ secrets.HASH_SALT_STG }}|g" .env
+          sed -i -e "s|STORAGE_SERVICE_ACCOUNT\=.*|STORAGE_SERVICE_ACCOUNT\=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|KMS_SERVICE_ACCOUNT\=.*|KMS_SERVICE_ACCOUNT\=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT\=.*|FIREBASE_SERVICE_ACCOUNT\=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|FIREBASE_API_KEY\=.*|FIREBASE_API_KEY\=${{ secrets.FIREBASE_API_KEY_STG }}|g" .env
+      - name: VPN config
+        env:
+          OVPN_CONFIG: ${{ secrets.OVPN_CONFIG }}
+        run: |
+          echo "$OVPN_CONFIG" > client.ovpn
+      - name: Connect to VPN
+        uses: kota65535/github-openvpn-connect-action@v3.1.0
+        with:
+          config_file: client.ovpn
+          echo_config: false
+          username: ${{ secrets.OVPN_USERNAME }}
+          password: ${{ secrets.OVPN_PASSWORD }}
+      - name: rsync .env file
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          switches: -avzr --delete --no-times --omit-dir-times --no-perms --no-owner --no-group --chmod=D755,F664
+          path: ./.env
+          remote_path: ${{ vars.DEPLOYMENT_PATH }}/.env
+          remote_host: ${{ vars.DEPLOYMENT_HOST_STG }}
+          remote_user: ${{ secrets.DEPLOYMENT_USER_STG }}
+          remote_key: ${{ secrets.DEPLOYMENT_KEY_STG }}
+          remote_port: ${{ secrets.DEPLOYMENT_PORT }}
+      - name: SSH config
+        env:
+          PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_STG }}
+        run: |
+          echo "$PRIVATE_KEY" > private_key.pem # Write the private key to a file
+          chmod 600 private_key.pem # Set the appropriate permissions for the key file
+      - name: Run business userId normalization script
+        run: |
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+            cd ${{ vars.DEPLOYMENT_PATH }}
+            npm run migrate:business-userid-normalize -- ${{ github.event.inputs.normalize_business_userid_args }}
           EOF
           rm -f private_key.pem # Remove the private key file after use for security
           rm -f client.ovpn # Remove ovpn file after use for security

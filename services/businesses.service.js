@@ -27,8 +27,6 @@ const addBusinesses = async (businessList, email, uid) => {
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
 
-  const userId = user._id.toString();
-
   const usedColors = new Set();
   for (const businessData of businessList) {
     if (businessData.legalName === "") continue;
@@ -156,7 +154,7 @@ const addBusinesses = async (businessList, email, uid) => {
       : [];
 
     const newBusiness = new Business({
-      userId: userId,
+      userId: [user._id],
       name: encryptedName,
       industryDesc: encryptedIndustryDesc,
       ownership: encryptedOwnership,
@@ -300,7 +298,7 @@ const getUserProfiles = async (email, uid) => {
     };
 
     profiles.push(personalProfile);
-    const userId = user._id.toString();
+    const userId = user._id;
 
     const businesses = await Business.find({ userId }).lean();
 
@@ -722,7 +720,7 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         if (isNaN(businessCode)) {
             throw new Error("Invalid business tax code.");
         }
-        updatePayload.businessCode = businessCode;
+        updatePayload.businessCode = await safeEncrypt(businessCode.toString(), { profile_id: profileId, field: "businessCode" });
     }
     if (formData.businessType) {
         updatePayload.businessType = await safeEncrypt(formData.businessType, { profile_id: profileId, field: "businessType" });
@@ -739,7 +737,8 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
             throw new Error("Invalid formation date.");
         }
         const formationYear = formationDate.getFullYear();
-        if (formationYear < 1900) {
+        const currentYear = new Date().getFullYear();
+        if (formationYear < 1900 || formationYear > currentYear) {
             throw new Error("Invalid formation date.");
         }
         updatePayload.formationDate = formationDate;
@@ -797,11 +796,11 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         if (formData.subsidiaries.length > 0 && typeof formData.subsidiaries[0] === 'object') {
             console.warn("Warning: The 'subsidiaries' field should be an array of strings, not an array of objects.");
             updatePayload.subsidiaries = await Promise.all(
-                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" }))
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiaries" }))
             );
         } else {
             updatePayload.subsidiaries = await Promise.all(
-                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary, { profile_id: profileId, field: "subsidiary.name" }))
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary, { profile_id: profileId, field: "subsidiaries" }))
             );
         }
     }

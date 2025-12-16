@@ -14,11 +14,14 @@ export const checkPlanLimit = (resource) => {
       const planLimits = permissions[plan];
 
       if (!planLimits) {
-        console.warn(`No plan limits found for plan: ${plan}`);
-        return next(); // Or handle as an error, for now we let it pass
+        return res.status(403).json({ error: "forbidden", message: "Invalid plan configuration." });
       }
 
       const limit = planLimits[resource];
+
+      if (limit === undefined || limit === null) {
+        return res.status(403).json({ error: "forbidden", message: `Resource limit for '${resource}' is not defined for your plan.` });
+      }
 
       // -1 means unlimited
       if (limit === -1) {
