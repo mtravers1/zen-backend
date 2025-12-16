@@ -750,10 +750,6 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         updatePayload.taxInformation = await safeEncrypt(formData.taxInformation, { profile_id: profileId, field: "taxInformation" });
     }
 
-    if (formData.ownership && formData.ownership.percentage && typeof formData.ownership.percentage !== 'number') {
-        throw new Error("Invalid format for ownership percentage.");
-    }
-
     if (formData.ownership && typeof formData.ownership.percentage === 'string' && formData.ownership.percentage.includes('[object Object]')) {
       throw new Error("Invalid format for ownership percentage.");
     }
@@ -789,14 +785,16 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         );
     }
     if (formData.businessPhones) {
+        console.warn("Warning: The field 'businessPhones' is deprecated. Please use 'phoneNumbers' instead.");
         updatePayload.phoneNumbers = await Promise.all(
             formData.businessPhones.map(async (phone) => ({
-                phone: phone.phone ? await safeEncrypt(phone.phone, { profile_id: profileId, field: "phone.phone" }) : null,
+                phone: phone.phoneNumber ? await safeEncrypt(phone.phoneNumber, { profile_id: profileId, field: "phone.phone" }) : null,
                 phoneType: phone.phoneType,
             }))
         );
     }
     if (formData.subsidiaries) {
+        console.warn("Warning: The 'subsidiaries' field should be an array of strings, not an array of objects.");
         updatePayload.subsidiaries = await Promise.all(
             formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" }))
         );
