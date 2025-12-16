@@ -1243,6 +1243,34 @@ const getOwnUserProfile = async (uid) => {
             })
           )
         : [];
+    let emails = [];
+    if (Array.isArray(user.email)) {
+      emails = await Promise.all(
+        user.email.map(async (emailObj) => {
+          return {
+            email: await safeDecrypt(emailObj.email, {
+              user_id: user._id,
+              field: "email",
+            }),
+            emailType: emailObj.emailType,
+            isPrimary: emailObj.isPrimary,
+          };
+        }),
+      );
+    } else {
+      emails = [
+        {
+          email: await safeDecrypt(user.email, {
+            user_id: user._id,
+            field: "email",
+          }),
+          emailType: "personal",
+          isPrimary: true,
+        },
+      ];
+    }
+
+    const primaryEmail = emails.find((e) => e.isPrimary)?.email || emails[0]?.email || null;
     const retrievedUser = {
       id: user._id,
       _id: user._id,
