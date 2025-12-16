@@ -746,7 +746,16 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
         updatePayload.taxInformation = await safeEncrypt(formData.taxInformation, { profile_id: profileId, field: "taxInformation" });
     }
 
+    if (formData.ownership && typeof formData.ownership.percentage === 'string' && formData.ownership.percentage.includes('[object Object]')) {
+      throw new Error("Invalid format for ownership percentage.");
+    }
+
     if (formData.businessOwnersDetails) {
+      for (const owner of formData.businessOwnersDetails) {
+        if (typeof owner.percentOwned === 'string' && owner.percentOwned.includes('[object Object]')) {
+          throw new Error("Invalid format for owner percentage.");
+        }
+      }
       updatePayload.businessOwnersDetails = await Promise.all(
         formData.businessOwnersDetails.map(async (owner) => ({
           name: await safeEncrypt(owner.name, { profile_id: profileId, field: "owner.name" }),
