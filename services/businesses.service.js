@@ -724,8 +724,9 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     if (formData.entityType) {
         updatePayload.entityType = await safeEncrypt(formData.entityType, { profile_id: profileId, field: "entityType" });
     }
-    if (formData.businessTaxType) {
-        updatePayload.businessTaxType = await safeEncrypt(formData.businessTaxType, { profile_id: profileId, field: "businessTaxType" });
+    if (formData.businessTaxCode) {
+        console.warn("Warning: The field 'businessTaxCode' should be a number, not a string.");
+        updatePayload.businessCode = await safeEncrypt(String(formData.businessTaxCode), { profile_id: profileId, field: "businessCode" });
     }
     if (formData.businessType) {
         updatePayload.businessType = await safeEncrypt(formData.businessType, { profile_id: profileId, field: "businessType" });
