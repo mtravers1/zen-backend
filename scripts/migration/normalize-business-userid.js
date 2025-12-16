@@ -1,11 +1,12 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import connectDB from '../database/database.js';
-import Business from '../database/models/Businesses.js';
+import connectDB from '../../database/database.js';
+import Business from '../../database/models/Businesses.js';
 
 dotenv.config();
 
 async function normalizeBusinessUserId() {
+  let hasError = false;
   try {
     console.log('Connecting to the database...');
     await connectDB();
@@ -58,10 +59,15 @@ Businesses with userId modified: ${modifiedCount}
 
   } catch (error) {
     console.error('An error occurred during migration:', error);
+    hasError = true;
   } finally {
     await mongoose.disconnect();
     console.log('Database disconnected.');
-    process.exit(0);
+    if (hasError) {
+      process.exit(1);
+    } else {
+      process.exit(0);
+    }
   }
 }
 
