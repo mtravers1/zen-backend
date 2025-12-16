@@ -658,21 +658,20 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
       }
 
       if (formData.nameParts) {
-          updatePayload.name = {};
           if (formData.nameParts.firstName) {
-              updatePayload.name.firstName = await safeEncrypt(formData.nameParts.firstName, { profile_id: profileId, field: "firstName" });
+              updatePayload['name.firstName'] = await safeEncrypt(formData.nameParts.firstName, { profile_id: profileId, field: "firstName" });
           }
           if (formData.nameParts.lastName) {
-              updatePayload.name.lastName = await safeEncrypt(formData.nameParts.lastName, { profile_id: profileId, field: "lastName" });
+              updatePayload['name.lastName'] = await safeEncrypt(formData.nameParts.lastName, { profile_id: profileId, field: "lastName" });
           }
           if (formData.nameParts.middleName) {
-              updatePayload.name.middleName = await safeEncrypt(formData.nameParts.middleName, { profile_id: profileId, field: "middleName" });
+              updatePayload['name.middleName'] = await safeEncrypt(formData.nameParts.middleName, { profile_id: profileId, field: "middleName" });
           }
           if (formData.nameParts.prefix) {
-              updatePayload.name.prefix = await safeEncrypt(formData.nameParts.prefix, { profile_id: profileId, field: "prefix" });
+              updatePayload['name.prefix'] = await safeEncrypt(formData.nameParts.prefix, { profile_id: profileId, field: "prefix" });
           }
           if (formData.nameParts.suffix) {
-              updatePayload.name.suffix = await safeEncrypt(formData.nameParts.suffix, { profile_id: profileId, field: "suffix" });
+              updatePayload['name.suffix'] = await safeEncrypt(formData.nameParts.suffix, { profile_id: profileId, field: "suffix" });
           }
       }
 
