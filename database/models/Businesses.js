@@ -59,7 +59,7 @@ const businessSchema = new Schema({
     type: String,
     default: null,
   },
-  businessCode: Number,
+  businessCode: String,
   entityType: String,
   businessType: {
     type: String,

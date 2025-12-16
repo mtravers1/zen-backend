@@ -27,8 +27,6 @@ const addBusinesses = async (businessList, email, uid) => {
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
 
-  const userId = user._id.toString();
-
   const usedColors = new Set();
   for (const businessData of businessList) {
     if (businessData.legalName === "") continue;
@@ -115,9 +113,7 @@ const addBusinesses = async (businessList, email, uid) => {
     const encryptedWebsite = businessData.website ? await safeEncrypt(businessData.website, {
         field: 'website',
     }) : null;
-    const encryptedFormationDate = businessData.formationDate ? await safeEncrypt(businessData.formationDate, {
-        field: 'formationDate',
-    }) : null;
+    const formationDate = businessData.formationDate ? new Date(businessData.formationDate) : null;
     const encryptedTaxInformation = businessData.taxInformation ? await safeEncrypt(businessData.taxInformation, {
         field: 'taxInformation',
     }) : null;
@@ -158,7 +154,7 @@ const addBusinesses = async (businessList, email, uid) => {
       : [];
 
     const newBusiness = new Business({
-      userId: userId,
+      userId: [user._id],
       name: encryptedName,
       industryDesc: encryptedIndustryDesc,
       ownership: encryptedOwnership,
@@ -172,7 +168,7 @@ const addBusinesses = async (businessList, email, uid) => {
       subsidiaries: encryptedSubsidiaries,
       businessDescription: encryptedBusinessDescription,
       website: encryptedWebsite,
-      formationDate: encryptedFormationDate,
+      formationDate: formationDate,
       taxInformation: encryptedTaxInformation,
       legalName: encryptedLegalName,
       businessType: encryptedBusinessType,
@@ -302,7 +298,7 @@ const getUserProfiles = async (email, uid) => {
     };
 
     profiles.push(personalProfile);
-    const userId = user._id.toString();
+    const userId = user._id;
 
     const businesses = await Business.find({ userId }).lean();
 
@@ -413,12 +409,7 @@ const getUserProfiles = async (email, uid) => {
             field: "website",
           })
         : null;
-      const decryptedFormationDate = business.formationDate
-        ? await safeDecrypt(business.formationDate, {
-            business_id: business._id,
-            field: "formationDate",
-          })
-        : null;
+      const decryptedFormationDate = business.formationDate;
       const decryptedTaxInformation = business.taxInformation
         ? await safeDecrypt(business.taxInformation, {
             business_id: business._id,
@@ -651,201 +642,185 @@ const updateBusinessProfile = async (profileId, formData, email, uid) => {
     }
 
     if (formData.isPersonal) {
-      const encryptedProfilePhotoUrl = await safeEncrypt(
-        formData.profilePhotoUrl,
-        { profile_id: profileId, field: "profilePhotoUrl" },
-      );
+      const updatePayload = {};
 
-      const encryptedFirstName = await safeEncrypt(formData.nameParts.firstName, {
-        profile_id: profileId,
-        field: "firstName",
-      });
-      const encryptedLastName = await safeEncrypt(formData.nameParts.lastName, {
-        profile_id: profileId,
-        field: "lastName",
-      });
-      const encryptedMiddleName = formData.nameParts.middleName ? await safeEncrypt(formData.nameParts.middleName, { profile_id: profileId, field: "middleName" }) : null;
-      const encryptedPrefix = formData.nameParts.prefix ? await safeEncrypt(formData.nameParts.prefix, { profile_id: profileId, field: "prefix" }) : null;
-      const encryptedSuffix = formData.nameParts.suffix ? await safeEncrypt(formData.nameParts.suffix, { profile_id: profileId, field: "suffix" }) : null;
+      if (formData.profilePhotoUrl) {
+          updatePayload.profilePhotoUrl = await safeEncrypt(formData.profilePhotoUrl, { profile_id: profileId, field: "profilePhotoUrl" });
+      }
 
-      const encryptedEmails = await Promise.all(
-        formData.email.map(async (emailData) => ({
-          email: await safeEncrypt(emailData.email, { profile_id: profileId, field: "email" }),
-          emailType: emailData.emailType,
-          isPrimary: emailData.isPrimary,
-        }))
-      );
+      if (formData.nameParts) {
+          if (formData.nameParts.firstName) {
+              updatePayload['name.firstName'] = await safeEncrypt(formData.nameParts.firstName, { profile_id: profileId, field: "firstName" });
+          }
+          if (formData.nameParts.lastName) {
+              updatePayload['name.lastName'] = await safeEncrypt(formData.nameParts.lastName, { profile_id: profileId, field: "lastName" });
+          }
+          if (formData.nameParts.middleName) {
+              updatePayload['name.middleName'] = await safeEncrypt(formData.nameParts.middleName, { profile_id: profileId, field: "middleName" });
+          }
+          if (formData.nameParts.prefix) {
+              updatePayload['name.prefix'] = await safeEncrypt(formData.nameParts.prefix, { profile_id: profileId, field: "prefix" });
+          }
+          if (formData.nameParts.suffix) {
+              updatePayload['name.suffix'] = await safeEncrypt(formData.nameParts.suffix, { profile_id: profileId, field: "suffix" });
+          }
+      }
 
-      const encryptedPhones = await Promise.all(
-        formData.phones.map(async (phoneData) => ({
-          phone: await safeEncrypt(phoneData.phoneNumber, { profile_id: profileId, field: "phone" }),
-          phoneType: phoneData.phoneType,
-        }))
-      );
+      if (formData.email) {
+          updatePayload.email = await Promise.all(
+            formData.email.map(async (emailData) => ({
+              email: await safeEncrypt(emailData.email, { profile_id: profileId, field: "email" }),
+              emailType: emailData.emailType,
+              isPrimary: emailData.isPrimary,
+            }))
+          );
+      }
+
+      if (formData.phones) {
+          updatePayload.phones = await Promise.all(
+            formData.phones.map(async (phoneData) => ({
+              phone: await safeEncrypt(phoneData.phoneNumber, { profile_id: profileId, field: "phone" }),
+              phoneType: phoneData.phoneType,
+            }))
+          );
+      }
 
       const updatedPersonalProfile = await User.findByIdAndUpdate(
         profileId,
-        {
-          name: {
-            firstName: encryptedFirstName,
-            lastName: encryptedLastName,
-            middleName: encryptedMiddleName,
-            prefix: encryptedPrefix,
-            suffix: encryptedSuffix,
-          },
-          email: encryptedEmails,
-          phones: encryptedPhones,
-          profilePhotoUrl: encryptedProfilePhotoUrl, //TODO:validate upload in other process
-        },
+        { $set: updatePayload },
         { new: true },
       );
+
+      if (!updatedPersonalProfile) {
+        throw new Error("Personal profile not found or update failed.");
+      }
+
       return {
         message: "Personal profile updated successfully.",
         updatedPersonalProfile,
       };
     }
 
-    const encryptedBusinessOwnersDetails = formData.businessOwnersDetails
-      ? await Promise.all(
-          formData.businessOwnersDetails.map(async (owner) => {
-            return {
-              name: await safeEncrypt(owner.name, { profile_id: profileId, field: "owner.name" }),
-              email: owner.email
-                ? await safeEncrypt(owner.email, { profile_id: profileId, field: "owner.email" })
-                : null,
-              percentOwned: owner.percentOwned,
-              position: owner.position,
-            };
-          })
-        )
-      : [];
+    const updatePayload = {};
 
-    //const encryptedTaxInformation = await safeEncrypt(formData.taxId, dek);//TODO: not implemented yet
+    if (formData.businessLogo) {
+      updatePayload.businessLogo = await safeEncrypt(formData.businessLogo, { profile_id: profileId, field: "businessLogo" });
+    }
+    if (formData.legalName) {
+      updatePayload.legalName = await safeEncrypt(formData.legalName, { profile_id: profileId, field: "legalName" });
+    }
+    if (formData.industryDesc) {
+        updatePayload.industryDesc = await safeEncrypt(formData.industryDesc, { profile_id: profileId, field: "industryDesc" });
+    }
+    if (formData.entityType) {
+        updatePayload.entityType = await safeEncrypt(formData.entityType, { profile_id: profileId, field: "entityType" });
+    }
+    if (formData.businessTaxCode) {
+        const businessCode = parseInt(formData.businessTaxCode, 10);
+        if (isNaN(businessCode)) {
+            throw new Error("Invalid business tax code.");
+        }
+        updatePayload.businessCode = await safeEncrypt(businessCode.toString(), { profile_id: profileId, field: "businessCode" });
+    }
+    if (formData.businessType) {
+        updatePayload.businessType = await safeEncrypt(formData.businessType, { profile_id: profileId, field: "businessType" });
+    }
+    if (formData.businessDescription) {
+        updatePayload.businessDescription = await safeEncrypt(formData.businessDescription, { profile_id: profileId, field: "businessDescription" });
+    }
+    if (formData.website) {
+        updatePayload.website = await safeEncrypt(formData.website, { profile_id: profileId, field: "website" });
+    }
+    if (formData.formationDate) {
+        const formationDate = new Date(formData.formationDate);
+        if (isNaN(formationDate.getTime())) {
+            throw new Error("Invalid formation date.");
+        }
+        const formationYear = formationDate.getFullYear();
+        const currentYear = new Date().getFullYear();
+        if (formationYear < 1900 || formationYear > currentYear) {
+            throw new Error("Invalid formation date.");
+        }
+        updatePayload.formationDate = formationDate;
+    }
+    if (formData.taxId) {
+        updatePayload.taxInformation = await safeEncrypt(formData.taxId, { profile_id: profileId, field: "taxInformation" });
+    } else if (formData.taxInformation) {
+        updatePayload.taxInformation = await safeEncrypt(formData.taxInformation, { profile_id: profileId, field: "taxInformation" });
+    }
 
-    const encryptedBusinessLogo = await safeEncrypt(
-      formData.businessLogo,
-      { profile_id: profileId, field: "businessLogo" },
-    );
+    if (formData.ownership && typeof formData.ownership.percentage === 'string' && formData.ownership.percentage.includes('[object Object]')) {
+      throw new Error("Invalid format for ownership percentage.");
+    }
 
-    const encryptedEntityType = await safeEncrypt(formData.entityType, {
-      profile_id: profileId,
-      field: "entityType",
-    });
-    const encryptedBusinessTaxType = await safeEncrypt(
-      formData.businessTaxType,
-      { profile_id: profileId, field: "businessTaxType" },
-    );
-
-    const encryptedBusinessType = formData.businessType ? await safeEncrypt(formData.businessType, {
-        profile_id: profileId,
-        field: 'businessType',
-    }) : null;
-    const encryptedLegalName = await safeEncrypt(
-      formData.legalName,
-      { profile_id: profileId, field: "legalName" },
-    );
-    const encryptedIndustryDesc = await safeEncrypt(
-      formData.industryDesc,
-      { profile_id: profileId, field: "industryDesc" },
-    );
-
-    const encryptedBusinessDescription = formData.businessDescription ? await safeEncrypt(
-        formData.businessDescription,
-        { profile_id: profileId, field: 'businessDescription' }
-    ) : null;
-
-    const encryptedWebsite = formData.website ? await safeEncrypt(formData.website, {
-        profile_id: profileId,
-        field: 'website',
-    }) : null;
-
-    const encryptedBusinessLocations = formData.businessAddresses
-      ? await Promise.all(
-          formData.businessAddresses.map(async (address) => {
-            return {
-              name: address.name,
-              street: address.street ? await safeEncrypt(address.street, { profile_id: profileId, field: "address.street" }) : null,
-              city: address.city ? await safeEncrypt(address.city, { profile_id: profileId, field: "address.city" }) : null,
-              state: address.state ? await safeEncrypt(address.state, { profile_id: profileId, field: "address.state" }) : null,
-              postalCode: address.postalCode ? await safeEncrypt(address.postalCode, { profile_id: profileId, field: "address.postalCode" }) : null,
-              country: address.country ? await safeEncrypt(address.country, { profile_id: profileId, field: "address.country" }) : null,
-              addressLine1: address.addressLine1 ? await safeEncrypt(address.addressLine1, { profile_id: profileId, field: "address.addressLine1" }) : null,
-              addressLine2: address.addressLine2 ? await safeEncrypt(address.addressLine2, { profile_id: profileId, field: "address.addressLine2" }) : null,
-              type: address.type,
-            };
-          })
-        )
-      : [];
-
-    const encryptedPhoneNumbers = formData.businessPhones
-      ? await Promise.all(
-          formData.businessPhones.map(async (phone) => {
-            return {
-              phone: phone.phone ? await safeEncrypt(phone.phone, { profile_id: profileId, field: "phone.phone" }) : null,
-              phoneType: phone.phoneType,
-            };
-          })
-        )
-      : [];
-
-    const encryptedFormationDate = formData.formationDate ? await safeEncrypt(formData.formationDate, {
-        profile_id: profileId,
-        field: 'formationDate',
-    }) : null;
-
-    const encryptedBusinessCode = formData.businessTaxCode ? await safeEncrypt(formData.businessTaxCode, {
-        profile_id: profileId,
-        field: 'businessTaxCode',
-    }) : null;
-
-    const encryptedSubsidiaries = formData.subsidiaries
-      ? await Promise.all(
-          formData.subsidiaries.map(async (subsidiary) => {
-            return await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiary.name" });
-          })
-        )
-      : [];
-
-    const encryptedBusinessOwners = formData.businessOwners
-      ? await Promise.all(
-          formData.businessOwners.map(async (owner) => {
-            return await safeEncrypt(owner, { profile_id: profileId, field: "businessOwner" });
-          })
-        )
-      : [];
-
-    const encryptedOwnershipPercentage = formData.ownership && formData.ownership.percentage ? await safeEncrypt(String(formData.ownership.percentage), {
-        profile_id: profileId,
-        field: 'ownership.percentage',
-    }) : null;
-
-    const encryptedTaxInformation = formData.taxInformation ? await safeEncrypt(formData.taxInformation, {
-        profile_id: profileId,
-        field: 'taxInformation',
-    }) : null;
+    if (formData.businessOwnersDetails) {
+      for (const owner of formData.businessOwnersDetails) {
+        if (typeof owner.percentOwned === 'string' && owner.percentOwned.includes('[object Object]')) {
+          throw new Error("Invalid format for owner percentage.");
+        }
+      }
+      updatePayload.businessOwnersDetails = await Promise.all(
+        formData.businessOwnersDetails.map(async (owner) => ({
+          name: await safeEncrypt(owner.name, { profile_id: profileId, field: "owner.name" }),
+          email: owner.email ? await safeEncrypt(owner.email, { profile_id: profileId, field: "owner.email" }) : null,
+          percentOwned: owner.percentOwned === '' ? null : owner.percentOwned,
+          position: owner.position,
+        }))
+      );
+    }
+    if (formData.businessAddresses) {
+        updatePayload.businessLocations = await Promise.all(
+            formData.businessAddresses.map(async (address) => ({
+                name: address.name,
+                street: address.street ? await safeEncrypt(address.street, { profile_id: profileId, field: "address.street" }) : null,
+                city: address.city ? await safeEncrypt(address.city, { profile_id: profileId, field: "address.city" }) : null,
+                state: address.state ? await safeEncrypt(address.state, { profile_id: profileId, field: "address.state" }) : null,
+                postalCode: address.postalCode ? await safeEncrypt(address.postalCode, { profile_id: profileId, field: "address.postalCode" }) : null,
+                country: address.country ? await safeEncrypt(address.country, { profile_id: profileId, field: "address.country" }) : null,
+                addressLine1: address.addressLine1 ? await safeEncrypt(address.addressLine1, { profile_id: profileId, field: "address.addressLine1" }) : null,
+                addressLine2: address.addressLine2 ? await safeEncrypt(address.addressLine2, { profile_id: profileId, field: "address.addressLine2" }) : null,
+                type: address.type,
+            }))
+        );
+    }
+    if (formData.businessPhones) {
+        console.warn("Warning: The field 'businessPhones' is deprecated. Please use 'phoneNumbers' instead.");
+        updatePayload.phoneNumbers = await Promise.all(
+            formData.businessPhones.map(async (phone) => ({
+                phone: phone.phoneNumber ? await safeEncrypt(phone.phoneNumber, { profile_id: profileId, field: "phone.phone" }) : null,
+                phoneType: phone.phoneType,
+            }))
+        );
+    }
+    if (formData.subsidiaries) {
+        if (formData.subsidiaries.length > 0 && typeof formData.subsidiaries[0] === 'object') {
+            console.warn("Warning: The 'subsidiaries' field should be an array of strings, not an array of objects.");
+            updatePayload.subsidiaries = await Promise.all(
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary.name, { profile_id: profileId, field: "subsidiaries" }))
+            );
+        } else {
+            updatePayload.subsidiaries = await Promise.all(
+                formData.subsidiaries.map(async (subsidiary) => await safeEncrypt(subsidiary, { profile_id: profileId, field: "subsidiaries" }))
+            );
+        }
+    }
+    if (formData.businessOwners) {
+        for (const owner of formData.businessOwners) {
+            if (typeof owner !== 'string') {
+                throw new Error("Invalid owner format. Each owner must be a string.");
+            }
+        }
+        updatePayload.businessOwners = await Promise.all(
+            formData.businessOwners.map(async (owner) => await safeEncrypt(owner, { profile_id: profileId, field: "businessOwner" }))
+        );
+    }
+    if (formData.ownership && formData.ownership.percentage) {
+        updatePayload['ownership.percentage'] = await safeEncrypt(String(formData.ownership.percentage), { profile_id: profileId, field: "ownership.percentage" });
+    }
 
     const updatedProfile = await Business.findByIdAndUpdate(
       profileId,
-      {
-        phoneNumbers: encryptedPhoneNumbers,
-        legalName: encryptedLegalName,
-
-        businessLocations: encryptedBusinessLocations,
-        formationDate: encryptedFormationDate,
-        businessDescription: encryptedBusinessDescription,
-        businessCode: encryptedBusinessCode,
-        entityType: encryptedEntityType,
-        industryDesc: encryptedIndustryDesc,
-        businessType: encryptedBusinessType,
-        businessTaxType: encryptedBusinessTaxType,
-        subsidiaries: encryptedSubsidiaries,
-        businessOwners: encryptedBusinessOwners,
-        businessOwnersDetails: encryptedBusinessOwnersDetails,
-        'ownership.percentage': encryptedOwnershipPercentage,
-        taxInformation: encryptedTaxInformation,
-        website: encryptedWebsite,
-        businessLogo: encryptedBusinessLogo,
-      },
+      { $set: updatePayload },
       { new: true },
     );
 
