@@ -102,44 +102,34 @@ export const PRODUCT_MAPPINGS = {
   },
   prod: {
     ios: {
-      // Base subscription plans - Monthly (no suffix)
-      "com.zentavos.sub.personal": "Personal",
-      "com.zentavos.sub.founder": "Founder",
-      "com.zentavos.sub.entrepreneur": "Entrepreneur",
+      "com.zentavos.sub.tycoon.100.gb": "Tycoon +100gb",
       "com.zentavos.sub.tycoon": "Tycoon",
-
-      // Base subscription plans - Yearly (.yearly suffix)
-      "com.zentavos.sub.personal.yearly": "Personal",
-      "com.zentavos.sub.founder.yearly": "Founder",
-      "com.zentavos.sub.entrepreneur.yearly": "Entrepreneur",
-      "com.zentavos.sub.tycoon.yearly": "Tycoon",
-
-      // Add-on plans - Monthly (no suffix)
-      "com.zentavos.sub.personal.1.institution": "Personal+1",
-      "com.zentavos.sub.founder.1.institution": "Founder+1",
-      "com.zentavos.sub.entrepreneur.1.institution": "Entrepreneur+1",
-      "com.zentavos.sub.entrepreneur.2.institution": "Entrepreneur+2",
-      "com.zentavos.sub.tycoon.100.gb": "Tycoon+100gb",
-
-      // Add-on plans - Yearly (.yearly suffix)
-      "com.zentavos.sub.personal.1.institution.yearly": "Personal+1",
-      "com.zentavos.sub.founder.1.institution.yearly": "Founder+1",
-      "com.zentavos.sub.entrepreneur.1.institution.yearly": "Entrepreneur+1",
-      "com.zentavos.sub.entrepreneur.2.institution.yearly": "Entrepreneur+2",
-      "com.zentavos.sub.tycoon.100.gb.yearly": "Tycoon+100gb",
+      "com.zentavos.sub.entrepreneur.2.institution": "Entrepreneur + 2 institution",
+      "com.zentavos.sub.entrepreneur.1.institution": "Entrepreneur + 1 institution",
+      "com.zentavos.sub.entrepreneur": "Entrepreneur",
+      "com.zentavos.sub.founder.1.institution": "Founder + 1 institution",
+      "com.zentavos.sub.founder": "Founder",
+      "com.zentavos.sub.personal.1.institution": "Personal + 1 institution",
+      "com.zentavos.sub.personal": "Personal",
+      "com.zentavos.sub.tycoon.100.gb.annual": "Tycoon +100gb Annual",
+      "com.zentavos.sub.entrepreneur.2.institution.annual": "Entrepreneur + 2 institution Annual",
+      "com.zentavos.sub.entrepreneur.1.institution.annual": "Entrepreneur + 1 institution Annual",
+      "com.zentavos.sub.entrepreneur.annual": "Entrepreneur Annual",
+      "com.zentavos.sub.founder.1.institution.annual": "Founder + 1 institution Annual",
+      "com.zentavos.sub.founder.annual": "Founder Annual",
+      "com.zentavos.sub.personal.1.institution.annual": "Personal + 1 institution Annual",
+      "com.zentavos.sub.personal.annual": "Personal Annual",
+      "com.zentavos.sub.tycoon.annual": "Tycoon Annual",
     },
     android: {
-      // Base subscription plans
-      "com.zentavos.mobile.personal": "Personal",
-      "com.zentavos.mobile.founder": "Founder",
       "com.zentavos.mobile.entrepreneur": "Entrepreneur",
-      "com.zentavos.mobile.tycoon": "Tycoon",
-
-      // Add-on plans +1 institution ($3 extra)
-      "com.zentavos.mobile.personal.plus1": "Personal+1",
-      "com.zentavos.mobile.founder.plus1": "Founder+1",
       "com.zentavos.mobile.entrepreneur.p1": "Entrepreneur+1",
       "com.zentavos.mobile.entrepreneur.p2": "Entrepreneur+2",
+      "com.zentavos.mobile.founder": "Founder",
+      "com.zentavos.mobile.founder.plus1": "Founder+1",
+      "com.zentavos.mobile.personal": "Personal",
+      "com.zentavos.mobile.personal.plus1": "Personal+1",
+      "com.zentavos.mobile.tycoon": "Tycoon",
       "com.zentavos.mobile.tycoon.100gb": "Tycoon+100gb",
     },
   },
