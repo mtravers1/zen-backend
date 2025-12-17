@@ -12,6 +12,7 @@ const getOwnUserProfile = async (req, res) => {
     structuredLogger.logOperationStart("auth_get_own_user_profile", { user_id: uid });
     const user = await authService.getOwnUserProfile(uid);
     structuredLogger.logSuccess("auth_get_own_user_profile", { user_id: uid });
+    res.setHeader('Cache-Control', 'no-store');
     res.status(200).send(user);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {

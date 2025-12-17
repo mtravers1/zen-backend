@@ -1243,14 +1243,6 @@ const getOwnUserProfile = async (uid) => {
             })
           )
         : [];
-    let decryptedPhotoUrl;
-    if (user.profilePhotoUrl) {
-      decryptedPhotoUrl = await safeDecrypt(user.profilePhotoUrl, {
-        user_id: user._id,
-        field: "profilePhotoUrl",
-      });
-    }
-
     let emails = [];
     if (Array.isArray(user.email)) {
       emails = await Promise.all(
@@ -1279,7 +1271,6 @@ const getOwnUserProfile = async (uid) => {
     }
 
     const primaryEmail = emails.find((e) => e.isPrimary)?.email || emails[0]?.email || null;
-
     const retrievedUser = {
       id: user._id,
       _id: user._id,
@@ -1288,7 +1279,7 @@ const getOwnUserProfile = async (uid) => {
       role: user.role,
       account_type: user.account_type,
       subscription_metadata: user.subscription_metadata,
-      profilePhotoUrl: decryptedPhotoUrl,
+      profilePhotoUrl: user.profilePhotoUrl, // Return encrypted URL
       name: {
         firstName: decryptedFirstName,
         lastName: decryptedLastName,
