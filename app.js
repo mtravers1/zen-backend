@@ -51,63 +51,6 @@ app.use(cookieParser());
 // Apply structured logging first to ensure all requests have an ID.
 app.use(structuredLoggingMiddleware);
 
-// Passively decode the user from the token without enforcing auth. 
-// This makes req.user available to subsequent middleware like the rate limiter.
-app.use(decodeUserMiddleware);
-
-// Rate limiting for brute force protection
-const isProduction = process.env.NODE_ENV === "production";
-
-const webhookLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 1000, // Allow a high number of requests for the webhook
-  message: {
-    error: "Too many requests from this IP, please try again later.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
-  message: {
-    error: "Too many requests from this IP, please try again later.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    if (req.user && req.user.uid) {
-      return req.user.uid;
-    }
-    return req.ip;
-  },
-  handler: (req, res, next, options) => {
-    const key = options.keyGenerator(req, res);
-    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
-    console.log(
-      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
-    );
-
-    const retryAfter = Math.ceil(options.windowMs / 1000);
-    res.setHeader('Retry-After', String(retryAfter));
-    res.status(options.statusCode).send(options.message);
-  },
-});
-
-// Apply rate limiting to all requests
-// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
-app.set('trust proxy', 1);
-
-// Apply specific limiter for the webhook
-app.use("/api/payments/webhook/android", webhookLimiter);
-
-// Apply general limiter to all other routes
-app.use(generalLimiter);
-
-// Apply route validation middleware FIRST to block invalid routes and attacks
-app.use(routeValidationMiddleware);
-
 // authentication
 app.use((req, res, next) => {
   // Define paths that should be excluded from authentication
@@ -172,6 +115,60 @@ app.use((req, res, next) => {
   // Apply authentication for all other paths
   return firebaseAuth(req, res, next);
 });
+
+// Rate limiting for brute force protectionconst isProduction = process.env.NODE_ENV === "production";
+
+const webhookLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 1000, // Allow a high number of requests for the webhook
+  message: {
+    error: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
+  message: {
+    error: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    if (req.user && req.user.uid) {
+      return req.user.uid;
+    }
+    return req.ip;
+  },
+  handler: (req, res, next, options) => {
+    const key = options.keyGenerator(req, res);
+    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
+    console.log(
+      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
+    );
+
+    const retryAfter = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(options.statusCode).send(options.message);
+  },
+});
+
+// Apply rate limiting to all requests
+// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
+app.set('trust proxy', 1);
+
+// Apply specific limiter for the webhook
+app.use("/api/payments/webhook/android", webhookLimiter);
+
+// Apply general limiter to all other routes
+app.use(generalLimiter);
+
+// Apply route validation middleware FIRST to block invalid routes and attacks
+app.use(routeValidationMiddleware);
+
+
 
 // Load routes
 
