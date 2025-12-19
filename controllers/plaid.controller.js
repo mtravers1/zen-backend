@@ -4,7 +4,7 @@ import permissionsService from "../services/permissions.service.js";
 import upgradeResponseService from "../services/upgradeResponse.service.js";
 import User from "../database/models/User.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
-import { getUserDek } from "../database/encryption.js";
+import { getUserDek, DekMigrationInProgressError } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
 
 const createLinkToken = async (req, res) => {
@@ -50,6 +50,18 @@ const createLinkToken = async (req, res) => {
 
     res.status(200).send({ linkToken });
   } catch (error) {
+    if (error instanceof DekMigrationInProgressError) {
+      structuredLogger.logErrorBlock(error, {
+        operation: "createLinkToken",
+        user_id: req.user?.uid,
+        request_id: requestId,
+        message: "DEK retrieval is in progress. Returning 503.",
+      });
+      return res.status(503).send({ 
+        message: "Your account is being prepared. Please try again in a moment.",
+        error_code: "ACCOUNT_PREPARATION_IN_PROGRESS"
+      });
+    }
     // Log the detailed error
     structuredLogger.logErrorBlock(error, {
       operation: "createLinkToken",
