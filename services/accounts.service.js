@@ -599,7 +599,7 @@ const addAccount = async (accessToken, email, uid) => {
   );
 };
 
-const removeAccount = async (accountId, email) => {
+const deletePlaidAccountByEmail = async (accountId, email) => {
   const user = await User.findOne({
     "email.email": email.toLowerCase(),
   });
@@ -620,7 +620,7 @@ const removeAccount = async (accountId, email) => {
   await Liability.deleteMany({ accountId });
 };
 
-const removeAccountByUid = async (accountId, uid) => {
+const deletePlaidAccount = async (accountId, uid) => {
   const user = await User.findOne({
     authUid: uid,
   });
@@ -2860,14 +2860,17 @@ const accountsService = {
   generateUploadUrl,
   generateSignedUrl,
   getProfileTransactions,
-  removeAccount,
-  removeAccountByUid,
+  deletePlaidAccountByEmail,
+  deletePlaidAccount,
+  deleteAccount,
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
   getNewestAccessToken,
   getDecryptedLiabilitiesLoan,
   getDecryptedLiabilitiesCredit,
+  weeklyCashFlowPlaidAccountSetUpTransactions,
+  calculateCashFlowsWeekly,
 };
 
 export default accountsService;

@@ -253,6 +253,19 @@ const accountsController = {
   getCashFlowsByPlaidAccount,
   // getInvestmentTransactionsByAccount,
   serveAccountPhoto,
+  deleteAccount,
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const uid = req.user.uid;
+    const response = await accountsService.deleteAccount(accountId, uid);
+    res.status(200).send(response);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
 };
 
 export default accountsController;

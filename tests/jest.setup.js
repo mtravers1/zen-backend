@@ -6,7 +6,6 @@ console.log('Executing tests/jest.setup.js');
 
 jest.mock('../database/encryption.js', () => ({
   __esModule: true,
-  ...jest.requireActual('../database/encryption.js'), // Import and retain default behavior
   getUserDek: jest.fn(() => ([Buffer.from('fake-dek-32bytes-long-0123456789')])), // Return a consistent fake DEK
   getUserDekForSignup: jest.fn(() => ([Buffer.from('fake-dek-32bytes-long-0123456789')])), // Return a consistent fake DEK
   encryptValue: jest.fn((value) => `encrypted_${JSON.stringify(value)}`), // Simple prefix for testing

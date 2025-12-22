@@ -1104,7 +1104,7 @@ const repairAccessToken = async (accountId, email) => {
         }
 
         for (const accountId of removedAccounts) {
-          await accountsService.removeAccount(accountId, email);
+          await accountsService.deletePlaidAccountByEmail(accountId, email);
         }
 
         const resAddAcount = await accountsService.addAccount(

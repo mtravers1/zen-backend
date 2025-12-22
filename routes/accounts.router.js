@@ -25,4 +25,6 @@ router.post("/get-photo", controller.getAccountPhoto);
 router.get("/photo/:fileName", controller.serveAccountPhoto);
 // router.get("/investment-transactions/:accountId", controller.getInvestmentTransactionsByAccount);
 
+router.delete("/:accountId", controller.deleteAccount);
+
 export default router;
