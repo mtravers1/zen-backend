@@ -52,6 +52,7 @@ export default {
         { from: "ecosystem.config.cjs", to: "./ecosystem.config.cjs" },
         { from: "package.json", to: "." },
         { from: "package-lock.json", to: "." },
+        { from: "instrument.js", to: "." },
         { from: ".env.sample", to: ".", noErrorOnMissing: true },
         { from: "scripts/", to: "./scripts/", noErrorOnMissing: true },
         { from: "config/", to: "./config/", noErrorOnMissing: true },
