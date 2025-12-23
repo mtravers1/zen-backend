@@ -7,7 +7,7 @@ module.exports = {
     {
       name: "local",
       script: "./bin/www.js",
-      node_args: "-r dotenv/config",
+      node_args: "--import ./instrument.js",
       env: {
         DOTENV_CONFIG_PATH: "/Users/chris.stevens/development/zentavos-backend/.env",
         PLAID_ENV: "sandbox",
@@ -20,7 +20,7 @@ module.exports = {
       name: "dev",
       script: "./index.js",
       watch: true,
-      node_args: "-r dotenv/config",
+      node_args: "--import ./instrument.js",
       env: {
         PLAID_ENV: "development",
       },
@@ -32,7 +32,7 @@ module.exports = {
       name: "staging",
       script: "./index.js",
       watch: false,
-      node_args: "-r dotenv/config",
+      node_args: "--import ./instrument.js",
       env: {
         PLAID_ENV: "production",
       },
@@ -44,7 +44,7 @@ module.exports = {
       name: "prod",
       script: "./index.js",
       watch: false,
-      node_args: "-r dotenv/config",
+      node_args: "--import ./instrument.js",
       env: {
         PLAID_ENV: "production",
       },
