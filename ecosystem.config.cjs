@@ -5,6 +5,7 @@ module.exports = {
       name: "local",
       script: "./index.js",
       env: {
+        NODE_OPTIONS: "--import ./instrument.mjs --enable-source-maps",
         
         DOTENV_CONFIG_PATH: "./.env",
         PLAID_ENV: "sandbox",
@@ -18,6 +19,7 @@ module.exports = {
       script: "./index.js",
       watch: true,
       env: {
+        NODE_OPTIONS: "--import ./instrument.mjs --enable-source-maps",
         
         PLAID_ENV: "development",
       },
@@ -30,6 +32,7 @@ module.exports = {
       script: "./index.js",
       watch: false,
       env: {
+        NODE_OPTIONS: "--import ./instrument.mjs --enable-source-maps",
         
         PLAID_ENV: "production",
       },
@@ -42,6 +45,7 @@ module.exports = {
       script: "./index.js",
       watch: false,
       env: {
+        NODE_OPTIONS: "--import ./instrument.mjs --enable-source-maps",
         
         PLAID_ENV: "production",
       },

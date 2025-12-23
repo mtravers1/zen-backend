@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import TerserPlugin from "terser-webpack-plugin";
 import CopyWebpackPlugin from "copy-webpack-plugin";
+import nodeExternals from 'webpack-node-externals';
 
 
 
@@ -78,12 +79,9 @@ export default {
   resolve: {
     extensions: [".js", ".mjs"],
   },
-  externals: {
-    '@google-cloud/storage': 'module @google-cloud/storage',
-    '@google-cloud/kms': 'module @google-cloud/kms',
-    'mongodb-client-encryption': 'module mongodb-client-encryption',
-    'mongodb': 'module mongodb',
-  },
+  externals: [nodeExternals({
+    importType: 'module'
+  })],
 
 
 };
