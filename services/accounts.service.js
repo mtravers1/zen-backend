@@ -638,18 +638,24 @@ const deletePlaidAccount = async (accountId, uid) => {
     return;
   }
 
-  const dek = await getUserDek(uid);
-  const safeDecrypt = createSafeDecrypt(uid, dek);
-  const decryptedToken = await safeDecrypt(account.accessToken, {
-    account_id: account.plaid_account_id,
-    field: "accessToken",
-  });
+  try {
+    const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const decryptedToken = await safeDecrypt(account.accessToken, {
+      account_id: account.plaid_account_id,
+      field: "accessToken",
+    });
 
-  if (!decryptedToken) {
-    throw new Error("Failed to decrypt access token.");
+    if (decryptedToken) {
+      await plaidService.invalidateAccessToken(decryptedToken);
+    }
+  } catch (error) {
+    // If the error is ITEM_NOT_FOUND, we can ignore it and proceed with deletion.
+    if (error.response?.data?.error_code !== 'ITEM_NOT_FOUND') {
+      // For any other error, we re-throw it.
+      throw error;
+    }
   }
-
-  await plaidService.invalidateAccessToken(decryptedToken);
 
   user.plaidAccounts.pull(account._id);
   await user.save();
