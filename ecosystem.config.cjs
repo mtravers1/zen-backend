@@ -7,21 +7,21 @@ module.exports = {
     {
       name: "local",
       script: "./bin/www.js",
-      node_args: "--import ./instrument.js",
       env: {
+        NODE_OPTIONS: "--import ./instrument.js",
         DOTENV_CONFIG_PATH: "/Users/chris.stevens/development/zentavos-backend/.env",
         PLAID_ENV: "sandbox",
       },
-      error_file: "/Users/chris.stevens/development/zentavos-backend/logs/local-error.log",
-      out_file: "/Users/chris.stevens/development/zentavos-backend/logs/local-out.log",
+      error_file: "/var/log/zentavos/api-error.log",
+      out_file: "/var/log/zentavos/api-out.log",
       log_date_format: "YYYY-MM-DD HH:mm Z",
     },
     {
       name: "dev",
       script: "./index.js",
       watch: true,
-      node_args: "--import ./instrument.js",
       env: {
+        NODE_OPTIONS: "--import ./instrument.js",
         PLAID_ENV: "development",
       },
       error_file: "/var/log/zentavos/api-error.log",
@@ -32,8 +32,8 @@ module.exports = {
       name: "staging",
       script: "./index.js",
       watch: false,
-      node_args: "--import ./instrument.js",
       env: {
+        NODE_OPTIONS: "--import ./instrument.js",
         PLAID_ENV: "production",
       },
       error_file: "/var/log/zentavos/api-error.log",
@@ -44,8 +44,8 @@ module.exports = {
       name: "prod",
       script: "./index.js",
       watch: false,
-      node_args: "--import ./instrument.js",
       env: {
+        NODE_OPTIONS: "--import ./instrument.js",
         PLAID_ENV: "production",
       },
       error_file: "/var/log/zentavos/api-error.log",
