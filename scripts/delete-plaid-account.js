@@ -71,7 +71,7 @@ const deletePlaidAccount = async (accountId, userIdentifier, isDryRun) => {
         }
       }
     } else {
-      await accountsService.removeAccountByUid(accountId, uid);
+      await accountsService.deletePlaidAccount(accountId, uid);
       console.log(`Plaid account ${accountId} for user with uid ${uid} deleted successfully.`);
     }
 
