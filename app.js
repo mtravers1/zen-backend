@@ -1,5 +1,4 @@
-// IMPORTANT: Make sure to import `instrument.js` at the top of your file.
-import "./instrument.js";
+
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
