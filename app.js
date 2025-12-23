@@ -1,3 +1,5 @@
+// IMPORTANT: Make sure to import `instrument.js` at the top of your file.
+import "./instrument.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -17,8 +19,10 @@ import {
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
 import connectDB from "./database/database.js";
 import router from "./routes/index.js";
+import * as Sentry from "@sentry/node";
 
 export async function createApp() {
+
   const app = express();
 
 // database initialization
@@ -188,6 +192,9 @@ app.get("/favicon.ico", (req, res) => {
   res.status(204).end(); // No content for favicon
 });
 
+// The Sentry error handler must be registered before any other error middleware and after all controllers
+Sentry.setupExpressErrorHandler(app);
+
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
   next(createError(404));
@@ -207,6 +214,7 @@ app.use(function (err, req, res, next) {
   }
 
   res.status(err.status || 500).json(errorResponse);
+  res.end(res.Sentry + "\n");
 });
 
   return app;
