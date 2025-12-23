@@ -249,11 +249,26 @@ async function deletePlaidAccount(req, res) {
     }
     res.status(200).send(response);
   } catch (error) {
+    // Check if this is the specific Plaid error for an item that's already been removed.
+    if (error.response?.data?.error_code === 'ITEM_NOT_FOUND') {
+      // Log this as a warning to Sentry, as it's an expected but notable event.
+      Sentry.captureMessage("Plaid item not found during deletion (already removed)", {
+        level: "warning",
+        extra: {
+          accountId: accountId,
+          user_uid: req.user.uid,
+          plaid_error: error.response.data,
+        },
+      });
+      // Return a success response.
+      return res.status(200).send({ message: "Plaid item already removed." });
+    }
+
     if (error.message === "User not found") {
       return res.status(403).send({ message: "Forbidden" });
     }
     console.log(error);
-    Sentry.captureException(error);
+    Sentry.captureException(error); // Capture any other unexpected errors
     res.status(500).send({ message: error.message });
   }
 };
