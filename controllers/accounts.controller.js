@@ -255,7 +255,7 @@ async function deletePlaidAccount(req, res) {
       Sentry.captureMessage("Plaid item not found during deletion (already removed)", {
         level: "warning",
         extra: {
-          accountId: req.params.accountId,
+          accountId: req.params.accountId, // Corrected: get from req.params
           user_uid: req.user.uid,
           plaid_error: error.response.data,
         },
