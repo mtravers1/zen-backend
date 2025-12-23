@@ -425,6 +425,109 @@ const updateTrip = async (tripId, updateData, uid) => {
   return Trips.findByIdAndUpdate(tripId, encryptedData, { new: true });
 };
 
+const partialUpdateTrip = async (tripId, updateData, uid) => {
+  const dek = await getUserDek(uid);
+  const safeEncrypt = createSafeEncrypt(uid, dek);
+
+  const encryptedData = {};
+
+  // Encrypt locations if provided
+  if (updateData.locations) {
+    encryptedData.locations = await Promise.all(
+      updateData.locations.map(async (loc) => ({
+        latitude: await safeEncrypt(loc.latitude.toString(), {
+          trip_id: tripId,
+          field: "latitude",
+        }),
+        longitude: await safeEncrypt(loc.longitude.toString(), {
+          trip_id: tripId,
+          field: "longitude",
+        }),
+      })),
+    );
+  }
+
+  // Update totalMiles if provided
+  if (updateData.totalMiles !== undefined) {
+    encryptedData.totalMiles = updateData.totalMiles;
+  }
+
+  // Encrypt metadata if provided
+  if (updateData.metadata) {
+    const encryptedMetadata = {};
+
+    if (updateData.metadata.placeName) {
+      encryptedMetadata.placeName = await safeEncrypt(
+        updateData.metadata.placeName,
+        { trip_id: tripId, field: "placeName" },
+      );
+    }
+
+    if (updateData.metadata.pickupAddress) {
+      encryptedMetadata.pickupAddress = await safeEncrypt(
+        updateData.metadata.pickupAddress,
+        { trip_id: tripId, field: "pickupAddress" },
+      );
+    }
+
+    if (updateData.metadata.dropoffAddress) {
+      encryptedMetadata.dropoffAddress = await safeEncrypt(
+        updateData.metadata.dropoffAddress,
+        { trip_id: tripId, field: "dropoffAddress" },
+      );
+    }
+
+    if (updateData.metadata.description) {
+      encryptedMetadata.description = await safeEncrypt(
+        updateData.metadata.description,
+        { trip_id: tripId, field: "description" },
+      );
+    }
+
+    if (updateData.metadata.purpose) {
+      encryptedMetadata.purpose = await safeEncrypt(
+        updateData.metadata.purpose,
+        { trip_id: tripId, field: "purpose" },
+      );
+    }
+
+    if (updateData.metadata.other) {
+      encryptedMetadata.other = await safeEncrypt(
+        updateData.metadata.other,
+        { trip_id: tripId, field: "other" },
+      );
+    }
+
+    if (updateData.metadata.dateTime) {
+      encryptedMetadata.dateTime = await safeEncrypt(
+        updateData.metadata.dateTime.toString(),
+        { trip_id: tripId, field: "dateTime" },
+      );
+    }
+
+    if (updateData.metadata.vehicle) {
+      encryptedMetadata.vehicle = await safeEncrypt(
+        updateData.metadata.vehicle,
+        { trip_id: tripId, field: "vehicle" },
+      );
+    }
+
+    if (updateData.metadata.profile) {
+      encryptedMetadata.profile = await safeEncrypt(
+        updateData.metadata.profile,
+        { trip_id: tripId, field: "profile" },
+      );
+    }
+    
+    // Only add metadata to encryptedData if it's not empty
+    if (Object.keys(encryptedMetadata).length > 0) {
+      encryptedData.metadata = encryptedMetadata;
+    }
+  }
+
+  return Trips.findByIdAndUpdate(tripId, encryptedData, { new: true });
+};
+
 const deleteTrip = async (tripId) => {
   const deletedTrip = await Trips.findByIdAndDelete(tripId);
   return deletedTrip;
@@ -436,5 +539,6 @@ const tripService = {
   updateTrip,
   deleteTrip,
   getLastVehicleIdUsed,
+  partialUpdateTrip,
 };
 export default tripService;

@@ -106,6 +106,21 @@ const checkTripLimit = async (req, res) => {
   }
 };
 
+const partialUpdateTrip = async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const uid = req.user.uid;
+    const updatedTrip = await tripService.partialUpdateTrip(tripId, req.body, uid);
+    if (!updatedTrip) {
+      return res.status(404).json({ error: "Trip not found" });
+    }
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error("Error partially updating trip:", error);
+    res.status(500).json({ error: "Error updating trip" });
+  }
+};
+
 const tripsController = {
   createTrip,
   getFilteredTrips,
@@ -113,6 +128,7 @@ const tripsController = {
   deleteTrip,
   getLatVehicleUsed,
   checkTripLimit,
+  partialUpdateTrip,
 };
 
 export default tripsController;

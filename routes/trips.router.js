@@ -14,6 +14,7 @@ router.get("/lastvehicle", tripsController.getLatVehicleUsed);
 
 ///sync endpoints
 router.put("/:tripId", tripsController.updateTrip);
+router.patch("/:tripId/partial", tripsController.partialUpdateTrip);
 router.delete("/:tripId", tripsController.deleteTrip);
 
 export default router;
