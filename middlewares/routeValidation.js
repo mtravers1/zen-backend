@@ -148,6 +148,7 @@ const VALID_ROUTE_PATTERNS = [
   /^\/api\/business\/profile\/update\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/business\/profile\/delete\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/trips\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/trips\/[a-zA-Z0-9\-_]+\/partial$/,
   /^\/api\/assets\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/role\/users\/[a-zA-Z0-9\-_]+\/role$/,
   /^\/api\/users\/[a-zA-Z0-9\-_]+$/,

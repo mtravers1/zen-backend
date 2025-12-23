@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import accountsService from "../services/accounts.service.js";
 import businessService from "../services/businesses.service.js";
 
@@ -252,6 +253,7 @@ async function deletePlaidAccount(req, res) {
       return res.status(403).send({ message: "Forbidden" });
     }
     console.log(error);
+    Sentry.captureException(error);
     res.status(500).send({ message: error.message });
   }
 };
