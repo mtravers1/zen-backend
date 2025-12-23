@@ -299,15 +299,10 @@ async function getUserDek(firebaseUid) {
     }
   }
 
-  // 2. If not in cache, trigger background migration and throw error
-  console.log(`[DEK_TRACE] DEK not in cache for user ${bucketKey}. Triggering background retrieval.`);
-  migrateAndCacheDek(firebaseUid).catch(err => {
-    console.error(`[DEK_TRACE] Background DEK retrieval failed for user ${bucketKey}:`, err);
-  });
-
-  throw new DekMigrationInProgressError(
-    `DEK for user ${bucketKey} is being retrieved. Please try again shortly.`
-  );
+  // 2. If not in cache, retrieve it, cache it, and return it.
+  console.log(`[DEK_TRACE] DEK not in cache for user ${bucketKey}. Retrieving...`);
+  const deks = await migrateAndCacheDek(firebaseUid);
+  return deks;
 }
 
 // Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
