@@ -1,4 +1,8 @@
 import AccessToken from "../../database/models/AccessToken.js";
+import plaidService from "../plaid.service.js";
+import { getUserDek } from "../../database/encryption.js";
+import { createSafeDecrypt } from "../../lib/encryptionHelper.js";
+import User from "../../database/models/User.js";
 
 export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
   const weeklySummary = [];
@@ -112,9 +116,69 @@ export const getNewestAccessToken = async (find) => {
     ...find,
     isAccessTokenExpired: { $ne: true },
   }).sort({ createdAt: -1 });
+
   if (accessTokens.length > 1) {
-    console.error("Multiple access tokens found for query: ", find);
+    console.warn("Multiple active access tokens found for query: ", find);
+    console.warn("The newest token will be used, and older ones will be invalidated and marked as expired.");
+
+    const newestToken = accessTokens[0];
+    const olderTokens = accessTokens.slice(1);
+
+    for (const token of olderTokens) {
+      let shouldMarkAsExpired = false;
+      try {
+        const user = await User.findById(token.userId);
+        if (user) {
+          const dek = await getUserDek(user.authUid);
+          const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+          const decryptedToken = await safeDecrypt(token.accessToken, {
+            item_id: token.itemId,
+            field: "accessToken",
+          });
+
+          if (decryptedToken) {
+            try {
+              await plaidService.invalidateAccessToken(decryptedToken);
+              // If invalidate succeeds, we should mark as expired
+              shouldMarkAsExpired = true;
+            } catch (plaidError) {
+              if (plaidError.response?.data?.error_code === 'ITEM_NOT_FOUND') {
+                // Already invalid, so we can safely mark as expired
+                shouldMarkAsExpired = true;
+              } else {
+                // Unexpected error from Plaid, log it for investigation
+                Sentry.captureException(plaidError, {
+                  level: "error",
+                  extra: {
+                    message: "Unexpected error during Plaid token invalidation",
+                    tokenId: token._id,
+                    itemId: token.itemId,
+                  },
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to process old access token ${token._id}:`, error);
+        Sentry.captureException(error, {
+          level: "error",
+          extra: {
+            message: "General failure during old token processing",
+            tokenId: token._id,
+          },
+        });
+      }
+
+      if (shouldMarkAsExpired) {
+        token.isAccessTokenExpired = true;
+        await token.save();
+      }
+    }
+
+    return newestToken;
   }
+
   return accessTokens[0];
 };
 
