@@ -26,6 +26,7 @@ import {
 } from "./middlewares/structuredLogging.js";
 import routeValidationMiddleware from "./middlewares/routeValidation.js";
 import connectDB from "./database/database.js";
+import router from "./routes/index.js";
 
 
 export async function createApp() {
