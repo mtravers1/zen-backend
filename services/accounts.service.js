@@ -2862,7 +2862,6 @@ const accountsService = {
   getProfileTransactions,
   deletePlaidAccountByEmail,
   deletePlaidAccount,
-  deleteAccount,
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
