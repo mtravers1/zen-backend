@@ -638,6 +638,19 @@ const deletePlaidAccount = async (accountId, uid) => {
     return;
   }
 
+  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
+  const decryptedToken = await safeDecrypt(account.accessToken, {
+    account_id: account.plaid_account_id,
+    field: "accessToken",
+  });
+
+  if (!decryptedToken) {
+    throw new Error("Failed to decrypt access token.");
+  }
+
+  await plaidService.invalidateAccessToken(decryptedToken);
+
   user.plaidAccounts.pull(account._id);
   await user.save();
 
