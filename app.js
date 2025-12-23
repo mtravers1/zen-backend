@@ -1,3 +1,13 @@
+import * as Sentry from "@sentry/node";
+
+Sentry.init({
+  dsn: "https://3b0788b88b1203668fd993c64bdebc8f@o4510568686092288.ingest.us.sentry.io/4510580113145856",
+  sendDefaultPii: true,
+  release: process.env.SENTRY_RELEASE,
+  tracesSampleRate: 1.0,
+  registerEsmLoaderHooks: false,
+});
+
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "morgan";
@@ -18,7 +28,9 @@ import routeValidationMiddleware from "./middlewares/routeValidation.js";
 import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 
+
 export async function createApp() {
+
   const app = express();
 
 // database initialization
@@ -46,63 +58,6 @@ app.use(cookieParser());
 
 // Apply structured logging first to ensure all requests have an ID.
 app.use(structuredLoggingMiddleware);
-
-// Passively decode the user from the token without enforcing auth. 
-// This makes req.user available to subsequent middleware like the rate limiter.
-app.use(decodeUserMiddleware);
-
-// Rate limiting for brute force protection
-const isProduction = process.env.NODE_ENV === "production";
-
-const webhookLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 1000, // Allow a high number of requests for the webhook
-  message: {
-    error: "Too many requests from this IP, please try again later.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
-  message: {
-    error: "Too many requests from this IP, please try again later.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    if (req.user && req.user.uid) {
-      return req.user.uid;
-    }
-    return req.ip;
-  },
-  handler: (req, res, next, options) => {
-    const key = options.keyGenerator(req, res);
-    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
-    console.log(
-      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
-    );
-
-    const retryAfter = Math.ceil(options.windowMs / 1000);
-    res.setHeader('Retry-After', String(retryAfter));
-    res.status(options.statusCode).send(options.message);
-  },
-});
-
-// Apply rate limiting to all requests
-// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
-app.set('trust proxy', 1);
-
-// Apply specific limiter for the webhook
-app.use("/api/payments/webhook/android", webhookLimiter);
-
-// Apply general limiter to all other routes
-app.use(generalLimiter);
-
-// Apply route validation middleware FIRST to block invalid routes and attacks
-app.use(routeValidationMiddleware);
 
 // authentication
 app.use((req, res, next) => {
@@ -169,6 +124,60 @@ app.use((req, res, next) => {
   return firebaseAuth(req, res, next);
 });
 
+// Rate limiting for brute force protectionconst isProduction = process.env.NODE_ENV === "production";
+
+const webhookLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 1000, // Allow a high number of requests for the webhook
+  message: {
+    error: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Balanced rate limit for production, adjust based on monitoring and caching improvements.
+  message: {
+    error: "Too many requests from this IP, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    if (req.user && req.user.uid) {
+      return req.user.uid;
+    }
+    return req.ip;
+  },
+  handler: (req, res, next, options) => {
+    const key = options.keyGenerator(req, res);
+    const userIdentifier = req.user ? `${redactEmail(req.user.email)} (key: ${key})` : `key: ${key}`;
+    console.log(
+      `[REQUEST ${req.requestId}] RATE LIMIT EXCEEDED for user: ${userIdentifier} on path: ${req.path}`,
+    );
+
+    const retryAfter = Math.ceil(options.windowMs / 1000);
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(options.statusCode).send(options.message);
+  },
+});
+
+// Apply rate limiting to all requests
+// Enable trust proxy to allow rate limiting to work correctly behind a reverse proxy
+app.set('trust proxy', 1);
+
+// Apply specific limiter for the webhook
+app.use("/api/payments/webhook/android", webhookLimiter);
+
+// Apply general limiter to all other routes
+app.use(generalLimiter);
+
+// Apply route validation middleware FIRST to block invalid routes and attacks
+app.use(routeValidationMiddleware);
+
+
+
 // Load routes
 
 app.use("/api", router);
@@ -187,6 +196,9 @@ app.get("/", (req, res) => {
 app.get("/favicon.ico", (req, res) => {
   res.status(204).end(); // No content for favicon
 });
+
+// The Sentry error handler must be registered before any other error middleware and after all controllers
+Sentry.setupExpressErrorHandler(app);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
@@ -207,6 +219,7 @@ app.use(function (err, req, res, next) {
   }
 
   res.status(err.status || 500).json(errorResponse);
+  res.end(res.Sentry + "\n");
 });
 
   return app;

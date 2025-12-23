@@ -13,12 +13,12 @@ const metadataSchema = new mongoose.Schema(
     profile: {
       type: String,
       ref: "Business",
-      required: true,
+      required: false,
     },
     vehicle: {
       type: String,
       ref: "Assets",
-      required: true,
+      required: false,
     },
     purpose: String,
     description: String,

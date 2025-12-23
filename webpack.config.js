@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import TerserPlugin from "terser-webpack-plugin";
 import CopyWebpackPlugin from "copy-webpack-plugin";
+import nodeExternals from 'webpack-node-externals';
 
 
 
@@ -52,6 +53,8 @@ export default {
         { from: "ecosystem.config.cjs", to: "./ecosystem.config.cjs" },
         { from: "package.json", to: "." },
         { from: "package-lock.json", to: "." },
+        { from: "instrument.mjs", to: "." },
+        
         { from: ".env.sample", to: ".", noErrorOnMissing: true },
         { from: "scripts/", to: "./scripts/", noErrorOnMissing: true },
         { from: "config/", to: "./config/", noErrorOnMissing: true },
@@ -77,12 +80,9 @@ export default {
   resolve: {
     extensions: [".js", ".mjs"],
   },
-  externals: {
-    '@google-cloud/storage': 'module @google-cloud/storage',
-    '@google-cloud/kms': 'module @google-cloud/kms',
-    'mongodb-client-encryption': 'module mongodb-client-encryption',
-    'mongodb': 'module mongodb',
-  },
+  externals: [nodeExternals({
+    importType: 'module'
+  })],
 
 
 };

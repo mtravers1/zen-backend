@@ -6,12 +6,12 @@
   "scripts": {
     "run-build": "cd dist && node ./index.js",
     "start": "nodemon --inspect ./bin/www",
-    "start:dev": "cross-env NODE_ENV=development nodemon --inspect ./bin/www",
-    "start:staging": "cross-env NODE_ENV=staging nodemon --inspect ./bin/www",
-    "start:prod": "cross-env NODE_ENV=production node ./bin/www",
+    "start:dev": "source ./scripts/version.sh && cross-env NODE_ENV=development nodemon -r dotenv/config --inspect ./bin/www",
+    "start:staging": "./scripts/version.sh && cross-env NODE_ENV=staging nodemon -r dotenv/config --inspect ./bin/www",
+    "start:prod": "./scripts/version.sh && cross-env NODE_ENV=production node -r dotenv/config ./bin/www",
     "mongodb": "docker-compose up",
     "build": "webpack --config webpack.config.js",
-    "test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand",
+    "test": "./scripts/version.sh && cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand",
     "migrate:encryption": "node -r dotenv/config scripts/migrate-encryption.js",
     "delete-user": "node -r dotenv/config scripts/delete-user.js",
     "delete-all-users": "node -r dotenv/config scripts/delete-all-users.js",
@@ -24,6 +24,7 @@
     "@apple/app-store-server-library": "^1.5.0",
     "@google-cloud/kms": "^5.0.1",
     "@google-cloud/storage": "^7.15.2",
+    "@sentry/node": "^10.32.1",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -39,7 +40,7 @@
     "hbs": "^4.2.0",
     "http-errors": "^2.0.0",
     "jose": "^6.0.11",
-    "jsonwebtoken": "^9.0.2",
+    "jsonwebtoken": "^9.0.3",
     "mongodb": "^6.15.0",
     "mongodb-client-encryption": "^6.3.0",
     "mongoose": "^8.9.0",
@@ -61,6 +62,7 @@
     "node-loader": "^2.1.0",
     "nodemon": "^3.1.9",
     "webpack": "^5.97.1",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^5.1.4",
+    "webpack-node-externals": "^3.0.0"
   }
 }

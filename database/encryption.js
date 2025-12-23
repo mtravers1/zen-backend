@@ -13,6 +13,13 @@ class DecryptionError extends Error {
   }
 }
 
+class DekMigrationInProgressError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DekMigrationInProgressError';
+  }
+}
+
 
 
 let kmsClientInstance;
@@ -277,132 +284,25 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
  * @throws {Error} If the user does not exist, no DEK is found for the user, or an error occurs during retrieval or migration.
  */
 async function getUserDek(firebaseUid) {
-  const LEGACY_GCS_BUCKET_NAME = process.env.LEGACY_GCS_BUCKET_NAME;
-  if (!LEGACY_GCS_BUCKET_NAME) {
-    throw new Error("❌ CRITICAL: LEGACY_GCS_BUCKET_NAME environment variable is not set.");
+  const user = await User.findOne({ authUid: firebaseUid });
+  if (!user) {
+    throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
+  }
+  const bucketKey = user._id.toString();
+
+  // 1. Check cache first
+  if (dekCache.has(bucketKey)) {
+    const cachedDeks = dekCache.get(bucketKey);
+    if (cachedDeks.length > 0) {
+      console.log(`[DEK_TRACE] Found ${cachedDeks.length} DEK(s) in cache.`);
+      return cachedDeks;
+    }
   }
 
-  let user;
-  try {
-    // Find user in database
-    user = await User.findOne({ authUid: firebaseUid });
-    if (!user) {
-      throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
-    }
-    const bucketKey = user._id.toString();
-    console.log(`[DEK_TRACE] Starting DEK retrieval for user ${bucketKey}`);
-
-    // 1. Check cache first
-    if (dekCache.has(bucketKey)) {
-      const cachedDeks = dekCache.get(bucketKey);
-      if (cachedDeks.length > 0) {
-        console.log(`[DEK_TRACE] Found ${cachedDeks.length} DEK(s) in cache.`);
-        return cachedDeks;
-      }
-    }
-
-    const primaryBucket = await getBucket();
-    const legacyBucket = await getBucket(LEGACY_GCS_BUCKET_NAME);
-    const kmsClient = await getKmsClient(); // Get KMS client
-
-    // Construct legacy KMS key path
-    const legacyKmsKeyPath = kmsClient.cryptoKeyPath(
-        process.env.LEGACY_GCP_PROJECT_ID,
-        process.env.LEGACY_GCP_KEY_LOCATION,
-        process.env.LEGACY_GCP_KEY_RING,
-        process.env.LEGACY_GCP_KEY_NAME,
-    );
-
-    // 2. Check primary bucket with databaseId
-    console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
-    const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);
-    if (primaryDeks.length > 0) {
-      console.log(`[DEK_TRACE] Found ${primaryDeks.length} DEK(s) in primary bucket.`);
-      dekCache.set(bucketKey, primaryDeks);
-      return primaryDeks;
-    }
-
-    // 3. Check legacy bucket with databaseId
-    console.log(`[DEK_TRACE] Checking legacy bucket with databaseId: ${bucketKey}`);
-    const legacyDbIdDeks = await getDEKFromBucket(bucketKey, legacyBucket, legacyKmsKeyPath);
-    if (legacyDbIdDeks.length > 0) {
-      console.log(`[DEK_TRACE] Found ${legacyDbIdDeks.length} legacy DEK(s) with databaseId. Migrating by re-encrypting with new KMS key...`);
-      const KEY_PATH = kmsClient.cryptoKeyPath(
-        process.env.GCP_PROJECT_ID,
-        process.env.GCP_KEY_LOCATION,
-        process.env.GCP_KEY_RING,
-        process.env.GCP_KEY_NAME,
-      );
-      // Re-encrypt and store the DEK with the new key
-      for (const dek of legacyDbIdDeks) {
-        const [encryptResponse] = await kmsClient.encrypt({
-          name: KEY_PATH, // KEY_PATH points to the new KMS key
-          plaintext: dek,
-        });
-        const encryptedDEK = encryptResponse.ciphertext;
-        const filePath = `keys/${bucketKey}.key`;
-        const file = primaryBucket.file(filePath);
-        await file.save(encryptedDEK, {
-          resumable: false,
-          validation: false,
-          metadata: {
-            contentType: "application/octet-stream",
-            cacheControl: "private, max-age=0",
-          },
-        });
-        console.log(`[DEK_TRACE] Successfully migrated and re-encrypted DEK for user ${bucketKey}`);
-      }
-      dekCache.set(bucketKey, legacyDbIdDeks);
-      return legacyDbIdDeks;
-    }
-
-    // 4. Check legacy bucket with firebaseUid
-    console.log(`[DEK_TRACE] Checking legacy bucket with firebaseUid: ${firebaseUid}`);
-    const legacyFirebaseUidDeks = await getDEKFromBucket(firebaseUid, legacyBucket, legacyKmsKeyPath);
-    if (legacyFirebaseUidDeks.length > 0) {
-      console.log(`[DEK_TRACE] Found ${legacyFirebaseUidDeks.length} legacy DEK(s) with firebaseUid. Migrating by re-encrypting with new KMS key...`);
-      const KEY_PATH = kmsClient.cryptoKeyPath(
-        process.env.GCP_PROJECT_ID,
-        process.env.GCP_KEY_LOCATION,
-        process.env.GCP_KEY_RING,
-        process.env.GCP_KEY_NAME,
-      );
-      // Re-encrypt and store the DEK with the new key
-      for (const dek of legacyFirebaseUidDeks) {
-        const [encryptResponse] = await kmsClient.encrypt({
-          name: KEY_PATH, // KEY_PATH points to the new KMS key
-          plaintext: dek,
-        });
-        const encryptedDEK = encryptResponse.ciphertext;
-        // IMPORTANT: Save to the new key name (databaseId), not the old one (firebaseUid)
-        const filePath = `keys/${bucketKey}.key`;
-        const file = primaryBucket.file(filePath);
-        await file.save(encryptedDEK, {
-          resumable: false,
-          validation: false,
-          metadata: {
-            contentType: "application/octet-stream",
-            cacheControl: "private, max-age=0",
-          },
-        });
-        console.log(`[DEK_TRACE] Successfully migrated and re-encrypted DEK for user ${bucketKey}`);
-      }
-      dekCache.set(bucketKey, legacyFirebaseUidDeks);
-      return legacyFirebaseUidDeks;
-    }
-
-    // 5. Final processing
-    const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
-    console.error(`❌ ${errorMessage}`);
-    const errorCode = `NO_DEK_FOUND-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    throw new DecryptionError(errorMessage, errorCode);
-
-  } catch (e) {
-    console.error(
-      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`,
-    );
-    throw e;
-  }
+  // 2. If not in cache, retrieve it, cache it, and return it.
+  console.log(`[DEK_TRACE] DEK not in cache for user ${bucketKey}. Retrieving...`);
+  const deks = await migrateAndCacheDek(firebaseUid);
+  return deks;
 }
 
 // Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
@@ -656,6 +556,49 @@ async function moveDEKToDeadLetterQueue(file, bucket) {
   }
 }
 
+async function migrateAndCacheDek(firebaseUid) {
+  let user;
+  try {
+    user = await User.findOne({ authUid: firebaseUid });
+    if (!user) {
+      throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
+    }
+    const bucketKey = user._id.toString();
+    console.log(`[DEK_TRACE] Starting DEK retrieval for user ${bucketKey}`);
+
+    // Check cache first
+    if (dekCache.has(bucketKey)) {
+      const cachedDeks = dekCache.get(bucketKey);
+      if (cachedDeks.length > 0) {
+        console.log(`[DEK_TRACE] Found ${cachedDeks.length} DEK(s) in cache.`);
+        return cachedDeks;
+      }
+    }
+
+    const primaryBucket = await getBucket();
+
+    // Check primary bucket with databaseId
+    console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
+    const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);
+    if (primaryDeks.length > 0) {
+      console.log(`[DEK_TRACE] Found ${primaryDeks.length} DEK(s) in primary bucket.`);
+      dekCache.set(bucketKey, primaryDeks);
+      return primaryDeks;
+    }
+
+    const errorMessage = `CRITICAL: No DEK found for user ${bucketKey} (Firebase UID: ${firebaseUid}). Data may be inaccessible.`;
+    console.error(`❌ ${errorMessage}`);
+    const errorCode = `NO_DEK_FOUND-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    throw new DecryptionError(errorMessage, errorCode);
+
+  } catch (e) {
+    console.error(
+      `❌ Error getting DEK for Firebase UID: ${firebaseUid}, Database ID: ${user?._id} - ${e.message}`,
+    );
+    throw e;
+  }
+}
+
 export {
   encryptValue,
   decryptValue,
@@ -665,6 +608,8 @@ export {
   hashValue,
   copyDEKToNewBucketKey,
   moveDEKToDeadLetterQueue,
+  migrateAndCacheDek,
   DecryptionError,
+  DekMigrationInProgressError,
   getBucket,
 };

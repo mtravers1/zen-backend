@@ -8,6 +8,7 @@ import {
   decryptValue,
   encryptValue,
   getUserDek,
+  DekMigrationInProgressError,
 } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import { getNewestAccessToken } from "./utils/accounts.js";
@@ -59,7 +60,15 @@ const createLinkToken = async (
         throw new Error("User not found");
       }
       let accessToken;
-      const dek = await getUserDek(uid);
+      let dek;
+      try {
+        dek = await getUserDek(uid);
+      } catch (error) {
+        if (error instanceof DekMigrationInProgressError) {
+          throw error; // Re-throw to be handled by the controller
+        }
+        throw error; // Re-throw other errors
+      }
       const safeDecrypt = createSafeDecrypt(uid, dek);
       if (accountId) {
         const account = await PlaidAccount.findOne({ _id: accountId });
@@ -1095,7 +1104,7 @@ const repairAccessToken = async (accountId, email) => {
         }
 
         for (const accountId of removedAccounts) {
-          await accountsService.removeAccount(accountId, email);
+          await accountsService.deletePlaidAccountByEmail(accountId, email);
         }
 
         const resAddAcount = await accountsService.addAccount(

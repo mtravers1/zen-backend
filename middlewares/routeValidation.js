@@ -141,6 +141,7 @@ const VALID_ROUTE_PATTERNS = [
   /^\/api\/account\/profile-transactions\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/account\/transactions\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/account\/details\/[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/,
+  /^\/api\/account\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/files\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/files\/getFiles\/[a-zA-Z0-9\-_]+$/,
   /^\/api\/files\/getFolders\/[a-zA-Z0-9\-_]+$/,

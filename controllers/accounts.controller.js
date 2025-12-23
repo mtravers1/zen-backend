@@ -238,6 +238,24 @@ const serveAccountPhoto = async (req, res) => {
 //   }
 // };
 
+async function deletePlaidAccount(req, res) {
+  try {
+    const { accountId } = req.params;
+    const uid = req.user.uid;
+    const response = await accountsService.deletePlaidAccount(accountId, uid);
+    if (!response) {
+      return res.status(404).send({ message: "Account not found" });
+    }
+    res.status(200).send(response);
+  } catch (error) {
+    if (error.message === "User not found") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+    console.log(error);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 const accountsController = {
   addAccount,
   getAccounts,
@@ -253,6 +271,7 @@ const accountsController = {
   getCashFlowsByPlaidAccount,
   // getInvestmentTransactionsByAccount,
   serveAccountPhoto,
+    deletePlaidAccount,
 };
 
 export default accountsController;
