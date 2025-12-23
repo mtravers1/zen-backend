@@ -6,4 +6,5 @@ Sentry.init({
   sendDefaultPii: true,
   release: process.env.SENTRY_RELEASE,
   tracesSampleRate: 1.0,
+  registerEsmLoaderHooks: false,
 });
