@@ -627,22 +627,25 @@ const deletePlaidAccount = async (accountId, uid) => {
   if (!user) {
     throw new Error("User not found");
   }
-  const plaidAccounts = user.plaidAccounts;
 
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
+  const account = await PlaidAccount.findById(accountId);
   if (!account) {
-    console.log(`Account with plaid_account_id ${accountId} not found.`);
+    console.log(`Account with _id ${accountId} not found.`);
     return;
   }
-  user.plaidAccounts = plaidAccounts.filter(
-    (id) => id.toString() !== account._id.toString(),
-  );
 
+  if (account.owner_id.toString() !== user._id.toString()) {
+    return;
+  }
+
+  user.plaidAccounts.pull(account._id);
   await user.save();
 
-  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
-  await Transaction.deleteMany({ plaidAccountId: accountId });
-  await Liability.deleteMany({ accountId });
+  const result = await PlaidAccount.deleteOne({ _id: account._id });
+  await Transaction.deleteMany({ plaidAccountId: account.plaid_account_id });
+  await Liability.deleteMany({ accountId: account.plaid_account_id });
+
+  return result;
 };
 
 const getAccounts = async (profile, uid) => {
