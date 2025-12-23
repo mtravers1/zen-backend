@@ -657,6 +657,7 @@ const deletePlaidAccount = async (accountId, uid) => {
     }
   }
 
+
   user.plaidAccounts.pull(account._id);
   await user.save();
 
