@@ -238,7 +238,7 @@ const serveAccountPhoto = async (req, res) => {
 //   }
 // };
 
-const deleteAccount = async (req, res) => {
+async function deleteAccount(req, res) {
   try {
     const { accountId } = req.params;
     const uid = req.user.uid;
