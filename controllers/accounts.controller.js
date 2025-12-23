@@ -240,8 +240,8 @@ const serveAccountPhoto = async (req, res) => {
 // };
 
 async function deletePlaidAccount(req, res) {
+  const { accountId } = req.params; 
   try {
-    const { accountId } = req.params;
     const uid = req.user.uid;
     const response = await accountsService.deletePlaidAccount(accountId, uid);
     if (!response) {
