@@ -13,12 +13,16 @@ const addFile = async (data, uid) => {
     type: data.type,
     info: data.info,
     fileurl: data.fileurl,
+    size: data.size || 0,
     folder: data.folder || "General",
     updatedAt: new Date(),
   });
 
   await newFile.save();
-  return { message: "File uploaded successfully" };
+
+  const signedUrl = await generateSignedUrl(data.fileurl);
+
+  return { message: "File uploaded successfully", signedUrl: signedUrl };
 };
 
 const generateUploadUrl = async (fileName, mimeType) => {
@@ -156,6 +160,16 @@ const deleteFiles = async (data, uid) => {
   return { message: "Files deleted successfully" };
 };
 
+
+const getSignedUrlByFileId = async (fileId) => {
+  const file = await Files.findById(fileId);
+  if (!file) {
+    throw new Error("File not found");
+  }
+  const signedUrl = await generateSignedUrl(file.fileurl);
+  return signedUrl;
+};
+
 const filesService = {
   addFile,
   getFiles,
@@ -165,5 +179,7 @@ const filesService = {
   generateUploadUrl,
   generateSignedUrl,
   generateImageUploadUrl,
+  getSignedUrlByFileId,
 };
 export default filesService;
+

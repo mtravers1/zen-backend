@@ -17,19 +17,7 @@ const getStorageStatus = async (uid) => {
     if (process.env.NODE_ENV === "development") {
       // Calculate real storage usage from uploaded files
       const userFiles = await Files.find({ userId: user._id.toString() });
-      let realStorageUsed = 0;
-
-      for (const file of userFiles) {
-        try {
-          const [fileMetadata] = await storage
-            .bucket(filesBucketName)
-            .file(file.fileurl)
-            .getMetadata();
-          realStorageUsed += parseInt(fileMetadata.size || 0);
-        } catch (error) {
-          console.log(`File ${file.fileurl} not found in bucket`);
-        }
-      }
+      const realStorageUsed = userFiles.reduce((total, file) => total + (file.size || 0), 0);
 
       // Mock base usage: 99% of limit, so one upload will exceed it
       const mockBaseGB = limitGB === -1 ? 4.0 : limitGB * 0.99;
@@ -58,18 +46,7 @@ const getStorageStatus = async (uid) => {
     // PRODUCTION: Real calculation
     const userFiles = await Files.find({ userId: user._id.toString() });
 
-    let userStorageUsed = 0;
-    for (const file of userFiles) {
-      try {
-        const [fileMetadata] = await storage
-          .bucket(filesBucketName)
-          .file(file.fileurl)
-          .getMetadata();
-        userStorageUsed += parseInt(fileMetadata.size || 0);
-      } catch (error) {
-        console.log(`File ${file.fileurl} not found in bucket`);
-      }
-    }
+    const userStorageUsed = userFiles.reduce((total, file) => total + (file.size || 0), 0);
 
     const usedGB = userStorageUsed / (1024 * 1024 * 1024);
     const isOverLimit = limitGB === -1 ? false : usedGB >= limitGB; // -1 means unlimited
