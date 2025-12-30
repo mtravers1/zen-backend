@@ -222,9 +222,6 @@ const getStorageStatus = async (req, res) => {
   );
 };
 
-
-import structuredLogger from "../lib/structuredLogger.js";
-
 const getSignedUrlForFile = async (req, res) => {
   await structuredLogger.withContext(
     "getSignedUrlForFile",
