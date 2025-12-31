@@ -228,8 +228,14 @@ const getSignedUrlForFile = async (req, res) => {
     { fileId: req.params.fileId, user: req.user },
     async () => {
       try {
-        const { fileId } = req.params;
-        const url = await filesService.getSignedUrlByFileId(fileId);
+        const { userId, fileId } = req.params;
+        const { uid } = req.user;
+
+        if (userId !== uid) {
+          return res.status(403).send({ message: "Unauthorized" });
+        }
+
+        const url = await filesService.getSignedUrlByFileId(fileId, uid);
         res.status(200).send({ signedUrl: url });
       } catch (error) {
         res.status(500).send({ message: "An internal server error occurred.", errorId: `Z-${error.errorId}` });
