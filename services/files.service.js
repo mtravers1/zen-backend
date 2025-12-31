@@ -161,11 +161,21 @@ const deleteFiles = async (data, uid) => {
 };
 
 
-const getSignedUrlByFileId = async (fileId) => {
+const getSignedUrlByFileId = async (fileId, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   const file = await Files.findById(fileId);
   if (!file) {
     throw new Error("File not found");
   }
+
+  if (file.userId.toString() !== user._id.toString()) {
+    throw new Error("Unauthorized");
+  }
+
   const signedUrl = await generateSignedUrl(file.fileurl);
   return signedUrl;
 };

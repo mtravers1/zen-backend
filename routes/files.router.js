@@ -10,9 +10,6 @@ router.get("/storage-status", filesController.getStorageStatus);
 router.get("/getFolders/:profileId", filesController.getFolders);
 router.post("/add-file", filesController.generateFileUrl);
 router.get("/:fileId/signed-url", filesController.getSignedUrlForFile);
-
-// TODO: Deprecate this route in favor of GET /:fileId/signed-url
-router.get("/:userId/:fileId/signed-url", filesController.getSignedUrlForFile);
 router.post("/add-image", filesController.generateImageUrl);
 router.post("/delete-file", filesController.deleteFiles);
 
