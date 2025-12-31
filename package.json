@@ -15,7 +15,8 @@
     "migrate:encryption": "node -r dotenv/config scripts/migrate-encryption.js",
     "delete-user": "node -r dotenv/config scripts/delete-user.js",
     "delete-all-users": "node -r dotenv/config scripts/delete-all-users.js",
-    "migrate:business-userid-normalize": "node -r dotenv/config scripts/migration/normalize-business-userid.js"
+    "migrate:business-userid-normalize": "node -r dotenv/config scripts/migration/normalize-business-userid.js",
+    "update-webhooks": "node -r dotenv/config scripts/update-plaid-webhooks.js"
   },
   "author": "",
   "license": "ISC",
