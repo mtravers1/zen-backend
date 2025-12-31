@@ -14,10 +14,12 @@ const deleteInvalidPlaidTokens = async (isDryRun) => {
     await connectDB();
     console.log("Database connected.");
 
-    const accessTokens = await AccessToken.find({});
+    const accessTokens = await AccessToken.find({ deletedAt: null });
     const plaidClient = getPlaidClient();
+    const tokensToDelete = [];
 
     for (const token of accessTokens) {
+      let decryptedToken;
       try {
         const user = await User.findById(token.userId);
         if (!user) {
@@ -26,7 +28,7 @@ const deleteInvalidPlaidTokens = async (isDryRun) => {
         }
         const dek = await getUserDek(user.authUid);
         const safeDecrypt = createSafeDecrypt(user.authUid, dek);
-        const decryptedToken = await safeDecrypt(token.accessToken, {
+        decryptedToken = await safeDecrypt(token.accessToken, {
           item_id: token.itemId,
           field: "accessToken",
         });
@@ -39,9 +41,18 @@ const deleteInvalidPlaidTokens = async (isDryRun) => {
         await plaidClient.itemGet({ access_token: decryptedToken });
       } catch (error) {
         if (error.response && error.response.data.error_code === 'ITEM_NOT_FOUND') {
-          console.log(`Invalid token found for itemId: ${token.itemId}`);
           if (isDryRun) {
-            console.log(`--DRY RUN-- Would soft-delete Plaid token and associated data for itemId: ${token.itemId}`);
+            const accounts = await PlaidAccount.find({ itemId: token.itemId, deletedAt: null });
+            const accountPlaidIds = accounts.map(a => a.plaid_account_id);
+            const transactionCount = await Transaction.countDocuments({ accountId: { $in: accounts.map(a => a._id) }, deletedAt: null });
+
+            tokensToDelete.push({
+              "Item ID": token.itemId,
+              "User ID": token.userId,
+              "Reason": "ITEM_NOT_FOUND in Plaid",
+              "Associated Plaid Accounts": accountPlaidIds.join(', '),
+              "Associated Transactions": transactionCount,
+            });
           } else {
             console.log(`Soft-deleting Plaid token and associated data for itemId: ${token.itemId}`);
 
@@ -77,6 +88,14 @@ const deleteInvalidPlaidTokens = async (isDryRun) => {
         }
       }
     }
+
+    if (isDryRun && tokensToDelete.length > 0) {
+      console.log("--DRY RUN-- The following items would be soft-deleted:");
+      console.table(tokensToDelete);
+    } else if (isDryRun) {
+      console.log("--DRY RUN-- No invalid tokens found.");
+    }
+
   } catch (error) {
     console.error("An unexpected error occurred:", error);
   } finally {
