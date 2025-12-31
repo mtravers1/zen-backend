@@ -90,10 +90,13 @@ const plaidAccountSchema = new Schema({
     type: Date,
     default: Date.now,
   },
-  updated_at: {
-    type: Date,
-  },
-});
+      updated_at: {
+        type: Date,
+      },
+      deletedAt: {
+        type: Date,
+        default: null,
+      },});
 
 const PlaidAccount = model("PlaidAccount", plaidAccountSchema);
 
