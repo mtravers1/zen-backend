@@ -110,6 +110,10 @@ const transactionSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
 });
 
 const Transaction = model("Transaction", transactionSchema);
