@@ -9,19 +9,10 @@ import getPlaidClient from "../config/plaid.js";
 import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 
-const deleteInvalidPlaidTokens = async (isDryRun, isForceHardDelete) => {
+const deleteInvalidPlaidTokens = async (isDryRun) => {
   try {
     await connectDB();
     console.log("Database connected.");
-
-    if (isForceHardDelete && !isDryRun) {
-      console.log("--force-hard-delete and --no-dry-run flags found. Hard-deleting soft-deleted documents.");
-      const deletedAccessTokens = await AccessToken.deleteMany({ deletedAt: { $ne: null } });
-      const deletedPlaidAccounts = await PlaidAccount.deleteMany({ deletedAt: { $ne: null } });
-      const deletedTransactions = await Transaction.deleteMany({ deletedAt: { $ne: null } });
-      console.log(`Hard-deleted ${deletedAccessTokens.deletedCount} access tokens, ${deletedPlaidAccounts.deletedCount} plaid accounts, and ${deletedTransactions.deletedCount} transactions.`);
-      return;
-    }
 
     const accessTokens = await AccessToken.find({ deletedAt: null });
     const plaidClient = getPlaidClient();
@@ -63,25 +54,44 @@ const deleteInvalidPlaidTokens = async (isDryRun, isForceHardDelete) => {
               "Associated Transactions": transactionCount,
             });
           } else {
-            console.log(`Hard-deleting Plaid token and associated data for itemId: ${token.itemId}`);
+            console.log(`Processing deletion for itemId: ${token.itemId}`);
 
             // 1. Soft delete AccessToken to prevent race conditions
             await AccessToken.updateOne({ _id: token._id }, { $set: { deletedAt: new Date() } });
-            
-            // 2. Hard delete associated PlaidAccounts
-            const accounts = await PlaidAccount.find({ itemId: token.itemId });
-            const accountIds = accounts.map(account => account._id);
-            if (accountIds.length > 0) {
-              await PlaidAccount.deleteMany({ _id: { $in: accountIds } });
 
-              // 3. Hard delete associated Transactions
-              await Transaction.deleteMany({ accountId: { $in: accountIds } });
+            // Check if there are any other valid (not soft-deleted) access tokens for this user and institution
+            const otherValidTokens = await AccessToken.find({
+              userId: token.userId,
+              institutionId: token.institutionId,
+              _id: { $ne: token._id }, // Exclude the current token
+              deletedAt: null // Only consider truly active tokens
+            });
+
+            if (otherValidTokens.length === 0) {
+              console.log(`No other valid tokens found for institution ${token.institutionId}. Proceeding with full data deletion.`);
+
+              // Find associated PlaidAccounts
+              const accounts = await PlaidAccount.find({ itemId: token.itemId });
+              const accountIds = accounts.map(account => account._id);
+
+              // 2. Hard-delete associated Transactions
+              if (accountIds.length > 0) {
+                await Transaction.deleteMany({ accountId: { $in: accountIds } });
+                console.log(`Hard-deleted transactions for itemId: ${token.itemId}`);
+              }
+
+              // 3. Hard-delete associated PlaidAccounts
+              if (accountIds.length > 0) {
+                await PlaidAccount.deleteMany({ _id: { $in: accountIds } });
+                console.log(`Hard-deleted accounts for itemId: ${token.itemId}`);
+              }
+            } else {
+              console.log(`Other valid tokens exist for institution ${token.institutionId}. Only deleting the invalid AccessToken.`);
             }
 
-            // 4. Hard delete the AccessToken itself
+            // 4. Hard-delete the AccessToken itself
             await AccessToken.deleteOne({ _id: token._id });
-            
-            console.log(`Successfully hard-deleted data for itemId: ${token.itemId}`);
+            console.log(`Successfully hard-deleted AccessToken for itemId: ${token.itemId}`);
           }
         } else {
           console.error(`Error checking token for itemId: ${token.itemId}`, error.response?.data || error);
@@ -106,19 +116,15 @@ const deleteInvalidPlaidTokens = async (isDryRun, isForceHardDelete) => {
 
 const parseArgs = () => {
   let isDryRun = true;
-  let isForceHardDelete = false;
 
   for (const arg of process.argv.slice(2)) {
     if (arg === "--no-dry-run") {
       isDryRun = false;
     }
-    if (arg === "--force-hard-delete") {
-      isForceHardDelete = true;
-    }
   }
 
-  return { isDryRun, isForceHardDelete };
+  return { isDryRun };
 };
 
-const { isDryRun, isForceHardDelete } = parseArgs();
-deleteInvalidPlaidTokens(isDryRun, isForceHardDelete);
+const { isDryRun } = parseArgs();
+deleteInvalidPlaidTokens(isDryRun);
