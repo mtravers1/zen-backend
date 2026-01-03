@@ -106,7 +106,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
     let result;
     switch (event.webhook_type) {
       case "TRANSACTIONS":
-        if (event.webhook_code === "SYNC_UPDATES_AVAILABLE" || event.webhook_code === "DEFAULT_UPDATE") {
+        if (event.webhook_code === "SYNC_UPDATES_AVAILABLE" || event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "HISTORICAL_UPDATE") {
           if (!event.item_id) {
             throw new Error("Missing item_id for TRANSACTIONS webhook");
           }
