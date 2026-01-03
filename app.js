@@ -41,7 +41,7 @@ const additionalOrigins = process.env.CORS_URL.split(",")
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || additionalOrigins.includes(origin)) {
+    if (!origin || additionalOrigins.includes(origin) || origin === 'null') {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
