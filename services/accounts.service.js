@@ -654,10 +654,20 @@ const deletePlaidAccount = async (accountId, uid) => {
       await plaidService.invalidateAccessToken(decryptedToken);
     }
   } catch (error) {
-    // If the item is already removed from Plaid, ignore the error and proceed with local cleanup.
-    if (error.response?.data?.error_code !== 'ITEM_NOT_FOUND') {
-      throw error; // For any other error, re-throw it.
+    const isItemNotFoundError =
+      error.response?.data?.error_code === "ITEM_NOT_FOUND" ||
+      error.message?.includes("item not found");
+
+    if (!isItemNotFoundError) {
+      // For any other error, re-throw it.
+      throw error;
     }
+    // Otherwise, it's an ITEM_NOT_FOUND error. Log it for info and proceed with local cleanup.
+    structuredLogger.logInfo("item_already_removed_from_plaid", {
+      item_id: itemId,
+      user_id: uid,
+      original_error: error.message,
+    });
   }
 
   // 3. Find all local accounts associated with the itemId.
