@@ -516,7 +516,7 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
     });
   } catch (error) {
     console.error("Error fetching account balances:", error);
-    return;
+    throw error;
   }
 
   if (newAccountsBalances) {
@@ -1357,10 +1357,18 @@ const handleAccountsUpdate = async (event) => {
       account_ids: event.account_ids,
     });
 
-    // Reset webhook failures on successful account update
-    if (event.item_id) {
-      resetWebhookFailures(event.item_id);
+    if (!event.item_id) {
+      throw new Error("Missing item_id for ACCOUNTS webhook");
     }
+
+    // Trigger a full transaction and balance update for the item.
+    // updateTransactions also calls updateAccountBalances internally.
+    await updateTransactions(event.item_id);
+
+    // Reset webhook failures on successful account update.
+    // This is also handled in updateTransactions, but it's good practice
+    // to have it here as well to signal successful handling of the webhook.
+    resetWebhookFailures(event.item_id);
 
     return `Accounts update handled for ${
       event.account_ids?.length || 0
@@ -1370,6 +1378,7 @@ const handleAccountsUpdate = async (event) => {
       operation: "handle_accounts_update",
       item_id: event.item_id,
     });
+    // Re-throw the error to be caught by the main webhook handler
     throw error;
   }
 };

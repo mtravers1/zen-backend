@@ -216,6 +216,26 @@ const saveAccessToken = async (req, res) => {
       },
     );
 
+    // After saving the token, trigger an initial transaction sync asynchronously.
+    // We don't await this because we want to send the response back to the user immediately.
+    // Any errors during this initial sync will be caught and logged independently.
+    (async () => {
+      try {
+        await plaidService.updateTransactions(itemId);
+        structuredLogger.logSuccess("initial_sync_started", {
+          item_id: itemId,
+          user_id: uid,
+        });
+      } catch (error) {
+        structuredLogger.logErrorBlock(error, {
+          operation: "initial_transaction_sync",
+          item_id: itemId,
+          user_id: uid,
+          error_classification: "background_process_error",
+        });
+      }
+    })();
+
     res.status(200).send(token);
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
