@@ -625,7 +625,6 @@ const updateTransactions = async (item) => {
 
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
-  await updateAccountBalances(dek, accessToken, accounts, uid);
 
   let cursor = accounts[0].nextCursor || null;
   let hasMore = true;
@@ -837,6 +836,9 @@ const updateTransactions = async (item) => {
       }
     }
   }
+
+  // Update balances AFTER transaction sync to ensure consistency
+  await updateAccountBalances(dek, accessToken, accounts, uid);
 
   if (email) {
     const internalTransfers = await detectInternalTransfers(newTransactions);
