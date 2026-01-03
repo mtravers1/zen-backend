@@ -598,7 +598,9 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 const updateTransactions = async (item) => {
   console.log("Updating transactions for item:", item);
   const accessInfo = await getNewestAccessToken({ itemId: item });
-  if (!accessInfo) return;
+  if (!accessInfo) {
+    throw new Error(`No access token found for item ID: ${item}`);
+  }
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
   if (!user) return;
@@ -607,16 +609,7 @@ const updateTransactions = async (item) => {
   if (!accessToken) {
     accessToken = await getAccessTokenFromItemId(item, uid);
     if (!accessToken) {
-      structuredLogger.logErrorBlock(
-        new Error("Access token could not be retrieved"),
-        {
-          operation: "update_transactions",
-          item_id: item,
-          user_id: userId,
-        },
-      );
-      //TODO: remove item
-      return;
+      throw new Error(`Access token could not be retrieved for item ID: ${item}`);
     }
   }
 
@@ -624,7 +617,7 @@ const updateTransactions = async (item) => {
 
   if (!accounts.length) {
     //TODO: remove item
-    return;
+    throw new Error(`No accounts found for item ID: ${item}`);
   }
 
   const emails = user?.email;
@@ -838,7 +831,7 @@ const updateTransactions = async (item) => {
           "Error syncing transactions:",
           error.response?.data || error,
         );
-        break;
+        throw error;
       }
     }
   }
@@ -874,8 +867,9 @@ const updateInvestmentTransactions = async (item) => {
       const accessInfo = await getNewestAccessToken({ itemId: item });
       if (!accessInfo) return;
       const userId = accessInfo.userId;
-      const user = await User.findById(userId);
-      if (!user) return;
+  if (!user) {
+    throw new Error(`User not found for user ID: ${userId}`);
+  }
       const uid = user?.authUid;
       const accessToken = await getAccessTokenFromItemId(item, uid);
 
