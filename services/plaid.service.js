@@ -601,14 +601,13 @@ const updateTransactions = async (item) => {
   }
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
-  if (!user) return;
+  if (!user) {
+    throw new Error(`User not found for userId ${userId}`);
+  }
   const uid = user?.authUid;
   const accessToken = await getAccessTokenFromItemId(item, uid);
   if (!accessToken) {
-    accessToken = await getAccessTokenFromItemId(item, uid);
-    if (!accessToken) {
-      throw new Error(`Access token could not be retrieved for item ID: ${item}`);
-    }
+    throw new Error(`Access token could not be retrieved for item ID: ${item}`);
   }
 
   const accounts = await PlaidAccount.find({ itemId: item });
@@ -806,7 +805,6 @@ const updateTransactions = async (item) => {
             filter: { plaid_account_id: accountId },
             update: {
               $addToSet: { transactions: { $each: accountTransaction } },
-              nextCursor: cursor,
             },
           },
         });
@@ -815,6 +813,12 @@ const updateTransactions = async (item) => {
       if (bulkUpdateAccountsOps.length > 0) {
         await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
       }
+
+      // Update the cursor on all accounts for the item
+      await PlaidAccount.updateMany(
+        { itemId: item },
+        { $set: { nextCursor: cursor } },
+      );
     } catch (error) {
       if (
         error.response?.data?.error_code ===
