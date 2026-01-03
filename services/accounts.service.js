@@ -2137,6 +2137,16 @@ const getAccountDetails = async (accountId, profileId, uid) => {
     accountPlaid = plaidData.accounts.find(a => a.account_id === account.plaid_account_id);
   } catch (error) {
     console.error("Error fetching account data from Plaid:", error.response?.data || error.message);
+    // If the item requires re-authentication, flag it in our database
+    if (error.response?.data?.error_code === 'ITEM_LOGIN_REQUIRED') {
+      structuredLogger.logInfo('item_login_required_detected_in_api_call', {
+        item_id: deac.itemId,
+        account_id: accountId,
+        user_id: uid,
+      });
+      // Use the original 'account' object from our DB lookup
+      await PlaidAccount.updateOne({ _id: account._id }, { $set: { isAccessTokenExpired: true } });
+    }
   }
 
   if (deac.account_type === "credit" && liab && liab.length > 0) {
