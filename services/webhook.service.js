@@ -106,20 +106,16 @@ const webhookHandler = async (event, signature = null, body = null) => {
     let result;
     switch (event.webhook_type) {
       case "TRANSACTIONS":
-        if (event.webhook_code === "SYNC_UPDATES_AVAILABLE" || event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "HISTORICAL_UPDATE") {
+        if (
+          event.webhook_code === "INITIAL_UPDATE" ||
+          event.webhook_code === "HISTORICAL_UPDATE" ||
+          event.webhook_code === "DEFAULT_UPDATE" ||
+          event.webhook_code === "SYNC_UPDATES_AVAILABLE" ||
+          event.webhook_code === "TRANSACTIONS_REMOVED"
+        ) {
           if (!event.item_id) {
             throw new Error("Missing item_id for TRANSACTIONS webhook");
           }
-
-          // Add debugging information
-          structuredLogger.logOperationStart("webhook_transactions_debug", {
-            item_id: event.item_id,
-            webhook_type: event.webhook_type,
-            webhook_code: event.webhook_code,
-            error_code: event.error?.error_code,
-            error_message: event.error?.error_message,
-          });
-
           result = await structuredLogger.withContext(
             "processTransactionSync",
             {
@@ -131,10 +127,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
               const syncResult = await plaidService.updateTransactions(
                 event.item_id,
               );
-
-              // Reset webhook failure count on successful processing
               plaidService.resetWebhookFailures(event.item_id);
-
               return syncResult;
             },
           );
@@ -147,9 +140,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
         if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
           result = await structuredLogger.withContext(
             "handleNewAccountsAvailable",
-            {
-              item_id: event.item_id,
-            },
+            { item_id: event.item_id },
             async () => {
               return await plaidService.updateTransactions(event.item_id);
             },
@@ -160,13 +151,10 @@ const webhookHandler = async (event, signature = null, body = null) => {
         break;
 
       case "ACCOUNTS":
-        if (event.webhook_code === "DEFAULT_UPDATE") {
+        if (event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
           result = await structuredLogger.withContext(
             "handleAccountsUpdate",
-            {
-              item_id: event.item_id,
-              account_ids: event.account_ids,
-            },
+            { item_id: event.item_id, account_ids: event.account_ids },
             async () => {
               return await plaidService.handleAccountsUpdate(event);
             },
@@ -192,7 +180,6 @@ const webhookHandler = async (event, signature = null, body = null) => {
               const syncResult = await plaidService.updateLiabilities(
                 event.item_id,
               );
-              // Reset webhook failure count on successful processing
               plaidService.resetWebhookFailures(event.item_id);
               return syncResult;
             },
@@ -202,10 +189,10 @@ const webhookHandler = async (event, signature = null, body = null) => {
         }
         break;
 
-      case "INVESTMENTS":
-        if (event.webhook_code === "DEFAULT_UPDATE") {
+      case "INVESTMENTS_TRANSACTIONS":
+        if (event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "HISTORICAL_UPDATE") {
           if (!event.item_id) {
-            throw new Error("Missing item_id for INVESTMENTS webhook");
+            throw new Error("Missing item_id for INVESTMENTS_TRANSACTIONS webhook");
           }
           result = await structuredLogger.withContext(
             "processInvestmentSync",
@@ -218,13 +205,12 @@ const webhookHandler = async (event, signature = null, body = null) => {
               const syncResult = await plaidService.updateInvestmentTransactions(
                 event.item_id,
               );
-              // Reset webhook failure count on successful processing
               plaidService.resetWebhookFailures(event.item_id);
               return syncResult;
             },
           );
         } else {
-          result = `Unhandled INVESTMENTS webhook code: ${event.webhook_code}`;
+          result = `Unhandled INVESTMENTS_TRANSACTIONS webhook code: ${event.webhook_code}`;
         }
         break;
 
