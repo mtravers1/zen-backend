@@ -621,28 +621,32 @@ const deletePlaidAccountByEmail = async (accountId, email) => {
 };
 
 const deletePlaidAccount = async (accountId, uid) => {
-  const user = await User.findOne({
-    authUid: uid,
-  });
+  const user = await User.findOne({ authUid: uid });
   if (!user) {
     throw new Error("User not found");
   }
 
-  const account = await PlaidAccount.findById(accountId);
-  if (!account) {
+  // 1. Find the target account to get the itemId.
+  const targetAccount = await PlaidAccount.findById(accountId);
+  if (!targetAccount) {
     console.log(`Account with _id ${accountId} not found.`);
-    return;
+    // If account is already gone, there's nothing to do.
+    return { success: true, message: "Account already deleted." };
   }
 
-  if (account.owner_id.toString() !== user._id.toString()) {
-    return;
+  // Verify ownership.
+  if (targetAccount.owner_id.toString() !== user._id.toString()) {
+    throw new Error("User does not own this account");
   }
 
+  const { itemId } = targetAccount;
+
+  // 2. Invalidate the item with Plaid.
   try {
     const dek = await getUserDek(uid);
     const safeDecrypt = createSafeDecrypt(uid, dek);
-    const decryptedToken = await safeDecrypt(account.accessToken, {
-      account_id: account.plaid_account_id,
+    const decryptedToken = await safeDecrypt(targetAccount.accessToken, {
+      account_id: targetAccount.plaid_account_id,
       field: "accessToken",
     });
 
@@ -650,20 +654,47 @@ const deletePlaidAccount = async (accountId, uid) => {
       await plaidService.invalidateAccessToken(decryptedToken);
     }
   } catch (error) {
-    // If the error is ITEM_NOT_FOUND, we can ignore it and proceed with deletion.
+    // If the item is already removed from Plaid, ignore the error and proceed with local cleanup.
     if (error.response?.data?.error_code !== 'ITEM_NOT_FOUND') {
-      // For any other error, we re-throw it.
-      throw error;
+      throw error; // For any other error, re-throw it.
     }
   }
 
+  // 3. Find all local accounts associated with the itemId.
+  const allAccountsOnItem = await PlaidAccount.find({ itemId });
+  if (allAccountsOnItem.length === 0) {
+    // This case should be rare if targetAccount was found, but it's good practice.
+    return { success: true, message: "No local accounts found for the item." };
+  }
 
-  user.plaidAccounts.pull(account._id);
-  await user.save();
+  const accountIdsToDelete = allAccountsOnItem.map(acc => acc._id);
+  const plaidAccountIdsToDelete = allAccountsOnItem.map(acc => acc.plaid_account_id);
 
-  const result = await PlaidAccount.deleteOne({ _id: account._id });
-  await Transaction.deleteMany({ plaidAccountId: account.plaid_account_id });
-  await Liability.deleteMany({ accountId: account.plaid_account_id });
+  // 4. Clean up all related data from the database.
+  
+  // Remove account references from the user.
+  await User.updateOne(
+    { _id: user._id },
+    { $pull: { plaidAccounts: { $in: accountIdsToDelete } } }
+  );
+  
+  // Delete all transactions for the accounts.
+  await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIdsToDelete } });
+  
+  // Delete all liabilities for the accounts.
+  await Liability.deleteMany({ accountId: { $in: plaidAccountIdsToDelete } });
+  
+  // Delete all AccessToken documents for the item.
+  await AccessToken.deleteMany({ itemId });
+
+  // Finally, delete all PlaidAccount documents for the item.
+  const result = await PlaidAccount.deleteMany({ itemId });
+
+  structuredLogger.logSuccess("item_deleted_successfully", {
+    item_id: itemId,
+    user_id: uid,
+    deleted_accounts_count: result.deletedCount,
+  });
 
   return result;
 };

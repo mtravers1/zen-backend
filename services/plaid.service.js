@@ -101,6 +101,7 @@ const createLinkToken = async (
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
+        account_selection_enabled: true,
         android_package_name: isAndroid ? process.env.BUNDLEID : null,
         redirect_uri: !isAndroid ? redirectUri : null,
         webhook: webhookUrl,
