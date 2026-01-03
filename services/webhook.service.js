@@ -176,6 +176,32 @@ const webhookHandler = async (event, signature = null, body = null) => {
         }
         break;
 
+      case "LIABILITIES":
+        if (event.webhook_code === "DEFAULT_UPDATE") {
+          if (!event.item_id) {
+            throw new Error("Missing item_id for LIABILITIES webhook");
+          }
+          result = await structuredLogger.withContext(
+            "processLiabilitySync",
+            {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            },
+            async () => {
+              const syncResult = await plaidService.updateLiabilities(
+                event.item_id,
+              );
+              // Reset webhook failure count on successful processing
+              plaidService.resetWebhookFailures(event.item_id);
+              return syncResult;
+            },
+          );
+        } else {
+          result = `Unhandled LIABILITIES webhook code: ${event.webhook_code}`;
+        }
+        break;
+
       default:
         result = `Unhandled webhook type: ${event.webhook_type}`;
     }
