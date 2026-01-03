@@ -1027,8 +1027,142 @@ const updateInvestmentTransactions = async (item) => {
   );
 };
 
+
 const updateLiabilities = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
+  return await structuredLogger.withContext(
+    'update_liabilities',
+    { item_id: item },
+    async () => {
+      const accessInfo = await getNewestAccessToken({ itemId: item });
+      if (!accessInfo) {
+        throw new Error(`No access token found for item ID: ${item}`);
+      }
+      const user = await User.findById(accessInfo.userId);
+      if (!user) {
+        throw new Error(`User not found for item ID: ${item}`);
+      }
+      const uid = user.authUid;
+      const accessToken = await getAccessTokenFromItemId(item, uid);
+      if (!accessToken) {
+        throw new Error(`Access token could not be retrieved for item ID: ${item}`);
+      }
+
+      const dek = await getUserDek(uid);
+      const safeEncrypt = createSafeEncrypt(uid, dek);
+
+      const liabilitiesResponse = await getLoanLiabilitiesWithAccessToken(accessToken);
+
+      if (liabilitiesResponse && liabilitiesResponse.liabilities) {
+        const accountIds = liabilitiesResponse.accounts.map(acc => acc.account_id);
+
+        // Delete old liabilities for all affected accounts to ensure consistency
+        await Liability.deleteMany({ accountId: { $in: accountIds } });
+
+        // Now, add the new, updated liabilities
+        for (const [key, value] of Object.entries(liabilitiesResponse.liabilities)) {
+          if (Array.isArray(value)) {
+            for (const liab of value) {
+              const encryptedAccountNumber = await safeEncrypt(liab.account_number);
+              const encryptedLastPaymentAmount = await safeEncrypt(liab.last_payment_amount);
+              const encryptedMinimumPaymentAmount = await safeEncrypt(liab.minimum_payment_amount);
+              const encryptedLastStatementBalance = await safeEncrypt(liab.last_statement_balance);
+              const encryptedLoanTypeDescription = await safeEncrypt(liab.loan_type_description);
+              const encryptedLoanTerm = await safeEncrypt(liab.loan_term);
+              const encryptedNextMonthlyPayment = await safeEncrypt(liab.next_monthly_payment);
+              const encryptedOriginationPrincipalAmount = await safeEncrypt(liab.origination_principal_amount);
+              const encryptedPastDueAmount = await safeEncrypt(liab.past_due_amount);
+              const encryptedEscrowBalance = await safeEncrypt(liab.escrow_balance);
+              const encryptedHasPmi = await safeEncrypt(liab.has_pmi);
+              const encryptedHasPrepaymentPenalty = await safeEncrypt(liab.has_prepayment_penalty);
+              let encryptedPropertyAddress;
+              if (liab.property_address) {
+                encryptedPropertyAddress = {
+                  city: await safeEncrypt(liab.property_address?.city),
+                  country: await safeEncrypt(liab.property_address?.country),
+                  postalCode: await safeEncrypt(liab.property_address?.postal_code),
+                  region: await safeEncrypt(liab.property_address?.region),
+                  street: await safeEncrypt(liab.property_address?.street),
+                };
+              }
+              const encryptedGuarantor = await safeEncrypt(liab.guarantor);
+              const encryptedLoanName = await safeEncrypt(liab.loan_name);
+              const encryptedOutstandingInterestAmount = await safeEncrypt(liab.outstanding_interest_amount);
+              const encryptedPaymentReferenceNumber = await safeEncrypt(liab.payment_reference_number);
+              const encryptedPslfStatus = await safeEncrypt(liab.pslf_status);
+              let encryptedRepaymentPlan;
+              if (liab.repayment_plan) {
+                encryptedRepaymentPlan = {
+                  type: await safeEncrypt(liab.repayment_plan?.type),
+                  description: await safeEncrypt(liab.repayment_plan?.description),
+                };
+              }
+              const encryptedSequenceNumber = await safeEncrypt(liab.sequence_number);
+              let encryptedServicerAddress;
+              if (liab.servicer_address) {
+                encryptedServicerAddress = {
+                  city: await safeEncrypt(liab.servicer_address?.city),
+                  country: await safeEncrypt(liab.servicer_address?.country),
+                  postalCode: await safeEncrypt(liab.servicer_address?.postal_code),
+                  region: await safeEncrypt(liab.servicer_address?.region),
+                  street: await safeEncrypt(liab.servicer_address?.street),
+                };
+              }
+              const encryptedYtdInterestPaid = await safeEncrypt(liab.ytd_interest_paid);
+              const encryptedYtdPrincipalPaid = await safeEncrypt(liab.ytd_principal_paid);
+
+              const newLiability = new Liability({
+                liabilityType: key,
+                accountId: liab.account_id,
+                accountNumber: encryptedAccountNumber,
+                lastPaymentAmount: encryptedLastPaymentAmount,
+                lastPaymentDate: liab.last_payment_date,
+                nextPaymentDueDate: liab.next_payment_due_date,
+                minimumPaymentAmount: encryptedMinimumPaymentAmount,
+                lastStatementBalance: encryptedLastStatementBalance,
+                lastStatementIssueDate: liab.last_statement_issue_date,
+                isOverdue: liab.is_overdue,
+                aprs: liab.aprs,
+                loanTypeDescription: encryptedLoanTypeDescription,
+                loanTerm: encryptedLoanTerm,
+                maturityDate: liab.maturity_date,
+                nextMonthlyPayment: encryptedNextMonthlyPayment,
+                originationDate: liab.origination_date,
+                originationPrincipalAmount: encryptedOriginationPrincipalAmount,
+                pastDueAmount: encryptedPastDueAmount,
+                escrowBalance: encryptedEscrowBalance,
+                hasPmi: encryptedHasPmi,
+                hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+                propertyAddress: encryptedPropertyAddress,
+                interestRate: liab.interest_rate,
+                disbursementDates: liab.disbursement_dates,
+                expectedPayoffDate: liab.expected_payoff_date,
+                guarantor: encryptedGuarantor,
+                interestRatePercentage: liab.interest_rate_percentage,
+                loanName: encryptedLoanName,
+                loanStatus: liab.loan_status,
+                outstandingInterestAmount: encryptedOutstandingInterestAmount,
+                paymentReferenceNumber: encryptedPaymentReferenceNumber,
+                pslfStatus: encryptedPslfStatus,
+                repaymentPlan: encryptedRepaymentPlan,
+                sequenceNumber: encryptedSequenceNumber,
+                servicerAddress: encryptedServicerAddress,
+                ytdInterestPaid: encryptedYtdInterestPaid,
+                ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+              });
+              await newLiability.save();
+            }
+          }
+        }
+        structuredLogger.logSuccess('update_liabilities_completed', {
+          item_id: item,
+          user_id: uid,
+          updated_accounts_count: accountIds.length,
+        });
+        return { success: true, updated_accounts: accountIds.length };
+      }
+      return { success: true, updated_accounts: 0, message: "No new liability data to update." };
+    }
+  );
 };
 
 const updateInvadlidAccessToken = async (item) => {
