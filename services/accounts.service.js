@@ -348,7 +348,7 @@ const addAccount = async (accessToken, email, uid) => {
           continue;
         }
 
-
+        const accountType = "investment";
         const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
         const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
 

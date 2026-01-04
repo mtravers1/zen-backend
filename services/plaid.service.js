@@ -2,6 +2,7 @@ import AccessToken from "../database/models/AccessToken.js";
 import User from "../database/models/User.js";
 import getPlaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
+import Liability from "../database/models/Liability.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
 import {
@@ -19,6 +20,8 @@ const plaidSecret = process.env.PLAID_SECRET;
 const webhookUrl = process.env.PLAID_WEBHOOK_URL;
 const plaidRedirectUri = process.env.PLAID_REDIRECT_URI;
 const plaidRedirectNewAccounts = process.env.PLAID_REDIRECT_URI_NEW_ACCOUNTS;
+
+import { hashValue } from "../database/encryption.js";
 
 import {
   createSafeEncrypt,
@@ -925,6 +928,7 @@ const updateInvestmentTransactions = async (item) => {
       const accessInfo = await getNewestAccessToken({ itemId: item });
       if (!accessInfo) return;
       const userId = accessInfo.userId;
+      const user = await User.findById(userId);
   if (!user) {
     throw new Error(`User not found for user ID: ${userId}`);
   }
