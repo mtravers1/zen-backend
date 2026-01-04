@@ -594,7 +594,6 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 };
 
 const updateTransactions = async (item) => {
-  console.log("Updating transactions for item:", item);
   const accessInfo = await getNewestAccessToken({ itemId: item });
   if (!accessInfo) {
     throw new Error(`No access token found for item ID: ${item}`);
@@ -608,6 +607,61 @@ const updateTransactions = async (item) => {
   const accessToken = await getAccessTokenFromItemId(item, uid);
   if (!accessToken) {
     throw new Error(`Access token could not be retrieved for item ID: ${item}`);
+  }
+
+  // First, ensure all accounts for the item are present in our DB.
+  const plaidAccountsData = await getAccountsWithAccessToken(accessToken);
+  const allPlaidAccounts = plaidAccountsData.accounts;
+  const institutionId = plaidAccountsData.item.institution_id;
+  const institutionName = plaidAccountsData.item.institution_name;
+
+  const existingDbAccounts = await PlaidAccount.find({ itemId: item });
+  const existingPlaidAccountIds = new Set(existingDbAccounts.map(a => a.plaid_account_id));
+
+  const newPlaidAccounts = allPlaidAccounts.filter(
+    plaidAcc => !existingPlaidAccountIds.has(plaidAcc.account_id)
+  );
+
+  if (newPlaidAccounts.length > 0) {
+    const dek = await getUserDek(uid);
+    const safeEncrypt = createSafeEncrypt(uid, dek);
+    for (const account of newPlaidAccounts) {
+        const hashAccountName = hashValue(account.name);
+        const hashAccountInstitutionId = hashValue(institutionId);
+        const hashAccountMask = hashValue(account.mask);
+
+        const encryptedMask = await safeEncrypt(account.mask, { account_id: account.account_id, field: "mask" });
+        const encryptedToken = await safeEncrypt(accessToken, { account_id: account.account_id, field: "accessToken" });
+        const encryptedName = await safeEncrypt(account.name, { account_id: account.account_id, field: "name" });
+        const encryptedOfficialName = account.official_name ? await safeEncrypt(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
+        const encryptedType = await safeEncrypt(account.type, { account_id: account.account_id, field: "type" });
+        const encryptedSubtype = await safeEncrypt(account.subtype, { account_id: account.account_id, field: "subtype" });
+        const encryptedInstitutionName = await safeEncrypt(institutionName, { account_id: account.account_id, field: "institutionName" });
+        const encryptedCurrentBalance = account.balances?.current ? await safeEncrypt(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
+        const encryptedAvailableBalance = account.balances?.available ? await safeEncrypt(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
+
+        const newAccount = new PlaidAccount({
+          owner_id: userId,
+          itemId: item,
+          accessToken: encryptedToken,
+          owner_type: user.role,
+          plaid_account_id: account.account_id,
+          account_name: encryptedName,
+          account_official_name: encryptedOfficialName,
+          account_type: encryptedType,
+          account_subtype: encryptedSubtype,
+          institution_name: encryptedInstitutionName,
+          institution_id: institutionId,
+          currentBalance: encryptedCurrentBalance,
+          availableBalance: encryptedAvailableBalance,
+          currency: account.balances.iso_currency_code,
+          mask: encryptedMask,
+          hashAccountName,
+          hashAccountInstitutionId,
+          hashAccountMask,
+        });
+        await newAccount.save();
+    }
   }
 
   const accounts = await PlaidAccount.find({ itemId: item });
