@@ -59,1079 +59,531 @@ const addAccount = async (accessToken, email, uid) => {
       const existingAccounts = [];
       const allAccounts = [];
 
-            let userModified = false;
-
-            for (let account of accounts) {
-
-              const hashAccountName = hashValue(account.name);
-
-              const hashAccountInstitutionId = hashValue(
-
-                accountsResponse.item.institution_id,
-
-              );
-
-              const hashAccountMask = hashValue(account.mask);
-
-      
-
-              const existingAccount = await PlaidAccount.findOne({
-
-                hashAccountName,
-
-                hashAccountInstitutionId,
-
-                hashAccountMask,
-
-                owner_id: user._id,
-
-              });
-
-      
-
-              if (existingAccount) {
-
-                existingAccounts.push(existingAccount);
-
-                allAccounts.push(existingAccount);
-
-                continue;
-
-              }
-
-      
-
-              const encryptedMask = await safeEncrypt(account.mask, {
-
-                account_id: account.account_id,
-
-                field: "mask",
-
-              });
-
-      
-
-              const encryptedToken = await safeEncrypt(accessToken, {
-
-                account_id: account.account_id,
-
-                field: "accessToken",
-
-              });
-
-      
-
-              const encryptedName = await safeEncrypt(account.name, {
-
-                account_id: account.account_id,
-
-                field: "name",
-
-              });
-
-      
-
-              let encryptedOfficialName;
-
-      
-
-              if (account.official_name) {
-
-                encryptedOfficialName = await safeEncrypt(
-
-                  account.official_name,
-
-                  { account_id: account.account_id, field: "official_name" },
-
-                );
-
-              }
-
-      
-
-              const encryptedType = await safeEncrypt(account.type, {
-
-                account_id: account.account_id,
-
-                field: "type",
-
-              });
-
-      
-
-              const encryptedSubtype = await safeEncrypt(account.subtype, {
-
-                account_id: account.account_id,
-
-                field: "subtype",
-
-              });
-
-      
-
-              const encryptedInstitutionName = await safeEncrypt(
-
-                institutionName,
-
-                { account_id: account.account_id, field: "institutionName" },
-
-              );
-
-      
-
-              let encryptedCurrentBalance;
-
-              let encryptedAvailableBalance;
-
-      
-
-              if (account.balances) {
-
-                if (account.balances.current) {
-
-                  encryptedCurrentBalance = await safeEncrypt(
-
-                    account.balances.current,
-
-                    { account_id: account.account_id, field: "currentBalance" },
-
-                  );
-
-                }
-
-      
-
-                if (account.balances.available) {
-
-                  encryptedAvailableBalance = await safeEncrypt(
-
-                    account.balances.available,
-
-                    { account_id: account.account_id, field: "availableBalance" },
-
-                  );
-
-                }
-
-              }
-
-      
-
-              const newAccount = new PlaidAccount({
-
-                owner_id: userId,
-
-                itemId: accountsResponse.item.item_id,
-
-                accessToken: encryptedToken,
-
-                owner_type: userType,
-
-                plaid_account_id: account.account_id,
-
-                account_name: encryptedName,
-
-                account_official_name: encryptedOfficialName,
-
-                account_type: encryptedType,
-
-                account_subtype: encryptedSubtype,
-
-                institution_name: encryptedInstitutionName,
-
-                institution_id: institutionId,
-
-                image_url: account.institution_name,
-
-                currentBalance: encryptedCurrentBalance,
-
-                availableBalance: encryptedAvailableBalance,
-
-                currency: account.balances.iso_currency_code,
-
-                transactions: [],
-
-                nextCursor: null,
-
-                mask: encryptedMask,
-
-                hashAccountName,
-
-                hashAccountInstitutionId,
-
-                hashAccountMask,
-
-              });
-
-      
-
-              accountTypes[account.account_id] = account.type;
-
-      
-
-              userAccounts.push(newAccount._id);
-
-              userModified = true;
-
-      
-
-              await newAccount.save();
-
-              savedAccounts.push(newAccount);
-
-              allAccounts.push(newAccount);
-
-            }
-
-      
-
-            if (userModified) {
-
-              await user.save();
-
-            }
-
-      
-
-            const responseExistingAccounts = await Promise.all(
-
-              existingAccounts.map(async (ec) => {
-
-                return {
-
-                  id: ec.id,
-
-                  name: await safeDecrypt(ec.account_name, {
-
-                    account_id: ec.id,
-
-                    field: "account_name",
-
-                  }),
-
-                };
-
-              }),
-
+      for (let account of accounts) {
+        const hashAccountName = hashValue(account.name);
+        const hashAccountInstitutionId = hashValue(
+          accountsResponse.item.institution_id,
+        );
+        const hashAccountMask = hashValue(account.mask);
+
+        const existingAccount = await PlaidAccount.findOne({
+          hashAccountName,
+          hashAccountInstitutionId,
+          hashAccountMask,
+          owner_id: user._id,
+        });
+
+        if (existingAccount) {
+          existingAccounts.push(existingAccount);
+          allAccounts.push(existingAccount);
+          continue;
+        }
+
+        const encryptedMask = await safeEncrypt(account.mask, {
+          account_id: account.account_id,
+          field: "mask",
+        });
+
+        const encryptedToken = await safeEncrypt(accessToken, {
+          account_id: account.account_id,
+          field: "accessToken",
+        });
+
+        const encryptedName = await safeEncrypt(account.name, {
+          account_id: account.account_id,
+          field: "name",
+        });
+
+        let encryptedOfficialName;
+
+        if (account.official_name) {
+          encryptedOfficialName = await safeEncrypt(
+            account.official_name,
+            { account_id: account.account_id, field: "official_name" },
+          );
+        }
+
+        const encryptedType = await safeEncrypt(account.type, {
+          account_id: account.account_id,
+          field: "type",
+        });
+
+        const encryptedSubtype = await safeEncrypt(account.subtype, {
+          account_id: account.account_id,
+          field: "subtype",
+        });
+
+        const encryptedInstitutionName = await safeEncrypt(
+          institutionName,
+          { account_id: account.account_id, field: "institutionName" },
+        );
+
+        let encryptedCurrentBalance;
+        let encryptedAvailableBalance;
+
+        if (account.balances) {
+          if (account.balances.current) {
+            encryptedCurrentBalance = await safeEncrypt(
+              account.balances.current,
+              { account_id: account.account_id, field: "currentBalance" },
             );
+          }
 
+          if (account.balances.available) {
+            encryptedAvailableBalance = await safeEncrypt(
+              account.balances.available,
+              { account_id: account.account_id, field: "availableBalance" },
+            );
+          }
+        }
+
+        const newAccount = new PlaidAccount({
+          owner_id: userId,
+          itemId: accountsResponse.item.item_id,
+          accessToken: encryptedToken,
+          owner_type: userType,
+          plaid_account_id: account.account_id,
+          account_name: encryptedName,
+          account_official_name: encryptedOfficialName,
+          account_type: encryptedType,
+          account_subtype: encryptedSubtype,
+          institution_name: encryptedInstitutionName,
+          institution_id: institutionId,
+          image_url: account.institution_name,
+          currentBalance: encryptedCurrentBalance,
+          availableBalance: encryptedAvailableBalance,
+          currency: account.balances.iso_currency_code,
+          transactions: [],
+          nextCursor: null,
+          mask: encryptedMask,
+          hashAccountName,
+          hashAccountInstitutionId,
+          hashAccountMask,
+        });
+
+        accountTypes[account.account_id] = account.type;
+
+        userAccounts.push(newAccount._id);
+
+        await user.save();
+        await newAccount.save();
+        savedAccounts.push(newAccount);
+        allAccounts.push(newAccount);
+      }
+
+      const responseExistingAccounts = await Promise.all(
+        existingAccounts.map(async (ec) => {
+          return {
+            id: ec.id,
+            name: await safeDecrypt(ec.account_name, {
+              account_id: ec.id,
+              field: "account_name",
+            }),
+          };
+        }),
+      );
+
+      let transactionsResponse;
+      let investmentTransactionsResponse;
+      let liabilitiesResponse;
+      if (accountsResponse.item.products.includes("transactions")) {
+        try {
+          transactionsResponse =
+            await plaidService.getTransactionsWithAccessToken(accessToken);
+        } catch (error) {
+          console.error(
+            "Error fetching transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          investmentTransactionsResponse =
+            await plaidService.getInvestmentTransactionsWithAccessToken(
+              accessToken,
+            );
+        } catch (error) {
+          console.error(
+            "Error fetching investment transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("liabilities")) {
+        try {
+          liabilitiesResponse =
+            await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
+        } catch (error) {
+          console.error(
+            "Error fetching liabilities:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      if (accountsResponse.item.products.includes("investments")) {
+        try {
+          await plaidService.updateInvestmentTransactions(
+            accountsResponse.item.item_id,
+          );
+        } catch (error) {
+          console.error(
+            "Error updating investment transactions:",
+            error.response?.data || error,
+          );
+        }
+      }
+
+      const nextCursor = transactionsResponse
+        ? transactionsResponse.next_cursor
+        : null;
+      const transactions = transactionsResponse
+        ? transactionsResponse.added
+        : [];
+      const investmentTransactions = investmentTransactionsResponse
+        ? investmentTransactionsResponse.investment_transactions
+        : [];
+
+      const transactionsByAccount = {};
+
+      for (const transaction of transactions) {
+        const existingTransaction = await Transaction.findOne({
+          plaidTransactionId: transaction.transaction_id,
+        });
+
+        if (existingTransaction) continue;
+
+        const accountType = accountTypes[transaction.account_id];
+
+        const existingAccount = await PlaidAccount.findOne({
+          plaid_account_id: transaction.account_id,
+        });
+
+        const account = allAccounts.find(
+          (account) => account.plaid_account_id === transaction.account_id,
+        );
+
+        if (!account) {
+          continue;
+        }
+
+        let merchantName;
+        let name;
+
+        if (transaction.merchant_name) {
+          merchantName = await safeEncrypt(transaction.merchant_name);
+        }
+
+        if (transaction.name) {
+          name = await safeEncrypt(transaction.name);
+        }
+
+        const merchantCategory = transaction.category?.[0];
+        const website = transaction.website;
+        const logo = transaction.logo_url;
+        const merchant = {
+          merchantName: merchantName,
+          name: name,
+          merchantCategory: merchantCategory,
+          website: website,
+          logo: logo,
+        };
+
+        let transactionCode;
+
+        const encyptedAmount = await safeEncrypt(transaction.amount);
+
+        if (transaction.transaction_code) {
+          transactionCode = await safeEncrypt(transaction.transaction_code);
+        }
+        let encryptedAccountType;
+        if (accountType) {
+          encryptedAccountType = await safeEncrypt(accountType);
+        }
+
+        const encryptedTags = await safeEncrypt(transaction.category);
+
+        const newTransaction = new Transaction({
+          accountId: account._id,
+          plaidTransactionId: transaction.transaction_id,
+          plaidAccountId: transaction.account_id,
+          transactionDate: transaction.date,
+          amount: encyptedAmount,
+          currency: transaction.iso_currency_code,
+          notes: null,
+          merchant: merchant,
+          description: null,
+          transactionCode: transactionCode,
+          tags: encryptedTags,
+          accountType: encryptedAccountType,
+        });
+
+        await newTransaction.save();
+
+        if (!transactionsByAccount[transaction.account_id]) {
+          transactionsByAccount[transaction.account_id] = [];
+        }
+
+        transactionsByAccount[transaction.account_id].push(newTransaction._id);
+      }
+
+      for (const transaction of investmentTransactions) {
+        const existingTransaction = await Transaction.findOne({
+          plaidTransactionId: transaction.investment_transaction_id,
+        });
+
+        if (existingTransaction) continue;
+
+        const account = allAccounts.find(
+          (account) => account.plaid_account_id === transaction.account_id,
+        );
+
+        if (!account) {
+          console.error(
+            `Could not find account for transaction ${transaction.investment_transaction_id} with account_id ${transaction.account_id}`,
+          );
+          continue;
+        }
+
+        const accountType = "investment";
+        const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
+        const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
+
+        const name = await safeEncrypt(transaction.name, { context: { transactionKind: 'investment', field: 'name' } });
+
+        const fees = await safeEncrypt(transaction.fees, { context: { transactionKind: 'investment', field: 'fees' } });
+
+        const price = await safeEncrypt(transaction.price, { context: { transactionKind: 'investment', field: 'price' } });
+
+        const quantity = await safeEncrypt(transaction.quantity, { context: { transactionKind: 'investment', field: 'quantity' } });
+
+        const securityId = await safeEncrypt(transaction.security_id, { context: { transactionKind: 'investment', field: 'securityId' } });
+
+        const type = await safeEncrypt(transaction.type, { context: { transactionKind: 'investment', field: 'type' } });
+
+        const subtype = await safeEncrypt(transaction.subtype, { context: { transactionKind: 'investment', field: 'subtype' } });
+
+        const newTransaction = new Transaction({
+          accountId: account._id,
+          plaidTransactionId: transaction.investment_transaction_id,
+          plaidAccountId: transaction.account_id,
+          transactionDate: transaction.date,
+          amount: encryptedAmount,
+          currency: transaction.iso_currency_code,
+          isInvestment: true,
+          name: name,
+          fees: fees,
+          price: price,
+          quantity: quantity,
+          securityId: securityId,
+          type: type,
+          subtype: subtype,
+          accountType: encryptedAccountType,
+        });
+
+        await newTransaction.save();
+
+        if (!transactionsByAccount[transaction.account_id]) {
+          transactionsByAccount[transaction.account_id] = [];
+        }
+
+        transactionsByAccount[transaction.account_id].push(newTransaction._id);
+      }
+
+            if (liabilitiesResponse) {
+              for (const [key, value] of Object.entries(
+                liabilitiesResponse.liabilities,
+              )) {
+                if (Array.isArray(value)) {
+                  for (const item of value) {
+                    //if accountid is not in savedaccounts, then skip
+                    if (
+                      !savedAccounts.find(
+                        (account) => account.plaid_account_id === item.account_id,
+                      )
+                    )
+                      continue;
       
-
-            let transactionsResponse;
-
-            let investmentTransactionsResponse;
-
-            let liabilitiesResponse;
-
-            if (accountsResponse.item.products.includes("transactions")) {
-
-              try {
-
-                transactionsResponse =
-
-                  await plaidService.getTransactionsWithAccessToken(accessToken);
-
-              } catch (error) {
-
-                console.error(
-
-                  "Error fetching transactions:",
-
-                  error.response?.data || error,
-
-                );
-
-              }
-
-            }
-
+                    const encryptedAccountNumber = await safeEncrypt(
+                      item.account_number,
+                    );
       
-
-            if (accountsResponse.item.products.includes("investments")) {
-
-              try {
-
-                investmentTransactionsResponse =
-
-                  await plaidService.getInvestmentTransactionsWithAccessToken(
-
-                    accessToken,
-
-                  );
-
-              } catch (error) {
-
-                console.error(
-
-                  "Error fetching investment transactions:",
-
-                  error.response?.data || error,
-
-                );
-
-              }
-
-            }
-
+                    const encryptedLastPaymentAmount = await safeEncrypt(
+                      item.last_payment_amount,
+                    );
       
-
-            if (accountsResponse.item.products.includes("liabilities")) {
-
-              try {
-
-                liabilitiesResponse =
-
-                  await plaidService.getLoanLiabilitiesWithAccessToken(accessToken);
-
-              } catch (error) {
-
-                console.error(
-
-                  "Error fetching liabilities:",
-
-                  error.response?.data || error,
-
-                );
-
-              }
-
-            }
-
+                    const encryptedMinimumPaymentAmount = await safeEncrypt(
+                      item.minimum_payment_amount,
+                    );
       
-
-            if (accountsResponse.item.products.includes("investments")) {
-
-              try {
-
-                await plaidService.updateInvestmentTransactions(
-
-                  accountsResponse.item.item_id,
-
-                );
-
-              } catch (error) {
-
-                console.error(
-
-                  "Error updating investment transactions:",
-
-                  error.response?.data || error,
-
-                );
-
-              }
-
-            }
-
+                    const encryptedLastStatementBalance = await safeEncrypt(
+                      item.last_statement_balance,
+                    );
       
-
-            const nextCursor = transactionsResponse
-
-              ? transactionsResponse.next_cursor
-
-              : null;
-
-            const transactions = transactionsResponse
-
-              ? transactionsResponse.added
-
-              : [];
-
-            const investmentTransactions = investmentTransactionsResponse
-
-              ? investmentTransactionsResponse.investment_transactions
-
-              : [];
-
+                    const encryptedLoanTypeDescription = await safeEncrypt(
+                      item.loan_type_description,
+                    );
       
-
-            const transactionsByAccount = {};
-
+                    const encryptedLoanTerm = await safeEncrypt(item.loan_term);
       
-
-            for (const transaction of transactions) {
-
-              const existingTransaction = await Transaction.findOne({
-
-                plaidTransactionId: transaction.transaction_id,
-
-              });
-
+                    const encryptedNextMonthlyPayment = await safeEncrypt(
+                      item.next_monthly_payment,
+                    );
       
-
-              if (existingTransaction) continue;
-
+                    const encryptedOriginationPrincipalAmount = await safeEncrypt(
+                      item.origination_principal_amount,
+                    );
       
-
-              const accountType = accountTypes[transaction.account_id];
-
+                    const encryptedPastDueAmount = await safeEncrypt(
+                      item.past_due_amount,
+                    );
       
-
-              const existingAccount = await PlaidAccount.findOne({
-
-                plaid_account_id: transaction.account_id,
-
-              });
-
+                    const encryptedEscrowBalance = await safeEncrypt(
+                      item.escrow_balance,
+                    );
       
-
-              const account = allAccounts.find(
-
-                (account) => account.plaid_account_id === transaction.account_id,
-
-              );
-
+                    const encryptedHasPmi = await safeEncrypt(item.has_pmi);
       
-
-              if (!account) {
-
-                continue;
-
-              }
-
-      
-
-              let merchantName;
-
-              let name;
-
-      
-
-              if (transaction.merchant_name) {
-
-                merchantName = await safeEncrypt(transaction.merchant_name);
-
-              }
-
-      
-
-              if (transaction.name) {
-
-                name = await safeEncrypt(transaction.name);
-
-              }
-
-      
-
-              const merchantCategory = transaction.category?.[0];
-
-              const website = transaction.website;
-
-              const logo = transaction.logo_url;
-
-              const merchant = {
-
-                merchantName: merchantName,
-
-                name: name,
-
-                merchantCategory: merchantCategory,
-
-                website: website,
-
-                logo: logo,
-
-              };
-
-      
-
-              let transactionCode;
-
-      
-
-              const encyptedAmount = await safeEncrypt(transaction.amount);
-
-      
-
-              if (transaction.transaction_code) {
-
-                transactionCode = await safeEncrypt(transaction.transaction_code);
-
-              }
-
-              let encryptedAccountType;
-
-              if (accountType) {
-
-                encryptedAccountType = await safeEncrypt(accountType);
-
-              }
-
-      
-
-              const encryptedTags = await safeEncrypt(transaction.category);
-
-      
-
-              const newTransaction = new Transaction({
-
-                accountId: account._id,
-
-                plaidTransactionId: transaction.transaction_id,
-
-                plaidAccountId: transaction.account_id,
-
-                transactionDate: transaction.date,
-
-                amount: encyptedAmount,
-
-                currency: transaction.iso_currency_code,
-
-                notes: null,
-
-                merchant: merchant,
-
-                description: null,
-
-                transactionCode: transactionCode,
-
-                tags: encryptedTags,
-
-                accountType: encryptedAccountType,
-
-              });
-
-      
-
-              await newTransaction.save();
-
-      
-
-              if (!transactionsByAccount[transaction.account_id]) {
-
-                transactionsByAccount[transaction.account_id] = [];
-
-              }
-
-      
-
-              transactionsByAccount[transaction.account_id].push(newTransaction._id);
-
-            }
-
-      
-
-            for (const transaction of investmentTransactions) {
-
-              const existingTransaction = await Transaction.findOne({
-
-                plaidTransactionId: transaction.investment_transaction_id,
-
-              });
-
-      
-
-              if (existingTransaction) continue;
-
-      
-
-              const account = allAccounts.find(
-
-                (account) => account.plaid_account_id === transaction.account_id,
-
-              );
-
-      
-
-              if (!account) {
-
-                console.error(
-
-                  `Could not find account for transaction ${transaction.investment_transaction_id} with account_id ${transaction.account_id}`,
-
-                );
-
-                continue;
-
-              }
-
-      
-
-              const accountType = "investment";
-
-              const encryptedAmount = await safeEncrypt(transaction.amount, { context: { transactionKind: 'investment', field: 'amount' } });
-
-      
-
-              const encryptedAccountType = await safeEncrypt(accountType, { context: { transactionKind: 'investment', field: 'accountType' } });
-
-      
-
-              const name = await safeEncrypt(transaction.name, { context: { transactionKind: 'investment', field: 'name' } });
-
-      
-
-              const fees = await safeEncrypt(transaction.fees, { context: { transactionKind: 'investment', field: 'fees' } });
-
-      
-
-              const price = await safeEncrypt(transaction.price, { context: { transactionKind: 'investment', field: 'price' } });
-
-      
-
-              const quantity = await safeEncrypt(transaction.quantity, { context: { transactionKind: 'investment', field: 'quantity' } });
-
-      
-
-              const securityId = await safeEncrypt(transaction.security_id, { context: { transactionKind: 'investment', field: 'securityId' } });
-
-      
-
-              const type = await safeEncrypt(transaction.type, { context: { transactionKind: 'investment', field: 'type' } });
-
-      
-
-              const subtype = await safeEncrypt(transaction.subtype, { context: { transactionKind: 'investment', field: 'subtype' } });
-
-      
-
-              const newTransaction = new Transaction({
-
-                accountId: account._id,
-
-                plaidTransactionId: transaction.investment_transaction_id,
-
-                plaidAccountId: transaction.account_id,
-
-                transactionDate: transaction.date,
-
-                amount: encryptedAmount,
-
-                currency: transaction.iso_currency_code,
-
-                isInvestment: true,
-
-                name: name,
-
-                fees: fees,
-
-                price: price,
-
-                quantity: quantity,
-
-                securityId: securityId,
-
-                type: type,
-
-                subtype: subtype,
-
-                accountType: encryptedAccountType,
-
-              });
-
-      
-
-              await newTransaction.save();
-
-      
-
-              if (!transactionsByAccount[transaction.account_id]) {
-
-                transactionsByAccount[transaction.account_id] = [];
-
-              }
-
-      
-
-              transactionsByAccount[transaction.account_id].push(newTransaction._id);
-
-            }
-
-      
-
-                  if (liabilitiesResponse) {
-
-                    for (const [key, value] of Object.entries(
-
-                      liabilitiesResponse.liabilities,
-
-                    )) {
-
-                      if (Array.isArray(value)) {
-
-                        for (const item of value) {
-
-                          //if accountid is not in savedaccounts, then skip
-
-                          if (
-
-                            !savedAccounts.find(
-
-                              (account) => account.plaid_account_id === item.account_id,
-
-                            )
-
-                          )
-
-                            continue;
-
-            
-
-                          const encryptedAccountNumber = await safeEncrypt(
-
-                            item.account_number,
-
-                          );
-
-            
-
-                          const encryptedLastPaymentAmount = await safeEncrypt(
-
-                            item.last_payment_amount,
-
-                          );
-
-            
-
-                          const encryptedMinimumPaymentAmount = await safeEncrypt(
-
-                            item.minimum_payment_amount,
-
-                          );
-
-            
-
-                          const encryptedLastStatementBalance = await safeEncrypt(
-
-                            item.last_statement_balance,
-
-                          );
-
-            
-
-                          const encryptedLoanTypeDescription = await safeEncrypt(
-
-                            item.loan_type_description,
-
-                          );
-
-            
-
-                          const encryptedLoanTerm = await safeEncrypt(item.loan_term);
-
-            
-
-                          const encryptedNextMonthlyPayment = await safeEncrypt(
-
-                            item.next_monthly_payment,
-
-                          );
-
-            
-
-                          const encryptedOriginationPrincipalAmount = await safeEncrypt(
-
-                            item.origination_principal_amount,
-
-                          );
-
-            
-
-                          const encryptedPastDueAmount = await safeEncrypt(
-
-                            item.past_due_amount,
-
-                          );
-
-            
-
-                          const encryptedEscrowBalance = await safeEncrypt(
-
-                            item.escrow_balance,
-
-                          );
-
-            
-
-                          const encryptedHasPmi = await safeEncrypt(item.has_pmi);
-
-            
-
-                          const encryptedHasPrepaymentPenalty = await safeEncrypt(
-
-                            item.has_prepayment_penalty,
-
-                          );
-
-                          let encryptedPropertyAddress;
-
-                          if (item.property_address) {
-
-                            encryptedPropertyAddress = {
-
-                              city: await safeEncrypt(item.property_address?.city),
-
-                              country: await safeEncrypt(item.property_address?.country),
-
-                              postalCode: await safeEncrypt(
-
-                                item.property_address?.postal_code,
-
-                              ),
-
-                              region: await safeEncrypt(item.property_address?.region),
-
-                              street: await safeEncrypt(item.property_address?.street),
-
-                            };
-
-                          }
-
-            
-
-                          const encryptedGuarantor = await safeEncrypt(item.guarantor);
-
-            
-
-                          const encryptedLoanName = await safeEncrypt(item.loan_name);
-
-            
-
-                          const encryptedOutstandingInterestAmount = await safeEncrypt(
-
-                            item.outstanding_interest_amount,
-
-                          );
-
-                          const encryptedPaymentReferenceNumber = await safeEncrypt(
-
-                            item.payment_reference_number,
-
-                          );
-
-                          const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
-
-                          let encryptedRepaymentPlan;
-
-                          if (item.repayment_plan) {
-
-                            encryptedRepaymentPlan = {
-
-                              type: await safeEncrypt(item.repayment_plan?.type),
-
-                              description: await safeEncrypt(
-
-                                item.repayment_plan?.description,
-
-                              ),
-
-                            };
-
-                          }
-
-                          const encryptedSequenceNumber = await safeEncrypt(
-
-                            item.sequence_number,
-
-                          );
-
-                          let encryptedServicerAddress;
-
-                          if (item.servicer_address)
-
-                            encryptedServicerAddress = {
-
-                              city: await safeEncrypt(item.servicer_address?.city),
-
-                              country: await safeEncrypt(
-
-                                item.servicer_address?.country,
-
-                              ),
-
-                              postalCode: await safeEncrypt(
-
-                                item.servicer_address?.postal_code,
-
-                              ),
-
-                              region: await safeEncrypt(item.servicer_address?.region),
-
-                              street: await safeEncrypt(item.servicer_address?.street),
-
-                            };
-
-                          const encryptedYtdInterestPaid = await safeEncrypt(
-
-                            item.ytd_interest_paid,
-
-                          );
-
-                          const encryptedYtdPrincipalPaid = await safeEncrypt(
-
-                            item.ytd_principal_paid,
-
-                          );
-
-            
-
-                          const liability = new Liability({
-
-                            liabilityType: key,
-
-                            accountId: item.account_id,
-
-                            accountNumber: encryptedAccountNumber,
-
-                            lastPaymentAmount: encryptedLastPaymentAmount,
-
-                            lastPaymentDate: item.last_payment_date,
-
-                            nextPaymentDueDate: item.next_payment_due_date,
-
-                            minimumPaymentAmount: encryptedMinimumPaymentAmount,
-
-                            lastStatementBalance: encryptedLastStatementBalance,
-
-                            lastStatementIssueDate: item.last_statement_issue_date,
-
-                            isOverdue: item.is_overdue,
-
-            
-
-                            // Credit-specific fields
-
-                            aprs: item.aprs,
-
-            
-
-                            // Mortgage-specific fields
-
-                            loanTypeDescription: encryptedLoanTypeDescription,
-
-                            loanTerm: encryptedLoanTerm,
-
-                            maturityDate: item.maturity_date,
-
-                            nextMonthlyPayment: encryptedNextMonthlyPayment,
-
-                            originationDate: item.origination_date,
-
-                            originationPrincipalAmount:
-
-                              encryptedOriginationPrincipalAmount,
-
-                            pastDueAmount: encryptedPastDueAmount,
-
-                            escrowBalance: encryptedEscrowBalance,
-
-                            hasPmi: encryptedHasPmi,
-
-                            hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
-
-                            propertyAddress: encryptedPropertyAddress,
-
-                            interestRate: item.interest_rate,
-
-            
-
-                            // Student-specific fields
-
-                            disbursementDates: item.disbursement_dates,
-
-                            expectedPayoffDate: item.expected_payoff_date,
-
-                            guarantor: encryptedGuarantor,
-
-                            interestRatePercentage: item.interest_rate_percentage,
-
-                            loanName: encryptedLoanName,
-
-            
-
-                            // Loan status
-
-                            loanStatus: item.loan_status,
-
-                            outstandingInterestAmount: encryptedOutstandingInterestAmount,
-
-                            paymentReferenceNumber: encryptedPaymentReferenceNumber,
-
-                            pslfStatus: encryptedPslfStatus,
-
-                            repaymentPlan: encryptedRepaymentPlan,
-
-                            sequenceNumber: encryptedSequenceNumber,
-
-                            servicerAddress: encryptedServicerAddress,
-
-                            ytdInterestPaid: encryptedYtdInterestPaid,
-
-                            ytdPrincipalPaid: encryptedYtdPrincipalPaid,
-
-                          });
-
-            
-
-                          await liability.save();
-
-                        }
-
-                      }
-
+                    const encryptedHasPrepaymentPenalty = await safeEncrypt(
+                      item.has_prepayment_penalty,
+                    );
+                    let encryptedPropertyAddress;
+                    if (item.property_address) {
+                      encryptedPropertyAddress = {
+                        city: await safeEncrypt(item.property_address?.city),
+                        country: await safeEncrypt(item.property_address?.country),
+                        postalCode: await safeEncrypt(
+                          item.property_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.property_address?.region),
+                        street: await safeEncrypt(item.property_address?.street),
+                      };
                     }
-
-                  }
-
-            const internalTransfers =
-
-              await plaidService.detectInternalTransfers(transactions);
-
       
-
-            for (const internalTransaction of internalTransfers) {
-
-              const transactionId = internalTransaction.transactionId;
-
-              const transactionRef = internalTransaction.transactionRef;
-
-              const transaction = await Transaction.findOne({
-
-                plaidTransactionId: transactionId,
-
-              });
-
-              if (!transaction) continue;
-
-              transaction.isInternal = true;
-
-              transaction.internalReference = transactionRef;
-
-              await transaction.save();
-
-            }
-
+                    const encryptedGuarantor = await safeEncrypt(item.guarantor);
       
-
-            const bulkUpdateOps = [];
-
-            for (const accountId in transactionsByAccount) {
-
-              bulkUpdateOps.push({
-
-                updateOne: {
-
-                  filter: { plaid_account_id: accountId },
-
-                  update: {
-
-                    $push: { transactions: { $each: transactionsByAccount[accountId] } },
-
-                    $set: { nextCursor: nextCursor }
-
+                    const encryptedLoanName = await safeEncrypt(item.loan_name);
+      
+                    const encryptedOutstandingInterestAmount = await safeEncrypt(
+                      item.outstanding_interest_amount,
+                    );
+                    const encryptedPaymentReferenceNumber = await safeEncrypt(
+                      item.payment_reference_number,
+                    );
+                    const encryptedPslfStatus = await safeEncrypt(item.pslf_status);
+                    let encryptedRepaymentPlan;
+                    if (item.repayment_plan) {
+                      encryptedRepaymentPlan = {
+                        type: await safeEncrypt(item.repayment_plan?.type),
+                        description: await safeEncrypt(
+                          item.repayment_plan?.description,
+                        ),
+                      };
+                    }
+                    const encryptedSequenceNumber = await safeEncrypt(
+                      item.sequence_number,
+                    );
+                    let encryptedServicerAddress;
+                    if (item.servicer_address)
+                      encryptedServicerAddress = {
+                        city: await safeEncrypt(item.servicer_address?.city),
+                        country: await safeEncrypt(
+                          item.servicer_address?.country,
+                        ),
+                        postalCode: await safeEncrypt(
+                          item.servicer_address?.postal_code,
+                        ),
+                        region: await safeEncrypt(item.servicer_address?.region),
+                        street: await safeEncrypt(item.servicer_address?.street),
+                      };
+                    const encryptedYtdInterestPaid = await safeEncrypt(
+                      item.ytd_interest_paid,
+                    );
+                    const encryptedYtdPrincipalPaid = await safeEncrypt(
+                      item.ytd_principal_paid,
+                    );
+      
+                    const liability = new Liability({
+                      liabilityType: key,
+                      accountId: item.account_id,
+                      accountNumber: encryptedAccountNumber,
+                      lastPaymentAmount: encryptedLastPaymentAmount,
+                      lastPaymentDate: item.last_payment_date,
+                      nextPaymentDueDate: item.next_payment_due_date,
+                      minimumPaymentAmount: encryptedMinimumPaymentAmount,
+                      lastStatementBalance: encryptedLastStatementBalance,
+                      lastStatementIssueDate: item.last_statement_issue_date,
+                      isOverdue: item.is_overdue,
+      
+                      // Credit-specific fields
+                      aprs: item.aprs,
+      
+                      // Mortgage-specific fields
+                      loanTypeDescription: encryptedLoanTypeDescription,
+                      loanTerm: encryptedLoanTerm,
+                      maturityDate: item.maturity_date,
+                      nextMonthlyPayment: encryptedNextMonthlyPayment,
+                      originationDate: item.origination_date,
+                      originationPrincipalAmount:
+                        encryptedOriginationPrincipalAmount,
+                      pastDueAmount: encryptedPastDueAmount,
+                      escrowBalance: encryptedEscrowBalance,
+                      hasPmi: encryptedHasPmi,
+                      hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+                      propertyAddress: encryptedPropertyAddress,
+                      interestRate: item.interest_rate,
+      
+                      // Student-specific fields
+                      disbursementDates: item.disbursement_dates,
+                      expectedPayoffDate: item.expected_payoff_date,
+                      guarantor: encryptedGuarantor,
+                      interestRatePercentage: item.interest_rate_percentage,
+                      loanName: encryptedLoanName,
+      
+                      // Loan status
+                      loanStatus: item.loan_status,
+                      outstandingInterestAmount: encryptedOutstandingInterestAmount,
+                      paymentReferenceNumber: encryptedPaymentReferenceNumber,
+                      pslfStatus: encryptedPslfStatus,
+                      repaymentPlan: encryptedRepaymentPlan,
+                      sequenceNumber: encryptedSequenceNumber,
+                      servicerAddress: encryptedServicerAddress,
+                      ytdInterestPaid: encryptedYtdInterestPaid,
+                      ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+                    });
+      
+                    await liability.save();
                   }
-
                 }
-
-              });
-
+              }
             }
+      const internalTransfers =
+        await plaidService.detectInternalTransfers(transactions);
 
-            if (bulkUpdateOps.length > 0) {
+      for (const internalTransaction of internalTransfers) {
+        const transactionId = internalTransaction.transactionId;
+        const transactionRef = internalTransaction.transactionRef;
+        const transaction = await Transaction.findOne({
+          plaidTransactionId: transactionId,
+        });
+        if (!transaction) continue;
+        transaction.isInternal = true;
+        transaction.internalReference = transactionRef;
+        await transaction.save();
+      }
 
-              await PlaidAccount.bulkWrite(bulkUpdateOps);
-
-            }
+      for (const accountId in transactionsByAccount) {
+        const account = await PlaidAccount.findOne({
+          plaid_account_id: accountId,
+        });
+        if (!account) continue;
+        account.transactions.push(...transactionsByAccount[accountId]);
+        account.nextCursor = nextCursor;
+        await account.save();
+      }
       structuredLogger.logSuccess("add_account_completed", {
         user_id: userId,
         institution_id: institutionId,
@@ -1211,7 +663,11 @@ const deletePlaidAccount = async (accountId, uid) => {
       throw error;
     }
     // Otherwise, it's an ITEM_NOT_FOUND error. Log it for info and proceed with local cleanup.
-    console.log(`[INFO] Plaid item with itemId: ${itemId} was already removed. Proceeding with local cleanup.`);
+    structuredLogger.logInfo("item_already_removed_from_plaid", {
+      item_id: itemId,
+      user_id: uid,
+      original_error: error.message,
+    });
   }
 
   // 3. Find all local accounts associated with the itemId.
