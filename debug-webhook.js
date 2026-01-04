@@ -8,7 +8,7 @@ dotenv.config();
 
 const runSimulation = async (mockEvent) => {
   try {
-    if (!mockEvent.item_id || mockEvent.item_id.includes('your_item_id')) {
+    if (!mockEvent.item_id || mockEvent.item_id.includes('your_')) {
       console.warn(`
 --- SKIPPING simulation for ${mockEvent.webhook_type}: Please replace the placeholder item_id. ---
 `);
@@ -51,6 +51,14 @@ async function main() {
   };
   await runSimulation(transactionsEvent);
   
+  // Test Case 3: Investment Transactions Update
+  const investmentsEvent = {
+    webhook_type: 'INVESTMENTS_TRANSACTIONS',
+    webhook_code: 'DEFAULT_UPDATE',
+    item_id: 'your_investments_item_id', // <<< REPLACE with an item that has investment products
+  };
+  await runSimulation(investmentsEvent);
+
   await disconnectDB();
   console.log("Database disconnected.");
 }
