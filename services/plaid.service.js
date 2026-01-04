@@ -618,11 +618,7 @@ const updateTransactions = async (item) => {
   // Wait and retry for new items that may not have been saved to the DB yet.
   while (accounts.length === 0 && attempts < 5) {
     attempts++;
-    structuredLogger.logInfo('update_transactions_retry', {
-      item_id: item,
-      attempt: attempts,
-      message: "No accounts found, retrying in 2 seconds...",
-    });
+    console.log(`[update_transactions_retry] Item: ${item}, Attempt: ${attempts}, Message: No accounts found, retrying in 2 seconds...`);
     await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2 seconds
     accounts = await PlaidAccount.find({ itemId: item });
   }
