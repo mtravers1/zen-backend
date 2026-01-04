@@ -612,16 +612,7 @@ const updateTransactions = async (item) => {
     throw new Error(`Access token could not be retrieved for item ID: ${item}`);
   }
 
-  let accounts = await PlaidAccount.find({ itemId: item });
-  let attempts = 0;
-
-  // Wait and retry for new items that may not have been saved to the DB yet.
-  while (accounts.length === 0 && attempts < 5) {
-    attempts++;
-    console.log(`[update_transactions_retry] Item: ${item}, Attempt: ${attempts}, Message: No accounts found, retrying in 2 seconds...`);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2 seconds
-    accounts = await PlaidAccount.find({ itemId: item });
-  }
+  const accounts = await PlaidAccount.find({ itemId: item });
 
   if (!accounts.length) {
     //TODO: remove item
@@ -892,19 +883,76 @@ const updateInvestmentTransactions = async (item) => {
       structuredLogger.logOperationStart("update_investment_transactions", {
         item_id: item,
       });
+
       const accessInfo = await getNewestAccessToken({ itemId: item });
       if (!accessInfo) return;
       const userId = accessInfo.userId;
       const user = await User.findById(userId);
-  if (!user) {
-    throw new Error(`User not found for user ID: ${userId}`);
-  }
+      if (!user) {
+        throw new Error(`User not found for user ID: ${userId}`);
+      }
       const uid = user?.authUid;
       const accessToken = await getAccessTokenFromItemId(item, uid);
 
       if (!accessToken) {
         return;
       }
+
+      // First, ensure all accounts for the item are present in our DB.
+      const plaidAccountsData = await getAccountsWithAccessToken(accessToken);
+      const allPlaidAccounts = plaidAccountsData.accounts;
+      const institutionId = plaidAccountsData.item.institution_id;
+      const institutionName = plaidAccountsData.item.institution_name;
+
+      const existingDbAccounts = await PlaidAccount.find({ itemId: item });
+      const existingPlaidAccountIds = new Set(existingDbAccounts.map(a => a.plaid_account_id));
+
+      const newPlaidAccounts = allPlaidAccounts.filter(
+        plaidAcc => !existingPlaidAccountIds.has(plaidAcc.account_id)
+      );
+
+      if (newPlaidAccounts.length > 0) {
+        const dekForNewAccounts = await getUserDek(uid);
+        const safeEncryptForNewAccounts = createSafeEncrypt(uid, dekForNewAccounts);
+        for (const account of newPlaidAccounts) {
+            const hashAccountName = hashValue(account.name);
+            const hashAccountInstitutionId = hashValue(institutionId);
+            const hashAccountMask = hashValue(account.mask);
+
+            const encryptedMask = await safeEncryptForNewAccounts(account.mask, { account_id: account.account_id, field: "mask" });
+            const encryptedToken = await safeEncryptForNewAccounts(accessToken, { account_id: account.account_id, field: "accessToken" });
+            const encryptedName = await safeEncryptForNewAccounts(account.name, { account_id: account.account_id, field: "name" });
+            const encryptedOfficialName = account.official_name ? await safeEncryptForNewAccounts(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
+            const encryptedType = await safeEncryptForNewAccounts(account.type, { account_id: account.account_id, field: "type" });
+            const encryptedSubtype = await safeEncryptForNewAccounts(account.subtype, { account_id: account.account_id, field: "subtype" });
+            const encryptedInstitutionName = await safeEncryptForNewAccounts(institutionName, { account_id: account.account_id, field: "institutionName" });
+            const encryptedCurrentBalance = account.balances?.current ? await safeEncryptForNewAccounts(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
+            const encryptedAvailableBalance = account.balances?.available ? await safeEncryptForNewAccounts(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
+
+            const newAccountDoc = new PlaidAccount({
+              owner_id: userId,
+              itemId: item,
+              accessToken: encryptedToken,
+              owner_type: user.role,
+              plaid_account_id: account.account_id,
+              account_name: encryptedName,
+              account_official_name: encryptedOfficialName,
+              account_type: encryptedType,
+              account_subtype: encryptedSubtype,
+              institution_name: encryptedInstitutionName,
+              institution_id: institutionId,
+              currentBalance: encryptedCurrentBalance,
+              availableBalance: encryptedAvailableBalance,
+              currency: account.balances.iso_currency_code,
+              mask: encryptedMask,
+              hashAccountName,
+              hashAccountInstitutionId,
+              hashAccountMask,
+            });
+            await newAccountDoc.save();
+        }
+      }
+
       const accounts = await PlaidAccount.find({ itemId: item });
 
       const dek = await getUserDek(uid);
