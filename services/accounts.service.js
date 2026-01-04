@@ -663,11 +663,7 @@ const deletePlaidAccount = async (accountId, uid) => {
       throw error;
     }
     // Otherwise, it's an ITEM_NOT_FOUND error. Log it for info and proceed with local cleanup.
-    structuredLogger.logInfo("item_already_removed_from_plaid", {
-      item_id: itemId,
-      user_id: uid,
-      original_error: error.message,
-    });
+    console.log(`[INFO] Plaid item with itemId: ${itemId} was already removed. Proceeding with local cleanup.`);
   }
 
   // 3. Find all local accounts associated with the itemId.
