@@ -5,6 +5,7 @@ import Transaction from "../database/models/Transaction.js";
 import Liability from "../database/models/Liability.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import accountsService from "./accounts.service.js";
+import withRetry from "../lib/axiosRateLimit.js";
 import {
   decryptValue,
   encryptValue,
@@ -519,10 +520,10 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 
   try {
     const plaidClient = getPlaidClient();
-    newAccountsBalances = await plaidClient.accountsGet({
+    newAccountsBalances = await withRetry(() => plaidClient.accountsGet({
       access_token: accessToken,
       // min_last_updated_datetime: new Date().toISOString(),
-    });
+    }));
   } catch (error) {
     console.error("Error fetching account balances:", error);
     throw error;
@@ -668,11 +669,11 @@ const updateTransactions = async (item) => {
     }
     try {
       const plaidClient = getPlaidClient();
-      const response = await plaidClient.transactionsSync({
+      const response = await withRetry(() => plaidClient.transactionsSync({
         access_token: accessToken,
         cursor: cursor,
         count: 500,
-      });
+      }));
 
       const transactions = response.data.added || [];
       const modifiedTransactions = response.data.modified || [];

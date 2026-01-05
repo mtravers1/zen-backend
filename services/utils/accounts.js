@@ -3,6 +3,7 @@ import plaidService from "../plaid.service.js";
 import { getUserDek } from "../../database/encryption.js";
 import { createSafeDecrypt } from "../../lib/encryptionHelper.js";
 import User from "../../database/models/User.js";
+import * as Sentry from "@sentry/node";
 
 export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
   const weeklySummary = [];
@@ -142,7 +143,7 @@ export const getNewestAccessToken = async (find) => {
               // If invalidate succeeds, we should mark as expired
               shouldMarkAsExpired = true;
             } catch (plaidError) {
-              if (plaidError.response?.data?.error_code === 'ITEM_NOT_FOUND') {
+              if (plaidError.response?.data?.error_code === 'ITEM_NOT_FOUND' || plaidError.response?.data?.error_code === 'INVALID_ACCESS_TOKEN') {
                 // Already invalid, so we can safely mark as expired
                 shouldMarkAsExpired = true;
               } else {
