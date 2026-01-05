@@ -75,6 +75,7 @@ app.use((req, res, next) => {
   // Define paths that should be excluded from authentication
   const excludedPaths = [
     "/api/auth/signup",
+    "/robots.txt",
     "/api/auth/signin",
     "/api/auth/signin-oauth",
     "/api/auth/signup-oauth",

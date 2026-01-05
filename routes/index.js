@@ -19,8 +19,7 @@ import securityRouter from "./security.router.js";
 const router = Router();
 
 // Load different routes
-
-router.use("/_info", infoRouter);
+router.use("/", infoRouter);
 router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);
 router.use("/webhook", webhookRouter);
