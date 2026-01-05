@@ -66,6 +66,9 @@ app.use(cookieParser());
 // Apply structured logging first to ensure all requests have an ID.
 app.use(structuredLoggingMiddleware);
 
+// Apply cleanup middleware periodically to remove old request contexts
+app.use(cleanupMiddleware);
+
 // authentication
 app.use((req, res, next) => {
   // Define paths that should be excluded from authentication
