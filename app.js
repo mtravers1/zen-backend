@@ -31,6 +31,7 @@ Sentry.init({
   // Enable logs to be sent to Sentry
   enableLogs: true,
   release: process.env.SENTRY_RELEASE,
+  environment: process.env.ENVIRONMENT,
   tracesSampleRate: 1.0,
   registerEsmLoaderHooks: false,
 });
