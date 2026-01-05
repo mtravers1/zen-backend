@@ -141,14 +141,14 @@ export const structuredLoggingMiddleware = (req, res, next) => {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   req.requestId = requestId;
 
-  console.log(`\n📝 [REQUEST ${requestId}] ====== NEW REQUEST ======`);
-  console.log(`[REQUEST ${requestId}] Timestamp: ${new Date().toISOString()}`);
-  console.log(`[REQUEST ${requestId}] Method: ${req.method}`);
-  console.log(`[REQUEST ${requestId}] URL: ${req.url}`);
-  console.log(`[REQUEST ${requestId}] IP: ${req.ip}`);
-  console.log(
-    `[REQUEST ${requestId}] User Agent: ${req.headers["user-agent"]}`,
-  );
+  // console.log(`\n📝 [REQUEST ${requestId}] ====== NEW REQUEST ======`);
+  // console.log(`[REQUEST ${requestId}] Timestamp: ${new Date().toISOString()}`);
+  // console.log(`[REQUEST ${requestId}] Method: ${req.method}`);
+  // console.log(`[REQUEST ${requestId}] URL: ${req.url}`);
+  // console.log(`[REQUEST ${requestId}] IP: ${req.ip}`);
+  // console.log(
+  //   `[REQUEST ${requestId}] User Agent: ${req.headers["user-agent"]}`,
+  // );
 
 
 
@@ -165,20 +165,20 @@ export const structuredLoggingMiddleware = (req, res, next) => {
   // Capture response details
   const originalSend = res.send;
   res.send = function (data) {
-    console.log(`[REQUEST ${requestId}] ====== RESPONSE ======`);
-    console.log(`[REQUEST ${requestId}] Status Code: ${res.statusCode}`);
-    console.log(`[REQUEST ${requestId}] Response Type: ${typeof data}`);
-    console.log(
-      `[REQUEST ${requestId}] Response Length: ${typeof data === "string" ? data.length : data ? JSON.stringify(data).length : 0}`,
-    );
+    // console.log(`[REQUEST ${requestId}] ====== RESPONSE ======`);
+    // console.log(`[REQUEST ${requestId}] Status Code: ${res.statusCode}`);
+    // console.log(`[REQUEST ${requestId}] Response Type: ${typeof data}`);
+    // console.log(
+    //   `[REQUEST ${requestId}] Response Length: ${typeof data === "string" ? data.length : data ? JSON.stringify(data).length : 0}`,
+    // );
 
-    if (typeof data === "string" && data.length < 200) {
-      console.log(`[REQUEST ${requestId}] Response Preview:`, data);
-    } else if (typeof data === "object" && data !== null) {
-      console.log(`[REQUEST ${requestId}] Response Keys:`, Object.keys(data));
-    }
+    // if (typeof data === "string" && data.length < 200) {
+    //   console.log(`[REQUEST ${requestId}] Response Preview:`, data);
+    // } else if (typeof data === "object" && data !== null) {
+    //   console.log(`[REQUEST ${requestId}] Response Keys:`, Object.keys(data));
+    // }
 
-    console.log(`[REQUEST ${requestId}] ====== REQUEST COMPLETE ======\n`);
+    // console.log(`[REQUEST ${requestId}] ====== REQUEST COMPLETE ======\n`);
 
     return originalSend.call(this, data);
   };

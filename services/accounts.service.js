@@ -629,7 +629,7 @@ const deletePlaidAccount = async (accountId, uid) => {
   // 1. Find the target account to get the itemId.
   const targetAccount = await PlaidAccount.findById(accountId);
   if (!targetAccount) {
-    console.log(`Account with _id ${accountId} not found.`);
+    // console.log(`Account with _id ${accountId} not found.`);
     // If account is already gone, there's nothing to do.
     return { success: true, message: "Account already deleted." };
   }
@@ -663,7 +663,7 @@ const deletePlaidAccount = async (accountId, uid) => {
       throw error;
     }
     // Otherwise, it's an ITEM_NOT_FOUND error. Log it for info and proceed with local cleanup.
-    console.log(`[INFO] Plaid item with itemId: ${itemId} was already removed. Proceeding with local cleanup.`);
+    // console.log(`[INFO] Plaid item with itemId: ${itemId} was already removed. Proceeding with local cleanup.`);
   }
 
   // 3. Find all local accounts associated with the itemId.
@@ -712,7 +712,7 @@ const getAccounts = async (profile, uid) => {
     async () => {
                 const dek = await getUserDek(uid);
                 const dekHash = crypto.createHash('sha256').update(dek[0]).digest('hex');
-                console.error(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
+                // console.error(`[DEK_HASH] getAccounts for user ${uid}: ${dekHash}`);
                 const safeDecrypt = createSafeDecrypt(uid, dek);
       
                 const plaidIds = profile.plaidAccounts;      const plaidAccountsResponse = await PlaidAccount.find({
@@ -1619,7 +1619,7 @@ const getTransactions = async (
             console.error(`Failed to decrypt securityId for transaction ${transaction._id}:`, e);
           }
 
-          console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
+          // console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
           let decryptedDescription = null;
           try {
             if (transaction.description) {
@@ -1753,7 +1753,7 @@ const getProfileTransactions = async (
   uid,
   pagination = { paginate: false },
 ) => {
-  console.log('[AI] getProfileTransactions called');
+  // console.log('[AI] getProfileTransactions called');
   if (!profile) {
     throw new Error("Profile not found");
   }
@@ -1793,7 +1793,7 @@ const getProfileTransactions = async (
     });
   }
 
-  console.log('[AI] getProfileTransactions finished');
+  // console.log('[AI] getProfileTransactions finished');
   return await getTransactions(plaidAccounts, uid, pagination);
 };
 
