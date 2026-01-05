@@ -614,7 +614,7 @@ const updateTransactions = async (item) => {
 
   let accounts = [];
   const maxRetries = 5;
-  const delayMs = 1000; // 1 second
+  const delayMs = 3000; // 3 seconds
 
   for (let i = 0; i < maxRetries; i++) {
     accounts = await PlaidAccount.find({ itemId: item });
