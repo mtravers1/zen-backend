@@ -475,6 +475,14 @@ const getInvestmentsHoldingsWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
+const getItemWithAccessToken = async (accessToken) => {
+  const plaidClient = getPlaidClient();
+  const response = await plaidClient.itemGet({
+    access_token: accessToken,
+  });
+  return response.data;
+};
+
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await getNewestAccessToken({ itemId });
 
@@ -1252,8 +1260,7 @@ const updateLiabilities = async (item) => {
 };
 
 const updateInvadlidAccessToken = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
-  const accounts = await PlaidAccount.find({ accessToken });
+  const accounts = await PlaidAccount.find({ itemId: item });
   for (const account of accounts) {
     account.isAccessTokenExpired = true;
     await account.save();
@@ -1632,6 +1639,7 @@ const plaidService = {
   repairAccessTokenWebhook,
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
+  getItemWithAccessToken,
   getInstitutionUpdateToken,
   invalidateAccessToken,
   resetWebhookFailures,
