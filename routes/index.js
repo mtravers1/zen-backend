@@ -1,5 +1,4 @@
 import { Router } from "express";
-import infoRouter from "./app.router.js";
 import authRouter from "./auth.router.js";
 import plaidRouter from "./plaid.router.js";
 import webhookRouter from "./webhook.router.js";
@@ -14,12 +13,10 @@ import paymentsRouter from "./payments.router.js";
 import subscriptionsRouter from "./subscriptions.router.js";
 import roleRouter from "./role.router.js";
 import usersRouter from "./users.router.js";
-import securityRouter from "./security.router.js";
 
 const router = Router();
 
 // Load different routes
-router.use("/", infoRouter);
 router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);
 router.use("/webhook", webhookRouter);
