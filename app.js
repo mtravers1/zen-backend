@@ -213,9 +213,6 @@ app.use(function (req, res, next) {
 // Structured error handling middleware
 app.use(errorHandlingMiddleware);
 
-// Add the cleanup middleware to the end of the request lifecycle
-app.use(cleanupMiddleware);
-
 // Legacy error handler (fallback)
 app.use(function (err, req, res, next) {
   const errorResponse = {
