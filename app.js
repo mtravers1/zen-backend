@@ -76,6 +76,7 @@ export async function createApp() {
 			"/robots.txt",
 			"/favicon.ico",
 			"/api/_info/version",
+			"/api/info",
 			"/api/version",
 			"/api/health",
 			"/api/auth/signup",
