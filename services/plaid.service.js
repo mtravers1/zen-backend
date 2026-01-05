@@ -612,11 +612,24 @@ const updateTransactions = async (item) => {
     throw new Error(`Access token could not be retrieved for item ID: ${item}`);
   }
 
-  const accounts = await PlaidAccount.find({ itemId: item });
+  let accounts = [];
+  const maxRetries = 5;
+  const delayMs = 1000; // 1 second
+
+  for (let i = 0; i < maxRetries; i++) {
+    accounts = await PlaidAccount.find({ itemId: item });
+    if (accounts.length > 0) {
+      break;
+    }
+    console.log(
+      `[updateTransactions] No accounts found for item ${item}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${maxRetries})`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
 
   if (!accounts.length) {
     //TODO: remove item
-    throw new Error(`No accounts found for item ID: ${item}`);
+    throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
   }
 
   const emails = user?.email;
