@@ -40,7 +40,7 @@ function getPlaidClient(
         "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID,
         "PLAID-SECRET": process.env.PLAID_SECRET,
       },
-      timeout: 30000, // 30 seconds
+      timeout: 60000, // 60 seconds
     },
   });
 
