@@ -12,7 +12,7 @@ import {
   createSafeEncrypt,
   createSafeDecrypt,
 } from "../lib/encryptionHelper.js";
-import haversine from "../../utils/haversine.js";
+import haversine from "../utils/haversine.js";
 
 const saveTrip = async ({
   user,
