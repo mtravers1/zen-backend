@@ -18,6 +18,10 @@ const accessTokenSchema = new Schema(
     institutionId: {
       type: String,
     },
+    isAccessTokenExpired: {
+      type: Boolean,
+      default: false,
+    },
     // Add status tracking for corrupted tokens
     status: {
       type: String,
