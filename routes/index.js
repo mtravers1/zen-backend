@@ -13,6 +13,7 @@ import paymentsRouter from "./payments.router.js";
 import subscriptionsRouter from "./subscriptions.router.js";
 import roleRouter from "./role.router.js";
 import usersRouter from "./users.router.js";
+import securityRouter from "./security.router.js";
 
 const router = Router();
 
