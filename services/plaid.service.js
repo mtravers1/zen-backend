@@ -1615,6 +1615,11 @@ const handleAccountsUpdate = async (event) => {
   }
 };
 
+const isItemExpired = async (itemId) => {
+  const account = await PlaidAccount.findOne({ itemId: itemId, isAccessTokenExpired: true });
+  return !!account;
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -1652,11 +1657,6 @@ const plaidService = {
   handleItemError,
   handleAccountsUpdate,
   isItemExpired,
-};
-
-const isItemExpired = async (itemId) => {
-  const account = await PlaidAccount.findOne({ itemId: itemId, isAccessTokenExpired: true });
-  return !!account;
 };
 
 export default plaidService;
