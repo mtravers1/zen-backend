@@ -1651,6 +1651,12 @@ const plaidService = {
   checkIfChaseBank,
   handleItemError,
   handleAccountsUpdate,
+  isItemExpired,
+};
+
+const isItemExpired = async (itemId) => {
+  const account = await PlaidAccount.findOne({ itemId: itemId, isAccessTokenExpired: true });
+  return !!account;
 };
 
 export default plaidService;

@@ -116,6 +116,17 @@ const webhookHandler = async (event, signature = null, body = null) => {
           if (!event.item_id) {
             throw new Error("Missing item_id for TRANSACTIONS webhook");
           }
+
+          // Check if the item is already known to be expired.
+          const isExpired = await plaidService.isItemExpired(event.item_id);
+          if (isExpired) {
+            structuredLogger.logInfo(
+              "Skipping transaction sync for item with expired token.",
+              { item_id: event.item_id }
+            );
+            return "Skipped sync for expired item.";
+          }
+
           result = await structuredLogger.withContext(
             "processTransactionSync",
             {
