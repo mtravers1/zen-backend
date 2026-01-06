@@ -51,6 +51,14 @@ const tripSchema = new mongoose.Schema(
     },
     locations: [coordinateSchema],
     totalMiles: Number,
+    mileageEditedAt: {
+      type: Date,
+      default: null,
+    },
+    mileageManuallyEdited: {
+      type: Boolean,
+      default: false,
+    },
     metadata: metadataSchema,
   },
   { timestamps: true },

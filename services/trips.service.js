@@ -12,6 +12,7 @@ import {
   createSafeEncrypt,
   createSafeDecrypt,
 } from "../lib/encryptionHelper.js";
+import haversine from "../../utils/haversine.js";
 
 const saveTrip = async ({
   user,
@@ -21,6 +22,8 @@ const saveTrip = async ({
   email,
   uid,
 }) => {
+  const calculatedTotalMiles = haversine.calculateTotalMiles(locations);
+
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
 
@@ -73,8 +76,10 @@ const saveTrip = async ({
   const trip = new Trips({
     user,
     locations: encryptedLocations,
-    totalMiles,
+    totalMiles: calculatedTotalMiles,
     metadata: encryptedMetadata,
+    mileageEditedAt: null,
+    mileageManuallyEdited: false,
   });
 
   try {
@@ -350,6 +355,14 @@ const updateTrip = async (tripId, updateData, uid) => {
         }),
       })),
     );
+    encryptedData.totalMiles = haversine.calculateTotalMiles(updateData.locations);
+    encryptedData.mileageEditedAt = null;
+    encryptedData.mileageManuallyEdited = false;
+  } else if (updateData.totalMiles !== undefined) {
+    // Manual update of totalMiles
+    encryptedData.totalMiles = updateData.totalMiles;
+    encryptedData.mileageEditedAt = new Date();
+    encryptedData.mileageManuallyEdited = true;
   }
 
   // Encrypt metadata if provided
@@ -428,13 +441,38 @@ const updateTrip = async (tripId, updateData, uid) => {
 const partialUpdateTrip = async (tripId, updateData, uid) => {
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
 
   const encryptedData = {};
 
   // Encrypt locations if provided
   if (updateData.locations) {
+    const existingTrip = await Trips.findById(tripId).lean();
+    const decryptedLocations = await Promise.all(
+      existingTrip.locations.map(async (loc) => ({
+        latitude: loc.latitude
+          ? parseFloat(
+              await safeDecrypt(loc.latitude, {
+                trip_id: tripId,
+                field: "latitude",
+              }),
+            )
+          : null,
+        longitude: loc.longitude
+          ? parseFloat(
+              await safeDecrypt(loc.longitude, {
+                trip_id: tripId,
+                field: "longitude",
+              }),
+            )
+          : null,
+      })),
+    );
+
+    const newLocations = decryptedLocations.concat(updateData.locations);
+
     encryptedData.locations = await Promise.all(
-      updateData.locations.map(async (loc) => ({
+      newLocations.map(async (loc) => ({
         latitude: await safeEncrypt(loc.latitude.toString(), {
           trip_id: tripId,
           field: "latitude",
@@ -445,11 +483,14 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
         }),
       })),
     );
-  }
 
-  // Update totalMiles if provided
-  if (updateData.totalMiles !== undefined) {
+    encryptedData.totalMiles = haversine.calculateTotalMiles(newLocations);
+    encryptedData.mileageEditedAt = null;
+    encryptedData.mileageManuallyEdited = false;
+  } else if (updateData.totalMiles !== undefined) {
     encryptedData.totalMiles = updateData.totalMiles;
+    encryptedData.mileageEditedAt = new Date();
+    encryptedData.mileageManuallyEdited = true;
   }
 
   // Encrypt metadata if provided
