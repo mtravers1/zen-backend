@@ -17,7 +17,9 @@ import {
 	errorHandlingMiddleware,
 	cleanupMiddleware,
 } from "./middlewares/structuredLogging.js";
-import routeValidationMiddleware from "./middlewares/routeValidation.js";
+import routeValidationMiddleware, {
+	recordInvalidRequest,
+} from "./middlewares/routeValidation.js";
 import connectDB from "./database/database.js";
 import router from "./routes/index.js";
 import appRouter from "./routes/app.router.js";
@@ -202,6 +204,8 @@ export async function createApp() {
 
 	// catch 404 and forward to error handler
 	app.use(function (req, res, next) {
+		// Record this invalid request for security stats and automatic blacklisting
+		recordInvalidRequest(req.ip || req.connection.remoteAddress);
 		next(createError(404));
 	});
 
