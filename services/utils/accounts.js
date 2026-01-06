@@ -144,6 +144,7 @@ export const getNewestAccessToken = async (find) => {
               shouldMarkAsExpired = true;
             } catch (plaidError) {
               if (plaidError.response?.data?.error_code === 'ITEM_NOT_FOUND' || plaidError.response?.data?.error_code === 'INVALID_ACCESS_TOKEN') {
+                console.log(`[INFO] Old access token for itemID ${token.itemId} is already invalid (${plaidError.response?.data?.error_code}). Marking as expired.`);
                 // Already invalid, so we can safely mark as expired
                 shouldMarkAsExpired = true;
               } else {
