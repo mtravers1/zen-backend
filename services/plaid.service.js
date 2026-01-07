@@ -1311,10 +1311,10 @@ const repairAccessTokenWebhook = async (item) => {
   return accounts;
 };
 
-const repairAccessToken = async (accountId, email) => {
+const repairAccessToken = async (accountId, uid) => {
   return await structuredLogger.withContext(
     "repair_access_token",
-    { accountId, email },
+    { accountId, uid },
     async () => {
       try {
         const account = await PlaidAccount.findById(accountId);
@@ -1325,13 +1325,14 @@ const repairAccessToken = async (accountId, email) => {
           });
           return;
         }
-        const user = await User.findOne({ "email.email": email.toLowerCase() });
+
+        const user = await User.findOne({ authUid: uid });
         if (!user) {
-          throw new Error(`User not found for email: ${email}`);
+          throw new Error(`User not found for uid: ${uid}`);
         }
 
-        const dek = await getUserDek(user.authUid);
-        const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+        const dek = await getUserDek(uid);
+        const safeDecrypt = createSafeDecrypt(uid, dek);
         const accessToken = await safeDecrypt(account.accessToken, {
           account_id: accountId,
           field: "accessToken",
@@ -1349,31 +1350,39 @@ const repairAccessToken = async (accountId, email) => {
         }
 
         const accounts = await PlaidAccount.find({
-          accessToken,
+          accessToken: account.accessToken,
         });
-        for (const account of accounts) {
-          accountIds.push(account.plaid_account_id);
+        for (const acc of accounts) {
+          accountIds.push(acc.plaid_account_id);
         }
 
         const plaidSet = new Set(plaidIds);
         const removedAccounts = accountIds.filter((id) => !plaidSet.has(id));
         const unchangedAccounts = accountIds.filter((id) => plaidSet.has(id));
 
-        for (const accountId of unchangedAccounts) {
+        for (const accId of unchangedAccounts) {
           const plaidAccount = await PlaidAccount.findOne({
-            plaid_account_id: accountId,
+            plaid_account_id: accId,
           });
           plaidAccount.isAccessTokenExpired = false;
           await plaidAccount.save();
         }
 
-        for (const accountId of removedAccounts) {
-          await accountsService.deletePlaidAccountByEmail(accountId, email);
+        for (const accId of removedAccounts) {
+          const primaryEmail = user.email.find(e => e.isPrimary)?.email;
+          if (primaryEmail) {
+            await accountsService.deletePlaidAccountByEmail(accId, primaryEmail);
+          }
         }
 
+        const primaryEmail = user.email.find(e => e.isPrimary)?.email;
+        if (!primaryEmail) {
+            throw new Error(`Primary email not found for user: ${uid}`);
+        }
         const resAddAcount = await accountsService.addAccount(
           accessToken,
-          email,
+          primaryEmail,
+          uid
         );
 
         structuredLogger.logSuccess("repair_access_token_completed", {
@@ -1387,7 +1396,7 @@ const repairAccessToken = async (accountId, email) => {
         structuredLogger.logErrorBlock(error, {
           operation: "repair_access_token",
           accountId,
-          email,
+          uid,
         });
         throw error;
       }
