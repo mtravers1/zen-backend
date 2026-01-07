@@ -13,7 +13,7 @@ import {
   DekMigrationInProgressError,
 } from "../database/encryption.js";
 import structuredLogger from "../lib/structuredLogger.js";
-import { getNewestAccessToken } from "./utils/accounts.js";
+import * as Sentry from "@sentry/node";
 
 //TODO: change to production
 const plaidClientId = process.env.PLAID_CLIENT_ID;
@@ -35,6 +35,85 @@ import {
  * It is not a decryption token.
  * @returns {Promise<string>} The link token.
  */
+const getNewestAccessToken = async (find) => {
+  const accessTokens = await AccessToken.find({
+    ...find,
+    isAccessTokenExpired: { $ne: true },
+  }).sort({ createdAt: -1 });
+
+  if (accessTokens.length > 1) {
+    console.warn("Multiple active access tokens found for query: ", find);
+    console.warn(
+      "The newest token will be used, and older ones will be invalidated and marked as expired.",
+    );
+
+    const newestToken = accessTokens[0];
+    const olderTokens = accessTokens.slice(1);
+
+    for (const token of olderTokens) {
+      let shouldMarkAsExpired = false;
+      try {
+        const user = await User.findById(token.userId);
+        if (user) {
+          const dek = await getUserDek(user.authUid);
+          const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+          const decryptedToken = await safeDecrypt(token.accessToken, {
+            item_id: token.itemId,
+            field: "accessToken",
+          });
+
+          if (decryptedToken) {
+            try {
+              await invalidateAccessToken(decryptedToken);
+              // If invalidate succeeds, we should mark as expired
+              shouldMarkAsExpired = true;
+            } catch (plaidError) {
+              if (
+                plaidError.response?.data?.error_code === "ITEM_NOT_FOUND" ||
+                plaidError.response?.data?.error_code === "INVALID_ACCESS_TOKEN"
+              ) {
+                console.log(
+                  `[INFO] Old access token for itemID ${token.itemId} is already invalid (${plaidError.response?.data?.error_code}). Marking as expired.`,
+                );
+                // Already invalid, so we can safely mark as expired
+                shouldMarkAsExpired = true;
+              } else {
+                // Unexpected error from Plaid, log it for investigation
+                Sentry.captureException(plaidError, {
+                  level: "error",
+                  extra: {
+                    message: "Unexpected error during Plaid token invalidation",
+                    tokenId: token._id,
+                    itemId: token.itemId,
+                  },
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to process old access token ${token._id}:`, error);
+        Sentry.captureException(error, {
+          level: "error",
+          extra: {
+            message: "General failure during old token processing",
+            tokenId: token._id,
+          },
+        });
+      }
+
+      if (shouldMarkAsExpired) {
+        token.isAccessTokenExpired = true;
+        await token.save();
+      }
+    }
+
+    return newestToken;
+  }
+
+  return accessTokens[0];
+};
+
 const createLinkToken = async (
   email,
   isAndroid,
@@ -846,12 +925,45 @@ const updateTransactions = async (item) => {
       if (modifiedTransactions.length > 0) {
         const modifiedBulkOps = [];
         for (const transaction of modifiedTransactions) {
-            const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount", });
-            modifiedBulkOps.push({ updateOne: { filter: { plaidTransactionId: transaction.transaction_id }, update: { $set: { amount: encryptedAmount, transactionDate: new Date(`${transaction.date}T12:00:00Z`), tags: transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags", }) : null, pending_transaction_id: transaction.pending_transaction_id, pending: transaction.pending, }, }, }, });
+          const encryptedAmount = await safeEncrypt(transaction.amount, {
+            transaction_id: transaction.transaction_id,
+            field: "amount",
+          });
+
+          const updatePayload = {
+            amount: encryptedAmount,
+            tags: transaction.category
+              ? await safeEncrypt(transaction.category, {
+                  transaction_id: transaction.transaction_id,
+                  field: "tags",
+                })
+              : null,
+            pending_transaction_id: transaction.pending_transaction_id,
+            pending: transaction.pending,
+          };
+
+          // Only update the date if Plaid provides one. Prefer `date` but fallback to `authorized_date`.
+          const dateToUse = transaction.date || transaction.authorized_date;
+          if (dateToUse) {
+            updatePayload.transactionDate = new Date(`${dateToUse}T12:00:00Z`);
+          }
+
+          modifiedBulkOps.push({
+            updateOne: {
+              filter: { plaidTransactionId: transaction.transaction_id },
+              update: { $set: updatePayload },
+            },
+          });
         }
-        structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${modifiedBulkOps.length} modified transactions.`, { itemId: item });
+        structuredLogger.logInfo(
+          `[SYNC_TRACE] Performing bulkWrite for ${modifiedBulkOps.length} modified transactions.`,
+          { itemId: item },
+        );
         await Transaction.bulkWrite(modifiedBulkOps);
-        structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for modified transactions successful.`, { itemId: item });
+        structuredLogger.logInfo(
+          `[SYNC_TRACE] bulkWrite for modified transactions successful.`,
+          { itemId: item },
+        );
       }
 
       const bulkUpdateAccountsOps = [];
@@ -1715,8 +1827,19 @@ const handleAccountsUpdate = async (event) => {
 };
 
 const isItemExpired = async (itemId) => {
-  const account = await PlaidAccount.findOne({ itemId: itemId, isAccessTokenExpired: true });
-  return !!account;
+  // First, check if there's any PlaidAccount marked as expired. This is a fast check.
+  const expiredAccount = await PlaidAccount.findOne({
+    itemId: itemId,
+    isAccessTokenExpired: true,
+  });
+  if (expiredAccount) {
+    return true;
+  }
+
+  // If no account is explicitly marked, check the state of the AccessToken.
+  // An item is also considered expired if it has NO valid access tokens.
+  const validToken = await getNewestAccessToken({ itemId: itemId });
+  return !validToken;
 };
 
 const plaidService = {
@@ -1756,6 +1879,7 @@ const plaidService = {
   handleItemError,
   handleAccountsUpdate,
   isItemExpired,
+  getNewestAccessToken,
 };
 
 export default plaidService;
