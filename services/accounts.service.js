@@ -722,6 +722,15 @@ const getAccounts = async (profile, uid) => {
         .select("-accessToken")
         .exec();
 
+      const itemIds = [...new Set(plaidAccountsResponse.map(acc => acc.itemId))];
+
+      // Find all AccessTokens that are expired for those items
+      const expiredTokens = await AccessToken.find({
+        itemId: { $in: itemIds },
+        isAccessTokenExpired: true
+      });
+      const expiredItemIds = new Set(expiredTokens.map(token => token.itemId));
+
       let plaidAccounts = [];
 
       for (const plaidAccount of plaidAccountsResponse) {
@@ -760,8 +769,11 @@ const getAccounts = async (profile, uid) => {
           { account_id: plaidAccount._id, field: "institution_name" },
         );
 
+        const isExpired = plaidAccount.isAccessTokenExpired || expiredItemIds.has(plaidAccount.itemId);
+
         plaidAccounts.push({
           ...plaidAccount,
+          isAccessTokenExpired: isExpired,
           currentBalance: decryptedCurrentBalance,
           availableBalance: decryptedAvailableBalance,
           account_type: decryptedAccountType,
@@ -836,6 +848,15 @@ const getAllUserAccounts = async (email, uid) => {
 
       let accounts = [];
 
+      const itemIds = [...new Set(accountsResponse.map(acc => acc.itemId))];
+
+      // Find all AccessTokens that are expired for those items
+      const expiredTokens = await AccessToken.find({
+        itemId: { $in: itemIds },
+        isAccessTokenExpired: true
+      });
+      const expiredItemIds = new Set(expiredTokens.map(token => token.itemId));
+
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
 
@@ -875,8 +896,12 @@ const getAllUserAccounts = async (email, uid) => {
           { account_id: plaidAccount._id, field: "institution_name" },
         );
 
+        // Determine the true expired status
+        const isExpired = plaidAccount.isAccessTokenExpired || expiredItemIds.has(plaidAccount.itemId);
+
         accounts.push({
           ...plaidAccount._doc,
+          isAccessTokenExpired: isExpired, // Use the corrected status
           currentBalance: decryptedCurrentBalance,
           availableBalance: decryptedAvailableBalance,
           account_type: decryptedAccountType,
@@ -2114,7 +2139,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   if (!account) {
     throw new Error("Account not found");
   }
-  const deac = await getDecryptedAccount(account, dek, uid);
+  const deac = await getDecryptedAccount(account, dek, uid, true);
 
   const access_token = await getNewestAccessToken({
     userId: user._id,
@@ -2384,13 +2409,22 @@ async function getDecryptedLiabilitiesLoan(liabilities, dek, uid) {
  * @returns {Object} An account object containing the original metadata and decrypted sensitive fields (e.g., `accessToken`, `account_name`, `account_official_name`, `account_type`, `account_subtype`, `institution_name`, `currentBalance`, `availableBalance`, `mask`) when present.
  */
 
-async function getDecryptedAccount(account, dek, uid) {
+async function getDecryptedAccount(account, dek, uid, crossReferenceExpired = false) {
   const safeDecrypt = createSafeDecrypt(uid, dek);
+  let isExpired = account.isAccessTokenExpired;
+
+  if (crossReferenceExpired) {
+    const expiredToken = await AccessToken.findOne({ itemId: account.itemId, isAccessTokenExpired: true });
+    if (expiredToken) {
+      isExpired = true;
+    }
+  }
+
   const decryptedAccount = {
     _id: account._id,
     owner_id: account.owner_id,
     itemId: account.itemId,
-    isAccessTokenExpired: account.isAccessTokenExpired,
+    isAccessTokenExpired: isExpired,
     owner_type: account.owner_type,
     plaid_account_id: account.plaid_account_id,
     institution_id: account.institution_id,
