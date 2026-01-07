@@ -1,76 +1,95 @@
-import mongoose from 'mongoose';
-import Transaction from '../database/models/Transaction.js';
-import connectDB from '../database/database.js';
+import mongoose from "mongoose";
+import Transaction from "../database/models/Transaction.js";
+import connectDB from "../database/database.js";
+import {
+  decryptValue,
+  encryptValue,
+  getUserDek,
+} from "../database/encryption.js";
+import User from "../database/models/User.js";
+import PlaidAccount from "../database/models/PlaidAccount.js";
+import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 
 const BATCH_SIZE = 500;
 
-const fixTransactionDates = async () => {
-  console.log('Connecting to database...');
-  await connectDB();
-  console.log('Database connected.');
-
-  let fixedCount = 0;
-  let processedCount = 0;
-
+const fixTransactionDates = async (dryRun = true) => {
   try {
-    console.log('Starting transaction date migration...');
+    console.log("Connecting to database...");
+    await connectDB();
+    console.log("Database connected.");
+
+    console.log("Starting transaction date migration...");
     const totalTransactions = await Transaction.countDocuments();
     console.log(`Found ${totalTransactions} total transactions to check.`);
 
-    let lastId = null;
+    if (totalTransactions === 0) {
+      console.log("No transactions found to migrate.");
+      return;
+    }
 
-    while (true) {
-      const query = lastId ? { _id: { $gt: lastId } } : {};
-      const transactions = await Transaction.find(query)
-        .sort({ _id: 1 })
-        .limit(BATCH_SIZE);
+    let fixedCount = 0;
+    let processedCount = 0;
+    const bulkOps = [];
 
-      if (transactions.length === 0) {
-        break; // No more transactions to process
-      }
-      
-      const bulkOps = [];
+    for (let i = 0; i < totalTransactions; i += BATCH_SIZE) {
+      const transactions = await Transaction.find().skip(i).limit(BATCH_SIZE);
 
       for (const trans of transactions) {
-        if (trans.transactionDate) {
-          const date = new Date(trans.transactionDate);
-          // Check if the time is exactly midnight UTC
-          if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0) {
-            // Adjust to noon UTC
-            const newDate = new Date(date.getTime());
-            newDate.setUTCHours(12);
+        if (!trans.transactionDate) {
+            continue;
+        }
 
+        const currentHours = trans.transactionDate.getUTCHours();
+        const currentMinutes = trans.transactionDate.getUTCMinutes();
+        const currentSeconds = trans.transactionDate.getUTCSeconds();
+        const currentMs = trans.transactionDate.getUTCMilliseconds();
+
+        // Check if the time is anything other than exactly noon
+        if (currentHours !== 12 || currentMinutes !== 0 || currentSeconds !== 0 || currentMs !== 0) {
+          const year = trans.transactionDate.getUTCFullYear();
+          const month = trans.transactionDate.getUTCMonth();
+          const day = trans.transactionDate.getUTCDate();
+          
+          const newDate = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+          
+          if (!dryRun) {
             bulkOps.push({
               updateOne: {
                 filter: { _id: trans._id },
                 update: { $set: { transactionDate: newDate } },
               },
             });
-            fixedCount++;
           }
+          fixedCount++;
         }
       }
-
-      if (bulkOps.length > 0) {
-        console.log(`Found ${bulkOps.length} transactions to fix in this batch...`);
-        await Transaction.bulkWrite(bulkOps);
-        console.log(`Updated ${bulkOps.length} transactions.`);
-      }
-
       processedCount += transactions.length;
-      lastId = transactions[transactions.length - 1]._id;
       console.log(`Processed ${processedCount} / ${totalTransactions} transactions...`);
     }
 
-    console.log(`Migration complete. Fixed a total of ${fixedCount} transactions.`);
+    if (!dryRun && bulkOps.length > 0) {
+      console.log(`Applying changes to ${bulkOps.length} transactions...`);
+      await Transaction.bulkWrite(bulkOps);
+      console.log("Bulk write complete.");
+    }
+
+    if (dryRun) {
+        console.log(`DRY RUN: Would have fixed a total of ${fixedCount} transactions.`);
+    } else {
+        console.log(`Migration complete. Fixed a total of ${fixedCount} transactions.`);
+    }
+
   } catch (error) {
-    console.error('An error occurred during the migration:', error);
-    process.exit(1);
+    console.error("An error occurred during migration:", error);
   } finally {
-    await mongoose.disconnect();
-    console.log('Database connection closed.');
-    process.exit(0);
+    try {
+      await mongoose.connection.close();
+      console.log("Database connection closed.");
+    } catch (error) {
+      console.error("Failed to close database connection:", error);
+    }
   }
 };
 
-fixTransactionDates();
+const dryRun = process.argv.includes("--no-dry-run") ? false : true;
+fixTransactionDates(dryRun);
