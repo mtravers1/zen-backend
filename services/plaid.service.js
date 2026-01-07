@@ -683,14 +683,14 @@ const updateTransactions = async (item) => {
   structuredLogger.logInfo("[SYNC_TRACE] Starting updateTransactions.", { itemId: item });
   const accessInfo = await getNewestAccessToken({ itemId: item });
   if (!accessInfo) {
-    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: No access token found for item.", { itemId: item });
+    structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: No access token found for item."), { itemId: item });
     throw new Error(`No access token found for item ID: ${item}`);
   }
   
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
   if (!user) {
-    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: User not found for item.", { itemId: item, userId: userId });
+    structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: User not found for item."), { itemId: item, userId: userId });
     throw new Error(`User not found for userId ${userId}`);
   }
   
@@ -722,7 +722,7 @@ const updateTransactions = async (item) => {
   }
 
   if (!accounts.length) {
-    structuredLogger.logError(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`, { itemId: item });
+    structuredLogger.logErrorBlock(new Error(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`), { itemId: item });
     //TODO: remove item
     throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
   }
@@ -749,7 +749,7 @@ const updateTransactions = async (item) => {
     structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
     
     if (iterationCounter > maxIterations) {
-      structuredLogger.logError("[SYNC_TRACE] Max sync iterations reached, stopping.", { itemId: item });
+      structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] Max sync iterations reached, stopping."), { itemId: item });
       hasMore = false;
       break;
     }
