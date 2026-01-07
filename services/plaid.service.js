@@ -125,15 +125,38 @@ const createLinkToken = async (
         };
       }
       const plaidClient = getPlaidClient(plaidEnvironment);
-      const response = await plaidClient
-        .linkTokenCreate(plaidRequest)
-        .catch((error) => {
+      let response;
+      try {
+        response = await plaidClient.linkTokenCreate(plaidRequest);
+      } catch (error) {
+        const plaidErrorCode = error.response?.data?.error_code;
+
+        // If in update mode and the item is not found, it means the access_token is dead.
+        // We should seamlessly convert this to a "new item" flow by removing the access token
+        // and re-calling the function.
+        if (mode === 'update' && plaidErrorCode === 'ITEM_NOT_FOUND') {
+          structuredLogger.logWarning(
+            'ITEM_NOT_FOUND in update mode. Converting to a new link flow.',
+            { plaid_error: error.response.data }
+          );
+          
+          const newLinkRequest = { ...plaidRequest };
+          delete newLinkRequest.access_token;
+          
+          // Add products for the new link flow
+          newLinkRequest.products = ["transactions"];
+          newLinkRequest.optional_products = ["investments", "liabilities"];
+
+          response = await plaidClient.linkTokenCreate(newLinkRequest);
+        } else {
+          // For all other errors, log and re-throw.
           structuredLogger.logPlaidApi("link_token_create", false, {
             error: error.response?.data || error.message,
             plaid_request: plaidRequest,
           });
           throw error;
-        });
+        }
+      }
 
       structuredLogger.logPlaidApi("link_token_create", true, {
         user_id: userId,
