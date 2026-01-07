@@ -962,6 +962,16 @@ const updateInvestmentTransactions = async (item) => {
         return;
       }
 
+      // Check if the item supports the investments product before proceeding.
+      const itemInfo = await getItemWithAccessToken(accessToken);
+      if (!itemInfo.item.billed_products.includes('investments')) {
+        structuredLogger.logInfo(
+          'Skipping investment sync: item does not have investments product enabled.',
+          { item_id: item, billed_products: itemInfo.item.billed_products },
+        );
+        return 'Skipped: Item does not have investments product.';
+      }
+
       // First, ensure all accounts for the item are present in our DB.
       const plaidAccountsData = await getAccountsWithAccessToken(accessToken);
       const allPlaidAccounts = plaidAccountsData.accounts;
