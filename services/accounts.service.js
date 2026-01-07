@@ -18,7 +18,6 @@ import {
 } from "../database/encryption.js";
 import {
   calculateWeeklyTotals,
-  getNewestAccessToken,
   groupByWeek,
 } from "./utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
@@ -2182,7 +2181,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
   const deac = await getDecryptedAccount(account, dek, uid, true);
 
-  const access_token = await getNewestAccessToken({
+  const access_token = await plaidService.getNewestAccessToken({
     userId: user._id,
     institutionId: deac.institution_id,
   });
@@ -3010,7 +3009,6 @@ const accountsService = {
   getCashFlowsByPlaidAccount,
   formatTransactionsWithSigns,
   formatAccountsBalances,
-  getNewestAccessToken,
   getDecryptedLiabilitiesLoan,
   getDecryptedLiabilitiesCredit,
   weeklyCashFlowPlaidAccountSetUpTransactions,
