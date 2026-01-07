@@ -1538,11 +1538,27 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
       field: "accessToken",
     });
 
+    // Proactively check if the token is invalid and flag the item if so.
+    try {
+      const plaidClient = getPlaidClient();
+      await plaidClient.itemGet({ access_token: decryptedAccessToken });
+    } catch (error) {
+      const plaidErrorCode = error.response?.data?.error_code;
+      if (["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN", "ITEM_LOGIN_REQUIRED"].includes(plaidErrorCode)) {
+        structuredLogger.logWarning("Proactively marking item as expired in getInstitutionUpdateToken.", {
+          itemId: account.itemId,
+          plaid_error_code: plaidErrorCode,
+        });
+        await updateInvadlidAccessToken(account.itemId);
+      }
+      // Do not re-throw; we want the re-link flow to continue regardless.
+    }
+
     if (!decryptedAccessToken) {
       throw new Error(`Failed to decrypt access token for institution ID: ${institutionId}`);
     }
 
-    return { access_token: decryptedAccessToken };
+    return { access_token: decryptedAccessToken, itemId: account.itemId };
   } catch (error) {
     console.error("Error getting institution update token:", error);
     throw error;
