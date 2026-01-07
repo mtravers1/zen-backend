@@ -836,6 +836,47 @@ const getAllUserAccounts = async (email, uid) => {
         throw new Error("User not found");
       }
 
+      // SELF-HEALING: Detect and repair orphaned AccessTokens (tokens without accounts).
+      const allTokens = await AccessToken.find({ userId: user._id, isAccessTokenExpired: { $ne: true } });
+      const itemIdsWithAccounts = new Set(user.plaidAccounts.map(acc => acc.itemId));
+      const orphanedTokens = allTokens.filter(token => !itemIdsWithAccounts.has(token.itemId));
+
+      if (orphanedTokens.length > 0) {
+        for (const token of orphanedTokens) {
+          (async () => {
+            try {
+              structuredLogger.logWarning("Orphaned AccessToken found. Triggering self-healing.", {
+                  itemId: token.itemId,
+                  userId: user._id.toString()
+              });
+              const dek = await getUserDek(uid);
+              const safeDecrypt = createSafeDecrypt(uid, dek);
+              const decryptedToken = await safeDecrypt(token.accessToken, {
+                item_id: token.itemId,
+                field: "accessToken",
+              });
+
+              if (decryptedToken) {
+                const primaryEmail = user.email.find(e => e.isPrimary)?.email;
+                if (primaryEmail) {
+                  // This will fetch accounts and save them, fixing the orphan.
+                  await addAccount(decryptedToken, primaryEmail, uid);
+                }
+              }
+            } catch (error) {
+              structuredLogger.logErrorBlock(error, {
+                operation: "self_healing_add_account",
+                item_id: token.itemId,
+                user_id: uid,
+              });
+            }
+          })();
+        }
+        // Since accounts are being added in the background, we might return a slightly stale list on this first run.
+        // The user can refresh to see the newly added accounts.
+      }
+
+
       if (!user.plaidAccounts.length) {
         structuredLogger.logSuccess("get_all_user_accounts_completed", {
           uid,
