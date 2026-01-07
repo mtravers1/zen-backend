@@ -28,6 +28,7 @@ const createLinkToken = async (req, res) => {
       mode,
       access_token,
       plaidEnvironment,
+      institution_id,
     } = req.body;
 
     const linkToken = await structuredLogger.withContext(
@@ -48,6 +49,7 @@ const createLinkToken = async (req, res) => {
           mode,
           access_token,
           plaidEnvironment,
+          institution_id,
         );
       },
     );

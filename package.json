@@ -17,7 +17,8 @@
     "delete-all-users": "node -r dotenv/config scripts/delete-all-users.js",
     "migrate:business-userid-normalize": "node -r dotenv/config scripts/migration/normalize-business-userid.js",
     "update-webhooks": "node -r dotenv/config scripts/update-plaid-webhooks.js",
-    "delete-invalid-plaid-tokens": "node -r dotenv/config scripts/delete-invalid-plaid-tokens.js"
+    "delete-invalid-plaid-tokens": "node -r dotenv/config scripts/delete-invalid-plaid-tokens.js",
+    "fix-dates": "node -r dotenv/config scripts/fix-transaction-dates.js"
   },
   "author": "",
   "license": "ISC",

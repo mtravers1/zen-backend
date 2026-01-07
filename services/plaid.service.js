@@ -44,6 +44,7 @@ const createLinkToken = async (
   mode,
   access_token,
   plaidEnvironment,
+  institution_id,
 ) => {
   return await structuredLogger.withContext(
     "create_link_token",
@@ -55,6 +56,7 @@ const createLinkToken = async (
       screen,
       mode,
       has_access_token: !!access_token,
+      institution_id,
     },
     async () => {
       const user = await User.findOne({
@@ -113,6 +115,10 @@ const createLinkToken = async (
           client_user_id: userId,
         },
       };
+
+      if (institution_id) {
+        plaidRequest.institution_id = institution_id;
+      }
 
       if (accessToken) {
         plaidRequest.access_token = accessToken;
@@ -673,64 +679,76 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
 };
 
 const updateTransactions = async (item) => {
+  structuredLogger.logInfo("[SYNC_TRACE] Starting updateTransactions.", { itemId: item });
   const accessInfo = await getNewestAccessToken({ itemId: item });
   if (!accessInfo) {
+    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: No access token found for item.", { itemId: item });
     throw new Error(`No access token found for item ID: ${item}`);
   }
+  
   const userId = accessInfo.userId;
   const user = await User.findById(userId);
   if (!user) {
+    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: User not found for item.", { itemId: item, userId: userId });
     throw new Error(`User not found for userId ${userId}`);
   }
+  
   const uid = user?.authUid;
+  structuredLogger.logInfo("[SYNC_TRACE] Found user.", { itemId: item, uid: uid });
+
   const accessToken = await getAccessTokenFromItemId(item, uid);
   if (!accessToken) {
+    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: Could not decrypt access token.", { itemId: item });
     throw new Error(`Access token could not be retrieved for item ID: ${item}`);
   }
+  structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
 
   let accounts = [];
   const maxRetries = 5;
-  const delayMs = 3000; // 3 seconds
+  const delayMs = 3000;
 
   for (let i = 0; i < maxRetries; i++) {
     accounts = await PlaidAccount.find({ itemId: item });
     if (accounts.length > 0) {
       break;
     }
-    console.log(
-      `[updateTransactions] No accounts found for item ${item}. Retrying in ${delayMs}ms... (Attempt ${i + 1}/${maxRetries})`,
-    );
+    structuredLogger.logWarning(`[SYNC_TRACE] No accounts found for item. Retrying in ${delayMs}ms...`, {
+        itemId: item,
+        attempt: i + 1,
+        maxRetries: maxRetries,
+    });
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
   if (!accounts.length) {
+    structuredLogger.logError(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`, { itemId: item });
     //TODO: remove item
     throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
   }
+  structuredLogger.logInfo(`[SYNC_TRACE] Found ${accounts.length} accounts for item.`, { itemId: item });
 
   const emails = user?.email;
-
   const emailObject = emails?.find((email) => email.isPrimary === true);
-
   const email = emailObject?.email;
 
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
 
   let cursor = accounts[0].nextCursor || null;
+  structuredLogger.logInfo("[SYNC_TRACE] Starting sync loop.", { itemId: item, initialCursor: cursor });
   let hasMore = true;
   let transactionsByAccount = {};
   let oldCursor = cursor;
-  let iterationCoounter = 0;
+  let iterationCounter = 0;
   const maxIterations = 10;
   const newTransactions = [];
 
   while (hasMore) {
-    transactionsByAccount = {};
-    oldCursor = cursor;
-    iterationCoounter++;
-    if (iterationCoounter > maxIterations) {
-      console.log("Max iterations reached, stopping");
+    iterationCounter++;
+    structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
+    
+    if (iterationCounter > maxIterations) {
+      structuredLogger.logError("[SYNC_TRACE] Max sync iterations reached, stopping.", { itemId: item });
       hasMore = false;
       break;
     }
@@ -741,7 +759,7 @@ const updateTransactions = async (item) => {
         cursor: cursor,
         count: 500,
       }));
-
+      
       const transactions = response.data.added || [];
       const modifiedTransactions = response.data.modified || [];
       const removedTransactions = response.data.removed || [];
@@ -749,9 +767,14 @@ const updateTransactions = async (item) => {
       hasMore = response.data.has_more;
       newTransactions.push(...transactions);
 
-      console.log(
-        `Fetched ${transactions.length} new, ${modifiedTransactions.length} modified, ${removedTransactions.length} removed transactions`,
-      );
+      structuredLogger.logInfo(`[SYNC_TRACE] Plaid API returned transactions.`, {
+        itemId: item,
+        added: transactions.length,
+        modified: modifiedTransactions.length,
+        removed: removedTransactions.length,
+        nextCursor: cursor,
+        hasMore: hasMore,
+      });
 
       const accountMap = new Map();
       for (const account of accounts) {
@@ -761,44 +784,14 @@ const updateTransactions = async (item) => {
       const bulkOps = [];
       for (let transaction of transactions) {
         if (!accountMap.has(transaction.account_id)) continue;
-
-        const encryptedMerchantName = transaction.merchant_name
-          ? await safeEncrypt(transaction.merchant_name, {
-              transaction_id: transaction.transaction_id,
-              field: "merchant_name",
-            })
-          : null;
-        const encryptedName = transaction.name
-          ? await safeEncrypt(transaction.name, {
-              transaction_id: transaction.transaction_id,
-              field: "name",
-            })
-          : null;
+        
+        const encryptedMerchantName = transaction.merchant_name ? await safeEncrypt(transaction.merchant_name, { transaction_id: transaction.transaction_id, field: "merchant_name" }) : null;
+        const encryptedName = transaction.name ? await safeEncrypt(transaction.name, { transaction_id: transaction.transaction_id, field: "name" }) : null;
         const merchantCategory = transaction.category?.[0];
-        const merchant = {
-          merchantName: encryptedMerchantName,
-          name: encryptedName,
-          merchantCategory: merchantCategory,
-          website: transaction.website ? transaction.website : null,
-          logo: transaction.logo_url ? transaction.logo_url : null,
-        };
-
-        const encryptedAmount = await safeEncrypt(transaction.amount, {
-          transaction_id: transaction.transaction_id,
-          field: "amount",
-        });
-
-        const encryptedAccountType = await safeEncrypt(
-          accountMap.get(transaction.account_id).account_type,
-          { transaction_id: transaction.transaction_id, field: "account_type" },
-        );
-
-        const transactionCode = transaction.transaction_code
-          ? await safeEncrypt(transaction.transaction_code, {
-              transaction_id: transaction.transaction_id,
-              field: "transaction_code",
-            })
-          : null;
+        const merchant = { merchantName: encryptedMerchantName, name: encryptedName, merchantCategory: merchantCategory, website: transaction.website ? transaction.website : null, logo: transaction.logo_url ? transaction.logo_url : null };
+        const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount" });
+        const encryptedAccountType = await safeEncrypt( accountMap.get(transaction.account_id).account_type, { transaction_id: transaction.transaction_id, field: "account_type" });
+        const transactionCode = transaction.transaction_code ? await safeEncrypt(transaction.transaction_code, { transaction_id: transaction.transaction_id, field: "transaction_code" }) : null;
 
         bulkOps.push({
           updateOne: {
@@ -815,12 +808,7 @@ const updateTransactions = async (item) => {
                 merchant,
                 description: null,
                 transactionCode: transactionCode,
-                tags: transaction.category
-                  ? await safeEncrypt(transaction.category, {
-                      transaction_id: transaction.transaction_id,
-                      field: "tags",
-                    })
-                  : null,
+                tags: transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags" }) : null,
                 accountType: encryptedAccountType,
                 pending_transaction_id: transaction.pending_transaction_id,
                 pending: transaction.pending,
@@ -838,46 +826,31 @@ const updateTransactions = async (item) => {
         );
       }
 
-      if (bulkOps.length) {
+      if (bulkOps.length > 0) {
+        structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${bulkOps.length} new transactions.`, { itemId: item });
         await Transaction.bulkWrite(bulkOps);
+        structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for new transactions successful.`, { itemId: item });
       }
 
-      if (removedTransactions.length) {
+      if (removedTransactions.length > 0) {
+        structuredLogger.logInfo(`[SYNC_TRACE] Deleting ${removedTransactions.length} removed transactions.`, { itemId: item });
         await Transaction.deleteMany({
           plaidTransactionId: {
             $in: removedTransactions.map((t) => t.transaction_id),
           },
         });
+        structuredLogger.logInfo(`[SYNC_TRACE] Deletion of removed transactions successful.`, { itemId: item });
       }
 
       if (modifiedTransactions.length > 0) {
         const modifiedBulkOps = [];
         for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await safeEncrypt(transaction.amount, {
-            transaction_id: transaction.transaction_id,
-            field: "amount",
-          });
-
-          modifiedBulkOps.push({
-            updateOne: {
-              filter: { plaidTransactionId: transaction.transaction_id },
-              update: {
-                $set: {
-                  amount: encryptedAmount,
-                  transactionDate: new Date(`${transaction.date}T12:00:00Z`),
-                  tags: transaction.category ? await safeEncrypt(transaction.category, {
-              transaction_id: transaction.transaction_id,
-              field: "tags",
-            }) : null,
-                  pending_transaction_id: transaction.pending_transaction_id,
-                  pending: transaction.pending,
-                },
-              },
-            },
-          });
+            const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount", });
+            modifiedBulkOps.push({ updateOne: { filter: { plaidTransactionId: transaction.transaction_id }, update: { $set: { amount: encryptedAmount, transactionDate: new Date(`${transaction.date}T12:00:00Z`), tags: transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags", }) : null, pending_transaction_id: transaction.pending_transaction_id, pending: transaction.pending, }, }, }, });
         }
-
+        structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${modifiedBulkOps.length} modified transactions.`, { itemId: item });
         await Transaction.bulkWrite(modifiedBulkOps);
+        structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for modified transactions successful.`, { itemId: item });
       }
 
       const bulkUpdateAccountsOps = [];
@@ -901,34 +874,35 @@ const updateTransactions = async (item) => {
       }
 
       if (bulkUpdateAccountsOps.length > 0) {
+        structuredLogger.logInfo(`[SYNC_TRACE] Updating ${bulkUpdateAccountsOps.length} PlaidAccount documents with new transaction references.`, { itemId: item });
         await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
+        structuredLogger.logInfo(`[SYNC_TRACE] PlaidAccount update successful.`, { itemId: item });
       }
 
-      // Update the cursor on all accounts for the item
+      structuredLogger.logInfo("[SYNC_TRACE] Preparing to update cursor.", { itemId: item, nextCursor: cursor });
       await PlaidAccount.updateMany(
         { itemId: item },
         { $set: { nextCursor: cursor } },
       );
+      structuredLogger.logInfo("[SYNC_TRACE] Cursor update successful.", { itemId: item, updatedCursor: cursor });
+
     } catch (error) {
-      if (
-        error.response?.data?.error_code ===
-        "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
-      ) {
-        console.log(
-          "Mutation detected during pagination, restarting with old cursor...",
-        );
-        cursor = oldCursor; // Reiniciar con el cursor anterior
+      if (error.response?.data?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
+        structuredLogger.logWarning("[SYNC_TRACE] Mutation detected during pagination, restarting with old cursor...", { itemId: item, oldCursor: oldCursor });
+        cursor = oldCursor;
       } else {
-        console.error(
-          "Error syncing transactions:",
-          error.response?.data || error,
-        );
+        structuredLogger.logErrorBlock(error, {
+            operation: "[SYNC_TRACE] Error syncing transactions",
+            itemId: item,
+            plaidError: error.response?.data
+        });
         throw error;
       }
     }
   }
 
   // Also, trigger an update for investment transactions, just in case.
+  structuredLogger.logInfo("[SYNC_TRACE] Sync loop finished. Proceeding with chained updates.", { itemId: item });
   try {
     await updateInvestmentTransactions(item);
   } catch(error) {
@@ -959,7 +933,7 @@ const updateTransactions = async (item) => {
       await transaction.save();
     }
   }
-  console.log("Finished updating transactions");
+  structuredLogger.logSuccess("[SYNC_TRACE] Finished updateTransactions successfully.", { itemId: item });
 
   return transactionsByAccount;
 };

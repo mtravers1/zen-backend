@@ -675,9 +675,9 @@ jobs:
           rm -f private_key.pem
           rm -f client.ovpn
 
-  delete_invalid_tokens:
+  fix_transaction_dates:
     runs-on: ubuntu-latest
-    if: github.event.inputs.delete_invalid_tokens_args != ''
+    if: github.event.inputs.fix_transaction_dates_args != ''
     steps:
       - name: Install OpenVPN
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -774,11 +774,11 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
-      - name: Run delete-invalid-plaid-tokens script
+      - name: Run fix-transaction-dates script
         run: |
           ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ vars.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
-            npm run delete-invalid-plaid-tokens -- ${{ github.event.inputs.delete_invalid_tokens_args }}
+            npm run fix-transaction-dates -- ${{ github.event.inputs.fix_transaction_dates_args }}
           EOF
           rm -f private_key.pem
           rm -f client.ovpn
