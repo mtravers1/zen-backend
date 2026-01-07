@@ -14,10 +14,13 @@ const createLinkToken = async (req, res) => {
   );
 
   try {
-    console.log('[DEBUG-LINK-TOKEN] Received body for createLinkToken:', JSON.stringify(req.body, null, 2));
-    const email = req.user.email;
-    const uid = req.user.uid;
-    const {
+  const logBody = { ...req.body };
+  if (logBody.access_token) {
+    logBody.access_token = '[REDACTED]';
+  }
+  console.log('[DEBUG-LINK-TOKEN] Received body for createLinkToken:', JSON.stringify(logBody, null, 2));
+
+  const {
       isAndroid,
       accountId,
       screen,

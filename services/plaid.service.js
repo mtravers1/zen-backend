@@ -129,7 +129,7 @@ const createLinkToken = async (
         .linkTokenCreate(plaidRequest)
         .catch((error) => {
           structuredLogger.logPlaidApi("link_token_create", false, {
-            error: error.message,
+            error: error.response?.data || error.message,
             plaid_request: plaidRequest,
           });
           throw error;
