@@ -245,6 +245,51 @@ const saveAccessToken = async (
         institutionId,
       });
       await newToken.save();
+
+      // --- Start of automatic cleanup for old, broken items ---
+      try {
+        const oldExpiredTokens = await AccessToken.find({
+          userId: userId,
+          institutionId: institutionId,
+          itemId: { $ne: itemId }, // Exclude the newly saved item
+          isAccessTokenExpired: true, // Only consider expired tokens
+        });
+
+        for (const oldToken of oldExpiredTokens) {
+          // Find any PlaidAccount associated with this old, expired item
+          const onePlaidAccountForOldItem = await PlaidAccount.findOne({ itemId: oldToken.itemId });
+
+          if (onePlaidAccountForOldItem) {
+            structuredLogger.logInfo("Found old, expired item for automatic cleanup.", {
+              new_item_id: itemId,
+              old_item_id: oldToken.itemId,
+              old_account_id_example: onePlaidAccountForOldItem._id.toString(),
+            });
+            // Use accountsService.deletePlaidAccount to delete the entire old item
+            // This function expects an accountId, so we pass one from the old item.
+            await accountsService.deletePlaidAccount(onePlaidAccountForOldItem._id.toString(), uid);
+          } else {
+            // If no PlaidAccounts are found for an old expired AccessToken, it means
+            // the data was already partially deleted or never fully created.
+            // We should at least delete the AccessToken itself.
+            structuredLogger.logWarning("Found old, expired AccessToken without associated PlaidAccounts. Deleting AccessToken.", {
+              new_item_id: itemId,
+              old_item_id: oldToken.itemId,
+            });
+            await AccessToken.deleteOne({ _id: oldToken._id });
+          }
+        }
+      } catch (cleanupError) {
+        structuredLogger.logErrorBlock(cleanupError, {
+          operation: "automatic_item_cleanup",
+          new_item_id: itemId,
+          institution_id: institutionId,
+          user_id: userId,
+          error_classification: "non_fatal_cleanup_error", // Cleanup errors should not prevent saving the new token
+        });
+      }
+      // --- End of automatic cleanup ---
+
       structuredLogger.logEncryptionOperation("save_access_token", true, {
         user_id: userId,
         item_id: itemId,
