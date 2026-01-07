@@ -1325,7 +1325,17 @@ const repairAccessToken = async (accountId, email) => {
           });
           return;
         }
-        const accessToken = account.accessToken;
+        const user = await User.findOne({ "email.email": email.toLowerCase() });
+        if (!user) {
+          throw new Error(`User not found for email: ${email}`);
+        }
+
+        const dek = await getUserDek(user.authUid);
+        const safeDecrypt = createSafeDecrypt(user.authUid, dek);
+        const accessToken = await safeDecrypt(account.accessToken, {
+          account_id: accountId,
+          field: "accessToken",
+        });
 
         const plaidClient = getPlaidClient();
         const plaidAccountsResponse = await plaidClient.accountsGet({
