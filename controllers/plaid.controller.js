@@ -395,14 +395,9 @@ const detectInternalTransfers = async (req, res) => {
 };
 
 const repairAccessToken = async (req, res) => {
-  try {
-    const { accountId } = req.body;
-    const { uid } = req.user;
-    const response = await plaidService.repairAccessToken(accountId, uid);
-    res.status(200).send(response);
-  } catch (error) {
-    res.status(500).send({ message: error.message });
-  }
+  // This endpoint is now obsolete. The re-linking flow handles this seamlessly.
+  // Returning success to prevent errors from legacy frontend calls.
+  res.status(200).send({ message: "Repair operation is obsolete and no longer needed." });
 };
 
 const checkInstitutionLimit = async (req, res) => {

@@ -763,7 +763,7 @@ const updateTransactions = async (item) => {
                 accountId: accountMap.get(transaction.account_id)._id,
                 plaidTransactionId: transaction.transaction_id,
                 plaidAccountId: transaction.account_id,
-                transactionDate: transaction.date,
+                transactionDate: new Date(`${transaction.date}T12:00:00Z`),
                 amount: encryptedAmount,
                 currency: transaction.iso_currency_code,
                 notes: null,
@@ -819,7 +819,7 @@ const updateTransactions = async (item) => {
               update: {
                 $set: {
                   amount: encryptedAmount,
-                  transactionDate: transaction.date,
+                  transactionDate: new Date(`${transaction.date}T12:00:00Z`),
                   tags: transaction.category ? await safeEncrypt(transaction.category, {
               transaction_id: transaction.transaction_id,
               field: "tags",
@@ -1117,7 +1117,7 @@ const updateInvestmentTransactions = async (item) => {
             accountId: account._id,
             plaidTransactionId: transaction.investment_transaction_id,
             plaidAccountId: transaction.account_id,
-            transactionDate: transaction.date,
+            transactionDate: new Date(`${transaction.date}T12:00:00Z`),
             amount: encryptedAmount,
             currency: transaction.iso_currency_code,
             isInvestment: true,
