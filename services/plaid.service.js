@@ -51,61 +51,24 @@ const getNewestAccessToken = async (find) => {
     const olderTokens = accessTokens.slice(1);
 
     for (const token of olderTokens) {
-      let shouldMarkAsExpired = false;
-      try {
-        const user = await User.findById(token.userId);
-        if (user) {
-          const dek = await getUserDek(user.authUid);
-          const safeDecrypt = createSafeDecrypt(user.authUid, dek);
-          const decryptedToken = await safeDecrypt(token.accessToken, {
-            item_id: token.itemId,
-            field: "accessToken",
-          });
-
-          if (decryptedToken) {
-            try {
-              await invalidateAccessToken(decryptedToken);
-              // If invalidate succeeds, we should mark as expired
-              shouldMarkAsExpired = true;
-            } catch (plaidError) {
-              if (
-                plaidError.response?.data?.error_code === "ITEM_NOT_FOUND" ||
-                plaidError.response?.data?.error_code === "INVALID_ACCESS_TOKEN"
-              ) {
-                console.log(
-                  `[INFO] Old access token for itemID ${token.itemId} is already invalid (${plaidError.response?.data?.error_code}). Marking as expired.`,
-                );
-                // Already invalid, so we can safely mark as expired
-                shouldMarkAsExpired = true;
-              } else {
-                // Unexpected error from Plaid, log it for investigation
-                Sentry.captureException(plaidError, {
-                  level: "error",
-                  extra: {
-                    message: "Unexpected error during Plaid token invalidation",
+        try {
+            token.isAccessTokenExpired = true;
+            await token.save();
+            structuredLogger.logWarning("marked_duplicate_token_as_expired", {
+                tokenId: token._id,
+                itemId: token.itemId,
+                message: "Found multiple valid access tokens for the same item. The older one was marked as expired.",
+            });
+        } catch (error) {
+            Sentry.captureException(error, {
+                level: "error",
+                extra: {
+                    message: "Failed to mark duplicate access token as expired",
                     tokenId: token._id,
                     itemId: token.itemId,
-                  },
-                });
-              }
-            }
-          }
+                },
+            });
         }
-      } catch (error) {
-        console.error(`Failed to process old access token ${token._id}:`, error);
-        Sentry.captureException(error, {
-          level: "error",
-          extra: {
-            message: "General failure during old token processing",
-            tokenId: token._id,
-          },
-        });
-      }
-
-      if (shouldMarkAsExpired) {
-        token.isAccessTokenExpired = true;
-        await token.save();
-      }
     }
 
     return newestToken;
