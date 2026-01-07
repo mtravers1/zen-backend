@@ -1339,6 +1339,12 @@ const repairAccessToken = async (accountId, uid) => {
         });
 
         const plaidClient = getPlaidClient();
+        structuredLogger.logInfo("Attempting plaidClient.accountsGet with decrypted token in repairAccessToken.", {
+            accountId: accountId,
+            uid: uid,
+            hasAccessToken: !!accessToken,
+            accessToken_start: accessToken ? accessToken.substring(0, 10) : 'N/A'
+        });
         const plaidAccountsResponse = await plaidClient.accountsGet({
           access_token: accessToken,
         });
