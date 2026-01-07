@@ -112,18 +112,17 @@ const createLinkToken = async (
         user: {
           client_user_id: userId,
         },
-        // NOTE: For update mode, Plaid documentation suggests omitting products array
-        // Testing with products first - may need to remove for update mode if issues arise
-        transactions: {
-          days_requested: 730,
-        },
       };
+
       if (accessToken) {
         plaidRequest.access_token = accessToken;
       } else {
-        // Products should only be specified when creating a new item, not in update mode.
+        // Products and transactions should only be specified when creating a new item, not in update mode.
         plaidRequest.products = ["transactions"];
         plaidRequest.optional_products = ["investments", "liabilities"];
+        plaidRequest.transactions = {
+          days_requested: 730,
+        };
       }
       const plaidClient = getPlaidClient(plaidEnvironment);
       const response = await plaidClient
