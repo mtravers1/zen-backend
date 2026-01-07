@@ -148,6 +148,7 @@ const createLinkToken = async (
           
           const newLinkRequest = { ...plaidRequest };
           delete newLinkRequest.access_token;
+          delete newLinkRequest.institution_id; // Cannot be used with products
           
           // Add products for the new link flow
           newLinkRequest.products = ["transactions"];
