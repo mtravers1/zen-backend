@@ -1261,13 +1261,19 @@ const updateLiabilities = async (item) => {
 };
 
 const updateInvadlidAccessToken = async (item) => {
-  const accounts = await PlaidAccount.find({ itemId: item });
-  for (const account of accounts) {
-    account.isAccessTokenExpired = true;
-    await account.save();
-  }
+  // Use updateMany for efficiency to set the flag on all matching tokens.
+  const result = await AccessToken.updateMany(
+    { itemId: item },
+    { $set: { isAccessTokenExpired: true } }
+  );
 
-  return accounts;
+  // Also update the PlaidAccount collection for consistency in the UI
+  await PlaidAccount.updateMany(
+    { itemId: item },
+    { $set: { isAccessTokenExpired: true } }
+  );
+
+  return result;
 };
 
 const repairAccessTokenWebhook = async (item) => {

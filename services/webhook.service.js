@@ -143,11 +143,12 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 return syncResult;
               } catch (error) {
                 if (error.message.startsWith("No access token found for item ID")) {
-                  structuredLogger.logWarning(
-                    "Missing access token for transaction sync webhook. Marking as invalid.",
+                  structuredLogger.logErrorBlock(
+                    new Error("Missing access token for transaction sync webhook. Marking as invalid."),
                     {
                       item_id: event.item_id,
                       error: error.message,
+                      error_classification: "handled_error",
                     },
                   );
                   await plaidService.updateInvadlidAccessToken(event.item_id);
@@ -186,11 +187,12 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 return await plaidService.handleAccountsUpdate(event);
               } catch (error) {
                 if (error.message.startsWith("No access token found for item ID")) {
-                  structuredLogger.logWarning(
-                    "Missing access token for accounts update webhook. Marking as invalid.",
+                  structuredLogger.logErrorBlock(
+                    new Error("Missing access token for accounts update webhook. Marking as invalid."),
                     {
                       item_id: event.item_id,
                       error: error.message,
+                      error_classification: "handled_error",
                     },
                   );
                   await plaidService.updateInvadlidAccessToken(event.item_id);
@@ -226,11 +228,12 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 return syncResult;
               } catch (error) {
                 if (error.message.startsWith("No access token found for item ID")) {
-                  structuredLogger.logWarning(
-                    "Missing access token for liability sync webhook. Marking as invalid.",
+                  structuredLogger.logErrorBlock(
+                    new Error("Missing access token for liability sync webhook. Marking as invalid."),
                     {
                       item_id: event.item_id,
                       error: error.message,
+                      error_classification: "handled_error",
                     },
                   );
                   await plaidService.updateInvadlidAccessToken(event.item_id);
@@ -266,11 +269,12 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 return syncResult;
               } catch (error) {
                 if (error.message.startsWith("No access token found for item ID")) {
-                  structuredLogger.logWarning(
-                    "Missing access token for investment transaction sync webhook. Marking as invalid.",
+                  structuredLogger.logErrorBlock(
+                    new Error("Missing access token for investment transaction sync webhook. Marking as invalid."),
                     {
                       item_id: event.item_id,
                       error: error.message,
+                      error_classification: "handled_error",
                     },
                   );
                   await plaidService.updateInvadlidAccessToken(event.item_id);
