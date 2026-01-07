@@ -22,10 +22,7 @@ on:
       update_webhooks_args:
         description: 'Arguments for the update-webhooks script. Use --no-dry-run to execute.'
         required: false
-      delete_invalid_tokens_args:
-        description: 'Arguments for the delete-invalid-plaid-tokens script. Use --no-dry-run to execute.'
-        required: false
-      fix_dates_args:
+      fix_transaction_dates_args:
         description: 'Arguments for the fix-transaction-dates script. Use --no-dry-run to execute.'
         required: false
 
