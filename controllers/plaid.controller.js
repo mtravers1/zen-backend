@@ -20,6 +20,7 @@ const createLinkToken = async (req, res) => {
   }
   console.log('[DEBUG-LINK-TOKEN] Received body for createLinkToken:', JSON.stringify(logBody, null, 2));
 
+  const { uid, email } = req.user;
   const {
       isAndroid,
       accountId,
