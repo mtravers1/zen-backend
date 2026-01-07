@@ -439,39 +439,39 @@ const updateTrip = async (tripId, updateData, uid) => {
 };
 
 const partialUpdateTrip = async (tripId, updateData, uid) => {
+  const existingTrip = await Trips.findById(tripId).lean();
+  if (!existingTrip) {
+    return null;
+  }
+
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   const encryptedData = {};
+  const updateObject = { $set: {} };
 
-  // Encrypt locations if provided
+  // Handle locations
   if (updateData.locations) {
-    const existingTrip = await Trips.findById(tripId).lean();
     const decryptedLocations = await Promise.all(
       existingTrip.locations.map(async (loc) => ({
-        latitude: loc.latitude
-          ? parseFloat(
-              await safeDecrypt(loc.latitude, {
-                trip_id: tripId,
-                field: "latitude",
-              }),
-            )
-          : null,
-        longitude: loc.longitude
-          ? parseFloat(
-              await safeDecrypt(loc.longitude, {
-                trip_id: tripId,
-                field: "longitude",
-              }),
-            )
-          : null,
+        latitude: parseFloat(
+          await safeDecrypt(loc.latitude, {
+            trip_id: tripId,
+            field: "latitude",
+          }),
+        ),
+        longitude: parseFloat(
+          await safeDecrypt(loc.longitude, {
+            trip_id: tripId,
+            field: "longitude",
+          }),
+        ),
       })),
     );
 
     const newLocations = decryptedLocations.concat(updateData.locations);
-
-    encryptedData.locations = await Promise.all(
+    updateObject.$set.locations = await Promise.all(
       newLocations.map(async (loc) => ({
         latitude: await safeEncrypt(loc.latitude.toString(), {
           trip_id: tripId,
@@ -484,89 +484,29 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
       })),
     );
 
-    encryptedData.totalMiles = haversine.calculateTotalMiles(newLocations);
-    encryptedData.mileageEditedAt = null;
-    encryptedData.mileageManuallyEdited = false;
+    updateObject.$set.totalMiles = haversine.calculateTotalMiles(newLocations);
+    updateObject.$set.mileageEditedAt = null;
+    updateObject.$set.mileageManuallyEdited = false;
   } else if (updateData.totalMiles !== undefined) {
-    encryptedData.totalMiles = updateData.totalMiles;
-    encryptedData.mileageEditedAt = new Date();
-    encryptedData.mileageManuallyEdited = true;
+    updateObject.$set.totalMiles = updateData.totalMiles;
+    updateObject.$set.mileageEditedAt = new Date();
+    updateObject.$set.mileageManuallyEdited = true;
   }
 
-  // Encrypt metadata if provided
+  // Handle metadata
   if (updateData.metadata) {
-    const encryptedMetadata = {};
-
-    if (updateData.metadata.placeName) {
-      encryptedMetadata.placeName = await safeEncrypt(
-        updateData.metadata.placeName,
-        { trip_id: tripId, field: "placeName" },
-      );
-    }
-
-    if (updateData.metadata.pickupAddress) {
-      encryptedMetadata.pickupAddress = await safeEncrypt(
-        updateData.metadata.pickupAddress,
-        { trip_id: tripId, field: "pickupAddress" },
-      );
-    }
-
-    if (updateData.metadata.dropoffAddress) {
-      encryptedMetadata.dropoffAddress = await safeEncrypt(
-        updateData.metadata.dropoffAddress,
-        { trip_id: tripId, field: "dropoffAddress" },
-      );
-    }
-
-    if (updateData.metadata.description) {
-      encryptedMetadata.description = await safeEncrypt(
-        updateData.metadata.description,
-        { trip_id: tripId, field: "description" },
-      );
-    }
-
-    if (updateData.metadata.purpose) {
-      encryptedMetadata.purpose = await safeEncrypt(
-        updateData.metadata.purpose,
-        { trip_id: tripId, field: "purpose" },
-      );
-    }
-
-    if (updateData.metadata.other) {
-      encryptedMetadata.other = await safeEncrypt(
-        updateData.metadata.other,
-        { trip_id: tripId, field: "other" },
-      );
-    }
-
-    if (updateData.metadata.dateTime) {
-      encryptedMetadata.dateTime = await safeEncrypt(
-        updateData.metadata.dateTime.toString(),
-        { trip_id: tripId, field: "dateTime" },
-      );
-    }
-
-    if (updateData.metadata.vehicle) {
-      encryptedMetadata.vehicle = await safeEncrypt(
-        updateData.metadata.vehicle,
-        { trip_id: tripId, field: "vehicle" },
-      );
-    }
-
-    if (updateData.metadata.profile) {
-      encryptedMetadata.profile = await safeEncrypt(
-        updateData.metadata.profile,
-        { trip_id: tripId, field: "profile" },
-      );
-    }
-    
-    // Only add metadata to encryptedData if it's not empty
-    if (Object.keys(encryptedMetadata).length > 0) {
-      encryptedData.metadata = encryptedMetadata;
+    for (const key in updateData.metadata) {
+      if (Object.prototype.hasOwnProperty.call(updateData.metadata, key)) {
+        const value = updateData.metadata[key];
+        updateObject.$set[`metadata.${key}`] = await safeEncrypt(
+          value.toString(),
+          { trip_id: tripId, field: key },
+        );
+      }
     }
   }
 
-  return Trips.findByIdAndUpdate(tripId, encryptedData, { new: true });
+  return Trips.findByIdAndUpdate(tripId, updateObject, { new: true });
 };
 
 const deleteTrip = async (tripId) => {
