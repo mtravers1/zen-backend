@@ -142,19 +142,39 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 plaidService.resetWebhookFailures(event.item_id);
                 return syncResult;
               } catch (error) {
+                const plaidErrorCode = error.response?.data?.error_code;
+                const isExpectedPlaidError = [
+                  "INVALID_ACCESS_TOKEN",
+                  "ITEM_NOT_FOUND",
+                  "ITEM_LOGIN_REQUIRED",
+                ].includes(plaidErrorCode);
+
                 if (error.message.startsWith("No access token found for item ID")) {
+                  // This is an error on our side - we have an item with no token.
                   structuredLogger.logErrorBlock(
-                    new Error("Missing access token for transaction sync webhook. Marking as invalid."),
+                    new Error(`Data integrity issue: ${error.message}`),
                     {
                       item_id: event.item_id,
-                      error: error.message,
                       error_classification: "handled_error",
                     },
                   );
-                  await plaidService.updateInvadlidAccessToken(event.item_id);
-                  return "Handled missing access token by marking item as invalid.";
+                } else if (isExpectedPlaidError) {
+                  // This is a normal Plaid event. Log as a warning.
+                  structuredLogger.logWarning(
+                    `Handled expected Plaid error: ${plaidErrorCode}. Marking item as expired.`,
+                    {
+                      item_id: event.item_id,
+                      plaid_error_code: plaidErrorCode,
+                    },
+                  );
+                } else {
+                  // This is a true, unexpected error.
+                  throw error;
                 }
-                throw error;
+
+                // If we handled the error, mark the item as expired.
+                await plaidService.updateInvadlidAccessToken(event.item_id);
+                return "Handled invalid token by marking item as expired.";
               }
             },
           );
@@ -172,6 +192,14 @@ const webhookHandler = async (event, signature = null, body = null) => {
               return await plaidService.updateTransactions(event.item_id);
             },
           );
+        } else if (event.webhook_code === "ERROR" && event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
+            result = await structuredLogger.withContext(
+            "handleItemError",
+            { item_id: event.item_id, error_code: event.error?.error_code },
+            async () => {
+              return await plaidService.handleItemError(event);
+            },
+          );
         } else {
           result = `Unhandled ITEM webhook code: ${event.webhook_code}`;
         }
@@ -186,19 +214,39 @@ const webhookHandler = async (event, signature = null, body = null) => {
               try {
                 return await plaidService.handleAccountsUpdate(event);
               } catch (error) {
+                const plaidErrorCode = error.response?.data?.error_code;
+                const isExpectedPlaidError = [
+                  "INVALID_ACCESS_TOKEN",
+                  "ITEM_NOT_FOUND",
+                  "ITEM_LOGIN_REQUIRED",
+                ].includes(plaidErrorCode);
+
                 if (error.message.startsWith("No access token found for item ID")) {
+                  // This is an error on our side - we have an item with no token.
                   structuredLogger.logErrorBlock(
-                    new Error("Missing access token for accounts update webhook. Marking as invalid."),
+                    new Error(`Data integrity issue: ${error.message}`),
                     {
                       item_id: event.item_id,
-                      error: error.message,
                       error_classification: "handled_error",
                     },
                   );
-                  await plaidService.updateInvadlidAccessToken(event.item_id);
-                  return "Handled missing access token by marking item as invalid.";
+                } else if (isExpectedPlaidError) {
+                  // This is a normal Plaid event. Log as a warning.
+                  structuredLogger.logWarning(
+                    `Handled expected Plaid error: ${plaidErrorCode}. Marking item as expired.`,
+                    {
+                      item_id: event.item_id,
+                      plaid_error_code: plaidErrorCode,
+                    },
+                  );
+                } else {
+                  // This is a true, unexpected error.
+                  throw error;
                 }
-                throw error;
+
+                // If we handled the error, mark the item as expired.
+                await plaidService.updateInvadlidAccessToken(event.item_id);
+                return "Handled invalid token by marking item as expired.";
               }
             },
           );
@@ -227,19 +275,39 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 plaidService.resetWebhookFailures(event.item_id);
                 return syncResult;
               } catch (error) {
+                const plaidErrorCode = error.response?.data?.error_code;
+                const isExpectedPlaidError = [
+                  "INVALID_ACCESS_TOKEN",
+                  "ITEM_NOT_FOUND",
+                  "ITEM_LOGIN_REQUIRED",
+                ].includes(plaidErrorCode);
+
                 if (error.message.startsWith("No access token found for item ID")) {
+                  // This is an error on our side - we have an item with no token.
                   structuredLogger.logErrorBlock(
-                    new Error("Missing access token for liability sync webhook. Marking as invalid."),
+                    new Error(`Data integrity issue: ${error.message}`),
                     {
                       item_id: event.item_id,
-                      error: error.message,
                       error_classification: "handled_error",
                     },
                   );
-                  await plaidService.updateInvadlidAccessToken(event.item_id);
-                  return "Handled missing access token by marking item as invalid.";
+                } else if (isExpectedPlaidError) {
+                  // This is a normal Plaid event. Log as a warning.
+                  structuredLogger.logWarning(
+                    `Handled expected Plaid error: ${plaidErrorCode}. Marking item as expired.`,
+                    {
+                      item_id: event.item_id,
+                      plaid_error_code: plaidErrorCode,
+                    },
+                  );
+                } else {
+                  // This is a true, unexpected error.
+                  throw error;
                 }
-                throw error;
+
+                // If we handled the error, mark the item as expired.
+                await plaidService.updateInvadlidAccessToken(event.item_id);
+                return "Handled invalid token by marking item as expired.";
               }
             },
           );
@@ -268,19 +336,39 @@ const webhookHandler = async (event, signature = null, body = null) => {
                 plaidService.resetWebhookFailures(event.item_id);
                 return syncResult;
               } catch (error) {
+                const plaidErrorCode = error.response?.data?.error_code;
+                const isExpectedPlaidError = [
+                  "INVALID_ACCESS_TOKEN",
+                  "ITEM_NOT_FOUND",
+                  "ITEM_LOGIN_REQUIRED",
+                ].includes(plaidErrorCode);
+
                 if (error.message.startsWith("No access token found for item ID")) {
+                  // This is an error on our side - we have an item with no token.
                   structuredLogger.logErrorBlock(
-                    new Error("Missing access token for investment transaction sync webhook. Marking as invalid."),
+                    new Error(`Data integrity issue: ${error.message}`),
                     {
                       item_id: event.item_id,
-                      error: error.message,
                       error_classification: "handled_error",
                     },
                   );
-                  await plaidService.updateInvadlidAccessToken(event.item_id);
-                  return "Handled missing access token by marking item as invalid.";
+                } else if (isExpectedPlaidError) {
+                  // This is a normal Plaid event. Log as a warning.
+                  structuredLogger.logWarning(
+                    `Handled expected Plaid error: ${plaidErrorCode}. Marking item as expired.`,
+                    {
+                      item_id: event.item_id,
+                      plaid_error_code: plaidErrorCode,
+                    },
+                  );
+                } else {
+                  // This is a true, unexpected error.
+                  throw error;
                 }
-                throw error;
+
+                // If we handled the error, mark the item as expired.
+                await plaidService.updateInvadlidAccessToken(event.item_id);
+                return "Handled invalid token by marking item as expired.";
               }
             },
           );
