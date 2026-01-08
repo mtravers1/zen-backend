@@ -61,24 +61,23 @@ const plaidWebhook = async (req, res) => {
       return res.status(401).json({ error: "Webhook verification failed" });
     }
 
-    // Process webhook asynchronously to avoid timeout
-    const webhookPromise = webhookService.webhookHandler(
-      event,
-      authorization,
-      JSON.stringify(req.body),
-    );
-
-    // Track webhook processing
-    webhookPromise
-      .then(() => {
-        structuredLogger.logSuccess("plaidWebhook.async", {
-          request_id: requestId,
+    try {
+      await webhookService.webhookHandler(
+        event,
+        authorization,
+        JSON.stringify(req.body),
+      );
+      return res.status(200).json({ status: "success" });
+    } catch (error) {
+      if (error instanceof UnknownItemError) {
+        structuredLogger.logWarning("Unknown item webhook received", {
           item_id: event.item_id,
           webhook_type: event.webhook_type,
           webhook_code: event.webhook_code,
+          error: error.message,
         });
-      })
-      .catch((error) => {
+        return res.status(404).json({ error: "Item not found" });
+      } else {
         structuredLogger.logErrorBlock(error, {
           operation: "plaidWebhook",
           request_id: requestId,
@@ -88,21 +87,9 @@ const plaidWebhook = async (req, res) => {
           request: structuredLogger.requestContext.get(requestId)?.request,
           error_classification: "webhook_processing_error",
         });
-
-        // Consider sending to a dead letter queue or retry mechanism
-        console.error("Webhook processing failed:", {
-          item_id: event.item_id,
-          webhook_type: event.webhook_type,
-          webhook_code: event.webhook_code,
-          error: error.message,
-        });
-      });
-
-    // Return success immediately
-    return res.status(200).json({
-      status: "success",
-      message: "Webhook received and processing started",
-    });
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    }
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "plaidWebhook",

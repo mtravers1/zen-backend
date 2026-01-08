@@ -17,7 +17,6 @@ import {
 } from "../database/encryption.js";
 import { createSafeDecrypt } from "../lib/encryptionHelper.js";
 import plaidService from "../services/plaid.service.js";
-import { getNewestAccessToken } from "../services/utils/accounts.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
