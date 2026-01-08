@@ -1603,14 +1603,8 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
       throw new Error("Institution not found or user does not have access");
     }
 
-    // Decrypt access token
-    const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid, dek);
-    const decryptedAccessToken = await safeDecrypt(account.accessToken, {
-      user_id: user._id,
-      institution_id: institutionId,
-      field: "accessToken",
-    });
+    const itemId = account.itemId;
+    const decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
 
     // Proactively check if the token is invalid and flag the item if so.
     try {
