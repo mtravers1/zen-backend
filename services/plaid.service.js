@@ -785,6 +785,8 @@ const updateTransactions = async (item) => {
   let iterationCounter = 0;
   const maxIterations = 10;
   const newTransactions = [];
+  let allModifiedTransactions = [];
+  let allRemovedTransactions = [];
 
   while (hasMore) {
     oldCursor = cursor;
@@ -810,6 +812,8 @@ const updateTransactions = async (item) => {
       cursor = response.data.next_cursor;
       hasMore = response.data.has_more;
       newTransactions.push(...transactions);
+      allModifiedTransactions.push(...modifiedTransactions);
+      allRemovedTransactions.push(...removedTransactions);
 
       structuredLogger.logInfo(`[SYNC_TRACE] Plaid API returned transactions.`, {
         itemId: item,
@@ -1010,7 +1014,15 @@ const updateTransactions = async (item) => {
       await transaction.save();
     }
   }
-  structuredLogger.logSuccess("[SYNC_TRACE] Finished updateTransactions successfully.", { itemId: item });
+  structuredLogger.logSuccess(
+    "[SYNC_TRACE] Finished updateTransactions successfully.",
+    {
+      itemId: item,
+      added_transactions: newTransactions.length,
+      modified_transactions: allModifiedTransactions.length,
+      removed_transactions: allRemovedTransactions.length,
+    },
+  );
 
   return transactionsByAccount;
 };
@@ -1281,10 +1293,12 @@ const updateLiabilities = async (item) => {
         // Delete old liabilities for all affected accounts to ensure consistency
         await Liability.deleteMany({ accountId: { $in: accountIds } });
 
+        let newLiabilitiesCount = 0;
         // Now, add the new, updated liabilities
         for (const [key, value] of Object.entries(liabilitiesResponse.liabilities)) {
           if (Array.isArray(value)) {
             for (const liab of value) {
+              newLiabilitiesCount++;
               const encryptedAccountNumber = await safeEncrypt(liab.account_number);
               const encryptedLastPaymentAmount = await safeEncrypt(liab.last_payment_amount);
               const encryptedMinimumPaymentAmount = await safeEncrypt(liab.minimum_payment_amount);
@@ -1380,6 +1394,7 @@ const updateLiabilities = async (item) => {
           item_id: item,
           user_id: uid,
           updated_accounts_count: accountIds.length,
+          new_liabilities_count: newLiabilitiesCount,
         });
         return { success: true, updated_accounts: accountIds.length };
       }
