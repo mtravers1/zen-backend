@@ -117,6 +117,16 @@ const webhookHandler = async (event, signature = null, body = null) => {
             throw new Error("Missing item_id for TRANSACTIONS webhook");
           }
 
+          const isKnownItem = await plaidService.doesItemExist(event.item_id);
+          if (!isKnownItem) {
+            structuredLogger.logError("Webhook received for an unknown item.", {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            });
+            return "Skipped sync for unknown item.";
+          }
+
           // Check if the item is already known to be expired.
           const isExpired = await plaidService.isItemExpired(event.item_id);
           if (isExpired) {
@@ -185,6 +195,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
 
       case "ITEM":
         if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
+          const isKnownItem = await plaidService.doesItemExist(event.item_id);
+          if (!isKnownItem) {
+            structuredLogger.logError("Webhook received for an unknown item.", {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            });
+            return "Skipped sync for unknown item.";
+          }
           result = await structuredLogger.withContext(
             "handleNewAccountsAvailable",
             { item_id: event.item_id },
@@ -193,6 +212,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
             },
           );
         } else if (event.webhook_code === "ERROR" && event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
+            const isKnownItem = await plaidService.doesItemExist(event.item_id);
+            if (!isKnownItem) {
+              structuredLogger.logError("Webhook received for an unknown item.", {
+                item_id: event.item_id,
+                webhook_type: event.webhook_type,
+                webhook_code: event.webhook_code,
+              });
+              return "Skipped sync for unknown item.";
+            }
             result = await structuredLogger.withContext(
             "handleItemError",
             { item_id: event.item_id, error_code: event.error?.error_code },
@@ -207,6 +235,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
 
       case "ACCOUNTS":
         if (event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
+          const isKnownItem = await plaidService.doesItemExist(event.item_id);
+          if (!isKnownItem) {
+            structuredLogger.logError("Webhook received for an unknown item.", {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            });
+            return "Skipped sync for unknown item.";
+          }
           result = await structuredLogger.withContext(
             "handleAccountsUpdate",
             { item_id: event.item_id, account_ids: event.account_ids },
@@ -259,6 +296,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
         if (event.webhook_code === "DEFAULT_UPDATE") {
           if (!event.item_id) {
             throw new Error("Missing item_id for LIABILITIES webhook");
+          }
+          const isKnownItem = await plaidService.doesItemExist(event.item_id);
+          if (!isKnownItem) {
+            structuredLogger.logError("Webhook received for an unknown item.", {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            });
+            return "Skipped sync for unknown item.";
           }
           result = await structuredLogger.withContext(
             "processLiabilitySync",
@@ -320,6 +366,15 @@ const webhookHandler = async (event, signature = null, body = null) => {
         if (event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "HISTORICAL_UPDATE") {
           if (!event.item_id) {
             throw new Error("Missing item_id for INVESTMENTS_TRANSACTIONS webhook");
+          }
+          const isKnownItem = await plaidService.doesItemExist(event.item_id);
+          if (!isKnownItem) {
+            structuredLogger.logError("Webhook received for an unknown item.", {
+              item_id: event.item_id,
+              webhook_type: event.webhook_type,
+              webhook_code: event.webhook_code,
+            });
+            return "Skipped sync for unknown item.";
           }
           result = await structuredLogger.withContext(
             "processInvestmentSync",

@@ -1805,6 +1805,11 @@ const isItemExpired = async (itemId) => {
   return !validToken;
 };
 
+const doesItemExist = async (itemId) => {
+  const token = await AccessToken.findOne({ itemId: itemId });
+  return !!token;
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -1843,6 +1848,7 @@ const plaidService = {
   handleAccountsUpdate,
   isItemExpired,
   getNewestAccessToken,
+  doesItemExist,
 };
 
 export default plaidService;
