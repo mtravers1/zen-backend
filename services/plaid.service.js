@@ -787,6 +787,7 @@ const updateTransactions = async (item) => {
   const newTransactions = [];
 
   while (hasMore) {
+    oldCursor = cursor;
     iterationCounter++;
     structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
     
