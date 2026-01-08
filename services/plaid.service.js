@@ -1491,8 +1491,6 @@ const repairAccessToken = async (accountId, uid) => {
           const plaidAccount = await PlaidAccount.findOne({
             plaid_account_id: accId,
           });
-          plaidAccount.isAccessTokenExpired = false;
-          await plaidAccount.save();
         }
 
         for (const accId of removedAccounts) {

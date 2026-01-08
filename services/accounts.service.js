@@ -52,6 +52,14 @@ const addAccount = async (accessToken, email, uid) => {
       const institutionId = accountsResponse.item.institution_id;
       const institutionName = accountsResponse.item.institution_name;
 
+      await plaidService.saveAccessToken(
+        email,
+        accessToken,
+        accountsResponse.item.item_id,
+        institutionId,
+        uid
+      );
+
       const userAccounts = user.plaidAccounts;
       let savedAccounts = [];
       const accountTypes = {};
@@ -81,11 +89,6 @@ const addAccount = async (accessToken, email, uid) => {
         const encryptedMask = await safeEncrypt(account.mask, {
           account_id: account.account_id,
           field: "mask",
-        });
-
-        const encryptedToken = await safeEncrypt(accessToken, {
-          account_id: account.account_id,
-          field: "accessToken",
         });
 
         const encryptedName = await safeEncrypt(account.name, {
@@ -139,7 +142,6 @@ const addAccount = async (accessToken, email, uid) => {
         const newAccount = new PlaidAccount({
           owner_id: userId,
           itemId: accountsResponse.item.item_id,
-          accessToken: encryptedToken,
           owner_type: userType,
           plaid_account_id: account.account_id,
           account_name: encryptedName,
@@ -642,12 +644,7 @@ const deletePlaidAccount = async (accountId, uid) => {
 
   // 2. Invalidate the item with Plaid.
   try {
-    const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid, dek);
-    const decryptedToken = await safeDecrypt(targetAccount.accessToken, {
-      account_id: targetAccount.plaid_account_id,
-      field: "accessToken",
-    });
+    const decryptedToken = await plaidService.getAccessTokenFromItemId(itemId, uid);
 
     if (decryptedToken) {
       await plaidService.invalidateAccessToken(decryptedToken);
@@ -718,7 +715,6 @@ const getAccounts = async (profile, uid) => {
         _id: { $in: plaidIds },
       })
         .lean()
-        .select("-accessToken")
         .exec();
 
       const itemIds = [...new Set(plaidAccountsResponse.map(acc => acc.itemId))];
@@ -768,7 +764,7 @@ const getAccounts = async (profile, uid) => {
           { account_id: plaidAccount._id, field: "institution_name" },
         );
 
-        const isExpired = plaidAccount.isAccessTokenExpired || expiredItemIds.has(plaidAccount.itemId);
+        const isExpired = expiredItemIds.has(plaidAccount.itemId);
 
         plaidAccounts.push({
           ...plaidAccount,
@@ -937,7 +933,7 @@ const getAllUserAccounts = async (email, uid) => {
         );
 
         // Determine the true expired status
-        const isExpired = plaidAccount.isAccessTokenExpired || expiredItemIds.has(plaidAccount.itemId);
+        const isExpired = expiredItemIds.has(plaidAccount.itemId);
 
         accounts.push({
           ...plaidAccount._doc,
@@ -951,17 +947,16 @@ const getAllUserAccounts = async (email, uid) => {
           mask: decryptedMask,
           institution_name: decryptedInstitutionName,
         });
-      }
+        }
+        structuredLogger.logSuccess("get_all_user_accounts_completed", {
+          uid,
+          accounts_count: accounts.length,
+        });
 
-      structuredLogger.logSuccess("get_all_user_accounts_completed", {
-        uid,
-        accounts_count: accounts.length,
-      });
-
-      return accounts;
-    },
-  );
-};
+        return accounts;
+      },
+    );
+  };
 const calculateCashFlowsWeekly = async (
   depositoryTransactions,
   creditTransactions,
@@ -2464,7 +2459,6 @@ async function getDecryptedAccount(account, dek, uid, crossReferenceExpired = fa
     _id: account._id,
     owner_id: account.owner_id,
     itemId: account.itemId,
-    isAccessTokenExpired: isExpired,
     owner_type: account.owner_type,
     plaid_account_id: account.plaid_account_id,
     institution_id: account.institution_id,
@@ -2476,7 +2470,6 @@ async function getDecryptedAccount(account, dek, uid, crossReferenceExpired = fa
   };
 
   const binaryFields = [
-    "accessToken",
     "account_name",
     "account_official_name",
     "account_type",
