@@ -202,7 +202,13 @@ const webhookHandler = async (event, signature = null, body = null) => {
             "handleNewAccountsAvailable",
             { item_id: event.item_id },
             async () => {
-              return await plaidService.updateTransactions(event.item_id);
+              await Promise.allSettled([
+                plaidService.updateTransactions(event.item_id),
+                plaidService.updateHoldings(event.item_id),
+                plaidService.updateLiabilities(event.item_id),
+              ]);
+              plaidService.resetWebhookFailures(event.item_id);
+              return "New accounts available. Transactions, Holdings, and Liabilities updated.";
             },
           );
         } else if (event.webhook_code === "ERROR" && event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
