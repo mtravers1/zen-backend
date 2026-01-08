@@ -741,7 +741,7 @@ const updateTransactions = async (item) => {
 
   const accessToken = await getAccessTokenFromItemId(item, uid);
   if (!accessToken) {
-    structuredLogger.logError("[SYNC_TRACE] updateTransactions failed: Could not decrypt access token.", { itemId: item });
+    structuredLogger.logError("updateTransactions failed: Could not decrypt access token.", { itemId: item, operation: "[SYNC_TRACE]" });
     throw new Error(`Access token could not be retrieved for item ID: ${item}`);
   }
   structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });

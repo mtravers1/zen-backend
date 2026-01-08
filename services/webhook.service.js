@@ -123,6 +123,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
               item_id: event.item_id,
               webhook_type: event.webhook_type,
               webhook_code: event.webhook_code,
+              operation: "webhookHandler",
             });
             return "Skipped sync for unknown item.";
           }
@@ -132,7 +133,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
           if (isExpired) {
             structuredLogger.logInfo(
               "Skipping transaction sync for item with expired token.",
-              { item_id: event.item_id }
+              { item_id: event.item_id },
             );
             return "Skipped sync for expired item.";
           }
@@ -195,12 +196,16 @@ const webhookHandler = async (event, signature = null, body = null) => {
 
       case "ITEM":
         if (event.webhook_code === "NEW_ACCOUNTS_AVAILABLE") {
+          if (!event.item_id) {
+            throw new Error("Missing item_id for ITEM webhook");
+          }
           const isKnownItem = await plaidService.doesItemExist(event.item_id);
           if (!isKnownItem) {
             structuredLogger.logError("Webhook received for an unknown item.", {
               item_id: event.item_id,
               webhook_type: event.webhook_type,
               webhook_code: event.webhook_code,
+              operation: "webhookHandler",
             });
             return "Skipped sync for unknown item.";
           }
@@ -212,12 +217,16 @@ const webhookHandler = async (event, signature = null, body = null) => {
             },
           );
         } else if (event.webhook_code === "ERROR" && event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
+            if (!event.item_id) {
+                throw new Error("Missing item_id for ITEM webhook");
+            }
             const isKnownItem = await plaidService.doesItemExist(event.item_id);
             if (!isKnownItem) {
               structuredLogger.logError("Webhook received for an unknown item.", {
                 item_id: event.item_id,
                 webhook_type: event.webhook_type,
                 webhook_code: event.webhook_code,
+                operation: "webhookHandler",
               });
               return "Skipped sync for unknown item.";
             }
@@ -235,12 +244,16 @@ const webhookHandler = async (event, signature = null, body = null) => {
 
       case "ACCOUNTS":
         if (event.webhook_code === "DEFAULT_UPDATE" || event.webhook_code === "SYNC_UPDATES_AVAILABLE") {
+          if (!event.item_id) {
+            throw new Error("Missing item_id for ACCOUNTS webhook");
+          }
           const isKnownItem = await plaidService.doesItemExist(event.item_id);
           if (!isKnownItem) {
             structuredLogger.logError("Webhook received for an unknown item.", {
               item_id: event.item_id,
               webhook_type: event.webhook_type,
               webhook_code: event.webhook_code,
+              operation: "webhookHandler",
             });
             return "Skipped sync for unknown item.";
           }
@@ -303,6 +316,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
               item_id: event.item_id,
               webhook_type: event.webhook_type,
               webhook_code: event.webhook_code,
+              operation: "webhookHandler",
             });
             return "Skipped sync for unknown item.";
           }
@@ -373,6 +387,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
               item_id: event.item_id,
               webhook_type: event.webhook_type,
               webhook_code: event.webhook_code,
+              operation: "webhookHandler",
             });
             return "Skipped sync for unknown item.";
           }
