@@ -1797,6 +1797,17 @@ const handleAccountsUpdate = async (event) => {
   }
 };
 
+const updateHoldings = async (item) => {
+  return await structuredLogger.withContext(
+    "update_holdings",
+    { item_id: item },
+    async () => {
+      structuredLogger.logInfo("updateHoldings function called", { item_id: item });
+      return "Holdings update placeholder";
+    },
+  );
+};
+
 const isItemExpired = async (itemId) => {
   // First, check if there's any PlaidAccount marked as expired. This is a fast check.
   const expiredAccount = await PlaidAccount.findOne({
@@ -1854,6 +1865,7 @@ const plaidService = {
   checkIfChaseBank,
   handleItemError,
   handleAccountsUpdate,
+  updateHoldings,
   isItemExpired,
   getNewestAccessToken,
   doesItemExist,
