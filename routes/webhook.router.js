@@ -1,5 +1,6 @@
 import express from "express";
 import webhookService from "../services/webhook.service.js";
+import { UnknownItemError } from "../lib/errors.js";
 
 const router = express.Router();
 
@@ -49,7 +50,11 @@ router.post("/plaid", async (req, res, next) => {
   } catch (error) {
     console.error("Webhook processing error:", error);
 
-    // Always return 200 to avoid unnecessary retries
+    if (error instanceof UnknownItemError) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+
+    // Always return 200 to avoid unnecessary retries for other errors
     res.status(200).json({
       status: "error",
       message: "Webhook processed with errors",
