@@ -1064,8 +1064,8 @@ const getCashFlows = async (profile, uid) => {
         );
         plaidAccounts.push({
           ...plaidAccount,
-          currentBalance: decryptedCurrentBalance,
-          availableBalance: parseInt(decryptedAvailableBalance),
+          currentBalance: parseFloat(decryptedCurrentBalance),
+          availableBalance: parseFloat(decryptedAvailableBalance),
           account_type: decryptedAccountType,
           account_subtype: decryptedAccountSubtype,
         });
