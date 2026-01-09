@@ -2440,6 +2440,13 @@ async function getDecryptedAccount(account, dek, uid, crossReferenceExpired = fa
     }
   }
 
+  if (decryptedAccount.currentBalance) {
+    decryptedAccount.currentBalance = parseFloat(decryptedAccount.currentBalance);
+  }
+  if (decryptedAccount.availableBalance) {
+    decryptedAccount.availableBalance = parseFloat(decryptedAccount.availableBalance);
+  }
+
   return decryptedAccount;
 }
 
