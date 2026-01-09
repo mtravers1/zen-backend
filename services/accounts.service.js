@@ -769,8 +769,8 @@ const getAccounts = async (profile, uid) => {
         plaidAccounts.push({
           ...plaidAccount,
           isAccessTokenExpired: isExpired,
-          currentBalance: decryptedCurrentBalance,
-          availableBalance: decryptedAvailableBalance,
+          currentBalance: parseFloat(decryptedCurrentBalance),
+          availableBalance: parseFloat(decryptedAvailableBalance),
           account_type: decryptedAccountType,
           account_subtype: decryptedAccountSubtype,
           account_name: decryptedAccountName,
@@ -938,8 +938,8 @@ const getAllUserAccounts = async (email, uid) => {
         accounts.push({
           ...plaidAccount._doc,
           isAccessTokenExpired: isExpired, // Use the corrected status
-          currentBalance: decryptedCurrentBalance,
-          availableBalance: decryptedAvailableBalance,
+          currentBalance: parseFloat(decryptedCurrentBalance),
+          availableBalance: parseFloat(decryptedAvailableBalance),
           account_type: decryptedAccountType,
           account_subtype: decryptedAccountSubtype,
           account_name: decryptedAccountName,
