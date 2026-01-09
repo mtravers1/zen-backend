@@ -766,11 +766,15 @@ const getAccounts = async (profile, uid) => {
 
         const isExpired = expiredItemIds.has(plaidAccount.itemId);
 
+        const finalAvailableBalance = decryptedAvailableBalance
+          ? parseFloat(decryptedAvailableBalance)
+          : parseFloat(decryptedCurrentBalance);
+
         plaidAccounts.push({
           ...plaidAccount,
           isAccessTokenExpired: isExpired,
           currentBalance: parseFloat(decryptedCurrentBalance),
-          availableBalance: parseFloat(decryptedAvailableBalance),
+          availableBalance: finalAvailableBalance,
           account_type: decryptedAccountType,
           account_subtype: decryptedAccountSubtype,
           account_name: decryptedAccountName,
@@ -935,11 +939,15 @@ const getAllUserAccounts = async (email, uid) => {
         // Determine the true expired status
         const isExpired = expiredItemIds.has(plaidAccount.itemId);
 
+        const finalAvailableBalance = decryptedAvailableBalance
+          ? parseFloat(decryptedAvailableBalance)
+          : parseFloat(decryptedCurrentBalance);
+
         accounts.push({
           ...plaidAccount._doc,
           isAccessTokenExpired: isExpired, // Use the corrected status
           currentBalance: parseFloat(decryptedCurrentBalance),
-          availableBalance: parseFloat(decryptedAvailableBalance),
+          availableBalance: finalAvailableBalance,
           account_type: decryptedAccountType,
           account_subtype: decryptedAccountSubtype,
           account_name: decryptedAccountName,
@@ -2445,6 +2453,9 @@ async function getDecryptedAccount(account, dek, uid, crossReferenceExpired = fa
   }
   if (decryptedAccount.availableBalance) {
     decryptedAccount.availableBalance = parseFloat(decryptedAccount.availableBalance);
+  }
+  if (!decryptedAccount.availableBalance) {
+    decryptedAccount.availableBalance = decryptedAccount.currentBalance;
   }
 
   return decryptedAccount;
