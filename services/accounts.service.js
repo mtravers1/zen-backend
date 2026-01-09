@@ -980,56 +980,11 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
   const allTransactions = [];
-  let balanceCredit = 0;
-  let balanceDebit = 0;
-  let balanceCurrentInvestment = 0;
-  let balanceAvailableInvestment = 0;
-  let allInvestmentsCurrentBalance = 0;
-  let balanceLoan = 0;
   const depositoryTransactions = [];
   const creditTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
-    const currentBalance = Number(plaidAccount.currentBalance) || 0;
-    const availableBalance = Number(plaidAccount.availableBalance) || 0;
 
-    if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
-      balanceCredit = balanceCredit += currentBalance;
-    } else if (plaidAccount.account_type === "depository") {
-      if (plaidAccount.availableBalance) {
-        balanceDebit = balanceDebit += availableBalance;
-      } else if (plaidAccount.currentBalance) {
-        balanceDebit = balanceDebit += currentBalance;
-      }
-    } else if (plaidAccount.account_type === "investment") {
-      if (plaidAccount?.currentBalance) {
-        allInvestmentsCurrentBalance = allInvestmentsCurrentBalance +=
-          currentBalance;
-      }
-      if (
-        plaidAccount.account_subtype === "brokerage" ||
-        plaidAccount.account_subtype === "isa" ||
-        plaidAccount.account_subtype === "crypto exchange" ||
-        plaidAccount.account_subtype === "fixed annuity" ||
-        plaidAccount.account_subtype === "non-custodial wallet" ||
-        plaidAccount.account_subtype === "non-taxable brokerage account" ||
-        plaidAccount.account_subtype === "retirement" ||
-        plaidAccount.account_subtype === "trust"
-      ) {
-        if (plaidAccount.currentBalance) {
-          balanceCurrentInvestment = balanceCurrentInvestment += currentBalance;
-        }
-        if (plaidAccount.availableBalance) {
-          balanceAvailableInvestment = balanceAvailableInvestment +=
-            availableBalance;
-        }
-      }
-    } else if (
-      plaidAccount.account_type === "loan" &&
-      plaidAccount.currentBalance
-    ) {
-      balanceLoan = balanceLoan += currentBalance;
-    }
 
     const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
@@ -1140,19 +1095,9 @@ const getCashFlows = async (profile, uid) => {
           balanceCredit = balanceCredit += currentBalance;
         } else if (plaidAccount.account_type === "depository") {
           if (plaidAccount.availableBalance) {
-            if (plaidAccount.account_subtype === "cd") {
-              balanceAvailableInvestment = balanceAvailableInvestment +=
-                availableBalance;
-            } else {
-              balanceDebit = balanceDebit += availableBalance;
-            }
+            balanceDebit += availableBalance;
           } else if (plaidAccount.currentBalance) {
-            if (plaidAccount.account_subtype === "cd") {
-              balanceCurrentInvestment = balanceCurrentInvestment +=
-                currentBalance;
-            } else {
-              balanceDebit = balanceDebit += currentBalance;
-            }
+            balanceDebit += currentBalance;
           }
         } else if (plaidAccount.account_type === "investment") {
           if (plaidAccount.currentBalance) {
@@ -1387,7 +1332,9 @@ const getCashFlows = async (profile, uid) => {
 
       /// Calculate total cash balance
 
-      const totalCashBalance = balanceDebit + balanceAvailableInvestment;
+      const totalCashBalance = plaidAccounts
+        .filter(acc => acc.account_type === 'depository' || acc.account_type === 'investment')
+        .reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
 
       /// Calculate net worth
       // (bank accounts + investments accounts + assets - credit accounts - loan accounts)
