@@ -99,11 +99,10 @@ export const groupByWeek = (transactions) => {
   }, {});
 
   const today = new Date();
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(today.getDate() - 90);
-
-  const start = new Date(getStartOfWeek(ninetyDaysAgo));
   const end = new Date(getStartOfWeek(today));
+
+  const start = new Date(end);
+  start.setDate(start.getDate() - 8 * 7);
 
   // Iterate through all weeks between the start and end
   const orderedGrouped = {};

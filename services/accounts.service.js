@@ -1003,8 +1003,8 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const nineWeeksAgo = new Date();
+  nineWeeksAgo.setDate(nineWeeksAgo.getDate() - 9 * 7);
   const allTransactions = [];
   const depositoryTransactions = [];
   const creditTransactions = [];
@@ -1014,7 +1014,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
 
     const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
-      transactionDate: { $gte: ninetyDaysAgo },
+      transactionDate: { $gte: nineWeeksAgo },
       isInternal: false,
     })
       .sort({ transactionDate: 1 })
