@@ -8,6 +8,8 @@ import structuredLogger from '../lib/structuredLogger.js';
 
 const findOrphanedPendingTransactions = async () => {
   const isDryRun = !process.argv.includes('--no-dry-run');
+  const plaidAccountIdArg = process.argv.find(arg => arg.startsWith('--plaidAccountId='));
+  const plaidAccountId = plaidAccountIdArg ? plaidAccountIdArg.split('=')[1] : null;
 
   if (isDryRun) {
     structuredLogger.logInfo('Running in DRY-RUN mode. No data will be deleted.');
@@ -34,7 +36,12 @@ const findOrphanedPendingTransactions = async () => {
     structuredLogger.logInfo('Database connected.');
 
     structuredLogger.logInfo('Finding posted transactions with a pending_transaction_id...');
-    const postedTransactions = await Transaction.find({ pending_transaction_id: { $ne: null } }).lean();
+    const findQuery = { pending_transaction_id: { $ne: null } };
+    if (plaidAccountId) {
+      findQuery.plaidAccountId = plaidAccountId;
+      structuredLogger.logInfo(`Filtering by plaidAccountId: ${plaidAccountId}`);
+    }
+    const postedTransactions = await Transaction.find(findQuery).lean();
     structuredLogger.logInfo(`Found ${postedTransactions.length} posted transactions with a pending_transaction_id.`);
 
     const orphanedPairs = [];
@@ -44,6 +51,8 @@ const findOrphanedPendingTransactions = async () => {
 
     for (const postedTransaction of postedTransactions) {
       const pendingTransactionId = postedTransaction.pending_transaction_id;
+
+      console.log(`Searching for pending transaction with plaidTransactionId: ${pendingTransactionId}`);
 
       const pendingTransaction = await Transaction.findOne({ plaidTransactionId: pendingTransactionId }).lean();
 
