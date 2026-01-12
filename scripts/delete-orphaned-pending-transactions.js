@@ -44,6 +44,21 @@ const findOrphanedPendingTransactions = async () => {
     const postedTransactions = await Transaction.find(findQuery).lean();
     structuredLogger.logInfo(`Found ${postedTransactions.length} posted transactions with a pending_transaction_id.`);
 
+    if (postedTransactions.length > 0) {
+      structuredLogger.logInfo('Last 5 posted transactions with pending_transaction_id (for debugging):');
+      postedTransactions.slice(-5).forEach(tx => {
+        console.log(JSON.stringify({
+          _id: tx._id,
+          plaidTransactionId: tx.plaidTransactionId,
+          transactionDate: tx.transactionDate,
+          postDate: tx.postDate,
+          amount: tx.amount, // Encrypted, but useful to see presence
+          pending: tx.pending,
+          pending_transaction_id: tx.pending_transaction_id
+        }, null, 2));
+      });
+    }
+
     const orphanedPairs = [];
     const orphanedIdsToDelete = [];
     const userDeks = new Map();
