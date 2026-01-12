@@ -106,7 +106,7 @@ const findOrphanedPendingTransactions = async () => {
     }
 
   } catch (error) {
-    structuredLogger.logError('An error occurred during the script execution:', error);
+    console.error('An error occurred during the script execution:', error);
   } finally {
     await mongoose.disconnect();
     structuredLogger.logInfo('Database disconnected.');
