@@ -65,10 +65,10 @@ const findOrphanedPendingTransactions = async () => {
               decryptedPostedAmount,
               decryptedPostedName,
             ] = await Promise.all([
-              safeDecrypt(pendingTransaction.amount, { transaction_id: pendingTransaction.plaidTransactionId, field: 'amount' }),
-              safeDecrypt(pendingTransaction.merchant.name, { transaction_id: pendingTransaction.plaidTransactionId, field: 'name' }),
-              safeDecrypt(postedTransaction.amount, { transaction_id: postedTransaction.plaidTransactionId, field: 'amount' }),
-              safeDecrypt(postedTransaction.merchant.name, { transaction_id: postedTransaction.plaidTransactionId, field: 'name' }),
+              pendingTransaction.amount ? safeDecrypt(pendingTransaction.amount, { transaction_id: pendingTransaction.plaidTransactionId, field: 'amount' }) : Promise.resolve(null),
+              pendingTransaction.merchant && pendingTransaction.merchant.name ? safeDecrypt(pendingTransaction.merchant.name, { transaction_id: pendingTransaction.plaidTransactionId, field: 'name' }) : Promise.resolve(null),
+              postedTransaction.amount ? safeDecrypt(postedTransaction.amount, { transaction_id: postedTransaction.plaidTransactionId, field: 'amount' }) : Promise.resolve(null),
+              postedTransaction.merchant && postedTransaction.merchant.name ? safeDecrypt(postedTransaction.merchant.name, { transaction_id: postedTransaction.plaidTransactionId, field: 'name' }) : Promise.resolve(null),
             ]);
 
             orphanedPairs.push({
