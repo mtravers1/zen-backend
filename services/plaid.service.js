@@ -631,20 +631,18 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
   return decryptedToken;
 };
 
-const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
-  let newAccountsBalances;
-
-  try {
-    const plaidClient = getPlaidClient();
-    newAccountsBalances = await withRetry(() => plaidClient.accountsGet({
-      access_token: accessToken,
-      // min_last_updated_datetime: new Date().toISOString(),
-    }));
-  } catch (error) {
-    console.error("Error fetching account balances:", error);
-    throw error;
+const updateAccountBalances = async (dek, accessToken, accounts, uid, newAccountsBalances) => {
+  if (!newAccountsBalances) {
+    try {
+      const plaidClient = getPlaidClient();
+      newAccountsBalances = await withRetry(() => plaidClient.accountsGet({
+        access_token: accessToken,
+      }));
+    } catch (error) {
+      console.error("Error fetching account balances:", error);
+      throw error;
+    }
   }
-
   if (newAccountsBalances) {
     const bulkOps = [];
     const safeEncrypt = createSafeEncrypt(uid, dek);
@@ -721,686 +719,746 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid) => {
   }
 };
 
+const syncingItems = new Map();
+
 const updateTransactions = async (item) => {
-  structuredLogger.logInfo("[SYNC_TRACE] Starting updateTransactions.", { itemId: item });
-  const accessInfo = await getNewestAccessToken({ itemId: item });
-  if (!accessInfo) {
-    structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: No access token found for item."), { itemId: item });
-    throw new Error(`No access token found for item ID: ${item}`);
+  if (syncingItems.has(item)) {
+    structuredLogger.logInfo("[SYNC_TRACE] Sync already in progress for item, skipping.", { itemId: item });
+    return;
   }
-  
-  const userId = accessInfo.userId;
-  const user = await User.findById(userId);
-  if (!user) {
-    structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: User not found for item."), { itemId: item, userId: userId });
-    throw new Error(`User not found for userId ${userId}`);
-  }
-  
-  const uid = user?.authUid;
-  structuredLogger.logInfo("[SYNC_TRACE] Found user.", { itemId: item, uid: uid });
-
-  const accessToken = await getAccessTokenFromItemId(item, uid);
-  if (!accessToken) {
-    structuredLogger.logError("updateTransactions failed: Could not decrypt access token.", { itemId: item, operation: "[SYNC_TRACE]" });
-    throw new Error(`Access token could not be retrieved for item ID: ${item}`);
-  }
-  structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
-
-  let accounts = [];
-  const maxRetries = 5;
-  const delayMs = 3000;
-
-  for (let i = 0; i < maxRetries; i++) {
-    accounts = await PlaidAccount.find({ itemId: item });
-    if (accounts.length > 0) {
-      break;
+  syncingItems.set(item, true);
+  try {
+    structuredLogger.logInfo("[SYNC_TRACE] Starting updateTransactions.", { itemId: item });
+    const accessInfo = await getNewestAccessToken({ itemId: item });
+    if (!accessInfo) {
+      structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: No access token found for item."), { itemId: item });
+      throw new Error(`No access token found for item ID: ${item}`);
     }
-    structuredLogger.logWarning(`[SYNC_TRACE] No accounts found for item. Retrying in ${delayMs}ms...`, {
-        itemId: item,
-        attempt: i + 1,
-        maxRetries: maxRetries,
-    });
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-
-  if (!accounts.length) {
-    structuredLogger.logErrorBlock(new Error(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`), { itemId: item });
-    //TODO: remove item
-    throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
-  }
-  structuredLogger.logInfo(`[SYNC_TRACE] Found ${accounts.length} accounts for item.`, { itemId: item });
-
-  const emails = user?.email;
-  const emailObject = emails?.find((email) => email.isPrimary === true);
-  const email = emailObject?.email;
-
-  const dek = await getUserDek(uid);
-  const safeEncrypt = createSafeEncrypt(uid, dek);
-
-  let cursor = accounts[0].nextCursor || null;
-  structuredLogger.logInfo("[SYNC_TRACE] Starting sync loop.", { itemId: item, initialCursor: cursor });
-  let hasMore = true;
-  let transactionsByAccount = {};
-  let oldCursor = cursor;
-  let iterationCounter = 0;
-  const maxIterations = 10;
-  const newTransactions = [];
-  let allModifiedTransactions = [];
-  let allRemovedTransactions = [];
-
-  while (hasMore) {
-    oldCursor = cursor;
-    iterationCounter++;
-    structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
     
-    if (iterationCounter > maxIterations) {
-      structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] Max sync iterations reached, stopping."), { itemId: item });
-      hasMore = false;
-      break;
+    const userId = accessInfo.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: User not found for item."), { itemId: item, userId: userId });
+      throw new Error(`User not found for userId ${userId}`);
     }
-    try {
-      const plaidClient = getPlaidClient();
-      const response = await withRetry(() => plaidClient.transactionsSync({
-        access_token: accessToken,
-        cursor: cursor,
-        count: 500,
-      }));
-      
-      const transactions = response.data.added || [];
-      const modifiedTransactions = response.data.modified || [];
-      const removedTransactions = response.data.removed || [];
-      cursor = response.data.next_cursor;
-      hasMore = response.data.has_more;
-      newTransactions.push(...transactions);
-      allModifiedTransactions.push(...modifiedTransactions);
-      allRemovedTransactions.push(...removedTransactions);
+    
+    const uid = user?.authUid;
+    structuredLogger.logInfo("[SYNC_TRACE] Found user.", { itemId: item, uid: uid });
 
-      structuredLogger.logInfo(`[SYNC_TRACE] Plaid API returned transactions.`, {
-        itemId: item,
-        added: transactions.length,
-        modified: modifiedTransactions.length,
-        removed: removedTransactions.length,
-        nextCursor: cursor,
-        hasMore: hasMore,
-      });
+    const accessToken = await getAccessTokenFromItemId(item, uid);
+    if (!accessToken) {
+      structuredLogger.logError("updateTransactions failed: Could not decrypt access token.", { itemId: item, operation: "[SYNC_TRACE]" });
+      throw new Error(`Access token could not be retrieved for item ID: ${item}`);
+    }
+    structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
 
-      const accountMap = new Map();
-      for (const account of accounts) {
-        accountMap.set(account.plaid_account_id, account);
+    let accounts = [];
+    const maxRetries = 5;
+    const delayMs = 3000;
+
+    for (let i = 0; i < maxRetries; i++) {
+      accounts = await PlaidAccount.find({ itemId: item });
+      if (accounts.length > 0) {
+        break;
       }
+      structuredLogger.logWarning(`[SYNC_TRACE] No accounts found for item. Retrying in ${delayMs}ms...`, {
+          itemId: item,
+          attempt: i + 1,
+          maxRetries: maxRetries,
+      });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
 
-      const bulkOps = [];
-      for (let transaction of transactions) {
-        if (!accountMap.has(transaction.account_id)) continue;
+    if (!accounts.length) {
+      structuredLogger.logErrorBlock(new Error(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`), { itemId: item });
+      //TODO: remove item
+      throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
+    }
+    structuredLogger.logInfo(`[SYNC_TRACE] Found ${accounts.length} accounts for item.`, { itemId: item });
+
+    const emails = user?.email;
+    const emailObject = emails?.find((email) => email.isPrimary === true);
+    const email = emailObject?.email;
+
+    const dek = await getUserDek(uid);
+    const safeEncrypt = createSafeEncrypt(uid, dek);
+
+    let cursor = accounts[0].nextCursor || null;
+    structuredLogger.logInfo("[SYNC_TRACE] Starting sync loop.", { itemId: item, initialCursor: cursor });
+    let hasMore = true;
+    let transactionsByAccount = {};
+    let oldCursor = cursor;
+    let iterationCounter = 0;
+    const maxIterations = 10;
+    const newTransactions = [];
+    let allModifiedTransactions = [];
+    let allRemovedTransactions = [];
+
+    while (hasMore) {
+      oldCursor = cursor;
+      iterationCounter++;
+      structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
+      
+      if (iterationCounter > maxIterations) {
+        structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] Max sync iterations reached, stopping."), { itemId: item });
+        hasMore = false;
+        break;
+      }
+      try {
+        const plaidClient = getPlaidClient();
+        const response = await withRetry(() => plaidClient.transactionsSync({
+          access_token: accessToken,
+          cursor: cursor,
+          count: 500,
+        }));
         
-        const encryptedMerchantName = transaction.merchant_name ? await safeEncrypt(transaction.merchant_name, { transaction_id: transaction.transaction_id, field: "merchant_name" }) : null;
-        const encryptedName = transaction.name ? await safeEncrypt(transaction.name, { transaction_id: transaction.transaction_id, field: "name" }) : null;
-        const merchantCategory = transaction.category?.[0];
-        const merchant = { merchantName: encryptedMerchantName, name: encryptedName, merchantCategory: merchantCategory, website: transaction.website ? transaction.website : null, logo: transaction.logo_url ? transaction.logo_url : null };
-        const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount" });
-        const encryptedAccountType = await safeEncrypt( accountMap.get(transaction.account_id).account_type, { transaction_id: transaction.transaction_id, field: "account_type" });
-        const transactionCode = transaction.transaction_code ? await safeEncrypt(transaction.transaction_code, { transaction_id: transaction.transaction_id, field: "transaction_code" }) : null;
+        const transactions = response.data.added || [];
+        const modifiedTransactions = response.data.modified || [];
+        const removedTransactions = response.data.removed || [];
+        cursor = response.data.next_cursor;
+        hasMore = response.data.has_more;
+        newTransactions.push(...transactions);
+        allModifiedTransactions.push(...modifiedTransactions);
+        allRemovedTransactions.push(...removedTransactions);
 
-        bulkOps.push({
-          updateOne: {
-            filter: { plaidTransactionId: transaction.transaction_id },
-            update: {
-              $setOnInsert: {
-                accountId: accountMap.get(transaction.account_id)._id,
-                plaidTransactionId: transaction.transaction_id,
-                plaidAccountId: transaction.account_id,
-                transactionDate: new Date(`${transaction.date}T12:00:00Z`),
-                amount: encryptedAmount,
-                currency: transaction.iso_currency_code,
-                notes: null,
-                merchant,
-                description: null,
-                transactionCode: transactionCode,
-                tags: transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags" }) : null,
-                accountType: encryptedAccountType,
-                pending_transaction_id: transaction.pending_transaction_id,
-                pending: transaction.pending,
+        structuredLogger.logInfo(`[SYNC_TRACE] Plaid API returned transactions.`, {
+          itemId: item,
+          added: transactions.length,
+          modified: modifiedTransactions.length,
+          removed: removedTransactions.length,
+          nextCursor: cursor,
+          hasMore: hasMore,
+        });
+
+        const accountMap = new Map();
+        for (const account of accounts) {
+          accountMap.set(account.plaid_account_id, account);
+        }
+
+        const bulkOps = [];
+        for (let transaction of transactions) {
+          if (!accountMap.has(transaction.account_id)) continue;
+
+          const encryptedMerchantName = transaction.merchant_name ? await safeEncrypt(transaction.merchant_name, { transaction_id: transaction.transaction_id, field: "merchant_name" }) : null;
+          const encryptedName = transaction.name ? await safeEncrypt(transaction.name, { transaction_id: transaction.transaction_id, field: "name" }) : null;
+          const merchantCategory = transaction.category?.[0];
+          const merchant = { merchantName: encryptedMerchantName, name: encryptedName, merchantCategory: merchantCategory, website: transaction.website ? transaction.website : null, logo: transaction.logo_url ? transaction.logo_url : null };
+          const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount" });
+          const encryptedAccountType = await safeEncrypt(accountMap.get(transaction.account_id).account_type, { transaction_id: transaction.transaction_id, field: "account_type" });
+          const transactionCode = transaction.transaction_code ? await safeEncrypt(transaction.transaction_code, { transaction_id: transaction.transaction_id, field: "transaction_code" }) : null;
+          const tags = transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags" }) : null;
+
+          if (transaction.pending_transaction_id) {
+            // This is a posted transaction that was previously pending.
+            // Update the existing pending transaction.
+            const updatePayload = {
+              plaidTransactionId: transaction.transaction_id, // Update the transaction ID
+              postDate: new Date(`${transaction.date}T12:00:00Z`),
+              amount: encryptedAmount,
+              currency: transaction.iso_currency_code,
+              merchant,
+              transactionCode: transactionCode,
+              tags: tags,
+              pending: transaction.pending,
+              pending_transaction_id: null, // The transaction is no longer pending
+            };
+
+            bulkOps.push({
+              updateOne: {
+                filter: { plaidTransactionId: transaction.pending_transaction_id },
+                update: { $set: updatePayload },
+              },
+            });
+          } else {
+            // This is a new transaction.
+            bulkOps.push({
+              updateOne: {
+                filter: { plaidTransactionId: transaction.transaction_id },
+                update: {
+                  $setOnInsert: {
+                    accountId: accountMap.get(transaction.account_id)._id,
+                    plaidTransactionId: transaction.transaction_id,
+                    plaidAccountId: transaction.account_id,
+                    transactionDate: new Date(`${transaction.authorized_date || transaction.date}T12:00:00Z`),
+                    postDate: !transaction.pending ? new Date(`${transaction.date}T12:00:00Z`) : null,
+                    amount: encryptedAmount,
+                    currency: transaction.iso_currency_code,
+                    notes: null,
+                    merchant,
+                    description: null,
+                    transactionCode: transactionCode,
+                    tags: tags,
+                    accountType: encryptedAccountType,
+                    pending_transaction_id: transaction.pending_transaction_id,
+                    pending: transaction.pending,
+                  },
+                },
+                upsert: true,
+              },
+            });
+          }
+
+          if (!transactionsByAccount[transaction.account_id]) {
+            transactionsByAccount[transaction.account_id] = [];
+          }
+          transactionsByAccount[transaction.account_id].push(
+            transaction.transaction_id,
+          );
+        }
+
+        if (bulkOps.length > 0) {
+          structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${bulkOps.length} new transactions.`, { itemId: item });
+          await Transaction.bulkWrite(bulkOps);
+          structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for new transactions successful.`, { itemId: item });
+        }
+
+        if (removedTransactions.length > 0) {
+          structuredLogger.logInfo(`[SYNC_TRACE] Deleting ${removedTransactions.length} removed transactions.`, { itemId: item });
+          await Transaction.deleteMany({
+            plaidTransactionId: {
+              $in: removedTransactions.map((t) => t.transaction_id),
+            },
+          });
+          structuredLogger.logInfo(`[SYNC_TRACE] Deletion of removed transactions successful.`, { itemId: item });
+        }
+
+        if (modifiedTransactions.length > 0) {
+          const modifiedBulkOps = [];
+          for (const transaction of modifiedTransactions) {
+            const encryptedAmount = await safeEncrypt(transaction.amount, {
+              transaction_id: transaction.transaction_id,
+              field: "amount",
+            });
+
+            const updatePayload = {
+              amount: encryptedAmount,
+              tags: transaction.category
+                ? await safeEncrypt(transaction.category, {
+                    transaction_id: transaction.transaction_id,
+                    field: "tags",
+                  })
+                : null,
+              pending_transaction_id: transaction.pending_transaction_id,
+              pending: transaction.pending,
+            };
+
+            // Only update the postDate if the transaction is no longer pending.
+            if (transaction.date && transaction.pending === false) {
+              updatePayload.postDate = new Date(`${transaction.date}T12:00:00Z`);
+            }
+
+            modifiedBulkOps.push({
+              updateOne: {
+                filter: { plaidTransactionId: transaction.transaction_id },
+                update: { $set: updatePayload },
+              },
+            });
+          }
+          structuredLogger.logInfo(
+            `[SYNC_TRACE] Performing bulkWrite for ${modifiedBulkOps.length} modified transactions.`,
+            { itemId: item },
+          );
+          await Transaction.bulkWrite(modifiedBulkOps);
+          structuredLogger.logInfo(
+            `[SYNC_TRACE] bulkWrite for modified transactions successful.`,
+            { itemId: item },
+          );
+        }
+
+        const bulkUpdateAccountsOps = [];
+        for (const [accountId] of Object.entries(transactionsByAccount)) {
+          const accountTransaction = await Transaction.find({
+            plaidAccountId: accountId,
+          })
+            .sort({ transactionDate: -1 })
+            .select("_id")
+            .lean()
+            .then((transactions) => transactions.map((t) => t._id));
+
+          bulkUpdateAccountsOps.push({
+            updateOne: {
+              filter: { plaid_account_id: accountId },
+              update: {
+                $addToSet: { transactions: { $each: accountTransaction } },
               },
             },
-            upsert: true,
-          },
-        });
-
-        if (!transactionsByAccount[transaction.account_id]) {
-          transactionsByAccount[transaction.account_id] = [];
-        }
-        transactionsByAccount[transaction.account_id].push(
-          transaction.transaction_id,
-        );
-      }
-
-      if (bulkOps.length > 0) {
-        structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${bulkOps.length} new transactions.`, { itemId: item });
-        await Transaction.bulkWrite(bulkOps);
-        structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for new transactions successful.`, { itemId: item });
-      }
-
-      if (removedTransactions.length > 0) {
-        structuredLogger.logInfo(`[SYNC_TRACE] Deleting ${removedTransactions.length} removed transactions.`, { itemId: item });
-        await Transaction.deleteMany({
-          plaidTransactionId: {
-            $in: removedTransactions.map((t) => t.transaction_id),
-          },
-        });
-        structuredLogger.logInfo(`[SYNC_TRACE] Deletion of removed transactions successful.`, { itemId: item });
-      }
-
-      if (modifiedTransactions.length > 0) {
-        const modifiedBulkOps = [];
-        for (const transaction of modifiedTransactions) {
-          const encryptedAmount = await safeEncrypt(transaction.amount, {
-            transaction_id: transaction.transaction_id,
-            field: "amount",
-          });
-
-          const updatePayload = {
-            amount: encryptedAmount,
-            tags: transaction.category
-              ? await safeEncrypt(transaction.category, {
-                  transaction_id: transaction.transaction_id,
-                  field: "tags",
-                })
-              : null,
-            pending_transaction_id: transaction.pending_transaction_id,
-            pending: transaction.pending,
-          };
-
-          // Only update the date if Plaid provides one. Prefer `date` but fallback to `authorized_date`.
-          const dateToUse = transaction.date || transaction.authorized_date;
-          if (dateToUse) {
-            updatePayload.transactionDate = new Date(`${dateToUse}T12:00:00Z`);
-          }
-
-          modifiedBulkOps.push({
-            updateOne: {
-              filter: { plaidTransactionId: transaction.transaction_id },
-              update: { $set: updatePayload },
-            },
           });
         }
-        structuredLogger.logInfo(
-          `[SYNC_TRACE] Performing bulkWrite for ${modifiedBulkOps.length} modified transactions.`,
+
+        if (bulkUpdateAccountsOps.length > 0) {
+          structuredLogger.logInfo(`[SYNC_TRACE] Updating ${bulkUpdateAccountsOps.length} PlaidAccount documents with new transaction references.`, { itemId: item });
+          await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
+          structuredLogger.logInfo(`[SYNC_TRACE] PlaidAccount update successful.`, { itemId: item });
+        }
+
+        structuredLogger.logInfo("[SYNC_TRACE] Preparing to update cursor.", { itemId: item, nextCursor: cursor });
+        await PlaidAccount.updateMany(
           { itemId: item },
+          { $set: { nextCursor: cursor } },
         );
-        await Transaction.bulkWrite(modifiedBulkOps);
-        structuredLogger.logInfo(
-          `[SYNC_TRACE] bulkWrite for modified transactions successful.`,
-          { itemId: item },
-        );
-      }
+        structuredLogger.logInfo("[SYNC_TRACE] Cursor update successful.", { itemId: item, updatedCursor: cursor });
 
-      const bulkUpdateAccountsOps = [];
-      for (const [accountId] of Object.entries(transactionsByAccount)) {
-        const accountTransaction = await Transaction.find({
-          plaidAccountId: accountId,
-        })
-          .sort({ transactionDate: -1 })
-          .select("_id")
-          .lean()
-          .then((transactions) => transactions.map((t) => t._id));
-
-        bulkUpdateAccountsOps.push({
-          updateOne: {
-            filter: { plaid_account_id: accountId },
-            update: {
-              $addToSet: { transactions: { $each: accountTransaction } },
-            },
-          },
-        });
-      }
-
-      if (bulkUpdateAccountsOps.length > 0) {
-        structuredLogger.logInfo(`[SYNC_TRACE] Updating ${bulkUpdateAccountsOps.length} PlaidAccount documents with new transaction references.`, { itemId: item });
-        await PlaidAccount.bulkWrite(bulkUpdateAccountsOps);
-        structuredLogger.logInfo(`[SYNC_TRACE] PlaidAccount update successful.`, { itemId: item });
-      }
-
-      structuredLogger.logInfo("[SYNC_TRACE] Preparing to update cursor.", { itemId: item, nextCursor: cursor });
-      await PlaidAccount.updateMany(
-        { itemId: item },
-        { $set: { nextCursor: cursor } },
-      );
-      structuredLogger.logInfo("[SYNC_TRACE] Cursor update successful.", { itemId: item, updatedCursor: cursor });
-
-    } catch (error) {
-      if (error.response?.data?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
-        structuredLogger.logWarning("[SYNC_TRACE] Mutation detected during pagination, restarting with old cursor...", { itemId: item, oldCursor: oldCursor });
-        cursor = oldCursor;
-      } else {
-        structuredLogger.logErrorBlock(error, {
-            operation: "[SYNC_TRACE] Error syncing transactions",
-            itemId: item,
-            plaidError: error.response?.data
-        });
-        throw error;
+      } catch (error) {
+        if (error.response?.data?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
+                  structuredLogger.logWarning("[SYNC_TRACE] Mutation detected during pagination, restarting with null cursor...", { itemId: item, oldCursor: oldCursor });
+                  cursor = null;        } else {
+          structuredLogger.logErrorBlock(error, {
+              operation: "[SYNC_TRACE] Error syncing transactions",
+              itemId: item,
+              plaidError: error.response?.data
+          });
+          throw error;
+        }
       }
     }
-  }
 
-  // Also, trigger an update for investment transactions, just in case.
-  structuredLogger.logInfo("[SYNC_TRACE] Sync loop finished. Proceeding with chained updates.", { itemId: item });
-  try {
-    await updateInvestmentTransactions(item);
-  } catch(error) {
-    // Log this as a non-fatal error, as the primary goal of this function
-    // was to update regular transactions.
-    structuredLogger.logErrorBlock(error, {
-      operation: 'updateTransactions_chained_investment_sync',
-      item_id: item,
-      error_classification: 'non_fatal_error'
-    });
-  }
-
-  // Update balances AFTER transaction sync to ensure consistency
-  await updateAccountBalances(dek, accessToken, accounts, uid);
-
-  if (email) {
-    const internalTransfers = await detectInternalTransfers(newTransactions);
-
-    for (const internalTransaction of internalTransfers) {
-      const transactionId = internalTransaction.transactionId;
-      const transactionRef = internalTransaction.transactionRef;
-      const transaction = await Transaction.findOne({
-        plaidTransactionId: transactionId,
+    // Also, trigger an update for investment transactions, just in case.
+    structuredLogger.logInfo("[SYNC_TRACE] Sync loop finished. Proceeding with chained updates.", { itemId: item });
+    try {
+      await updateInvestmentTransactions(item);
+    } catch(error) {
+      // Log this as a non-fatal error, as the primary goal of this function
+      // was to update regular transactions.
+      structuredLogger.logErrorBlock(error, {
+        operation: 'updateTransactions_chained_investment_sync',
+        item_id: item,
+        error_classification: 'non_fatal_error'
       });
-      if (!transaction) continue;
-      transaction.isInternal = true;
-      transaction.internalReference = transactionRef;
-      await transaction.save();
     }
-  }
-  structuredLogger.logSuccess(
-    "[SYNC_TRACE] Finished updateTransactions successfully.",
-    {
-      itemId: item,
-      added_transactions: newTransactions.length,
-      modified_transactions: allModifiedTransactions.length,
-      removed_transactions: allRemovedTransactions.length,
-    },
-  );
 
-  return transactionsByAccount;
+    // Update balances AFTER transaction sync to ensure consistency
+    await updateAccountBalances(dek, accessToken, accounts, uid);
+
+    if (email) {
+      const internalTransfers = await detectInternalTransfers(newTransactions);
+
+      for (const internalTransaction of internalTransfers) {
+        const transactionId = internalTransaction.transactionId;
+        const transactionRef = internalTransaction.transactionRef;
+        const transaction = await Transaction.findOne({
+          plaidTransactionId: transactionId,
+        });
+        if (!transaction) continue;
+        transaction.isInternal = true;
+        transaction.internalReference = transactionRef;
+        await transaction.save();
+      }
+    }
+    structuredLogger.logSuccess(
+      "[SYNC_TRACE] Finished updateTransactions successfully.",
+      {
+        itemId: item,
+        added_transactions: newTransactions.length,
+        modified_transactions: allModifiedTransactions.length,
+        removed_transactions: allRemovedTransactions.length,
+      },
+    );
+
+    return transactionsByAccount;
+  } finally {
+    syncingItems.delete(item);
+    structuredLogger.logInfo("[SYNC_TRACE] Finished updateTransactions, releasing lock.", { itemId: item });
+  }
 };
+
+const syncingInvestmentItems = new Map();
 
 const updateInvestmentTransactions = async (item) => {
-  return await structuredLogger.withContext(
-    "update_investment_transactions",
-    { item_id: item },
-    async () => {
-      structuredLogger.logOperationStart("update_investment_transactions", {
-        item_id: item,
-      });
-
-      const accessInfo = await getNewestAccessToken({ itemId: item });
-      if (!accessInfo) return;
-      const userId = accessInfo.userId;
-      const user = await User.findById(userId);
-      if (!user) {
-        throw new Error(`User not found for user ID: ${userId}`);
-      }
-      const uid = user?.authUid;
-      const accessToken = await getAccessTokenFromItemId(item, uid);
-
-      if (!accessToken) {
-        return;
-      }
-
-      // Check if the item supports the investments product before proceeding.
-      const itemInfo = await getItemWithAccessToken(accessToken);
-      if (!itemInfo.item.billed_products.includes('investments')) {
-        structuredLogger.logInfo(
-          'Skipping investment sync: item does not have investments product enabled.',
-          { item_id: item, billed_products: itemInfo.item.billed_products },
-        );
-        return 'Skipped: Item does not have investments product.';
-      }
-
-      // First, ensure all accounts for the item are present in our DB.
-      const plaidAccountsData = await getAccountsWithAccessToken(accessToken);
-      const allPlaidAccounts = plaidAccountsData.accounts;
-      const institutionId = plaidAccountsData.item.institution_id;
-      const institutionName = plaidAccountsData.item.institution_name;
-
-      const existingDbAccounts = await PlaidAccount.find({ itemId: item });
-      const existingPlaidAccountIds = new Set(existingDbAccounts.map(a => a.plaid_account_id));
-
-      const newPlaidAccounts = allPlaidAccounts.filter(
-        plaidAcc => !existingPlaidAccountIds.has(plaidAcc.account_id)
-      );
-
-      if (newPlaidAccounts.length > 0) {
-        const dekForNewAccounts = await getUserDek(uid);
-        const safeEncryptForNewAccounts = createSafeEncrypt(uid, dekForNewAccounts);
-        for (const account of newPlaidAccounts) {
-            const hashAccountName = hashValue(account.name);
-            const hashAccountInstitutionId = hashValue(institutionId);
-            const hashAccountMask = hashValue(account.mask);
-
-            const encryptedMask = await safeEncryptForNewAccounts(account.mask, { account_id: account.account_id, field: "mask" });
-            const encryptedToken = await safeEncryptForNewAccounts(accessToken, { account_id: account.account_id, field: "accessToken" });
-            const encryptedName = await safeEncryptForNewAccounts(account.name, { account_id: account.account_id, field: "name" });
-            const encryptedOfficialName = account.official_name ? await safeEncryptForNewAccounts(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
-            const encryptedType = await safeEncryptForNewAccounts(account.type, { account_id: account.account_id, field: "type" });
-            const encryptedSubtype = await safeEncryptForNewAccounts(account.subtype, { account_id: account.account_id, field: "subtype" });
-            const encryptedInstitutionName = await safeEncryptForNewAccounts(institutionName, { account_id: account.account_id, field: "institutionName" });
-            const encryptedCurrentBalance = account.balances?.current ? await safeEncryptForNewAccounts(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
-            const encryptedAvailableBalance = account.balances?.available ? await safeEncryptForNewAccounts(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
-
-            const newAccountDoc = new PlaidAccount({
-              owner_id: userId,
-              itemId: item,
-              accessToken: encryptedToken,
-              owner_type: user.role,
-              plaid_account_id: account.account_id,
-              account_name: encryptedName,
-              account_official_name: encryptedOfficialName,
-              account_type: encryptedType,
-              account_subtype: encryptedSubtype,
-              institution_name: encryptedInstitutionName,
-              institution_id: institutionId,
-              currentBalance: encryptedCurrentBalance,
-              availableBalance: encryptedAvailableBalance,
-              currency: account.balances.iso_currency_code,
-              mask: encryptedMask,
-              hashAccountName,
-              hashAccountInstitutionId,
-              hashAccountMask,
-            });
-            await newAccountDoc.save();
-        }
-      }
-
-      const accounts = await PlaidAccount.find({ itemId: item });
-
-      const dek = await getUserDek(uid);
-      const safeEncrypt = createSafeEncrypt(uid, dek);
-      await updateAccountBalances(dek, accessToken, accounts, uid);
-      let offset = 0;
-      let hasMore = true;
-      const plaidAccountIds = accounts.map(
-        (account) => account.plaid_account_id,
-      );
-
-      const lastTransaction = await Transaction.findOne({
-        plaidAccountId: { $in: plaidAccountIds },
-        isInvestment: true,
-      })
-        .sort({ transactionDate: -1 })
-        .limit(1);
-
-      const today = new Date();
-      const end_date = today.toISOString().split("T")[0];
-
-      let start_date;
-
-      if (lastTransaction) {
-        const safeStart = new Date(lastTransaction.transactionDate);
-        safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
-        if (safeStart > today) {
-          start_date = end_date;
-        } else {
-          start_date = safeStart.toISOString().split("T")[0];
-        }
-      } else {
-        const twoYearsAgo = new Date();
-        twoYearsAgo.setFullYear(today.getFullYear() - 2);
-        start_date = twoYearsAgo.toISOString().split("T")[0];
-      }
-
-      while (hasMore) {
-        const plaidClient = getPlaidClient();
-        const response = await plaidClient.investmentsTransactionsGet({
-          access_token: accessToken,
-          start_date,
-          end_date,
-          options: {
-            count: 500,
-            offset,
-          },
+  if (syncingInvestmentItems.has(item)) {
+    structuredLogger.logInfo("[SYNC_TRACE] Investment sync already in progress for item, skipping.", { itemId: item });
+    return;
+  }
+  syncingInvestmentItems.set(item, true);
+  try {
+    return await structuredLogger.withContext(
+      "update_investment_transactions",
+      { item_id: item },
+      async () => {
+        structuredLogger.logOperationStart("update_investment_transactions", {
+          item_id: item,
         });
-        const transactions = response.data.investment_transactions;
-        const totalInvestments = response.data.total_investment_transactions;
-        hasMore = offset + transactions.length < totalInvestments;
-        offset += transactions.length;
-        for (let transaction of transactions) {
-          const existingTransaction = await Transaction.findOne({
-            plaidTransactionId: transaction.investment_transaction_id,
-          });
-          if (existingTransaction) {
-            continue;
-          }
-          const accountType = "investment";
-          const encryptedAccountType = await safeEncrypt(accountType, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "accountType",
-          });
-          const encryptedName = await safeEncrypt(transaction.name, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "name",
-          });
-          const encryptedAmount = await safeEncrypt(transaction.amount, {
-            transaction_id: transaction.investment_transaction_id,
-            field: "amount",
-          });
 
-          const encryptedSecurityId = transaction.security_id
-            ? await safeEncrypt(transaction.security_id, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "security_id",
-              })
-            : null;
-          const encryptedPrice = transaction.price
-            ? await safeEncrypt(transaction.price, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "price",
-              })
-            : null;
-
-          const encryptedQuantity = transaction.quantity
-            ? await safeEncrypt(transaction.quantity, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "quantity",
-              })
-            : null;
-
-          const encryptedFees = transaction.fees
-            ? await safeEncrypt(transaction.fees, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "fees",
-              })
-            : null;
-
-          const encryptedType = transaction.type
-            ? await safeEncrypt(transaction.type, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "type",
-              })
-            : null;
-
-          const encryptedSubType = transaction.subtype
-            ? await safeEncrypt(transaction.subtype, {
-                transaction_id: transaction.investment_transaction_id,
-                field: "subtype",
-              })
-            : null;
-          const account = accounts.find(
-            (account) => account.plaid_account_id === transaction.account_id,
-          );
-          const newTransaction = new Transaction({
-            accountId: account._id,
-            plaidTransactionId: transaction.investment_transaction_id,
-            plaidAccountId: transaction.account_id,
-            transactionDate: new Date(`${transaction.date}T12:00:00Z`),
-            amount: encryptedAmount,
-            currency: transaction.iso_currency_code,
-            isInvestment: true,
-            name: encryptedName,
-            fees: encryptedFees,
-            price: encryptedPrice,
-            quantity: encryptedQuantity,
-            securityId: encryptedSecurityId,
-            type: encryptedType,
-            subType: encryptedSubType,
-            accountType: encryptedAccountType,
-          });
-
-          await newTransaction.save();
+        const accessInfo = await getNewestAccessToken({ itemId: item });
+        if (!accessInfo) return;
+        const userId = accessInfo.userId;
+        const user = await User.findById(userId);
+        if (!user) {
+          throw new Error(`User not found for user ID: ${userId}`);
         }
-      }
-      structuredLogger.logSuccess("update_investment_transactions_completed", {
-        item_id: item,
-        user_id: userId,
-      });
+        const uid = user?.authUid;
+        const accessToken = await getAccessTokenFromItemId(item, uid);
 
-      return "Investment transactions updated";
-    },
-  );
+        if (!accessToken) {
+          return;
+        }
+
+        // Check if the item supports the investments product before proceeding.
+        const itemInfo = await getItemWithAccessToken(accessToken);
+        if (!itemInfo.item.billed_products.includes('investments')) {
+          structuredLogger.logInfo(
+            'Skipping investment sync: item does not have investments product enabled.',
+            { item_id: item, billed_products: itemInfo.item.billed_products },
+          );
+          return 'Skipped: Item does not have investments product.';
+        }
+
+        // First, ensure all accounts for the item are present in our DB.
+        const plaidAccountsData = await getAccountsWithAccessToken(accessToken);
+        const allPlaidAccounts = plaidAccountsData.accounts;
+        const institutionId = plaidAccountsData.item.institution_id;
+        const institutionName = plaidAccountsData.item.institution_name;
+
+        const existingDbAccounts = await PlaidAccount.find({ itemId: item });
+        const existingPlaidAccountIds = new Set(existingDbAccounts.map(a => a.plaid_account_id));
+
+        const newPlaidAccounts = allPlaidAccounts.filter(
+          plaidAcc => !existingPlaidAccountIds.has(plaidAcc.account_id)
+        );
+
+        if (newPlaidAccounts.length > 0) {
+          const dekForNewAccounts = await getUserDek(uid);
+          const safeEncryptForNewAccounts = createSafeEncrypt(uid, dekForNewAccounts);
+          for (const account of newPlaidAccounts) {
+              const hashAccountName = hashValue(account.name);
+              const hashAccountInstitutionId = hashValue(institutionId);
+              const hashAccountMask = hashValue(account.mask);
+
+              const encryptedMask = await safeEncryptForNewAccounts(account.mask, { account_id: account.account_id, field: "mask" });
+              const encryptedToken = await safeEncryptForNewAccounts(accessToken, { account_id: account.account_id, field: "accessToken" });
+              const encryptedName = await safeEncryptForNewAccounts(account.name, { account_id: account.account_id, field: "name" });
+              const encryptedOfficialName = account.official_name ? await safeEncryptForNewAccounts(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
+              const encryptedType = await safeEncryptForNewAccounts(account.type, { account_id: account.account_id, field: "type" });
+              const encryptedSubtype = await safeEncryptForNewAccounts(account.subtype, { account_id: account.account_id, field: "subtype" });
+              const encryptedInstitutionName = await safeEncryptForNewAccounts(institutionName, { account_id: account.account_id, field: "institutionName" });
+              const encryptedCurrentBalance = account.balances?.current ? await safeEncryptForNewAccounts(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
+              const encryptedAvailableBalance = account.balances?.available ? await safeEncryptForNewAccounts(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
+
+              const newAccountDoc = new PlaidAccount({
+                owner_id: userId,
+                itemId: item,
+                accessToken: encryptedToken,
+                owner_type: user.role,
+                plaid_account_id: account.account_id,
+                account_name: encryptedName,
+                account_official_name: encryptedOfficialName,
+                account_type: encryptedType,
+                account_subtype: encryptedSubtype,
+                institution_name: encryptedInstitutionName,
+                institution_id: institutionId,
+                currentBalance: encryptedCurrentBalance,
+                availableBalance: encryptedAvailableBalance,
+                currency: account.balances.iso_currency_code,
+                mask: encryptedMask,
+                hashAccountName,
+                hashAccountInstitutionId,
+                hashAccountMask,
+              });
+              await newAccountDoc.save();
+          }
+        }
+
+        const accounts = await PlaidAccount.find({ itemId: item });
+
+        const dek = await getUserDek(uid);
+        const safeEncrypt = createSafeEncrypt(uid, dek);
+        await updateAccountBalances(dek, accessToken, accounts, uid, plaidAccountsData);
+        let offset = 0;
+        let hasMore = true;
+        const plaidAccountIds = accounts.map(
+          (account) => account.plaid_account_id,
+        );
+
+        const lastTransaction = await Transaction.findOne({
+          plaidAccountId: { $in: plaidAccountIds },
+          isInvestment: true,
+        })
+          .sort({ transactionDate: -1 })
+          .limit(1);
+
+        const today = new Date();
+        const end_date = today.toISOString().split("T")[0];
+
+        let start_date;
+
+        if (lastTransaction) {
+          const safeStart = new Date(lastTransaction.transactionDate);
+          safeStart.setDate(safeStart.getDate() - 2); // <- restamos 2 días
+          if (safeStart > today) {
+            start_date = end_date;
+          } else {
+            start_date = safeStart.toISOString().split("T")[0];
+          }
+        } else {
+          const twoYearsAgo = new Date();
+          twoYearsAgo.setFullYear(today.getFullYear() - 2);
+          start_date = twoYearsAgo.toISOString().split("T")[0];
+        }
+
+        while (hasMore) {
+          const plaidClient = getPlaidClient();
+          const response = await plaidClient.investmentsTransactionsGet({
+            access_token: accessToken,
+            start_date,
+            end_date,
+            options: {
+              count: 500,
+              offset,
+            },
+          });
+          const transactions = response.data.investment_transactions;
+          const totalInvestments = response.data.total_investment_transactions;
+          hasMore = offset + transactions.length < totalInvestments;
+          offset += transactions.length;
+          for (let transaction of transactions) {
+            const existingTransaction = await Transaction.findOne({
+              plaidTransactionId: transaction.investment_transaction_id,
+            });
+            if (existingTransaction) {
+              continue;
+            }
+            const accountType = "investment";
+            const encryptedAccountType = await safeEncrypt(accountType, {
+              transaction_id: transaction.investment_transaction_id,
+              field: "accountType",
+            });
+            const encryptedName = await safeEncrypt(transaction.name, {
+              transaction_id: transaction.investment_transaction_id,
+              field: "name",
+            });
+            const encryptedAmount = await safeEncrypt(transaction.amount, {
+              transaction_id: transaction.investment_transaction_id,
+              field: "amount",
+            });
+
+            const encryptedSecurityId = transaction.security_id
+              ? await safeEncrypt(transaction.security_id, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "security_id",
+                })
+              : null;
+            const encryptedPrice = transaction.price
+              ? await safeEncrypt(transaction.price, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "price",
+                })
+              : null;
+
+            const encryptedQuantity = transaction.quantity
+              ? await safeEncrypt(transaction.quantity, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "quantity",
+                })
+              : null;
+
+            const encryptedFees = transaction.fees
+              ? await safeEncrypt(transaction.fees, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "fees",
+                })
+              : null;
+
+            const encryptedType = transaction.type
+              ? await safeEncrypt(transaction.type, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "type",
+                })
+              : null;
+
+            const encryptedSubType = transaction.subtype
+              ? await safeEncrypt(transaction.subtype, {
+                  transaction_id: transaction.investment_transaction_id,
+                  field: "subtype",
+                })
+              : null;
+            const account = accounts.find(
+              (account) => account.plaid_account_id === transaction.account_id,
+            );
+            const newTransaction = new Transaction({
+              accountId: account._id,
+              plaidTransactionId: transaction.investment_transaction_id,
+              plaidAccountId: transaction.account_id,
+              transactionDate: new Date(`${transaction.date}T12:00:00Z`),
+              amount: encryptedAmount,
+              currency: transaction.iso_currency_code,
+              isInvestment: true,
+              name: encryptedName,
+              fees: encryptedFees,
+              price: encryptedPrice,
+              quantity: encryptedQuantity,
+              securityId: encryptedSecurityId,
+              type: encryptedType,
+              subType: encryptedSubType,
+              accountType: encryptedAccountType,
+            });
+
+            await newTransaction.save();
+          }
+        }
+        structuredLogger.logSuccess("update_investment_transactions_completed", {
+          item_id: item,
+          user_id: userId,
+        });
+
+        return "Investment transactions updated";
+      },
+    );
+  } finally {
+    syncingInvestmentItems.delete(item);
+    structuredLogger.logInfo("[SYNC_TRACE] Finished investment sync, releasing lock.", { itemId: item });
+  }
 };
 
 
+const syncingLiabilityItems = new Map();
+
 const updateLiabilities = async (item) => {
-  return await structuredLogger.withContext(
-    'update_liabilities',
-    { item_id: item },
-    async () => {
-      const accessInfo = await getNewestAccessToken({ itemId: item });
-      if (!accessInfo) {
-        throw new Error(`No access token found for item ID: ${item}`);
-      }
-      const user = await User.findById(accessInfo.userId);
-      if (!user) {
-        throw new Error(`User not found for item ID: ${item}`);
-      }
-      const uid = user.authUid;
-      const accessToken = await getAccessTokenFromItemId(item, uid);
-      if (!accessToken) {
-        throw new Error(`Access token could not be retrieved for item ID: ${item}`);
-      }
+  if (syncingLiabilityItems.has(item)) {
+    structuredLogger.logInfo("[SYNC_TRACE] Liability sync already in progress for item, skipping.", { itemId: item });
+    return;
+  }
+  syncingLiabilityItems.set(item, true);
+  try {
+    return await structuredLogger.withContext(
+      'update_liabilities',
+      { item_id: item },
+      async () => {
+        const accessInfo = await getNewestAccessToken({ itemId: item });
+        if (!accessInfo) {
+          throw new Error(`No access token found for item ID: ${item}`);
+        }
+        const user = await User.findById(accessInfo.userId);
+        if (!user) {
+          throw new Error(`User not found for item ID: ${item}`);
+        }
+        const uid = user.authUid;
+        const accessToken = await getAccessTokenFromItemId(item, uid);
+        if (!accessToken) {
+          throw new Error(`Access token could not be retrieved for item ID: ${item}`);
+        }
 
-      const dek = await getUserDek(uid);
-      const safeEncrypt = createSafeEncrypt(uid, dek);
+        const dek = await getUserDek(uid);
+        const safeEncrypt = createSafeEncrypt(uid, dek);
 
-      const liabilitiesResponse = await getLoanLiabilitiesWithAccessToken(accessToken);
+        const liabilitiesResponse = await getLoanLiabilitiesWithAccessToken(accessToken);
 
-      if (liabilitiesResponse && liabilitiesResponse.liabilities) {
-        const accountIds = liabilitiesResponse.accounts.map(acc => acc.account_id);
+        if (liabilitiesResponse && liabilitiesResponse.liabilities) {
+          const accountIds = liabilitiesResponse.accounts.map(acc => acc.account_id);
 
-        // Delete old liabilities for all affected accounts to ensure consistency
-        await Liability.deleteMany({ accountId: { $in: accountIds } });
+          // Delete old liabilities for all affected accounts to ensure consistency
+          await Liability.deleteMany({ accountId: { $in: accountIds } });
 
-        let newLiabilitiesCount = 0;
-        // Now, add the new, updated liabilities
-        for (const [key, value] of Object.entries(liabilitiesResponse.liabilities)) {
-          if (Array.isArray(value)) {
-            for (const liab of value) {
-              newLiabilitiesCount++;
-              const encryptedAccountNumber = await safeEncrypt(liab.account_number);
-              const encryptedLastPaymentAmount = await safeEncrypt(liab.last_payment_amount);
-              const encryptedMinimumPaymentAmount = await safeEncrypt(liab.minimum_payment_amount);
-              const encryptedLastStatementBalance = await safeEncrypt(liab.last_statement_balance);
-              const encryptedLoanTypeDescription = await safeEncrypt(liab.loan_type_description);
-              const encryptedLoanTerm = await safeEncrypt(liab.loan_term);
-              const encryptedNextMonthlyPayment = await safeEncrypt(liab.next_monthly_payment);
-              const encryptedOriginationPrincipalAmount = await safeEncrypt(liab.origination_principal_amount);
-              const encryptedPastDueAmount = await safeEncrypt(liab.past_due_amount);
-              const encryptedEscrowBalance = await safeEncrypt(liab.escrow_balance);
-              const encryptedHasPmi = await safeEncrypt(liab.has_pmi);
-              const encryptedHasPrepaymentPenalty = await safeEncrypt(liab.has_prepayment_penalty);
-              let encryptedPropertyAddress;
-              if (liab.property_address) {
-                encryptedPropertyAddress = {
-                  city: await safeEncrypt(liab.property_address?.city),
-                  country: await safeEncrypt(liab.property_address?.country),
-                  postalCode: await safeEncrypt(liab.property_address?.postal_code),
-                  region: await safeEncrypt(liab.property_address?.region),
-                  street: await safeEncrypt(liab.property_address?.street),
-                };
+          let newLiabilitiesCount = 0;
+          // Now, add the new, updated liabilities
+          for (const [key, value] of Object.entries(liabilitiesResponse.liabilities)) {
+            if (Array.isArray(value)) {
+              for (const liab of value) {
+                newLiabilitiesCount++;
+                const encryptedAccountNumber = await safeEncrypt(liab.account_number);
+                const encryptedLastPaymentAmount = await safeEncrypt(liab.last_payment_amount);
+                const encryptedMinimumPaymentAmount = await safeEncrypt(liab.minimum_payment_amount);
+                const encryptedLastStatementBalance = await safeEncrypt(liab.last_statement_balance);
+                const encryptedLoanTypeDescription = await safeEncrypt(liab.loan_type_description);
+                const encryptedLoanTerm = await safeEncrypt(liab.loan_term);
+                const encryptedNextMonthlyPayment = await safeEncrypt(liab.next_monthly_payment);
+                const encryptedOriginationPrincipalAmount = await safeEncrypt(liab.origination_principal_amount);
+                const encryptedPastDueAmount = await safeEncrypt(liab.past_due_amount);
+                const encryptedEscrowBalance = await safeEncrypt(liab.escrow_balance);
+                const encryptedHasPmi = await safeEncrypt(liab.has_pmi);
+                const encryptedHasPrepaymentPenalty = await safeEncrypt(liab.has_prepayment_penalty);
+                let encryptedPropertyAddress;
+                if (liab.property_address) {
+                  encryptedPropertyAddress = {
+                    city: await safeEncrypt(liab.property_address?.city),
+                    country: await safeEncrypt(liab.property_address?.country),
+                    postalCode: await safeEncrypt(liab.property_address?.postal_code),
+                    region: await safeEncrypt(liab.property_address?.region),
+                    street: await safeEncrypt(liab.property_address?.street),
+                  };
+                }
+                const encryptedGuarantor = await safeEncrypt(liab.guarantor);
+                const encryptedLoanName = await safeEncrypt(liab.loan_name);
+                const encryptedOutstandingInterestAmount = await safeEncrypt(liab.outstanding_interest_amount);
+                const encryptedPaymentReferenceNumber = await safeEncrypt(liab.payment_reference_number);
+                const encryptedPslfStatus = await safeEncrypt(liab.pslf_status);
+                let encryptedRepaymentPlan;
+                if (liab.repayment_plan) {
+                  encryptedRepaymentPlan = {
+                    type: await safeEncrypt(liab.repayment_plan?.type),
+                    description: await safeEncrypt(liab.repayment_plan?.description),
+                  };
+                }
+                const encryptedSequenceNumber = await safeEncrypt(liab.sequence_number);
+                let encryptedServicerAddress;
+                if (liab.servicer_address) {
+                  encryptedServicerAddress = {
+                    city: await safeEncrypt(liab.servicer_address?.city),
+                    country: await safeEncrypt(liab.servicer_address?.country),
+                    postalCode: await safeEncrypt(liab.servicer_address?.postal_code),
+                    region: await safeEncrypt(liab.servicer_address?.region),
+                    street: await safeEncrypt(liab.servicer_address?.street),
+                  };
+                }
+                const encryptedYtdInterestPaid = await safeEncrypt(liab.ytd_interest_paid);
+                const encryptedYtdPrincipalPaid = await safeEncrypt(liab.ytd_principal_paid);
+
+                const newLiability = new Liability({
+                  liabilityType: key,
+                  accountId: liab.account_id,
+                  accountNumber: encryptedAccountNumber,
+                  lastPaymentAmount: encryptedLastPaymentAmount,
+                  lastPaymentDate: liab.last_payment_date,
+                  nextPaymentDueDate: liab.next_payment_due_date,
+                  minimumPaymentAmount: encryptedMinimumPaymentAmount,
+                  lastStatementBalance: encryptedLastStatementBalance,
+                  lastStatementIssueDate: liab.last_statement_issue_date,
+                  isOverdue: liab.is_overdue,
+                  aprs: liab.aprs,
+                  loanTypeDescription: encryptedLoanTypeDescription,
+                  loanTerm: encryptedLoanTerm,
+                  maturityDate: liab.maturity_date,
+                  nextMonthlyPayment: encryptedNextMonthlyPayment,
+                  originationDate: liab.origination_date,
+                  originationPrincipalAmount: encryptedOriginationPrincipalAmount,
+                  pastDueAmount: encryptedPastDueAmount,
+                  escrowBalance: encryptedEscrowBalance,
+                  hasPmi: encryptedHasPmi,
+                  hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
+                  propertyAddress: encryptedPropertyAddress,
+                  interestRate: liab.interest_rate,
+                  disbursementDates: liab.disbursement_dates,
+                  expectedPayoffDate: liab.expected_payoff_date,
+                  guarantor: encryptedGuarantor,
+                  interestRatePercentage: liab.interest_rate_percentage,
+                  loanName: encryptedLoanName,
+                  loanStatus: liab.loan_status,
+                  outstandingInterestAmount: encryptedOutstandingInterestAmount,
+                  paymentReferenceNumber: encryptedPaymentReferenceNumber,
+                  pslfStatus: encryptedPslfStatus,
+                  repaymentPlan: encryptedRepaymentPlan,
+                  sequenceNumber: encryptedSequenceNumber,
+                  servicerAddress: encryptedServicerAddress,
+                  ytdInterestPaid: encryptedYtdInterestPaid,
+                  ytdPrincipalPaid: encryptedYtdPrincipalPaid,
+                });
+                await newLiability.save();
               }
-              const encryptedGuarantor = await safeEncrypt(liab.guarantor);
-              const encryptedLoanName = await safeEncrypt(liab.loan_name);
-              const encryptedOutstandingInterestAmount = await safeEncrypt(liab.outstanding_interest_amount);
-              const encryptedPaymentReferenceNumber = await safeEncrypt(liab.payment_reference_number);
-              const encryptedPslfStatus = await safeEncrypt(liab.pslf_status);
-              let encryptedRepaymentPlan;
-              if (liab.repayment_plan) {
-                encryptedRepaymentPlan = {
-                  type: await safeEncrypt(liab.repayment_plan?.type),
-                  description: await safeEncrypt(liab.repayment_plan?.description),
-                };
-              }
-              const encryptedSequenceNumber = await safeEncrypt(liab.sequence_number);
-              let encryptedServicerAddress;
-              if (liab.servicer_address) {
-                encryptedServicerAddress = {
-                  city: await safeEncrypt(liab.servicer_address?.city),
-                  country: await safeEncrypt(liab.servicer_address?.country),
-                  postalCode: await safeEncrypt(liab.servicer_address?.postal_code),
-                  region: await safeEncrypt(liab.servicer_address?.region),
-                  street: await safeEncrypt(liab.servicer_address?.street),
-                };
-              }
-              const encryptedYtdInterestPaid = await safeEncrypt(liab.ytd_interest_paid);
-              const encryptedYtdPrincipalPaid = await safeEncrypt(liab.ytd_principal_paid);
-
-              const newLiability = new Liability({
-                liabilityType: key,
-                accountId: liab.account_id,
-                accountNumber: encryptedAccountNumber,
-                lastPaymentAmount: encryptedLastPaymentAmount,
-                lastPaymentDate: liab.last_payment_date,
-                nextPaymentDueDate: liab.next_payment_due_date,
-                minimumPaymentAmount: encryptedMinimumPaymentAmount,
-                lastStatementBalance: encryptedLastStatementBalance,
-                lastStatementIssueDate: liab.last_statement_issue_date,
-                isOverdue: liab.is_overdue,
-                aprs: liab.aprs,
-                loanTypeDescription: encryptedLoanTypeDescription,
-                loanTerm: encryptedLoanTerm,
-                maturityDate: liab.maturity_date,
-                nextMonthlyPayment: encryptedNextMonthlyPayment,
-                originationDate: liab.origination_date,
-                originationPrincipalAmount: encryptedOriginationPrincipalAmount,
-                pastDueAmount: encryptedPastDueAmount,
-                escrowBalance: encryptedEscrowBalance,
-                hasPmi: encryptedHasPmi,
-                hasPrepaymentPenalty: encryptedHasPrepaymentPenalty,
-                propertyAddress: encryptedPropertyAddress,
-                interestRate: liab.interest_rate,
-                disbursementDates: liab.disbursement_dates,
-                expectedPayoffDate: liab.expected_payoff_date,
-                guarantor: encryptedGuarantor,
-                interestRatePercentage: liab.interest_rate_percentage,
-                loanName: encryptedLoanName,
-                loanStatus: liab.loan_status,
-                outstandingInterestAmount: encryptedOutstandingInterestAmount,
-                paymentReferenceNumber: encryptedPaymentReferenceNumber,
-                pslfStatus: encryptedPslfStatus,
-                repaymentPlan: encryptedRepaymentPlan,
-                sequenceNumber: encryptedSequenceNumber,
-                servicerAddress: encryptedServicerAddress,
-                ytdInterestPaid: encryptedYtdInterestPaid,
-                ytdPrincipalPaid: encryptedYtdPrincipalPaid,
-              });
-              await newLiability.save();
             }
           }
+          structuredLogger.logSuccess('update_liabilities_completed', {
+            item_id: item,
+            user_id: uid,
+            updated_accounts_count: accountIds.length,
+            new_liabilities_count: newLiabilitiesCount,
+          });
+          return { success: true, updated_accounts: accountIds.length };
         }
-        structuredLogger.logSuccess('update_liabilities_completed', {
-          item_id: item,
-          user_id: uid,
-          updated_accounts_count: accountIds.length,
-          new_liabilities_count: newLiabilitiesCount,
-        });
-        return { success: true, updated_accounts: accountIds.length };
-      }
-      return { success: true, updated_accounts: 0, message: "No new liability data to update." };
-    }
-  );
+        return { success: true, updated_accounts: 0, message: "No new liability data to update." };
+      },
+    );
+  } finally {
+    syncingLiabilityItems.delete(item);
+    structuredLogger.logInfo("[SYNC_TRACE] Finished liability sync, releasing lock.", { itemId: item });
+  }
 };
 
 const updateInvadlidAccessToken = async (item) => {

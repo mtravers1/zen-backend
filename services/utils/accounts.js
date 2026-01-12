@@ -5,32 +5,8 @@ import { createSafeDecrypt } from "../../lib/encryptionHelper.js";
 import User from "../../database/models/User.js";
 import * as Sentry from "@sentry/node";
 
-export const calculateWeeklyTotals = (groupedTransactions, allTransactions) => {
+export const calculateWeeklyTotals = (groupedTransactions) => {
   const weeklySummary = [];
-  let totalGeneralDeposits = 0;
-
-  for (const week in groupedTransactions) {
-    const weekTransactions = groupedTransactions[week];
-
-    const depositoryTransactions = weekTransactions.filter(
-      (t) => t.accountType === "depository",
-    );
-    const creditTransactions = weekTransactions.filter(
-      (t) => t.accountType === "credit",
-    );
-
-    const depositoryDepositsAmount = depositoryTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-
-    const creditDepositsAmount = creditTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((total, transaction) => total + transaction.amount, 0);
-    const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
-    const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-
-    totalGeneralDeposits += depositDepositsAmountAbs + creditDepositsAmountAbs;
-  }
 
   for (const week in groupedTransactions) {
     const weekTransactions = groupedTransactions[week];

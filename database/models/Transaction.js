@@ -38,6 +38,9 @@ const transactionSchema = new Schema({
     type: Date,
     required: true,
   },
+  postDate: {
+    type: Date,
+  },
   amount: {
     type: String,
     required: true,

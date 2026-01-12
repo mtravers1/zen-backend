@@ -81,6 +81,22 @@ const addAccount = async (accessToken, email, uid) => {
         });
 
         if (existingAccount) {
+          // If the account already exists, update its itemId and accessToken to the new ones from the re-link.
+          existingAccount.itemId = accountsResponse.item.item_id;
+          
+          // Encrypt and update the accessToken.
+          const encryptedToken = await safeEncrypt(accessToken, {
+            user_id: userId,
+            item_id: accountsResponse.item.item_id,
+            field: "accessToken",
+          });
+          existingAccount.accessToken = encryptedToken;
+
+          // Also, reset the isAccessTokenExpired flag.
+          existingAccount.isAccessTokenExpired = false;
+
+          await existingAccount.save();
+
           existingAccounts.push(existingAccount);
           allAccounts.push(existingAccount);
           continue;
@@ -311,7 +327,8 @@ const addAccount = async (accessToken, email, uid) => {
           accountId: account._id,
           plaidTransactionId: transaction.transaction_id,
           plaidAccountId: transaction.account_id,
-          transactionDate: transaction.date,
+          transactionDate: transaction.authorized_date || transaction.date,
+          postDate: transaction.date,
           amount: encyptedAmount,
           currency: transaction.iso_currency_code,
           notes: null,
@@ -372,6 +389,7 @@ const addAccount = async (accessToken, email, uid) => {
           plaidTransactionId: transaction.investment_transaction_id,
           plaidAccountId: transaction.account_id,
           transactionDate: transaction.date,
+          postDate: transaction.date,
           amount: encryptedAmount,
           currency: transaction.iso_currency_code,
           isInvestment: true,
@@ -975,7 +993,7 @@ const calculateCashFlowsWeekly = async (
     ...creditTransactions,
   ]);
 
-  return calculateWeeklyTotals(groupedTransactions, allTransactions);
+  return calculateWeeklyTotals(groupedTransactions);
 };
 
 const weeklyCashFlowPlaidAccountSetUpTransactions = async (
@@ -1341,7 +1359,7 @@ const getCashFlows = async (profile, uid) => {
       /// Calculate total cash balance
 
       const totalCashBalance = plaidAccounts
-        .filter(acc => acc.account_type === 'depository' || acc.account_type === 'investment')
+        .filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd') || acc.account_type === 'investment')
         .reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
 
       /// Calculate net worth
@@ -1382,7 +1400,7 @@ const getCashFlows = async (profile, uid) => {
       // weekly cash flow
 
       const ninetyDaysAgoDate = new Date();
-      ninetyDaysAgoDate.setDate(ninetyDaysAgoDate.getDate() - 86);
+      ninetyDaysAgoDate.setDate(ninetyDaysAgoDate.getDate() - 90);
       const weeklyCashFlow = {};
 
       const today = new Date();
@@ -2946,7 +2964,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
     ...depositoryTransactions,
     ...creditTransactions,
   ]);
-  const result = calculateWeeklyTotals(groupedTransactions, allTransactions);
+  const result = calculateWeeklyTotals(groupedTransactions);
   return { weeklyCashFlow: result };
 };
 
