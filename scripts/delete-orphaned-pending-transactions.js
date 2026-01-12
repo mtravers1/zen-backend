@@ -17,9 +17,19 @@ const findOrphanedPendingTransactions = async () => {
 
   try {
     structuredLogger.logInfo('Connecting to the database...');
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    const mongoDB = process.env.MONGODB_URI;
+    const user = process.env.MONGODB_USER;
+    const pass = process.env.MONGODB_PASS;
+    const dbName = process.env.MONGODB_DB;
+
+    if (!mongoDB || !user || !pass || !dbName) {
+      throw new Error("Missing required MONGODB environment variables");
+    }
+
+    await mongoose.connect(mongoDB, {
+      user,
+      pass,
+      dbName,
     });
     structuredLogger.logInfo('Database connected.');
 
