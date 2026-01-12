@@ -91,8 +91,6 @@ export const getStartOfWeek = (date) => {
 
 
 export const groupByWeek = (transactions) => {
-  if (transactions.length === 0) return {};
-
   const groupedTrans = transactions.reduce((acc, transaction) => {
     const week = getStartOfWeek(transaction.transactionDate);
     if (!acc[week]) acc[week] = [];
@@ -100,13 +98,12 @@ export const groupByWeek = (transactions) => {
     return acc;
   }, {});
 
-  // Get the minimum and maximum weeks of the group
-  const allWeeksSorted = Object.keys(groupedTrans).sort(
-    (a, b) => new Date(a) - new Date(b),
-  );
+  const today = new Date();
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(today.getDate() - 90);
 
-  const start = new Date(allWeeksSorted[0]);
-  const end = new Date(allWeeksSorted[allWeeksSorted.length - 1]);
+  const start = new Date(getStartOfWeek(ninetyDaysAgo));
+  const end = new Date(getStartOfWeek(today));
 
   // Iterate through all weeks between the start and end
   const orderedGrouped = {};
@@ -116,27 +113,5 @@ export const groupByWeek = (transactions) => {
     orderedGrouped[key] = groupedTrans[key] || [];
     current.setUTCDate(current.getUTCDate() + 7); // advance to the next week
   }
-
-  /*const keys = Object.keys(orderedGrouped).map((or) => {
-    console.log("WEEK", or);
-    const weekSet = orderedGrouped[or];
-    console.log("WEEK", or, weekSet.length);
-    return or;
-  });
-
-  keys.map((dt, index) => {
-    const og = orderedGrouped[dt];
-    og.map((data) => {
-      console.log(
-        index,
-        "Weekk Data: ",
-        dt,
-        data.transactionDate,
-        data.accountType,
-        data.amount
-      );
-    });
-  });*/
-
   return orderedGrouped;
 };
