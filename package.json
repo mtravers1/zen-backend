@@ -19,7 +19,8 @@
     "update-webhooks": "node -r dotenv/config scripts/update-plaid-webhooks.js",
     "delete-invalid-plaid-tokens": "node -r dotenv/config scripts/delete-invalid-plaid-tokens.js",
     "fix-transaction-dates": "node -r dotenv/config scripts/fix-transaction-dates.js",
-    "delete-orphaned-pending-transactions": "node -r dotenv/config scripts/delete-orphaned-pending-transactions.js"
+    "delete-orphaned-pending-transactions": "node -r dotenv/config scripts/delete-orphaned-pending-transactions.js",
+    "delete-duplicate-transactions": "node -r dotenv/config scripts/delete-orphaned-pending-transactions.js"
   },
   "author": "",
   "license": "ISC",
