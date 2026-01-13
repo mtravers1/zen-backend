@@ -387,29 +387,12 @@ const getUserAccessTokens = async (email, uid) => {
   return decryptedTokens;
 };
 
-const getAccounts = async (email, uid) => {
-  try {
-    const tokens = await getUserAccessTokens(email, uid);
-    if (!tokens.length) return [];
-    const plaidClient = getPlaidClient();
-    const accountsPromises = tokens.map(async (token) => {
-      const response = await plaidClient.accountsGet({
-        access_token: token.accessToken,
-      });
-      return response.data.accounts.map((account) => ({
-        ...account,
-        institutionId: token.institutionId,
-      }));
-    });
-
-    const accountsArray = await Promise.all(accountsPromises);
-
-    const accounts = accountsArray.flat();
-
-    return accounts;
-  } catch (error) {
-    return [];
+const getAccountsByItem = async (itemId, uid) => {
+  const accessToken = await getAccessTokenFromItemId(itemId, uid);
+  if (!accessToken) {
+    throw new Error(`Could not retrieve access token for item ${itemId}`);
   }
+  return await getAccountsWithAccessToken(accessToken);
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
@@ -1911,6 +1894,7 @@ const plaidService = {
   getUserAccessTokens,
   updateTransactions,
   getAccounts,
+  getAccountsByItem,
   detectInternalTransfers,
   getAccountsWithAccessToken,
   getTransactionsWithAccessToken,

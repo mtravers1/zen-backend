@@ -48,6 +48,10 @@ const addAccount = async (accessToken, email, uid) => {
       const accountsResponse =
         await plaidService.getAccountsWithAccessToken(accessToken);
 
+      if (!accountsResponse || !accountsResponse.accounts) {
+        throw new Error("Could not get accounts from Plaid");
+      }
+
       const accounts = accountsResponse.accounts;
       const institutionId = accountsResponse.item.institution_id;
       const institutionName = accountsResponse.item.institution_name;
@@ -67,16 +71,8 @@ const addAccount = async (accessToken, email, uid) => {
       const allAccounts = [];
 
       for (let account of accounts) {
-        const hashAccountName = hashValue(account.name);
-        const hashAccountInstitutionId = hashValue(
-          accountsResponse.item.institution_id,
-        );
-        const hashAccountMask = hashValue(account.mask);
-
         const existingAccount = await PlaidAccount.findOne({
-          hashAccountName,
-          hashAccountInstitutionId,
-          hashAccountMask,
+          plaid_account_id: account.account_id,
           owner_id: user._id,
         });
 
@@ -173,9 +169,6 @@ const addAccount = async (accessToken, email, uid) => {
           transactions: [],
           nextCursor: null,
           mask: encryptedMask,
-          hashAccountName,
-          hashAccountInstitutionId,
-          hashAccountMask,
         });
 
         accountTypes[account.account_id] = account.type;
