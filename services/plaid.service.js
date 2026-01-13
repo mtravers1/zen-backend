@@ -1219,7 +1219,11 @@ const updateInvestmentTransactions = async (item) => {
               transaction_id: transaction.investment_transaction_id,
               field: "name",
             });
-            const encryptedAmount = await safeEncrypt(transaction.amount, {
+            let transactionAmount = transaction.amount;
+            if (transaction.type === "buy") {
+              transactionAmount = -transactionAmount;
+            }
+            const encryptedAmount = await safeEncrypt(transactionAmount, {
               transaction_id: transaction.investment_transaction_id,
               field: "amount",
             });
