@@ -243,8 +243,7 @@ const getAccounts = async (req, res) => {
   const requestId = structuredLogger.startRequestContext(req, "getAccounts");
 
   try {
-    // const { email } = req.user;
-    const email = "galvanerick27@gmail.com";
+    const { uid, email } = req.user;
 
     const accounts = await structuredLogger.withContext(
       "getAccounts",
@@ -253,7 +252,13 @@ const getAccounts = async (req, res) => {
         request_id: requestId,
       },
       async () => {
-        return await plaidService.getAccounts(email);
+        const tokens = await plaidService.getUserAccessTokens(email, uid);
+        const allAccounts = [];
+        for (const token of tokens) {
+          const accountsForItem = await plaidService.getAccountsByItem(token.itemId, uid);
+          allAccounts.push(...accountsForItem.accounts);
+        }
+        return allAccounts;
       },
     );
 
