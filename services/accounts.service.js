@@ -28,17 +28,19 @@ import {
   safeDecryptNumericValue,
 } from "../lib/encryptionHelper.js";
 
-export const formatTransactionAmount = (transaction, account) => {
+const getFormattedAmount = (transaction, account) => {
   let amount = transaction.amount;
-  if (account.account_type === "investment") {
-    if (transaction.type === "buy") {
-      amount = -Math.abs(amount);
-    } else if (transaction.type === "sell") {
-      amount = Math.abs(amount);
-    }
-  } else {
-    amount = amount;
+  const type = account.account_type;
+
+  if (type === "credit" || type === "loan") {
+    amount = -amount;
   }
+
+  return amount;
+};
+
+export const formatTransactionAmount = (transaction, account) => {
+  const amount = getFormattedAmount(transaction, account);
   return { ...transaction, amount };
 };
 
