@@ -652,7 +652,8 @@ const updateAccountBalances = async (dek, accessToken, accounts, uid, newAccount
     if (newAccountsBalances) {
       const bulkOps = [];
       const safeEncrypt = createSafeEncrypt(uid, dek);
-      for (const account of newAccountsBalances.data.accounts) {
+      const accountsToProcess = newAccountsBalances.data ? newAccountsBalances.data.accounts : newAccountsBalances.accounts;
+      for (const account of accountsToProcess) {
         const accountBalance = account.balances;
         const accountType = account.type;
         const accountSubtype = account.subtype;

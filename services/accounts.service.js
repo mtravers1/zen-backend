@@ -2900,11 +2900,24 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
 const formatTransactionsWithSigns = (transactions) => {
   for (const transaction of transactions) {
-    if (transaction.accountType === "depository" || transaction.accountType === "credit") {
+    if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
       transaction.amount = transaction.amount * -1;
     } else if (transaction.accountType === "investment") {
-      if (transaction.type === 'buy' || transaction.type === 'fee') {
+      if (
+        transaction.type === 'buy' ||
+        transaction.type === 'fee' ||
+        transaction.type === 'reinvested_dividend' // Assuming 'reinvested_dividend' as the type for dividend reinvestment
+      ) {
+        // These are outflows, so they should be negative
         transaction.amount = transaction.amount * -1;
+      } else if (
+        transaction.type === 'sell' ||
+        transaction.type === 'dividend' // Assuming 'dividend' as the type for dividend
+      ) {
+        // These are inflows, so they should be positive. Ensure they are not negative.
+        if (transaction.amount < 0) {
+          transaction.amount = transaction.amount * -1;
+        }
       }
     }
     if (transaction.merchant) {
