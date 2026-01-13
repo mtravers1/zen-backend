@@ -1370,9 +1370,10 @@ const getCashFlows = async (profile, uid) => {
 
       /// Calculate total cash balance
 
-      const totalCashBalance = plaidAccounts
+      const unroundedTotalCashBalance = plaidAccounts
         .filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd') || acc.account_type === 'investment')
         .reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
+      const totalCashBalance = parseFloat(unroundedTotalCashBalance.toFixed(2));
 
       /// Calculate net worth
       // (bank accounts + investments accounts + assets - credit accounts - loan accounts)
