@@ -1662,7 +1662,24 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
     }
 
     const itemId = account.itemId;
-    const decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
+    let decryptedAccessToken = null;
+
+    try {
+      decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
+    } catch (decryptError) {
+      // Log the decryption error but do not re-throw immediately.
+      structuredLogger.logErrorBlock(decryptError, {
+        operation: "getInstitutionUpdateToken_decryption_error",
+        itemId: itemId,
+        uid: uid,
+        institutionId: institutionId,
+        message: "Failed to decrypt access token. Marking item as expired.",
+      });
+      // If decryption fails, proactively mark the item as expired.
+      await updateInvadlidAccessToken(itemId);
+      // Return null for the access_token, so the frontend can initiate a new link.
+      return { access_token: null, itemId: itemId, needs_relink: true };
+    }
 
     // Proactively check if the token is invalid and flag the item if so.
     try {
@@ -1676,15 +1693,27 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
           plaid_error_code: plaidErrorCode,
         });
         await updateInvadlidAccessToken(account.itemId);
+        // If the token is invalid via Plaid API, also return null for access_token
+        // and indicate re-link is needed.
+        return { access_token: null, itemId: itemId, needs_relink: true };
       }
-      // Do not re-throw; we want the re-link flow to continue regardless.
+      // Re-throw other unexpected errors from plaidClient.itemGet
+      throw error;
     }
 
     if (!decryptedAccessToken) {
-      throw new Error(`Failed to decrypt access token for institution ID: ${institutionId}`);
+      // This should ideally not be reached if getAccessTokenFromItemId throws on failure,
+      // but as a fallback, mark as expired and indicate re-link needed.
+      structuredLogger.logWarning("Decrypted access token is unexpectedly null. Marking item as expired.", {
+        itemId: itemId,
+        uid: uid,
+        institutionId: institutionId,
+      });
+      await updateInvadlidAccessToken(itemId);
+      return { access_token: null, itemId: itemId, needs_relink: true };
     }
 
-    return { access_token: decryptedAccessToken, itemId: account.itemId };
+    return { access_token: decryptedAccessToken, itemId: account.itemId, needs_relink: false };
   } catch (error) {
     console.error("Error getting institution update token:", error);
     throw error;

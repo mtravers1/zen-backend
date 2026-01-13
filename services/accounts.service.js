@@ -37,7 +37,7 @@ export const formatTransactionAmount = (transaction, account) => {
       amount = Math.abs(amount);
     }
   } else {
-    amount = -amount;
+    amount = amount;
   }
   return { ...transaction, amount };
 };
@@ -1296,11 +1296,11 @@ const getCashFlows = async (profile, uid) => {
       );
 
       const depositoryDepositsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount < 0)
+        .filter((transaction) => transaction.amount > 0)
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const depositoryWithdrawsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount > 0)
+        .filter((transaction) => transaction.amount < 0)
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const creditDepositsAmount = cleanCreditTxns
@@ -1507,11 +1507,11 @@ const getCashFlows = async (profile, uid) => {
           (transaction) => transaction.accountType === "credit",
         );
         const depositoryDepositsAmount = weekDepositoryTransactions
-          .filter((transaction) => transaction.amount < 0)
+          .filter((transaction) => transaction.amount > 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const depositoryWithdrawsAmount = weekDepositoryTransactions
-          .filter((transaction) => transaction.amount > 0)
+          .filter((transaction) => transaction.amount < 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const creditDepositsAmount = weekCreditTransactions
