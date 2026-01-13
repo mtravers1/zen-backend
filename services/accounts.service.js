@@ -1643,8 +1643,79 @@ const getTransactions = async (
             }
           } else if (accountType === 'credit' || accountType === 'loan') {
             decryptedAmount = -decryptedAmount;
-          } else if (accountType === 'depository') {
-            decryptedAmount = -decryptedAmount;
+          }
+          let decryptedName = null;
+          try {
+            decryptedName = await safeDecrypt(transaction.name, {
+              transaction_id: transaction._id,
+              field: "name",
+            });
+          } catch (e) {
+            console.error(`Failed to decrypt name for transaction ${transaction._id}:`, e);
+          }
+          
+          let decryptedAccountType = null;
+          try {
+            decryptedAccountType = await safeDecrypt(
+              transaction.accountType,
+              { transaction_id: transaction._id, field: "accountType" },
+            );
+          } catch (e) {
+            console.error(`Failed to decrypt accountType for transaction ${transaction._id}:`, e);
+          }
+
+          let decryptedMerchantName;
+          let decryptedMerchantMerchantName;
+          let merchantCategory;
+          let merchantLogo;
+          let merchantWebsite;
+          if (transaction.merchant) {
+            try {
+              decryptedMerchantName = await safeDecrypt(
+                transaction.merchant.name,
+                { transaction_id: transaction._id, field: "merchant.name" },
+              );
+            } catch (e) {
+              console.error(`Failed to decrypt merchant.name for transaction ${transaction._id}:`, e);
+            }
+
+            try {
+              decryptedMerchantMerchantName = await safeDecrypt(
+                transaction.merchant.merchantName,
+                {
+                  transaction_id: transaction._id,
+                  field: "merchant.merchantName",
+                },
+              );
+            } catch (e) {
+              console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
+            }
+
+            merchantCategory = transaction.merchant.merchantCategory;
+
+            merchantLogo = transaction.merchant.logo;
+
+            merchantWebsite = transaction.merchant.website;
+          }
+
+          const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
+            transaction_id: transaction._id,
+            field: "fees",
+          });
+
+          const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
+            transaction_id: transaction._id,
+            field: "price",
+          });
+
+          let decryptedType = null;
+          try {
+            decryptedType = await safeDecrypt(transaction.type, {
+              transaction_id: transaction._id,
+              field: "type",
+            });
+          } catch (e) {
+            console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
           }
 
           let decryptedSubtype = null;
@@ -1893,16 +1964,6 @@ const getTransactionsByAccount = async (
       continue;
     }
 
-    let decryptedType = null;
-    try {
-      decryptedType = await safeDecrypt(transaction.type, {
-        transaction_id: transaction._id,
-        field: "type",
-      });
-    } catch (e) {
-      console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
-    }
-
     const accountType = account.account_type;
 
     if (accountType === 'investment') {
@@ -1912,8 +1973,6 @@ const getTransactionsByAccount = async (
         decryptedAmount = Math.abs(decryptedAmount);
       }
     } else if (accountType === 'credit' || accountType === 'loan') {
-      decryptedAmount = -decryptedAmount;
-    } else if (accountType === 'depository') {
       decryptedAmount = -decryptedAmount;
     }
 
@@ -1974,6 +2033,16 @@ const getTransactionsByAccount = async (
       transaction_id: transaction._id,
       field: "price",
     });
+
+    let decryptedType = null;
+    try {
+      decryptedType = await safeDecrypt(transaction.type, {
+        transaction_id: transaction._id,
+        field: "type",
+      });
+    } catch (e) {
+      console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
+    }
 
     let decryptedSubtype = null;
     try {
