@@ -1415,7 +1415,7 @@ const getCashFlows = async (profile, uid) => {
       /// Calculate total cash balance
 
       const unroundedTotalCashBalance = plaidAccounts
-        .filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd') || acc.account_type === 'investment')
+        .filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd'))
         .reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
       const totalCashBalance = parseFloat(unroundedTotalCashBalance.toFixed(2));
 
