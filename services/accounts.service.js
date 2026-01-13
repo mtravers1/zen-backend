@@ -877,7 +877,7 @@ const getAllUserAccounts = async (email, uid) => {
         for (const token of orphanedTokens) {
           (async () => {
             try {
-              structuredLogger.logWarning("Orphaned AccessToken found. Triggering self-healing.", {
+              structuredLogger.logWarning("Orphaned AccessToken found. Investigating...", {
                   itemId: token.itemId,
                   userId: user._id.toString()
               });
@@ -889,10 +889,41 @@ const getAllUserAccounts = async (email, uid) => {
               });
 
               if (decryptedToken) {
-                const primaryEmail = user.email.find(e => e.isPrimary)?.email;
-                if (primaryEmail) {
-                  // This will fetch accounts and save them, fixing the orphan.
-                  await addAccount(decryptedToken, primaryEmail, uid);
+                const accountsResponse = await plaidService.getAccountsWithAccessToken(decryptedToken);
+                if (accountsResponse && accountsResponse.accounts) {
+                  const plaidAccounts = accountsResponse.accounts;
+                  let allAccountsExist = true;
+                  for (const plaidAccount of plaidAccounts) {
+                    const existingAccount = await PlaidAccount.findOne({
+                      plaid_account_id: plaidAccount.account_id,
+                      owner_id: user._id,
+                    });
+                    if (!existingAccount) {
+                      allAccountsExist = false;
+                      break;
+                    }
+                  }
+
+                  if (allAccountsExist) {
+                    // This is an old token from a re-link. The accounts are already in the database.
+                    // We can safely delete this old token.
+                    structuredLogger.logInfo("Deleting old orphaned AccessToken.", {
+                      itemId: token.itemId,
+                      userId: user._id.toString()
+                    });
+                    await AccessToken.findByIdAndDelete(token._id);
+                  } else {
+                    // This is a true orphan. Some accounts are missing.
+                    // Call addAccount to add the missing accounts.
+                    structuredLogger.logInfo("True orphaned AccessToken found. Triggering self-healing.", {
+                        itemId: token.itemId,
+                        userId: user._id.toString()
+                    });
+                    const primaryEmail = user.email.find(e => e.isPrimary)?.email;
+                    if (primaryEmail) {
+                      await addAccount(decryptedToken, primaryEmail, uid);
+                    }
+                  }
                 }
               }
             } catch (error) {
@@ -904,8 +935,6 @@ const getAllUserAccounts = async (email, uid) => {
             }
           })();
         }
-        // Since accounts are being added in the background, we might return a slightly stale list on this first run.
-        // The user can refresh to see the newly added accounts.
       }
 
 
