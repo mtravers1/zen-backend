@@ -28,19 +28,17 @@ import {
   safeDecryptNumericValue,
 } from "../lib/encryptionHelper.js";
 
-const getFormattedAmount = (transaction, account) => {
-  let amount = transaction.amount;
-  const type = account.account_type;
-
-  if (type === "credit" || type === "loan") {
-    amount = -amount;
-  }
-
-  return amount;
-};
-
 export const formatTransactionAmount = (transaction, account) => {
-  const amount = getFormattedAmount(transaction, account);
+  let amount = transaction.amount;
+  if (account.account_type === "investment") {
+    if (transaction.type === "buy") {
+      amount = -Math.abs(amount);
+    } else if (transaction.type === "sell") {
+      amount = Math.abs(amount);
+    }
+  } else {
+    amount = amount;
+  }
   return { ...transaction, amount };
 };
 
@@ -1075,6 +1073,10 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         transaction_id: transaction._id,
         field: "amount",
       });
+
+      if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+        decryptedAmount = -decryptedAmount;
+      }
                     const decryptedAccountType = await safeDecrypt(
       
                       transaction.accountType,
@@ -1224,10 +1226,15 @@ const getCashFlows = async (profile, uid) => {
 
         const transactions = [];
         for (const transaction of transactionsResponse) {
-          const decryptedAmount = await safeDecrypt(transaction.amount, {
+          let decryptedAmount = await safeDecrypt(transaction.amount, {
             transaction_id: transaction._id,
             field: "amount",
           });
+
+          if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+            decryptedAmount = -decryptedAmount;
+          }
+
           const decryptedAccountType = await safeDecrypt(
             transaction.accountType,
             { transaction_id: transaction._id, field: "accountType" },
@@ -1612,6 +1619,10 @@ const getTransactions = async (
           if (decryptedAmount === null) {
             continue;
           }
+
+          if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+            decryptedAmount = -decryptedAmount;
+          }
           let decryptedName = null;
           try {
             decryptedName = await safeDecrypt(transaction.name, {
@@ -1930,6 +1941,10 @@ const getTransactionsByAccount = async (
 
     if (decryptedAmount === null) {
       continue;
+    }
+
+    if (account.account_type === 'credit' || account.account_type === 'loan') {
+      decryptedAmount = -decryptedAmount;
     }
 
     let decryptedName = null;
