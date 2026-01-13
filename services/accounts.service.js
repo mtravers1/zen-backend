@@ -1064,12 +1064,17 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         field: "amount",
       });
 
+      const decryptedType = await safeDecrypt(transaction.type, {
+        transaction_id: transaction._id,
+        field: "type",
+      });
+
       const accountType = plaidAccount.account_type;
 
       if (accountType === 'investment') {
-        if (transaction.type === 'buy') {
+        if (decryptedType === 'buy') {
           decryptedAmount = -Math.abs(decryptedAmount);
-        } else if (transaction.type === 'sell') {
+        } else if (decryptedType === 'sell') {
           decryptedAmount = Math.abs(decryptedAmount);
         }
       } else if (accountType === 'credit' || accountType === 'loan') {
@@ -1229,12 +1234,17 @@ const getCashFlows = async (profile, uid) => {
             field: "amount",
           });
 
+          const decryptedType = await safeDecrypt(transaction.type, {
+            transaction_id: transaction._id,
+            field: "type",
+          });
+
           const accountType = plaidAccount.account_type;
 
           if (accountType === 'investment') {
-            if (transaction.type === 'buy') {
+            if (decryptedType === 'buy') {
               decryptedAmount = -Math.abs(decryptedAmount);
-            } else if (transaction.type === 'sell') {
+            } else if (decryptedType === 'sell') {
               decryptedAmount = Math.abs(decryptedAmount);
             }
           } else if (accountType === 'credit' || accountType === 'loan') {
@@ -1628,9 +1638,9 @@ const getTransactions = async (
           const accountType = plaidAccount.account_type;
 
           if (accountType === 'investment') {
-            if (transaction.type === 'buy') {
+            if (decryptedType === 'buy') {
               decryptedAmount = -Math.abs(decryptedAmount);
-            } else if (transaction.type === 'sell') {
+            } else if (decryptedType === 'sell') {
               decryptedAmount = Math.abs(decryptedAmount);
             }
           } else if (accountType === 'credit' || accountType === 'loan') {
@@ -1959,9 +1969,9 @@ const getTransactionsByAccount = async (
     const accountType = account.account_type;
 
     if (accountType === 'investment') {
-      if (transaction.type === 'buy') {
+      if (decryptedType === 'buy') {
         decryptedAmount = -Math.abs(decryptedAmount);
-      } else if (transaction.type === 'sell') {
+      } else if (decryptedType === 'sell') {
         decryptedAmount = Math.abs(decryptedAmount);
       }
     } else if (accountType === 'credit' || accountType === 'loan') {
