@@ -1531,19 +1531,19 @@ const getCashFlows = async (profile, uid) => {
           (transaction) => transaction.accountType === "credit",
         );
         const depositoryDepositsAmount = weekDepositoryTransactions
-          .filter((transaction) => transaction.amount < 0)
+          .filter((transaction) => transaction.amount > 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const depositoryWithdrawsAmount = weekDepositoryTransactions
-          .filter((transaction) => transaction.amount > 0)
+          .filter((transaction) => transaction.amount < 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const creditDepositsAmount = weekCreditTransactions
-          .filter((transaction) => transaction.amount > 0)
+          .filter((transaction) => transaction.amount < 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const creditWithdrawsAmount = weekCreditTransactions
-          .filter((transaction) => transaction.amount < 0)
+          .filter((transaction) => transaction.amount > 0)
           .reduce((total, transaction) => total + transaction.amount, 0);
 
         const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
@@ -1551,8 +1551,10 @@ const getCashFlows = async (profile, uid) => {
         const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
         const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
 
-        const totalDeposits = depositDepositsAmountAbs;
-        const totalWithdrawls = depositWithdrawAmountAbs;
+        const totalDeposits =
+          depositDepositsAmountAbs + creditDepositsAmountAbs;
+        const totalWithdrawls =
+          depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
         let currentCashFlow = 0;
         if (totalDeposits === 0) {
