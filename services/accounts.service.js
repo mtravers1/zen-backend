@@ -29,17 +29,7 @@ import {
 } from "../lib/encryptionHelper.js";
 
 export const formatTransactionAmount = (transaction, account) => {
-  let amount = transaction.amount;
-  if (account.account_type === "investment") {
-    if (transaction.type === "buy") {
-      amount = -Math.abs(amount);
-    } else if (transaction.type === "sell") {
-      amount = Math.abs(amount);
-    }
-  } else {
-    amount = amount;
-  }
-  return { ...transaction, amount };
+  return transaction;
 };
 
 const addAccount = async (accessToken, email, uid) => {
@@ -1074,7 +1064,15 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         field: "amount",
       });
 
-      if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+      const accountType = plaidAccount.account_type;
+
+      if (accountType === 'investment') {
+        if (transaction.type === 'buy') {
+          decryptedAmount = -Math.abs(decryptedAmount);
+        } else if (transaction.type === 'sell') {
+          decryptedAmount = Math.abs(decryptedAmount);
+        }
+      } else if (accountType === 'credit' || accountType === 'loan') {
         decryptedAmount = -decryptedAmount;
       }
                     const decryptedAccountType = await safeDecrypt(
@@ -1231,15 +1229,22 @@ const getCashFlows = async (profile, uid) => {
             field: "amount",
           });
 
-          if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+          const accountType = plaidAccount.account_type;
+
+          if (accountType === 'investment') {
+            if (transaction.type === 'buy') {
+              decryptedAmount = -Math.abs(decryptedAmount);
+            } else if (transaction.type === 'sell') {
+              decryptedAmount = Math.abs(decryptedAmount);
+            }
+          } else if (accountType === 'credit' || accountType === 'loan') {
             decryptedAmount = -decryptedAmount;
           }
 
-          const decryptedAccountType = await safeDecrypt(
-            transaction.accountType,
-            { transaction_id: transaction._id, field: "accountType" },
-          );
-
+          const decryptedAccountType = await safeDecrypt(transaction.accountType, {
+            transaction_id: transaction._id,
+            field: "accountType",
+          });
           transactions.push({
             ...transaction,
             amount: decryptedAmount,
@@ -1620,7 +1625,15 @@ const getTransactions = async (
             continue;
           }
 
-          if (plaidAccount.account_type === 'credit' || plaidAccount.account_type === 'loan') {
+          const accountType = plaidAccount.account_type;
+
+          if (accountType === 'investment') {
+            if (transaction.type === 'buy') {
+              decryptedAmount = -Math.abs(decryptedAmount);
+            } else if (transaction.type === 'sell') {
+              decryptedAmount = Math.abs(decryptedAmount);
+            }
+          } else if (accountType === 'credit' || accountType === 'loan') {
             decryptedAmount = -decryptedAmount;
           }
           let decryptedName = null;
@@ -1943,7 +1956,15 @@ const getTransactionsByAccount = async (
       continue;
     }
 
-    if (account.account_type === 'credit' || account.account_type === 'loan') {
+    const accountType = account.account_type;
+
+    if (accountType === 'investment') {
+      if (transaction.type === 'buy') {
+        decryptedAmount = -Math.abs(decryptedAmount);
+      } else if (transaction.type === 'sell') {
+        decryptedAmount = Math.abs(decryptedAmount);
+      }
+    } else if (accountType === 'credit' || accountType === 'loan') {
       decryptedAmount = -decryptedAmount;
     }
 
