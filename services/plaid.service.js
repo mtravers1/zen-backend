@@ -413,23 +413,28 @@ const getAccounts = async (email, uid) => {
 };
 
 const getAccountsWithAccessToken = async (accessToken) => {
-  console.log(
-    `[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`,
-  );
+  try {
+    console.log(
+      `[PLAID] Getting accounts with access_token: ${accessToken?.substring(0, 20)}...`,
+    );
 
-  const plaidClient = getPlaidClient();
-  const response = await plaidClient.accountsGet({
-    access_token: accessToken,
-  });
-  console.log(
-    `[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`,
-  );
-  console.log(
-    `[PLAID] Account details:`,
-    response.data.accounts?.map((acc) => `${acc.name} (${acc.account_id})`),
-  );
+    const plaidClient = getPlaidClient();
+    const response = await plaidClient.accountsGet({
+      access_token: accessToken,
+    });
+    console.log(
+      `[PLAID] ✅ Plaid API returned ${response.data.accounts?.length || 0} accounts for institution ${response.data.item?.institution_name}`,
+    );
+    console.log(
+      `[PLAID] Account details:`,
+      response.data.accounts?.map((acc) => `${acc.name} (${acc.account_id})`),
+    );
 
-  return response.data;
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching accounts with access token:", error);
+    throw error;
+  }
 };
 
 const getBalance = async (email) => {
@@ -632,90 +637,95 @@ const getAccessTokenFromItemId = async (itemId, uid) => {
 };
 
 const updateAccountBalances = async (dek, accessToken, accounts, uid, newAccountsBalances) => {
-  if (!newAccountsBalances) {
-    try {
-      const plaidClient = getPlaidClient();
-      newAccountsBalances = await withRetry(() => plaidClient.accountsGet({
-        access_token: accessToken,
-      }));
-    } catch (error) {
-      console.error("Error fetching account balances:", error);
-      throw error;
-    }
-  }
-  if (newAccountsBalances) {
-    const bulkOps = [];
-    const safeEncrypt = createSafeEncrypt(uid, dek);
-    for (const account of newAccountsBalances.data.accounts) {
-      const accountBalance = account.balances;
-      const accountType = account.type;
-      const accountSubtype = account.subtype;
-      const accountName = account.name;
-      const accountPlaidId = account.account_id;
-
-      const existingAccount = accounts.find(
-        (a) => a.plaid_account_id === accountPlaidId,
-      );
-
-      if (existingAccount) {
-        // Encriptar valores antes de actualizar
-        const [
-          encryptedAccountName,
-          encryptedAccountType,
-          encryptedAccountSubtype,
-          encryptedCurrentBalance,
-          encryptedAvailableBalance,
-        ] = await Promise.all([
-          safeEncrypt(accountName, {
-            account_id: accountPlaidId,
-            field: "accountName",
-          }),
-          safeEncrypt(accountType, {
-            account_id: accountPlaidId,
-            field: "accountType",
-          }),
-          safeEncrypt(accountSubtype, {
-            account_id: accountPlaidId,
-            field: "accountSubtype",
-          }),
-          accountBalance.current
-            ? safeEncrypt(accountBalance.current, {
-                account_id: accountPlaidId,
-                field: "currentBalance",
-              })
-            : null,
-          accountBalance.available
-            ? safeEncrypt(accountBalance.available, {
-                account_id: accountPlaidId,
-                field: "availableBalance",
-              })
-            : null,
-        ]);
-
-        existingAccount.currentBalance = accountBalance.current;
-        existingAccount.availableBalance = accountBalance.available;
-        existingAccount.account_type = accountType;
-        existingAccount.account_subtype = accountSubtype;
-        existingAccount.account_name = accountName;
-
-        bulkOps.push({
-          updateOne: {
-            filter: { plaid_account_id: accountPlaidId },
-            update: {
-              currentBalance: encryptedCurrentBalance,
-              availableBalance: encryptedAvailableBalance,
-              account_type: encryptedAccountType,
-              account_subtype: encryptedAccountSubtype,
-              account_name: encryptedAccountName,
-            },
-          },
-        });
+  try {
+    if (!newAccountsBalances) {
+      try {
+        const plaidClient = getPlaidClient();
+        newAccountsBalances = await withRetry(() => plaidClient.accountsGet({
+          access_token: accessToken,
+        }));
+      } catch (error) {
+        console.error("Error fetching account balances:", error);
+        throw error;
       }
     }
+    if (newAccountsBalances) {
+      const bulkOps = [];
+      const safeEncrypt = createSafeEncrypt(uid, dek);
+      for (const account of newAccountsBalances.data.accounts) {
+        const accountBalance = account.balances;
+        const accountType = account.type;
+        const accountSubtype = account.subtype;
+        const accountName = account.name;
+        const accountPlaidId = account.account_id;
 
-    if (bulkOps.length) {
-      await PlaidAccount.bulkWrite(bulkOps);
+        const existingAccount = accounts.find(
+          (a) => a.plaid_account_id === accountPlaidId,
+        );
+
+        if (existingAccount) {
+          // Encriptar valores antes de actualizar
+          const [
+            encryptedAccountName,
+            encryptedAccountType,
+            encryptedAccountSubtype,
+            encryptedCurrentBalance,
+            encryptedAvailableBalance,
+          ] = await Promise.all([
+            safeEncrypt(accountName, {
+              account_id: accountPlaidId,
+              field: "accountName",
+            }),
+            safeEncrypt(accountType, {
+              account_id: accountPlaidId,
+              field: "accountType",
+            }),
+            safeEncrypt(accountSubtype, {
+              account_id: accountPlaidId,
+              field: "accountSubtype",
+            }),
+            accountBalance.current
+              ? safeEncrypt(accountBalance.current, {
+                  account_id: accountPlaidId,
+                  field: "currentBalance",
+                })
+              : null,
+            accountBalance.available
+              ? safeEncrypt(accountBalance.available, {
+                  account_id: accountPlaidId,
+                  field: "availableBalance",
+                })
+              : null,
+          ]);
+
+          existingAccount.currentBalance = accountBalance.current;
+          existingAccount.availableBalance = accountBalance.available;
+          existingAccount.account_type = accountType;
+          existingAccount.account_subtype = accountSubtype;
+          existingAccount.account_name = accountName;
+
+          bulkOps.push({
+            updateOne: {
+              filter: { plaid_account_id: accountPlaidId },
+              update: {
+                currentBalance: encryptedCurrentBalance,
+                availableBalance: encryptedAvailableBalance,
+                account_type: encryptedAccountType,
+                account_subtype: encryptedAccountSubtype,
+                account_name: encryptedAccountName,
+              },
+            },
+          });
+        }
+      }
+
+      if (bulkOps.length) {
+        await PlaidAccount.bulkWrite(bulkOps);
+      }
     }
+  } catch (error) {
+    console.error("Error updating account balances:", error);
+    throw error;
   }
 };
 

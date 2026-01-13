@@ -1008,6 +1008,8 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const allTransactions = [];
   const depositoryTransactions = [];
   const creditTransactions = [];
+  const investmentTransactions = [];
+  const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
 
@@ -1053,8 +1055,18 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         (transaction) => plaidAccount.account_type === "credit",
       ),
     );
+    investmentTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "investment",
+      ),
+    );
+    loanTransactions.push(
+      ...transactions.filter(
+        (transaction) => plaidAccount.account_type === "loan",
+      ),
+    );
   }
-  return { depositoryTransactions, creditTransactions, allTransactions };
+  return { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions };
 };
 
 const getCashFlows = async (profile, uid) => {
@@ -2888,10 +2900,12 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
 const formatTransactionsWithSigns = (transactions) => {
   for (const transaction of transactions) {
-    if (transaction.accountType === "depository") {
+    if (transaction.accountType === "depository" || transaction.accountType === "credit") {
       transaction.amount = transaction.amount * -1;
     } else if (transaction.accountType === "investment") {
-      transaction.amount = Math.abs(transaction.amount);
+      if (transaction.type === 'buy' || transaction.type === 'fee') {
+        transaction.amount = transaction.amount * -1;
+      }
     }
     if (transaction.merchant) {
       delete transaction.merchant._id;
@@ -2957,13 +2971,17 @@ const getCashFlowsWeekly = async (profile, uid) => {
     });
   }
 
-  const { depositoryTransactions, creditTransactions, allTransactions } =
+  const { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions } =
     await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
 
-  const groupedTransactions = groupByWeek([
+  const formattedTransactions = formatTransactionsWithSigns([
     ...depositoryTransactions,
     ...creditTransactions,
+    ...investmentTransactions,
+    ...loanTransactions,
   ]);
+
+  const groupedTransactions = groupByWeek(formattedTransactions);
   const result = calculateWeeklyTotals(groupedTransactions);
   return { weeklyCashFlow: result };
 };
