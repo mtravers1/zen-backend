@@ -28,6 +28,20 @@ import {
   safeDecryptNumericValue,
 } from "../lib/encryptionHelper.js";
 
+export const formatTransactionAmount = (transaction, account) => {
+  let amount = transaction.amount;
+  if (account.account_type === "investment") {
+    if (transaction.type === "buy") {
+      amount = -Math.abs(amount);
+    } else if (transaction.type === "sell") {
+      amount = Math.abs(amount);
+    }
+  } else {
+    amount = -amount;
+  }
+  return { ...transaction, amount };
+};
+
 const addAccount = async (accessToken, email, uid) => {
   return await structuredLogger.withContext(
     "add_account",
@@ -304,7 +318,8 @@ const addAccount = async (accessToken, email, uid) => {
 
         let transactionCode;
 
-        const encyptedAmount = await safeEncrypt(transaction.amount);
+        const formattedTransaction = formatTransactionAmount(transaction, account);
+        const encyptedAmount = await safeEncrypt(formattedTransaction.amount);
 
         if (transaction.transaction_code) {
           transactionCode = await safeEncrypt(transaction.transaction_code);
