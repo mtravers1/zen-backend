@@ -1069,7 +1069,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
     const transactions = [];
 
     for (const transaction of transactionsResponse) {
-      const decryptedAmount = await safeDecrypt(transaction.amount, {
+      let decryptedAmount = await safeDecrypt(transaction.amount, {
         transaction_id: transaction._id,
         field: "amount",
       });
@@ -1611,7 +1611,7 @@ const getTransactions = async (
         const transactions = [];
 
         for (const transaction of transactionsResponse) {
-          const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
+          let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
             transaction_id: transaction._id,
             field: "amount",
           });
@@ -1934,7 +1934,7 @@ const getTransactionsByAccount = async (
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
+    let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
       transaction_id: transaction._id,
       field: "amount",
     });
@@ -2671,8 +2671,9 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     .lean();
   const transactions = [];
 
-  for (const transaction of transactionsResponse) {
-    const decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
+          for (const transaction of transactionsResponse) {
+
+            let decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
 
     const decryptedAccountType = await safeDecrypt(
       transaction.accountType,
