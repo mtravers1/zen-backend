@@ -165,6 +165,10 @@ const addAccount = async (accessToken, email, uid) => {
           }
         }
 
+        const hashAccountName = hashValue(account.name);
+        const hashAccountInstitutionId = hashValue(institutionId);
+        const hashAccountMask = hashValue(account.mask);
+
         const newAccount = new PlaidAccount({
           owner_id: userId,
           itemId: accountsResponse.item.item_id,
@@ -183,6 +187,9 @@ const addAccount = async (accessToken, email, uid) => {
           transactions: [],
           nextCursor: null,
           mask: encryptedMask,
+          hashAccountName,
+          hashAccountInstitutionId,
+          hashAccountMask,
         });
 
         accountTypes[account.account_id] = account.type;
