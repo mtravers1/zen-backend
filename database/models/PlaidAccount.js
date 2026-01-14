@@ -83,6 +83,11 @@ const plaidAccountSchema = new Schema({
     type: Date,
     default: Date.now,
   },
+  status: {
+    type: String,
+    enum: ['good', 'bad', 'login_required'],
+    default: 'good',
+  },
       updated_at: {
         type: Date,
       },

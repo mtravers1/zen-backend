@@ -289,6 +289,7 @@ async function getUserDek(firebaseUid) {
     throw new Error(`User not found for Firebase UID: ${firebaseUid}`);
   }
   const bucketKey = user._id.toString();
+  console.log(`[DEK_TRACE] getUserDek called for UID: ${firebaseUid}, resolved to bucketKey: ${bucketKey}`);
 
   // 1. Check cache first
   if (dekCache.has(bucketKey)) {
@@ -311,6 +312,8 @@ async function encryptValue(value, dek) {
 
   try {
     const encryptionKey = Array.isArray(dek) ? dek[0] : dek;
+    const dekHash = crypto.createHash('sha256').update(encryptionKey).digest('hex');
+    
     // Convert the value to a JSON string to ensure it's properly formatted
     const jsonString = JSON.stringify(value);
 
@@ -362,6 +365,8 @@ async function decryptValue(cipherTextBase64, deks) {
 
   for (const dek of deks) {
     try {
+      const dekHash = crypto.createHash('sha256').update(dek).digest('hex');
+      
       // Decode the base64-encoded ciphertext
       const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
 

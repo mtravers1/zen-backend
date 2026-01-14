@@ -5,6 +5,7 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 import Files from "../database/models/Files.js";
 import Trips from "../database/models/Trips.js";
 import upgradeResponseService from "./upgradeResponse.service.js";
+import AccessToken from "../database/models/AccessToken.js";
 
 const checkUserRole = async (user) => {
   if (!user.account_type) {
@@ -21,8 +22,9 @@ const checkUserRole = async (user) => {
 // Usage counting functions
 const countUserInstitutions = async (userId) => {
   try {
-    const institutions = await PlaidAccount.distinct("institution_id", {
-      owner_id: userId,
+    const institutions = await AccessToken.distinct("institutionId", {
+      userId: userId,
+      isAccessTokenExpired: { $ne: true },
     });
     return institutions.length;
   } catch (error) {
@@ -149,18 +151,20 @@ const canAddAccount = async (uid, institutionId) => {
 
     const userId = user._id.toString();
 
-    // Check if user already has this institution
-    const existingInstitution = await PlaidAccount.findOne({
-      owner_id: userId,
-      institution_id: institutionId,
-    });
+    // If an institutionId is provided, check if user already has this institution
+    if (institutionId) {
+      const existingInstitution = await PlaidAccount.findOne({
+        owner_id: userId,
+        institution_id: institutionId,
+      });
 
-    if (existingInstitution) {
-      // User already has this institution, allow additional accounts
-      return upgradeResponseService.actionAllowed();
+      if (existingInstitution) {
+        // User already has this institution, allow additional accounts
+        return upgradeResponseService.actionAllowed();
+      }
     }
 
-    // This is a new institution, check limits
+    // This is a new institution or no institutionId was provided, check limits
     const currentInstitutions = await countUserInstitutions(userId);
     const canAdd = await validateAccounts(rolePermissions.accounts_max, userId);
 

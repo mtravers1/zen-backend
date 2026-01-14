@@ -1,30 +1,28 @@
 import { Router } from "express";
-import controller from "../controllers/accounts.controller.js";
+import accountsController from "../controllers/accounts.controller.js";
+import transactionsController from "../controllers/transactions.controller.js";
+import cashflowController from "../controllers/cashflow.controller.js";
 
 const router = Router();
 
-router.post("/add-account", controller.addAccount);
-router.post("/", controller.getAccounts);
-router.post("/cash-flows", controller.getCashFlows);
-router.post("/cash-flows-weekly", controller.getCashFlowsWeekly);
-router.post(
-  "/cash-flows-by-plaidaccount",
-  controller.getCashFlowsByPlaidAccount,
-);
-router.get(
-  "/profile-transactions/:profileId",
-  controller.getProfileTransactions,
-);
-router.get("/transactions", controller.getUserTransactions);
-router.get("/transactions/:accountId", controller.getTransactionsByAccount);
-router.get("/details/:accountId/:profileId", controller.getAccountDetails);
-router.get("/", controller.getAllUserAccounts);
-router.post("/add-photo", controller.addAccountPhoto);
-router.post("/get-photo", controller.getAccountPhoto);
+// Accounts routes
+router.post("/add-account", accountsController.addAccount);
+router.post("/", accountsController.getAccounts);
+router.get("/details/:accountId/:profileId", accountsController.getAccountDetails);
+router.get("/", accountsController.getAllUserAccounts);
+router.post("/add-photo", accountsController.addAccountPhoto);
+router.post("/get-photo", accountsController.getAccountPhoto);
+router.get("/photo/:fileName", accountsController.serveAccountPhoto);
+router.delete("/:accountId", accountsController.deletePlaidAccount);
 
-router.get("/photo/:fileName", controller.serveAccountPhoto);
-// router.get("/investment-transactions/:accountId", controller.getInvestmentTransactionsByAccount);
+// Transactions routes
+router.get("/transactions", transactionsController.getUserTransactions);
+router.get("/transactions/:accountId", transactionsController.getTransactionsByAccount);
+router.get("/profile-transactions/:profileId", transactionsController.getProfileTransactions);
 
-router.delete("/:accountId", controller.deletePlaidAccount);
+// Cashflow routes
+router.post("/cash-flows", cashflowController.getCashFlows);
+router.post("/cash-flows-weekly", cashflowController.getCashFlowsWeekly);
+router.post("/cash-flows-by-plaidaccount", cashflowController.getCashFlowsByPlaidAccount);
 
 export default router;

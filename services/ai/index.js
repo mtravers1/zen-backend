@@ -32,7 +32,7 @@ export {
 } from "./test-hallucination-protection.js";
 
 // Serviços específicos
-export { default as accountsService } from "../accounts.service.js";
+export { default as accountsService } from "../account.service.js";
 export { default as businessService } from "../businesses.service.js";
 export { default as authService } from "../auth.service.js";
 export { default as assetsService } from "../assets.service.js";

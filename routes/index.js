@@ -16,6 +16,7 @@ import securityRouter from "./security.router.js";
 import usersRouter from "./users.router.js";
 
 
+
 const router = Router();
 
 // Load different routes
@@ -23,6 +24,7 @@ router.use("/auth", authRouter);
 router.use("/plaid", plaidRouter);
 router.use("/webhook", webhookRouter);
 router.use("/account", accountRouter);
+
 router.use("/business", businessRouter);
 router.use("/assets", assetsRouter);
 router.use("/permissions", permissionsRouter);
@@ -34,5 +36,6 @@ router.use("/subscriptions", subscriptionsRouter);
 router.use("/role", roleRouter);
 router.use("/security", securityRouter);
 router.use("/users", usersRouter);
+
 
 export default router;

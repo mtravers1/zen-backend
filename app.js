@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import logger from "morgan";
 import createError from "http-errors";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import admin from "firebase-admin";
 import fs from "fs";
 import firebaseAuth from "./middlewares/firebaseAuth.js";
@@ -165,7 +165,7 @@ export async function createApp() {
 			if (req.user && req.user.uid) {
 				return req.user.uid;
 			}
-			return req.ip;
+			return ipKeyGenerator(req);
 		},
 		handler: (req, res, next, options) => {
 			const key = options.keyGenerator(req, res);

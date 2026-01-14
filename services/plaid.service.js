@@ -4,8 +4,8 @@ import getPlaidClient from "../config/plaid.js";
 import Transaction from "../database/models/Transaction.js";
 import Liability from "../database/models/Liability.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
-import accountsService from "./accounts.service.js";
-import { formatTransactionAmount } from "./accounts.service.js";
+import accountsService from "./account.service.js";
+import { formatTransactionAmount } from "./transactions.service.js";
 import withRetry from "../lib/axiosRateLimit.js";
 import {
   decryptValue,
@@ -132,9 +132,6 @@ const createLinkToken = async (
 
       // UPDATE MODE: Use provided access_token for update mode
       if (mode === "update") {
-        if (!access_token) {
-          throw new Error("access_token required for update mode");
-        }
         accessToken = access_token; // Token already comes decrypted from getInstitutionUpdateToken
       }
 
@@ -159,19 +156,22 @@ const createLinkToken = async (
         },
       };
 
-      if (institution_id) {
-        plaidRequest.institution_id = institution_id;
-      }
-
       if (accessToken) {
         plaidRequest.access_token = accessToken;
+        if (institution_id) {
+          plaidRequest.institution_id = institution_id;
+        }
       } else {
-        // Products and transactions should only be specified when creating a new item, not in update mode.
         plaidRequest.products = ["transactions"];
         plaidRequest.optional_products = ["investments", "liabilities"];
         plaidRequest.transactions = {
           days_requested: 730,
         };
+        // If we are NOT in update mode, we can pre-select the institution.
+        // In update mode without a token, Plaid seems to reject the institution_id.
+        if (mode !== 'update' && institution_id) {
+            plaidRequest.institution_id = institution_id;
+        }
       }
       const plaidClient = getPlaidClient(plaidEnvironment);
       let response;
@@ -295,50 +295,6 @@ const saveAccessToken = async (
         institutionId,
       });
       await newToken.save();
-
-      // --- Start of automatic cleanup for old, broken items ---
-      try {
-        const oldExpiredTokens = await AccessToken.find({
-          userId: userId,
-          institutionId: institutionId,
-          itemId: { $ne: itemId }, // Exclude the newly saved item
-          isAccessTokenExpired: true, // Only consider expired tokens
-        });
-
-        for (const oldToken of oldExpiredTokens) {
-          // Find any PlaidAccount associated with this old, expired item
-          const onePlaidAccountForOldItem = await PlaidAccount.findOne({ itemId: oldToken.itemId });
-
-          if (onePlaidAccountForOldItem) {
-            structuredLogger.logInfo("Found old, expired item for automatic cleanup.", {
-              new_item_id: itemId,
-              old_item_id: oldToken.itemId,
-              old_account_id_example: onePlaidAccountForOldItem._id.toString(),
-            });
-            // Use accountsService.deletePlaidAccount to delete the entire old item
-            // This function expects an accountId, so we pass one from the old item.
-            await accountsService.deletePlaidAccount(onePlaidAccountForOldItem._id.toString(), uid);
-          } else {
-            // If no PlaidAccounts are found for an old expired AccessToken, it means
-            // the data was already partially deleted or never fully created.
-            // We should at least delete the AccessToken itself.
-            structuredLogger.logWarning("Found old, expired AccessToken without associated PlaidAccounts. Deleting AccessToken.", {
-              new_item_id: itemId,
-              old_item_id: oldToken.itemId,
-            });
-            await AccessToken.deleteOne({ _id: oldToken._id });
-          }
-        }
-      } catch (cleanupError) {
-        structuredLogger.logErrorBlock(cleanupError, {
-          operation: "automatic_item_cleanup",
-          new_item_id: itemId,
-          institution_id: institutionId,
-          user_id: userId,
-          error_classification: "non_fatal_cleanup_error", // Cleanup errors should not prevent saving the new token
-        });
-      }
-      // --- End of automatic cleanup ---
 
       structuredLogger.logEncryptionOperation("save_access_token", true, {
         user_id: userId,
@@ -543,10 +499,24 @@ const getTransactions = async (email, uid) => {
 
 const getTransactionsWithAccessToken = async (accessToken) => {
   const plaidClient = getPlaidClient();
-  const response = await plaidClient.transactionsSync({
-    access_token: accessToken,
-  });
-  return response.data;
+  try {
+    const response = await plaidClient.transactionsSync({
+      access_token: accessToken,
+    });
+    return response.data;
+  } catch (error) {
+    const plaidError = error.response?.data;
+    structuredLogger.logErrorBlock(error, {
+      operation: "getTransactionsWithAccessToken",
+      message: "Error fetching transactions with access token",
+      plaid_error_code: plaidError?.error_code,
+      plaid_error_message: plaidError?.error_message,
+      plaid_error_type: plaidError?.error_type,
+      plaid_display_message: plaidError?.display_message,
+      access_token_start: accessToken ? accessToken.substring(0, 20) : "N/A",
+    });
+    throw error;
+  }
 };
 
 const getInvestmentTransactionsWithAccessToken = async (accessToken) => {
@@ -591,6 +561,7 @@ const getItemWithAccessToken = async (accessToken) => {
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await getNewestAccessToken({ itemId });
+  console.log("[DEEPEST_TRACE] Full AccessToken document from DB:", JSON.stringify(access, null, 2));
 
   if (!access) {
     return;
@@ -997,11 +968,16 @@ const updateTransactions = async (item) => {
       } catch (error) {
         if (error.response?.data?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
                   structuredLogger.logWarning("[SYNC_TRACE] Mutation detected during pagination, restarting with null cursor...", { itemId: item, oldCursor: oldCursor });
-                  cursor = null;        } else {
+                  cursor = null;
+        } else {
+          console.log('PLAID ERROR RESPONSE:', error.response.data);
           structuredLogger.logErrorBlock(error, {
               operation: "[SYNC_TRACE] Error syncing transactions",
               itemId: item,
-              plaidError: error.response?.data
+              plaidError: error.response?.data, // Log the full Plaid error
+              plaid_error_code: error.response?.data?.error_code,
+              plaid_error_message: error.response?.data?.error_message,
+              plaid_error_type: error.response?.data?.error_type,
           });
           throw error;
         }
@@ -1017,6 +993,16 @@ const updateTransactions = async (item) => {
       // was to update regular transactions.
       structuredLogger.logErrorBlock(error, {
         operation: 'updateTransactions_chained_investment_sync',
+        item_id: item,
+        error_classification: 'non_fatal_error'
+      });
+    }
+
+    try {
+      await updateLiabilities(item);
+    } catch (error) {
+      structuredLogger.logErrorBlock(error, {
+        operation: 'updateTransactions_chained_liability_sync',
         item_id: item,
         error_classification: 'non_fatal_error'
       });
@@ -1057,14 +1043,14 @@ const updateTransactions = async (item) => {
   }
 };
 
-const syncingInvestmentItems = new Map();
+
 
 const updateInvestmentTransactions = async (item) => {
-  if (syncingInvestmentItems.has(item)) {
+  if (syncingItems.has(item)) {
     structuredLogger.logInfo("[SYNC_TRACE] Investment sync already in progress for item, skipping.", { itemId: item });
     return;
   }
-  syncingInvestmentItems.set(item, true);
+  syncingItems.set(item, true);
   try {
     return await structuredLogger.withContext(
       "update_investment_transactions",
@@ -1303,20 +1289,20 @@ const updateInvestmentTransactions = async (item) => {
       },
     );
   } finally {
-    syncingInvestmentItems.delete(item);
+    syncingItems.delete(item);
     structuredLogger.logInfo("[SYNC_TRACE] Finished investment sync, releasing lock.", { itemId: item });
   }
 };
 
 
-const syncingLiabilityItems = new Map();
+
 
 const updateLiabilities = async (item) => {
-  if (syncingLiabilityItems.has(item)) {
+  if (syncingItems.has(item)) {
     structuredLogger.logInfo("[SYNC_TRACE] Liability sync already in progress for item, skipping.", { itemId: item });
     return;
   }
-  syncingLiabilityItems.set(item, true);
+  syncingItems.set(item, true);
   try {
     return await structuredLogger.withContext(
       'update_liabilities',
@@ -1456,35 +1442,59 @@ const updateLiabilities = async (item) => {
       },
     );
   } finally {
-    syncingLiabilityItems.delete(item);
+    syncingItems.delete(item);
     structuredLogger.logInfo("[SYNC_TRACE] Finished liability sync, releasing lock.", { itemId: item });
   }
 };
 
-const updateInvadlidAccessToken = async (item) => {
-  // Use updateMany for efficiency to set the flag on all matching tokens.
-  const result = await AccessToken.updateMany(
-    { itemId: item },
-    { $set: { isAccessTokenExpired: true } }
-  );
-
-  // Also update the PlaidAccount collection for consistency in the UI
-  await PlaidAccount.updateMany(
-    { itemId: item },
-    { $set: { isAccessTokenExpired: true } }
-  );
-
-  return result;
+const setItemStatus = async (itemId, status) => {
+  const update = { status: status };
+  if (status === 'expired' || status === 'bad') {
+    update.isAccessTokenExpired = true;
+  }
+  await AccessToken.updateMany({ itemId: itemId }, { $set: update });
+  structuredLogger.logInfo("item_status_updated", { itemId, status });
 };
+
+const handlePlaidError = async (error, itemId) => {
+  const plaidErrorCode = error.response?.data?.error_code;
+  
+  if (plaidErrorCode === 'ITEM_LOGIN_REQUIRED') {
+    structuredLogger.logWarning(
+      `Plaid item requires relink. Marking as login_required.`,
+      { item_id: itemId, plaid_error_code: plaidErrorCode }
+    );
+    await setItemStatus(itemId, 'login_required');
+    return `Handled ITEM_LOGIN_REQUIRED by marking item status as login_required.`;
+
+  } else if (['INVALID_ACCESS_TOKEN', 'ITEM_NOT_FOUND'].includes(plaidErrorCode)) {
+    structuredLogger.logWarning(
+      `Invalid Plaid token. Marking item as expired.`,
+      { item_id: itemId, plaid_error_code: plaidErrorCode }
+    );
+    await setItemStatus(itemId, 'expired');
+    return `Handled ${plaidErrorCode} by marking item status as expired.`;
+
+  } else if (error.message.startsWith("No access token found for item ID")) {
+      structuredLogger.logErrorBlock(
+        new Error(`Data integrity issue: ${error.message}`),
+        { item_id: itemId, error_classification: "handled_error" }
+      );
+      return "Handled data integrity error by logging.";
+  } else {
+    // This is a true, unexpected error.
+    throw error;
+  }
+};
+
+
 
 const repairAccessTokenWebhook = async (item) => {
   const accessToken = await getAccessTokenFromItemId(item);
   const accounts = await PlaidAccount.find({
     accessToken,
-    isAccessTokenExpired: true,
   });
   for (const account of accounts) {
-    account.isAccessTokenExpired = false;
     await account.save();
   }
   return accounts;
@@ -1662,44 +1672,7 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
     }
 
     const itemId = account.itemId;
-    let decryptedAccessToken = null;
-
-    try {
-      decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
-    } catch (decryptError) {
-      // Log the decryption error but do not re-throw immediately.
-      structuredLogger.logErrorBlock(decryptError, {
-        operation: "getInstitutionUpdateToken_decryption_error",
-        itemId: itemId,
-        uid: uid,
-        institutionId: institutionId,
-        message: "Failed to decrypt access token. Marking item as expired.",
-      });
-      // If decryption fails, proactively mark the item as expired.
-      await updateInvadlidAccessToken(itemId);
-      // Return null for the access_token, so the frontend can initiate a new link.
-      return { access_token: null, itemId: itemId, needs_relink: true };
-    }
-
-    // Proactively check if the token is invalid and flag the item if so.
-    try {
-      const plaidClient = getPlaidClient();
-      await plaidClient.itemGet({ access_token: decryptedAccessToken });
-    } catch (error) {
-      const plaidErrorCode = error.response?.data?.error_code;
-      if (["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN", "ITEM_LOGIN_REQUIRED"].includes(plaidErrorCode)) {
-        structuredLogger.logWarning("Proactively marking item as expired in getInstitutionUpdateToken.", {
-          itemId: account.itemId,
-          plaid_error_code: plaidErrorCode,
-        });
-        await updateInvadlidAccessToken(account.itemId);
-        // If the token is invalid via Plaid API, also return null for access_token
-        // and indicate re-link is needed.
-        return { access_token: null, itemId: itemId, needs_relink: true };
-      }
-      // Re-throw other unexpected errors from plaidClient.itemGet
-      throw error;
-    }
+    const decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
 
     if (!decryptedAccessToken) {
       // This should ideally not be reached if getAccessTokenFromItemId throws on failure,
@@ -1713,9 +1686,36 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
       return { access_token: null, itemId: itemId, needs_relink: true };
     }
 
+    // Proactively check if the token is invalid and flag the item if so.
+    try {
+      const plaidClient = getPlaidClient();
+      await plaidClient.itemGet({ access_token: decryptedAccessToken });
+    } catch (error) {
+      await handlePlaidError(error, account.itemId);
+      return { access_token: null, itemId: itemId, needs_relink: true };
+    }
+
     return { access_token: decryptedAccessToken, itemId: account.itemId, needs_relink: false };
   } catch (error) {
     console.error("Error getting institution update token:", error);
+    if (error.message.includes("Failed to decrypt access token")) {
+        // Log the decryption error but do not re-throw immediately.
+        structuredLogger.logErrorBlock(error, {
+            operation: "getInstitutionUpdateToken_decryption_error",
+            uid: uid,
+            institutionId: institutionId,
+            message: "Failed to decrypt access token. Marking item as expired.",
+        });
+        const user = await User.findOne({ authUid: uid });
+        const account = await PlaidAccount.findOne({
+          institution_id: institutionId,
+          owner_id: user._id,
+        });
+        if (account) {
+            await setItemStatus(account.itemId, 'corrupted');
+            return { access_token: null, itemId: account.itemId, needs_relink: true };
+        }
+    }
     throw error;
   }
 };
@@ -1835,10 +1835,6 @@ const handleItemError = async (event) => {
     if (event.error?.error_code === "ITEM_LOGIN_REQUIRED") {
       // Mark accounts as requiring re-authentication
       const accounts = await PlaidAccount.find({ itemId: event.item_id });
-      for (const account of accounts) {
-        account.isAccessTokenExpired = true;
-        await account.save();
-      }
     }
 
     return `Item error handled: ${event.error?.error_code}`;
@@ -1896,17 +1892,8 @@ const updateHoldings = async (item) => {
 };
 
 const isItemExpired = async (itemId) => {
-  // First, check if there's any PlaidAccount marked as expired. This is a fast check.
-  const expiredAccount = await PlaidAccount.findOne({
-    itemId: itemId,
-    isAccessTokenExpired: true,
-  });
-  if (expiredAccount) {
-    return true;
-  }
-
-  // If no account is explicitly marked, check the state of the AccessToken.
-  // An item is also considered expired if it has NO valid access tokens.
+  // The AccessToken collection is the single source of truth for expiration.
+  // An item is considered expired if it has NO valid (non-expired) access tokens.
   const validToken = await getNewestAccessToken({ itemId: itemId });
   return !validToken;
 };
@@ -1936,7 +1923,6 @@ const plaidService = {
   updateInvestmentTransactions,
   updateLiabilities,
   getAccessTokenFromItemId,
-  updateInvadlidAccessToken,
   repairAccessTokenWebhook,
   repairAccessToken,
   getInvestmentsHoldingsWithAccessToken,
