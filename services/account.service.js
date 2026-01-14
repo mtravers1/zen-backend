@@ -97,26 +97,44 @@ const addAccount = async (accessToken, email, uid, profileId) => {
         });
 
         if (existingAccount) {
-          // Overwrite existing account with new data from the re-link
+          // An account with the same name, institution, and mask already exists.
+          // This is likely a re-link of an existing account.
+          // Instead of creating a new account, we will update the existing one.
+          // We need to associate the new item_id with this existing account.
+          
+          // Update the itemId to the new one from the re-link.
           existingAccount.itemId = accountsResponse.item.item_id;
-          existingAccount.plaid_account_id = account.account_id; // Update to the new plaid_account_id
-          existingAccount.status = 'good'; // Reset status to good
+          
+          // The plaid_account_id from Plaid should ideally be stable, but we update it
+          // just in case it has changed.
+          existingAccount.plaid_account_id = account.account_id;
 
-          existingAccount.account_name = await safeEncrypt(account.name, { account_id: account.account_id, field: "name" });
-          existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
-          existingAccount.account_type = await safeEncrypt(account.type, { account_id: account.account_id, field: "type" });
-          existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: account.account_id, field: "subtype" });
-
+          // Reset the status to 'good' as the re-link was successful.
+          existingAccount.status = 'good';
+          
+          // Encrypt and update account details.
+          existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
+          existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
+          existingAccount.account_type = await safeEncrypt(account.type, { account_id: existingAccount._id.toString(), field: "type" });
+          existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: existingAccount._id.toString(), field: "subtype" });
+          
+          // Update balances.
           if (account.balances) {
-            existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
-            existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
+            existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current.toString(), { account_id: existingAccount._id.toString(), field: "currentBalance" }) : null;
+            existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available.toString(), { account_id: existingAccount._id.toString(), field: "availableBalance" }) : null;
           }
           
-          existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: account.account_id, field: "institutionName" });
+          // Update institution details.
+          existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: existingAccount._id.toString(), field: "institutionName" });
           existingAccount.institution_id = institutionId;
+          
+          // The hashes should remain the same, but we re-calculate them for consistency.
+          existingAccount.hashAccountName = hashValue(account.name);
+          existingAccount.hashAccountInstitutionId = hashValue(institutionId);
+          existingAccount.hashAccountMask = hashValue(account.mask);
 
           await existingAccount.save();
-
+          
           existingAccounts.push(existingAccount);
           allAccounts.push(existingAccount);
           continue;
@@ -504,93 +522,7 @@ const getAllUserAccounts = async (email, uid) => {
         throw new Error("User not found");
       }
 
-      // SELF-HEALING: Detect and repair orphaned AccessTokens (tokens without accounts).
-      const allTokens = await AccessToken.find({ userId: user._id, isAccessTokenExpired: { $ne: true } });
-      const itemIdsWithAccounts = new Set(user.plaidAccounts.map(acc => acc.itemId));
-      const orphanedTokens = allTokens.filter(token => !itemIdsWithAccounts.has(token.itemId));
 
-      if (orphanedTokens.length > 0) {
-        let userWasModified = false;
-        for (const token of orphanedTokens) {
-            // SAFETY CHECK: If the token is very new, it might be part of an in-progress addAccount operation.
-            // Skip it to prevent a race condition where we delete a token that's about to be used.
-            const fiveMinutes = 5 * 60 * 1000;
-            if (Date.now() - new Date(token.createdAt).getTime() < fiveMinutes) {
-              structuredLogger.logWarning("Skipping recently created orphaned token to prevent race condition.", {
-                itemId: token.itemId,
-                createdAt: token.createdAt,
-              });
-              continue;
-            }
-
-            try {
-              structuredLogger.logWarning("Orphaned AccessToken found. Investigating...", {
-                  itemId: token.itemId,
-                  userId: user._id.toString()
-              });
-              const dek = await getUserDek(uid);
-              const safeDecrypt = createSafeDecrypt(uid, dek);
-              const decryptedToken = await safeDecrypt(token.accessToken, {
-                item_id: token.itemId,
-                field: "accessToken",
-              });
-
-              if (decryptedToken) {
-                const accountsResponse = await plaidService.getAccountsWithAccessToken(decryptedToken);
-                if (accountsResponse && accountsResponse.accounts) {
-                  const plaidAccounts = accountsResponse.accounts;
-                  let allAccountsExist = true;
-                  for (const plaidAccount of plaidAccounts) {
-                    const existingAccount = await PlaidAccount.findOne({
-                      plaid_account_id: plaidAccount.account_id,
-                      owner_id: user._id,
-                    });
-                    if (!existingAccount) {
-                      allAccountsExist = false;
-                      break;
-                    }
-                  }
-
-                  if (allAccountsExist) {
-                    // This is an old token from a re-link. The accounts are already in the database.
-                    // We can safely delete this old token.
-                    structuredLogger.logInfo("Deleting old orphaned AccessToken.", {
-                      itemId: token.itemId,
-                      userId: user._id.toString()
-                    });
-                    await AccessToken.findByIdAndDelete(token._id);
-                  } else {
-                    // This is a true orphan. Some accounts are missing.
-                    // Call addAccount to add the missing accounts.
-                    structuredLogger.logInfo("True orphaned AccessToken found. Triggering self-healing.", {
-                        itemId: token.itemId,
-                        userId: user._id.toString()
-                    });
-                    const primaryEmail = user.email.find(e => e.isPrimary)?.email;
-                    if (primaryEmail) {
-                      await addAccount(decryptedToken, primaryEmail, uid);
-                      userWasModified = true;
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              structuredLogger.logErrorBlock(error, {
-                operation: "self_healing_add_account",
-                item_id: token.itemId,
-                user_id: uid,
-              });
-            }
-        }
-        if (userWasModified) {
-          // Re-fetch the user to get the updated plaidAccounts
-          user = await User.findOne({
-            authUid: uid,
-          })
-            .populate("plaidAccounts", "-transactions")
-            .exec();
-        }
-      }
 
 
       if (!user.plaidAccounts.length) {
