@@ -91,13 +91,22 @@ const addAccount = async (accessToken, email, uid, profileId) => {
         });
 
         if (existingAccount) {
-          // If the account already exists, update its itemId and accessToken to the new ones from the re-link.
+          // Overwrite existing account with new data from the re-link
           existingAccount.itemId = accountsResponse.item.item_id;
-          
-          // Encrypt and update the accessToken.
-          
+          existingAccount.status = 'good'; // Reset status to good
 
+          existingAccount.account_name = await safeEncrypt(account.name, { account_id: account.account_id, field: "name" });
+          existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: account.account_id, field: "official_name" }) : null;
+          existingAccount.account_type = await safeEncrypt(account.type, { account_id: account.account_id, field: "type" });
+          existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: account.account_id, field: "subtype" });
+
+          if (account.balances) {
+            existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current, { account_id: account.account_id, field: "currentBalance" }) : null;
+            existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available, { account_id: account.account_id, field: "availableBalance" }) : null;
+          }
           
+          existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: account.account_id, field: "institutionName" });
+          existingAccount.institution_id = institutionId;
 
           await existingAccount.save();
 
