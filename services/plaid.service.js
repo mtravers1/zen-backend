@@ -561,7 +561,6 @@ const getItemWithAccessToken = async (accessToken) => {
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
   const access = await getNewestAccessToken({ itemId });
-  console.log("[DEEPEST_TRACE] Full AccessToken document from DB:", JSON.stringify(access, null, 2));
 
   if (!access) {
     return;
@@ -1937,6 +1936,7 @@ const plaidService = {
   checkIfChaseBank,
   handleItemError,
   handleAccountsUpdate,
+  handlePlaidError,
   updateHoldings,
   isItemExpired,
   getNewestAccessToken,
