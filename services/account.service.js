@@ -85,14 +85,21 @@ const addAccount = async (accessToken, email, uid, profileId) => {
       const allAccounts = [];
 
       for (let account of accounts) {
+        const hashAccountName = hashValue(account.name);
+        const hashAccountInstitutionId = hashValue(institutionId);
+        const hashAccountMask = hashValue(account.mask);
+
         const existingAccount = await PlaidAccount.findOne({
-          plaid_account_id: account.account_id,
+          hashAccountName,
+          hashAccountInstitutionId,
+          hashAccountMask,
           owner_id: userId,
         });
 
         if (existingAccount) {
           // Overwrite existing account with new data from the re-link
           existingAccount.itemId = accountsResponse.item.item_id;
+          existingAccount.plaid_account_id = account.account_id; // Update to the new plaid_account_id
           existingAccount.status = 'good'; // Reset status to good
 
           existingAccount.account_name = await safeEncrypt(account.name, { account_id: account.account_id, field: "name" });
@@ -505,6 +512,17 @@ const getAllUserAccounts = async (email, uid) => {
       if (orphanedTokens.length > 0) {
         let userWasModified = false;
         for (const token of orphanedTokens) {
+            // SAFETY CHECK: If the token is very new, it might be part of an in-progress addAccount operation.
+            // Skip it to prevent a race condition where we delete a token that's about to be used.
+            const fiveMinutes = 5 * 60 * 1000;
+            if (Date.now() - new Date(token.createdAt).getTime() < fiveMinutes) {
+              structuredLogger.logWarning("Skipping recently created orphaned token to prevent race condition.", {
+                itemId: token.itemId,
+                createdAt: token.createdAt,
+              });
+              continue;
+            }
+
             try {
               structuredLogger.logWarning("Orphaned AccessToken found. Investigating...", {
                   itemId: token.itemId,
