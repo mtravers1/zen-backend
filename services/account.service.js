@@ -89,54 +89,71 @@ const addAccount = async (accessToken, email, uid, profileId) => {
         const hashAccountInstitutionId = hashValue(institutionId);
         const hashAccountMask = hashValue(account.mask);
 
-        const existingAccount = await PlaidAccount.findOne({
+        const existingAccountsWithHash = await PlaidAccount.find({
           hashAccountName,
           hashAccountInstitutionId,
           hashAccountMask,
           owner_id: userId,
         });
 
-        if (existingAccount) {
-          // An account with the same name, institution, and mask already exists.
-          // This is likely a re-link of an existing account.
-          // Instead of creating a new account, we will update the existing one.
-          // We need to associate the new item_id with this existing account.
-          
-          // Update the itemId to the new one from the re-link.
-          existingAccount.itemId = accountsResponse.item.item_id;
-          
-          // The plaid_account_id from Plaid should ideally be stable, but we update it
-          // just in case it has changed.
-          existingAccount.plaid_account_id = account.account_id;
+async function _updatePlaidAccountDetails(existingAccount, account, institutionId, institutionName, safeEncrypt, hashValue) {
+  existingAccount.itemId = account.itemId; // Ensure itemId is passed correctly
+  existingAccount.plaid_account_id = account.account_id;
+  existingAccount.status = 'good';
 
-          // Reset the status to 'good' as the re-link was successful.
-          existingAccount.status = 'good';
-          
-          // Encrypt and update account details.
-          existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
-          existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
-          existingAccount.account_type = await safeEncrypt(account.type, { account_id: existingAccount._id.toString(), field: "type" });
-          existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: existingAccount._id.toString(), field: "subtype" });
-          
-          // Update balances.
-          if (account.balances) {
-            existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current.toString(), { account_id: existingAccount._id.toString(), field: "currentBalance" }) : null;
-            existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available.toString(), { account_id: existingAccount._id.toString(), field: "availableBalance" }) : null;
+  existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
+  existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
+  existingAccount.account_type = await safeEncrypt(account.type, { account_id: existingAccount._id.toString(), field: "type" });
+  existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: existingAccount._id.toString(), field: "subtype" });
+
+  if (account.balances) {
+    existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current.toString(), { account_id: existingAccount._id.toString(), field: "currentBalance" }) : null;
+    existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available.toString(), { account_id: existingAccount._id.toString(), field: "availableBalance" }) : null;
+  }
+
+  existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: existingAccount._id.toString(), field: "institutionName" });
+  existingAccount.institution_id = institutionId;
+
+  existingAccount.hashAccountName = hashValue(account.name);
+  existingAccount.hashAccountInstitutionId = hashValue(institutionId);
+  existingAccount.hashAccountMask = hashValue(account.mask);
+
+  await existingAccount.save();
+  return existingAccount;
+}
+
+        if (existingAccountsWithHash.length > 0) {
+          const primaryExistingAccount = existingAccountsWithHash[0];
+
+          // Use the new helper function to update the primary existing account
+          await _updatePlaidAccountDetails(primaryExistingAccount, { ...account, itemId: accountsResponse.item.item_id }, institutionId, institutionName, safeEncrypt, hashValue);
+
+          existingAccounts.push(primaryExistingAccount);
+          allAccounts.push(primaryExistingAccount);
+
+          // Handle redundant duplicate accounts
+          for (let i = 1; i < existingAccountsWithHash.length; i++) {
+            const redundantAccount = existingAccountsWithHash[i];
+            structuredLogger.logWarning("Redundant duplicate account found and will be deleted.", {
+              accountId: redundantAccount._id.toString(),
+              plaidAccountId: redundantAccount.plaid_account_id,
+              userId: userId,
+            });
+
+            // Remove account references from the user
+            if (profileId) {
+              targetEntity.plaidAccountIds = targetEntity.plaidAccountIds.filter(id => id.toString() !== redundantAccount._id.toString());
+            } else {
+              targetEntity.plaidAccounts = targetEntity.plaidAccounts.filter(id => id.toString() !== redundantAccount._id.toString());
+            }
+
+            // Delete associated transactions, liabilities, and the redundant account itself
+            await Transaction.deleteMany({ plaidAccountId: redundantAccount.plaid_account_id });
+            await Liability.deleteMany({ accountId: redundantAccount.plaid_account_id });
+            await PlaidAccount.deleteOne({ _id: redundantAccount._id });
           }
-          
-          // Update institution details.
-          existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: existingAccount._id.toString(), field: "institutionName" });
-          existingAccount.institution_id = institutionId;
-          
-          // The hashes should remain the same, but we re-calculate them for consistency.
-          existingAccount.hashAccountName = hashValue(account.name);
-          existingAccount.hashAccountInstitutionId = hashValue(institutionId);
-          existingAccount.hashAccountMask = hashValue(account.mask);
+          await targetEntity.save(); // Save user/business after removing references
 
-          await existingAccount.save();
-          
-          existingAccounts.push(existingAccount);
-          allAccounts.push(existingAccount);
           continue;
         }
 
