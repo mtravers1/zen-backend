@@ -18,7 +18,7 @@ import {
 import { filterTransactions, filterAccounts } from "./filters.js";
 import { toolDefinitions } from "./toolDefinitions.js";
 
-import accountsService from "../accounts.service.js";
+import accountsService from "../account.service.js";
 import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";

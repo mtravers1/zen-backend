@@ -20,7 +20,7 @@ NODE_OPTIONS: `--import ${path.join(__dirname, 'instrument.mjs')} --enable-sourc
       watch: true,
       env: {
         NODE_OPTIONS: `--import ${path.join(__dirname, 'instrument.mjs')} --enable-source-maps`,
-        
+        DEBUG_ENCRYPTION: "false",
         PLAID_ENV: "development",
       },
       error_file: "/var/log/zentavos/api-error.log",

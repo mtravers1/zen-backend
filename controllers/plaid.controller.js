@@ -180,7 +180,15 @@ const saveAccessToken = async (req, res) => {
   try {
     const email = req.user.email;
     const uid = req.user.uid;
-    const { accessToken, itemId, institutionId } = req.body;
+    const {
+      accessToken: camelCaseToken,
+      access_token: snakeCaseToken,
+      itemId: camelCaseItemId,
+      item_id: snakeCaseItemId,
+      institutionId,
+    } = req.body;
+    const accessToken = camelCaseToken || snakeCaseToken;
+    const itemId = camelCaseItemId || snakeCaseItemId;
     console.log(
       `[CONTROLLER] saveAccessToken request - uid: ${uid}, itemId: ${itemId}, institutionId: ${institutionId}`,
     );
@@ -389,13 +397,67 @@ const repairAccessToken = async (req, res) => {
   res.status(200).send({ message: "Repair operation is obsolete and no longer needed." });
 };
 
+
+/**
+ * @api {post} /plaid/check-institution-limit Check if a user can add a new institution
+ * @apiName CheckInstitutionLimit
+ * @apiGroup Plaid
+ * @apiDescription Checks if the current user is allowed to add a new financial institution, based on their subscription plan's limits. If an `institutionId` is provided, the check will pass if the user has already linked this institution, regardless of their plan limits. If no `institutionId` is provided, it will only check if the user is below their plan's institution limit.
+ *
+ * @apiBody {String} [institutionId] The ID of the institution the user wants to add.
+ *
+ * @apiSuccess {Boolean} success Indicates that the user can add the institution.
+ *
+ * @apiSuccessExample {json} Success-Response:
+ *    HTTP/1.1 200 OK
+ *    {
+ *      "success": true
+ *    }
+ *
+ * @apiError (403 Forbidden) {Object} error The user has reached their institution limit and needs to upgrade their plan.
+ *
+ * @apiErrorExample {json} Error-Response (403):
+ *    HTTP/1.1 403 Forbidden
+ *    {
+ *      "success": false,
+ *      "error": "LIMIT_EXCEEDED",
+ *      "limit_type": "institutions",
+ *      "current_usage": 2,
+ *      "plan_limit": 2,
+ *      "upgrade_required": true,
+ *      "popup_data": {
+ *        "title": "You reached your institution limit",
+ *        "message": "Looks like you've reached the limit of your current plan. To keep things running smoothly and unlock more features, consider upgrading your subscription.",
+ *        "current_plan": "Free",
+ *        "popup_type": "institution_limit",
+ *        "action_blocked": "add_institution"
+ *      }
+ *    }
+ * 
+ * @apiError (500 Internal Server Error) {String} error An unexpected error occurred on the server.
+ *
+ */
 const checkInstitutionLimit = async (req, res) => {
   try {
     const { institutionId } = req.body;
     const uid = req.user.uid;
 
-    if (!institutionId) {
-      return res.status(400).send({ error: "institutionId is required" });
+    if (institutionId) {
+      const user = await User.findOne({ authUid: uid });
+      if (user) {
+        const existingAccount = await PlaidAccount.findOne({
+          owner_id: user._id,
+          institution_id: institutionId,
+        });
+
+        if (existingAccount) {
+          const isExpired = await plaidService.isItemExpired(existingAccount.itemId);
+          if (isExpired) {
+            // This is a relink of an expired item, so we should allow it.
+            return res.status(200).send({ success: true });
+          }
+        }
+      }
     }
 
     const canAddAccount = await permissionsService.canAddAccount(

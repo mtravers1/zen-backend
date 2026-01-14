@@ -1,7 +1,7 @@
 // Zentavos AI Tool Functions Module
 // Provides helper functions (tool calls) for LLM to access user, account, transaction, asset, and trip data.
 
-import accountsService from "../accounts.service.js";
+import accountsService from "../account.service.js";
 import businessService from "../businesses.service.js";
 import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
@@ -56,7 +56,7 @@ export const toolFunctions = (context) => ({
       const cleanedData = accounts.map(
         ({
           accessToken,
-          isAccessTokenExpired,
+          
           itemId,
           hashAccountInstitutionId,
           hashAccountName,
@@ -105,7 +105,7 @@ export const toolFunctions = (context) => ({
                   ([k]) =>
                     ![
                       "accessToken",
-                      "isAccessTokenExpired",
+                      
                       "itemId",
                       "hashAccountInstitutionId",
                       "hashAccountName",

@@ -25,7 +25,7 @@ const accessTokenSchema = new Schema(
     // Add status tracking for corrupted tokens
     status: {
       type: String,
-      enum: ["active", "corrupted", "expired"],
+      enum: ["active", "corrupted", "expired", "login_required"],
       default: "active",
     },
     // Add error tracking

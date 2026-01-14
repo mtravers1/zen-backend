@@ -4,7 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import crypto from 'crypto';
 import User from '../database/models/User.js';
 import Liability from '../database/models/Liability.js';
-import accountsService from '../services/accounts.service.js';
+import accountsService from '../services/account.service.js';
 import { hashEmail } from '../database/encryption.js';
 import { createSafeEncrypt } from '../lib/encryptionHelper.js';
 

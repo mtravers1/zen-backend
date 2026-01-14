@@ -21,7 +21,7 @@ import {
 } from "../database/encryption.js";
 import plaidService from "./plaid.service.js";
 
-import accountsService from "./accounts.service.js";
+import accountsService from "./account.service.js";
 
 import {
   createSafeEncrypt,

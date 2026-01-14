@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import connectDB from "../database/database.js";
-import accountsService from "../services/accounts.service.js";
+import accountsService from "../services/account.service.js";
 import User from "../database/models/User.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
 import Transaction from "../database/models/Transaction.js";

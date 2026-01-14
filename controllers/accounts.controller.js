@@ -1,13 +1,23 @@
 import * as Sentry from "@sentry/node";
-import accountsService from "../services/accounts.service.js";
+import accountsService from "../services/account.service.js";
+import cashflowService from "../services/cashflow.service.js";
+import transactionsService from "../services/transactions.service.js";
 import businessService from "../services/businesses.service.js";
+import plaidService from "../services/plaid.service.js";
 
 const addAccount = async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, accessToken, access_token, publicToken, profileId } = req.body;
+    let finalToken = token || accessToken || access_token;
+
+    if (publicToken) {
+      const tokenResponse = await plaidService.getAccessToken(publicToken);
+      finalToken = tokenResponse.access_token;
+    }
+
     const email = req.user.email;
     const uid = req.user.uid;
-    const response = await accountsService.addAccount(token, email, uid);
+    const response = await accountsService.addAccount(finalToken, email, uid, profileId);
     res.status(201).send(response);
   } catch (error) {
     console.log(error);
@@ -38,111 +48,6 @@ const getAllUserAccounts = async (req, res) => {
   }
 };
 
-const getCashFlows = async (req, res) => {
-  try {
-    const { profile } = req.body;
-    const uid = req.user.uid;
-    const cashFlows = await accountsService.getCashFlows(profile, uid);
-    res.status(200).send(cashFlows);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: error.message });
-  }
-};
-
-const getCashFlowsWeekly = async (req, res) => {
-  try {
-    const { profile } = req.body;
-    const uid = req.user.uid;
-    const cashFlows = await accountsService.getCashFlowsWeekly(profile, uid);
-    res.status(200).send(cashFlows);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: error.message });
-  }
-};
-
-const getCashFlowsByPlaidAccount = async (req, res) => {
-  try {
-    const { account } = req.body;
-    const uid = req.user.uid;
-
-    const cashFlows = await accountsService.getCashFlowsByPlaidAccount(
-      account,
-      uid,
-    );
-    res.status(200).send(cashFlows);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: error.message });
-  }
-};
-
-const getUserTransactions = async (req, res) => {
-  try {
-    const email = req.user.email;
-    const uid = req.user.uid;
-    const { page = 1, limit = 50, paginate = false } = req.query;
-    const transactions = await accountsService.getUserTransactions(email, uid, {
-      page: parseInt(page),
-      limit: parseInt(limit),
-      paginate: paginate === "true",
-    });
-    res.status(200).send(transactions);
-  } catch (error) {
-    res.status(500).send({ message: error.message });
-  }
-};
-
-const getProfileTransactions = async (req, res) => {
-  try {
-    const email = req.user.email;
-    const uid = req.user.uid;
-    const { profileId } = req.params;
-    const { page = 1, limit = 50, paginate = false } = req.query;
-
-    const profiles = await businessService.getUserProfiles(email, uid);
-    const profile = profiles.find((p) => p.id.toString() === profileId);
-
-    if (!profile) {
-      return res.status(404).send({ message: "Profile not found" });
-    }
-
-    const transactions = await accountsService.getProfileTransactions(
-      profile,
-      uid,
-      {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        paginate: paginate === "true",
-      },
-    );
-    res.status(200).send(transactions);
-  } catch (e) {
-    console.log(e);
-    res.status(500).send(e);
-  }
-};
-
-const getTransactionsByAccount = async (req, res) => {
-  try {
-    const { accountId } = req.params;
-    const uid = req.user.uid;
-    const { page = 1, limit = 50, paginate = false } = req.query;
-    const transactions = await accountsService.getTransactionsByAccount(
-      accountId,
-      uid,
-      {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        paginate: paginate === "true",
-      },
-    );
-    res.status(200).send(transactions);
-  } catch (error) {
-    res.status(500).send({ message: error.message });
-  }
-};
 
 const getAccountDetails = async (req, res) => {
   try {
@@ -277,16 +182,9 @@ const accountsController = {
   addAccount,
   getAccounts,
   getAccountDetails,
-  getCashFlows,
-  getCashFlowsWeekly,
-  getUserTransactions,
-  getTransactionsByAccount,
   getAllUserAccounts,
   addAccountPhoto,
   getAccountPhoto,
-  getProfileTransactions,
-  getCashFlowsByPlaidAccount,
-  // getInvestmentTransactionsByAccount,
   serveAccountPhoto,
     deletePlaidAccount,
 };

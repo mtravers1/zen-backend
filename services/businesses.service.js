@@ -4,7 +4,7 @@ import Business from "../database/models/Businesses.js";
 import { businessColors } from "../constants/colors.js";
 import Transaction from "../database/models/Transaction.js";
 import PlaidAccount from "../database/models/PlaidAccount.js";
-import accountsService from "./accounts.service.js";
+import accountsService from "./account.service.js";
 import filesService from "./files.service.js";
 
 import {

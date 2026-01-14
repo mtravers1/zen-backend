@@ -72,8 +72,48 @@ const getStorageStatus = async (uid) => {
   }
 };
 
+
+const generateUploadUrl = async (fileName) => {
+  try {
+    const [url] = await storage
+      .bucket(filesBucketName)
+      .file(fileName)
+      .getSignedUrl({
+        action: "write",
+        expires: Date.now() + 15 * 60 * 1000,
+        contentType: "image/jpeg",
+      });
+    return url;
+  } catch (error) {
+    console.error("Error generating signed URL:", error);
+    return null;
+  }
+};
+
+const generateSignedUrl = async (fileName) => {
+  try {
+    const options = {
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000,
+    };
+
+    const [url] = await storage
+      .bucket(filesBucketName)
+      .file(fileName)
+      .getSignedUrl(options);
+
+    return url;
+  } catch (error) {
+    console.error("Error generating signed URL:", error);
+    return null;
+  }
+};
+
 const storageService = {
   getStorageStatus,
+  generateUploadUrl,
+  generateSignedUrl,
 };
 
 export default storageService;
