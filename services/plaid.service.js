@@ -1681,7 +1681,7 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
         uid: uid,
         institutionId: institutionId,
       });
-      await updateInvadlidAccessToken(itemId);
+      await setItemStatus(itemId, 'expired');
       return { access_token: null, itemId: itemId, needs_relink: true };
     }
 
