@@ -96,12 +96,12 @@ const addAccount = async (accessToken, email, uid, profileId) => {
       );
 
       let targetEntity;
-      if (profileId) {
+      if (profileId && mongoose.Types.ObjectId.isValid(profileId)) {
         targetEntity = await Business.findById(profileId);
-        if (!targetEntity) {
-          throw new Error("Business profile not found");
-        }
-      } else {
+      }
+      
+      // If no valid business profile is found (or profileId was not provided), default to the user.
+      if (!targetEntity) {
         targetEntity = user;
       }
 
