@@ -699,7 +699,13 @@ const updateTransactions = async (item) => {
       structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] updateTransactions failed: No access token found for item."), { itemId: item });
       throw new Error(`No access token found for item ID: ${item}`);
     }
-    
+
+    const isNewItem = (Date.now() - new Date(accessInfo.createdAt).getTime()) < 2 * 60 * 1000; // 2 minutes
+
+    let accounts = [];
+    const maxRetries = isNewItem ? 10 : 5;
+    const delayMs = isNewItem ? 6000 : 3000;
+
     const userId = accessInfo.userId;
     const user = await User.findById(userId);
     if (!user) {
@@ -716,10 +722,6 @@ const updateTransactions = async (item) => {
       throw new Error(`Access token could not be retrieved for item ID: ${item}`);
     }
     structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
-
-    let accounts = [];
-    const maxRetries = 5;
-    const delayMs = 3000;
 
     for (let i = 0; i < maxRetries; i++) {
       accounts = await PlaidAccount.find({ itemId: item });
