@@ -259,7 +259,7 @@ const addAccount = async (accessToken, email, uid, profileId) => {
         accountTypes[account.account_id] = account.type;
 
         // Associate account with either User or Business profile
-        if (profileId) {
+        if (targetEntity.constructor.modelName === 'Business') {
           targetEntity.plaidAccountIds.push(newAccount._id);
         } else {
           targetEntity.plaidAccounts.push(newAccount._id);
