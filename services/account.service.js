@@ -33,6 +33,32 @@ import {
 
 
 
+async function _updatePlaidAccountDetails(existingAccount, account, institutionId, institutionName, safeEncrypt, hashValue) {
+  existingAccount.itemId = account.itemId; // Ensure itemId is passed correctly
+  existingAccount.plaid_account_id = account.account_id;
+  existingAccount.status = 'good';
+
+  existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
+  existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
+  existingAccount.account_type = await safeEncrypt(account.type, { account_id: existingAccount._id.toString(), field: "type" });
+  existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: existingAccount._id.toString(), field: "subtype" });
+
+  if (account.balances) {
+    existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current.toString(), { account_id: existingAccount._id.toString(), field: "currentBalance" }) : null;
+    existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available.toString(), { account_id: existingAccount._id.toString(), field: "availableBalance" }) : null;
+  }
+
+  existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: existingAccount._id.toString(), field: "institutionName" });
+  existingAccount.institution_id = institutionId;
+
+  existingAccount.hashAccountName = hashValue(account.name);
+  existingAccount.hashAccountInstitutionId = hashValue(institutionId);
+  existingAccount.hashAccountMask = hashValue(account.mask);
+
+  await existingAccount.save();
+  return existingAccount;
+}
+
 const addAccount = async (accessToken, email, uid, profileId) => {
   return await structuredLogger.withContext(
     "add_account",
@@ -85,42 +111,14 @@ const addAccount = async (accessToken, email, uid, profileId) => {
       const allAccounts = [];
 
       for (let account of accounts) {
-        const hashAccountName = hashValue(account.name);
-        const hashAccountInstitutionId = hashValue(institutionId);
-        const hashAccountMask = hashValue(account.mask);
-
         const existingAccountsWithHash = await PlaidAccount.find({
-          hashAccountName,
-          hashAccountInstitutionId,
-          hashAccountMask,
+          hashAccountName: hashValue(account.name),
+          hashAccountInstitutionId: hashValue(institutionId),
+          hashAccountMask: hashValue(account.mask),
           owner_id: userId,
         });
 
-async function _updatePlaidAccountDetails(existingAccount, account, institutionId, institutionName, safeEncrypt, hashValue) {
-  existingAccount.itemId = account.itemId; // Ensure itemId is passed correctly
-  existingAccount.plaid_account_id = account.account_id;
-  existingAccount.status = 'good';
 
-  existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
-  existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
-  existingAccount.account_type = await safeEncrypt(account.type, { account_id: existingAccount._id.toString(), field: "type" });
-  existingAccount.account_subtype = await safeEncrypt(account.subtype, { account_id: existingAccount._id.toString(), field: "subtype" });
-
-  if (account.balances) {
-    existingAccount.currentBalance = account.balances.current ? await safeEncrypt(account.balances.current.toString(), { account_id: existingAccount._id.toString(), field: "currentBalance" }) : null;
-    existingAccount.availableBalance = account.balances.available ? await safeEncrypt(account.balances.available.toString(), { account_id: existingAccount._id.toString(), field: "availableBalance" }) : null;
-  }
-
-  existingAccount.institution_name = await safeEncrypt(institutionName, { account_id: existingAccount._id.toString(), field: "institutionName" });
-  existingAccount.institution_id = institutionId;
-
-  existingAccount.hashAccountName = hashValue(account.name);
-  existingAccount.hashAccountInstitutionId = hashValue(institutionId);
-  existingAccount.hashAccountMask = hashValue(account.mask);
-
-  await existingAccount.save();
-  return existingAccount;
-}
 
         if (existingAccountsWithHash.length > 0) {
           const primaryExistingAccount = existingAccountsWithHash[0];
