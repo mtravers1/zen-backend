@@ -124,9 +124,30 @@ async function _updatePlaidAccountDetails(existingAccount, account, institutionI
 
         if (existingAccountsWithHash.length > 0) {
           const primaryExistingAccount = existingAccountsWithHash[0];
+          const oldItemId = primaryExistingAccount.itemId;
 
           // Use the new helper function to update the primary existing account
           await _updatePlaidAccountDetails(primaryExistingAccount, { ...account, itemId: accountsResponse.item.item_id }, institutionId, institutionName, safeEncrypt, hashValue);
+
+          // Invalidate the old Plaid item and delete the old access token ONLY if the itemId has changed
+          if (oldItemId !== accountsResponse.item.item_id) {
+            try {
+              const oldAccessToken = await AccessToken.findOne({ itemId: oldItemId });
+              if (oldAccessToken) {
+                const decryptedToken = await safeDecrypt(oldAccessToken.accessToken, { item_id: oldItemId, field: "accessToken" });
+                if (decryptedToken) {
+                  await plaidService.invalidateAccessToken(decryptedToken);
+                }
+                await AccessToken.deleteOne({ _id: oldAccessToken._id });
+              }
+            } catch (error) {
+              structuredLogger.logErrorBlock(error, {
+                operation: "addAccount_cleanup_old_token",
+                item_id: oldItemId,
+                message: "Failed to invalidate or delete old access token.",
+              });
+            }
+          }
 
           existingAccounts.push(primaryExistingAccount);
           allAccounts.push(primaryExistingAccount);
