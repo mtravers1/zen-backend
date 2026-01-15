@@ -779,6 +779,14 @@ const formatAccountsBalances = (accounts) => {
   return accounts;
 };
 
+const getAccountsByProfile = async (profileId, uid) => {
+  const profile = await businessService.getBusiness(profileId, uid);
+  if (!profile) {
+    throw new Error("Business profile not found");
+  }
+  return await getAccounts(profile, uid);
+};
+
 const accountsService = {
   addAccount,
   getAccounts,
@@ -789,6 +797,7 @@ const accountsService = {
   formatAccountsBalances,
   findLiabilityByAccountId,
   summarizeHoldingsByAccountId,
+  getAccountsByProfile,
 };
 
 export default accountsService;

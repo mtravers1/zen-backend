@@ -38,9 +38,17 @@ const getAccounts = async (req, res) => {
 
 const getAllUserAccounts = async (req, res) => {
   try {
+    const { profileId } = req.query;
     const email = req.user.email;
     const uid = req.user.uid;
-    const accounts = await accountsService.getAllUserAccounts(email, uid);
+
+    let accounts;
+    if (profileId) {
+      accounts = await accountsService.getAccountsByProfile(profileId, uid);
+    } else {
+      accounts = await accountsService.getAllUserAccounts(email, uid);
+    }
+
     res.status(200).send(accounts);
   } catch (error) {
     console.log(error);
