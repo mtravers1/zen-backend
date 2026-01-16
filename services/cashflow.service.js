@@ -452,7 +452,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
-
+    console.log(`Querying transactions for account: ${plaidAccount.plaid_account_id}, from date: ${nineWeeksAgo.toISOString()}`);
 
     const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
