@@ -133,6 +133,10 @@ const createLinkToken = async (
 
       // UPDATE MODE: Use provided access_token for update mode
       if (mode === "update") {
+        structuredLogger.logInfo("createLinkToken running in update mode", { uid, accountId, screen });
+        if (!access_token) {
+          throw new Error("access_token is required for update mode");
+        }
         accessToken = access_token; // Token already comes decrypted from getInstitutionUpdateToken
       }
 
