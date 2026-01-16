@@ -562,7 +562,8 @@ const getItemWithAccessToken = async (accessToken) => {
 };
 
 const getAccessTokenFromItemId = async (itemId, uid) => {
-  const access = await getNewestAccessToken({ itemId });
+  // Directly find the access token by itemId without checking for expiration
+  const access = await AccessToken.findOne({ itemId });
 
   if (!access) {
     return;
