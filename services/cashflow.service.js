@@ -478,13 +478,13 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
       const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
       decryptedAmount = formattedTransaction.amount;
       
-      const decryptedAccountType = await safeDecrypt(
-      
-                      transaction.accountType,
-      
-                      { transaction_id: transaction._id, field: "accountType" },
-      
-                    );
+      let decryptedAccountType = await safeDecrypt(
+        transaction.accountType,
+        { transaction_id: transaction._id, field: "accountType" },
+      );
+      if (!decryptedAccountType) {
+        decryptedAccountType = plaidAccount.account_type;
+      }
 
       transactions.push({
         ...transaction,
