@@ -66,7 +66,7 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
       currentCashFlow = 0;
     } else {
       currentCashFlow = (
-        (totalDeposits - totalWithdrawls) /
+        (totalDeposits + totalWithdrawls) /
         totalDeposits
       ).toFixed(2);
     }

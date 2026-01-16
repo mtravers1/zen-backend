@@ -14,24 +14,19 @@ import assetsService from "./assets.service.js";
 import Liability from "../database/models/Liability.js";
 import { getDecryptedLiabilitiesCredit } from "../lib/encryptionHelper.js";
 
-const formatTransactionsWithSigns = (transactions) => {
+export const formatTransactionsWithSigns = (transactions) => {
+  const formatted = [];
   for (const transaction of transactions) {
+    const originalAmount = transaction.amount;
+    const originalAccountType = transaction.accountType;
+
     if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
       transaction.amount = transaction.amount * -1;
     } else if (transaction.accountType === "investment") {
-      if (
-        transaction.type === 'buy' ||
-        transaction.type === 'fee' ||
-        transaction.type === 'reinvested_dividend'
-      ) {
-        transaction.amount = transaction.amount * -1;
-      } else if (
-        transaction.type === 'sell' ||
-        transaction.type === 'dividend'
-      ) {
-        if (transaction.amount < 0) {
-          transaction.amount = transaction.amount * -1;
-        }
+      if (transaction.type === 'buy' || transaction.type === 'fee' || transaction.type === 'reinvested_dividend') {
+        transaction.amount = -Math.abs(transaction.amount);
+      } else if (transaction.type === 'sell' || transaction.type === 'dividend') {
+        transaction.amount = Math.abs(transaction.amount);
       }
     }
     if (transaction.merchant) {
@@ -39,8 +34,10 @@ const formatTransactionsWithSigns = (transactions) => {
       delete transaction.merchant.website;
       delete transaction.merchant.logo;
     }
+    console.log(`Original: Amount=${originalAmount}, Type=${originalAccountType} | Formatted: Amount=${transaction.amount}, Type=${transaction.accountType}`);
+    formatted.push(transaction);
   }
-  return transactions;
+  return formatted;
 };
 
 
