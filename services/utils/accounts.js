@@ -44,8 +44,19 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
 
     let currentCashFlow = 0;
-
-    currentCashFlow = (totalDeposits - totalWithdrawls).toFixed(2);
+    if (totalDeposits === 0) {
+      currentCashFlow = -999;
+    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
+      currentCashFlow = 0;
+    } else {
+      currentCashFlow = (
+        (totalDeposits - totalWithdrawls) /
+        totalDeposits
+      ).toFixed(2);
+    }
+    if (totalDeposits !== 0) {
+      currentCashFlow = currentCashFlow * 100;
+    }
 
     weeklySummary.push({
       week,
