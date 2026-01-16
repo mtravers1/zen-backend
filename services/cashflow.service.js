@@ -222,10 +222,10 @@ const getCashFlows = async (profile, uid) => {
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const depositoryDepositTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount < 0,
+        (transaction) => transaction.amount > 0,
       );
       const depositoryWithdrawTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount > 0,
+        (transaction) => transaction.amount < 0,
       );
       const creditDepositTransactions = cleanCreditTxns.filter(
         (transaction) => transaction.amount < 0,
@@ -236,10 +236,10 @@ const getCashFlows = async (profile, uid) => {
 
       /// Calculate current cash flow
 
-      const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
+      const depositDepositsAmountAbs = depositoryDepositsAmount;
       const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
       const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-      const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
+      const creditWithdrawAmountAbs = creditWithdrawsAmount;
 
       const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
       const totalWithdrawls =
@@ -428,7 +428,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
     });
   }
 
-  const { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions } =
+  const { allTransactions } = 
     await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
 
   const groupedTransactions = groupByWeek(allTransactions);
@@ -515,19 +515,11 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
       ),
     );
   }
-  return { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions };
+  return { allTransactions };
 };
 
-const calculateCashFlowsWeekly = async (
-  depositoryTransactions,
-  creditTransactions,
-  allTransactions,
-) => {
-  const groupedTransactions = groupByWeek([
-    ...depositoryTransactions,
-    ...creditTransactions,
-  ]);
-
+const calculateCashFlowsWeekly = async (allTransactions) => {
+  const groupedTransactions = groupByWeek(allTransactions);
   return calculateWeeklyTotals(groupedTransactions);
 };
 
@@ -557,8 +549,6 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     await weeklyCashFlowPlaidAccountSetUpTransactions([plaidAccount], uid);
 
   const resultWeeklyCashFlowwCharts = await calculateCashFlowsWeekly(
-    plaidWeeklyTransactions.depositoryTransactions,
-    plaidWeeklyTransactions.creditTransactions,
     plaidWeeklyTransactions.allTransactions,
   );
 
@@ -619,6 +609,12 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
           for (const transaction of transactionsResponse) {
 
             let decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
+            const decryptedType = await safeDecrypt(transaction.type, {
+              transaction_id: transaction._id,
+              field: "type",
+            });
+    const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
+    decryptedAmount = formattedTransaction.amount;
 
     const decryptedAccountType = await safeDecrypt(
       transaction.accountType,
