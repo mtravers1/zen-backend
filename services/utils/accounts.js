@@ -45,6 +45,7 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
 
     let currentCashFlow = 0;
     console.log(`Debug: Week ${week}, totalDeposits: ${totalDeposits}, totalWithdrawls: ${totalWithdrawls}`);
+    weekTransactions.forEach(t => console.log(`  Transaction: ${t._id}, Amount: ${t.amount}, AccountType: ${t.accountType}`));
     if (totalDeposits === 0) {
       currentCashFlow = -999;
     } else if (totalDeposits === 0 && totalWithdrawls === 0) {
