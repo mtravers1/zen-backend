@@ -359,6 +359,15 @@ const getTransactionsByAccount = async (
     throw new Error("Account not found");
   }
 
+  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
+
+  const decryptedAccountType = await safeDecrypt(
+    account.account_type,
+    { account_id: account._id, field: "account_type" },
+  );
+  account.account_type = decryptedAccountType;
+
   const transactionsResponse = await Transaction.find({
     plaidAccountId: account.plaid_account_id,
   })
@@ -366,10 +375,6 @@ const getTransactionsByAccount = async (
     .lean();
 
   let allTransactions = [];
-
-  const dek = await getUserDek(uid);
-
-  const safeDecrypt = createSafeDecrypt(uid, dek);
 
   for (const transaction of transactionsResponse) {
     let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
