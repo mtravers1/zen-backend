@@ -14,6 +14,39 @@ import assetsService from "./assets.service.js";
 import Liability from "../database/models/Liability.js";
 import { getDecryptedLiabilitiesCredit } from "../lib/encryptionHelper.js";
 
+const formatTransactionsWithSigns = (transactions) => {
+  for (const transaction of transactions) {
+    if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
+      transaction.amount = transaction.amount * -1;
+    } else if (transaction.accountType === "investment") {
+      if (
+        transaction.type === 'buy' ||
+        transaction.type === 'fee' ||
+        transaction.type === 'reinvested_dividend'
+      ) {
+        transaction.amount = transaction.amount * -1;
+      } else if (
+        transaction.type === 'sell' ||
+        transaction.type === 'dividend'
+      ) {
+        if (transaction.amount < 0) {
+          transaction.amount = transaction.amount * -1;
+        }
+      }
+    }
+    if (transaction.merchant) {
+      delete transaction.merchant._id;
+      delete transaction.merchant.website;
+      delete transaction.merchant.logo;
+    }
+  }
+  return transactions;
+};
+
+
+
+
+
 const getCashFlows = async (profile, uid) => {
   return await structuredLogger.withContext(
     "get_cash_flows",
@@ -392,6 +425,35 @@ const getCashFlows = async (profile, uid) => {
   );
 };
 
+const formatTransactionsWithSigns = (transactions) => {
+  for (const transaction of transactions) {
+    if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
+      transaction.amount = transaction.amount * -1;
+    } else if (transaction.accountType === "investment") {
+      if (
+        transaction.type === 'buy' ||
+        transaction.type === 'fee' ||
+        transaction.type === 'reinvested_dividend'
+      ) {
+        transaction.amount = transaction.amount * -1;
+      } else if (
+        transaction.type === 'sell' ||
+        transaction.type === 'dividend'
+      ) {
+        if (transaction.amount < 0) {
+          transaction.amount = transaction.amount * -1;
+        }
+      }
+    }
+    if (transaction.merchant) {
+      delete transaction.merchant._id;
+      delete transaction.merchant.website;
+      delete transaction.merchant.logo;
+    }
+  }
+  return transactions;
+};
+
 const getCashFlowsWeekly = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
@@ -419,7 +481,6 @@ const getCashFlowsWeekly = async (profile, uid) => {
       plaidAccount.account_subtype,
       { context: { accountId: plaidAccount._id, field: 'account_subtype' } },
     );
-    console.log(`[Debug] Decrypted account type for account ${plaidAccount._id}: ${decryptedAccountType}`);
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
@@ -429,10 +490,17 @@ const getCashFlowsWeekly = async (profile, uid) => {
     });
   }
 
-  const { allTransactions } = 
+  const { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions } =
     await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
 
-  const groupedTransactions = groupByWeek(allTransactions);
+  const formattedTransactions = formatTransactionsWithSigns([
+    ...depositoryTransactions,
+    ...creditTransactions,
+    ...investmentTransactions,
+    ...loanTransactions,
+  ]);
+
+  const groupedTransactions = groupByWeek(formattedTransactions);
   const result = calculateWeeklyTotals(groupedTransactions);
   return { weeklyCashFlow: result };
 };
@@ -453,8 +521,6 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
-    console.log(`Querying transactions for account: ${plaidAccount.plaid_account_id}, from date: ${nineWeeksAgo.toISOString()}`);
-
     const transactionsResponse = await Transaction.find({
       plaidAccountId: plaidAccount.plaid_account_id,
       transactionDate: { $gte: nineWeeksAgo },
@@ -476,45 +542,42 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         field: "type",
       });
 
-      const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
-      decryptedAmount = formattedTransaction.amount;
-      
-      const newTransaction = {
+      const accountType = plaidAccount.account_type;
+
+      if (accountType === 'investment') {
+        if (decryptedType === 'buy') {
+          decryptedAmount = -Math.abs(decryptedAmount);
+        } else if (decryptedType === 'sell') {
+          decryptedAmount = Math.abs(decryptedAmount);
+        }
+      } else if (accountType === 'credit' || accountType === 'loan') {
+        decryptedAmount = -decryptedAmount;
+      }
+
+      const decryptedAccountType = await safeDecrypt(
+        transaction.accountType,
+        { transaction_id: transaction._id, field: "accountType" },
+      );
+
+      transactions.push({
         ...transaction,
         amount: decryptedAmount,
-        accountType: plaidAccount.account_type,
-      };
-      transactions.push(newTransaction);
+        accountType: decryptedAccountType,
+      });
     }
 
     allTransactions.push(...transactions);
-    depositoryTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "depository",
-      ),
-    );
-    creditTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "credit",
-      ),
-    );
-    investmentTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "investment",
-      ),
-    );
-    loanTransactions.push(
-      ...transactions.filter(
-        (transaction) => plaidAccount.account_type === "loan",
-      ),
-    );
+    if (plaidAccount.account_type === "depository") {
+      depositoryTransactions.push(...transactions);
+    } else if (plaidAccount.account_type === "credit") {
+      creditTransactions.push(...transactions);
+    } else if (plaidAccount.account_type === "investment") {
+      investmentTransactions.push(...transactions);
+    } else if (plaidAccount.account_type === "loan") {
+      loanTransactions.push(...transactions);
+    }
   }
-  return { allTransactions };
-};
-
-const calculateCashFlowsWeekly = async (allTransactions) => {
-  const groupedTransactions = groupByWeek(allTransactions);
-  return calculateWeeklyTotals(groupedTransactions);
+  return { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions };
 };
 
 
