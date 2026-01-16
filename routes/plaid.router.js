@@ -24,5 +24,6 @@ router.post("/balance", plaidController.getBalance);
 router.get("/institutions", plaidController.getInstitutions);
 router.get("/transactions", plaidController.getTransactions);
 router.get("/detect-internal", plaidController.detectInternalTransfers);
+router.post("/link-token-for-update", plaidController.getLinkTokenForUpdate);
 
 export default router;

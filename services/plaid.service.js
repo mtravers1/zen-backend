@@ -1495,114 +1495,20 @@ const handlePlaidError = async (error, itemId) => {
   }
 };
 
-
-
+/**
+ * @deprecated This function is deprecated and will be removed in a future version.
+ */
 const repairAccessTokenWebhook = async (item) => {
-  const accessToken = await getAccessTokenFromItemId(item);
-  const accounts = await PlaidAccount.find({
-    accessToken,
-  });
-  for (const account of accounts) {
-    await account.save();
-  }
-  return accounts;
+  console.warn("DEPRECATED: repairAccessTokenWebhook is called. Please update your application.");
+  throw new Error("This function is deprecated. Please update your application.");
 };
 
+/**
+ * @deprecated This function is deprecated and will be removed in a future version.
+ */
 const repairAccessToken = async (accountId, uid) => {
-  return await structuredLogger.withContext(
-    "repair_access_token",
-    { accountId, uid },
-    async () => {
-      try {
-        const account = await PlaidAccount.findById(accountId);
-        if (!account) {
-          structuredLogger.logErrorBlock(new Error("Account not found"), {
-            operation: "repair_access_token",
-            accountId,
-          });
-          return;
-        }
-
-        const user = await User.findOne({ authUid: uid });
-        if (!user) {
-          throw new Error(`User not found for uid: ${uid}`);
-        }
-
-        const dek = await getUserDek(uid);
-        const safeDecrypt = createSafeDecrypt(uid, dek);
-        const accessToken = await safeDecrypt(account.accessToken, {
-          account_id: accountId,
-          field: "accessToken",
-        });
-
-        const plaidClient = getPlaidClient();
-        structuredLogger.logInfo("Attempting plaidClient.accountsGet with decrypted token in repairAccessToken.", {
-            accountId: accountId,
-            uid: uid,
-            hasAccessToken: !!accessToken,
-            accessToken_start: accessToken ? accessToken.substring(0, 10) : 'N/A'
-        });
-        const plaidAccountsResponse = await plaidClient.accountsGet({
-          access_token: accessToken,
-        });
-        const plaidAccounts = plaidAccountsResponse.data.accounts;
-        const plaidIds = [];
-        const accountIds = [];
-        for (const plaidAccount of plaidAccounts) {
-          plaidIds.push(plaidAccount.account_id);
-        }
-
-        const accounts = await PlaidAccount.find({
-          accessToken: account.accessToken,
-        });
-        for (const acc of accounts) {
-          accountIds.push(acc.plaid_account_id);
-        }
-
-        const plaidSet = new Set(plaidIds);
-        const removedAccounts = accountIds.filter((id) => !plaidSet.has(id));
-        const unchangedAccounts = accountIds.filter((id) => plaidSet.has(id));
-
-        for (const accId of unchangedAccounts) {
-          const plaidAccount = await PlaidAccount.findOne({
-            plaid_account_id: accId,
-          });
-        }
-
-        for (const accId of removedAccounts) {
-          const primaryEmail = user.email.find(e => e.isPrimary)?.email;
-          if (primaryEmail) {
-            await accountsService.deletePlaidAccountByEmail(accId, primaryEmail);
-          }
-        }
-
-        const primaryEmail = user.email.find(e => e.isPrimary)?.email;
-        if (!primaryEmail) {
-            throw new Error(`Primary email not found for user: ${uid}`);
-        }
-        const resAddAcount = await accountsService.addAccount(
-          accessToken,
-          primaryEmail,
-          uid
-        );
-
-        structuredLogger.logSuccess("repair_access_token_completed", {
-          accountId,
-          removed_accounts: removedAccounts.length,
-          unchanged_accounts: unchangedAccounts.length,
-        });
-
-        return { accounts, existingAccounts: resAddAcount.existingAccounts };
-      } catch (error) {
-        structuredLogger.logErrorBlock(error, {
-          operation: "repair_access_token",
-          accountId,
-          uid,
-        });
-        throw error;
-      }
-    },
-  );
+  console.warn("DEPRECATED: repairAccessToken is called. Please update your application.");
+  throw new Error("This function is deprecated. Please update your application.");
 };
 
 const getCurrentCashflow = async (email) => {
@@ -1911,6 +1817,42 @@ const doesItemExist = async (itemId) => {
   return !!token;
 };
 
+const createLinkTokenForUpdate = async (uid, institutionId) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const account = await PlaidAccount.findOne({
+    owner_id: user._id,
+    institution_id: institutionId,
+  });
+
+  if (!account) {
+    throw new Error("Institution not found for this user");
+  }
+
+  const accessToken = await getAccessTokenFromItemId(account.itemId, uid);
+  if (!accessToken) {
+    throw new Error("Could not retrieve access token for this institution");
+  }
+
+  const plaidClient = getPlaidClient();
+  const response = await plaidClient.linkTokenCreate({
+    client_id: plaidClientId,
+    secret: plaidSecret,
+    client_name: "Zentavos",
+    country_codes: ["US"],
+    language: "en",
+    user: {
+      client_user_id: user._id.toString(),
+    },
+    access_token: accessToken,
+  });
+
+  return response.data.link_token;
+};
+
 const plaidService = {
   createLinkToken,
   getPublicToken,
@@ -1950,6 +1892,7 @@ const plaidService = {
   isItemExpired,
   getNewestAccessToken,
   doesItemExist,
+  createLinkTokenForUpdate,
 };
 
 export default plaidService;

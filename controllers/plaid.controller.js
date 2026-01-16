@@ -392,9 +392,8 @@ const detectInternalTransfers = async (req, res) => {
 };
 
 const repairAccessToken = async (req, res) => {
-  // This endpoint is now obsolete. The re-linking flow handles this seamlessly.
-  // Returning success to prevent errors from legacy frontend calls.
-  res.status(200).send({ message: "Repair operation is obsolete and no longer needed." });
+  console.warn("DEPRECATED: repairAccessToken endpoint is called. Please update your application.");
+  res.status(410).send({ message: "This endpoint is deprecated. Please update your application." });
 };
 
 
@@ -674,6 +673,19 @@ const getInstitutionUpdateToken = async (req, res) => {
   }
 };
 
+const getLinkTokenForUpdate = async (req, res) => {
+  try {
+    const { institution_id } = req.body;
+    const { uid } = req.user;
+
+    const linkToken = await plaidService.createLinkTokenForUpdate(uid, institution_id);
+
+    res.status(200).send({ link_token: linkToken });
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+}
+
 const plaidController = {
   createLinkToken,
   getPublicToken,
@@ -689,6 +701,7 @@ const plaidController = {
   getConnectedInstitutions,
   getUpfrontInstitutionStatus,
   getInstitutionUpdateToken,
+  getLinkTokenForUpdate,
 };
 
 export default plaidController;
