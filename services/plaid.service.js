@@ -163,9 +163,6 @@ const createLinkToken = async (
 
       if (accessToken) {
         plaidRequest.access_token = accessToken;
-        if (institution_id) {
-          plaidRequest.institution_id = institution_id;
-        }
       } else {
         plaidRequest.products = ["transactions"];
         plaidRequest.optional_products = ["investments", "liabilities"];
