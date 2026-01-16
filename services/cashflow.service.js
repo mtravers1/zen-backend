@@ -419,6 +419,7 @@ const getCashFlowsWeekly = async (profile, uid) => {
       plaidAccount.account_subtype,
       { context: { accountId: plaidAccount._id, field: 'account_subtype' } },
     );
+    console.log(`[Debug] Decrypted account type for account ${plaidAccount._id}: ${decryptedAccountType}`);
     plaidAccounts.push({
       ...plaidAccount,
       currentBalance: decryptedCurrentBalance,
