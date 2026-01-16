@@ -20,7 +20,7 @@ export const formatTransactionAmount = (transaction, account) => {
     ) {
         amount = Math.abs(amount);
     }
-  } else if (account.account_type === 'credit' || account.account_type === 'loan' || account.account_type === 'depository') {
+  } else if (account.account_type === 'credit' || account.account_type === 'loan') {
     amount = -amount;
   }
 
