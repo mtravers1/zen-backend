@@ -538,9 +538,9 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const plaidWeeklyTransactions =
     await weeklyCashFlowPlaidAccountSetUpTransactions([plaidAccount], uid);
 
-  const resultWeeklyCashFlowwCharts = await calculateCashFlowsWeekly(
-    plaidWeeklyTransactions.allTransactions,
-  );
+  
+
+  const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(plaidWeeklyTransactions.allTransactions));
 
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
@@ -887,6 +887,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     advice,
     averageDailyNet,
     weeklyCashFlow,
+    
     weeklyCashFlowChartData: resultWeeklyCashFlowwCharts,
     liabilityPlaid,
   };
@@ -896,7 +897,6 @@ const cashflowService = {
   getCashFlows,
   getCashFlowsWeekly,
   weeklyCashFlowPlaidAccountSetUpTransactions,
-  calculateCashFlowsWeekly,
   getCashFlowsByPlaidAccount,
 };
 
