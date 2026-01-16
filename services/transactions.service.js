@@ -6,6 +6,24 @@ import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
+  if (account.account_type === "depository" || account.account_type === "credit" || account.account_type === "loan") {
+    transaction.amount = transaction.amount * -1;
+  } else if (account.account_type === "investment") {
+    if (
+      transaction.type === 'buy' ||
+      transaction.type === 'fee' ||
+      transaction.type === 'reinvested_dividend'
+    ) {
+      transaction.amount = transaction.amount * -1;
+    } else if (
+      transaction.type === 'sell' ||
+      transaction.type === 'dividend'
+    ) {
+      if (transaction.amount < 0) {
+        transaction.amount = transaction.amount * -1;
+      }
+    }
+  }
   return transaction;
 };
 

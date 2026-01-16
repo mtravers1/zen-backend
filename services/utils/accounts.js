@@ -17,6 +17,12 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     const creditTransactions = weekTransactions.filter(
       (t) => t.accountType === "credit",
     );
+    const investmentTransactions = weekTransactions.filter(
+      (t) => t.accountType === "investment",
+    );
+    const loanTransactions = weekTransactions.filter(
+      (t) => t.accountType === "loan",
+    );
 
     const depositoryDepositsAmount = depositoryTransactions
       .filter((transaction) => transaction.amount > 0)
@@ -34,18 +40,26 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
       .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
-    const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
+    const investmentDepositsAmount = investmentTransactions
+      .filter((transaction) => transaction.amount > 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-    const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
+    const investmentWithdrawsAmount = investmentTransactions
+      .filter((transaction) => transaction.amount < 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
-    const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
+    const loanDepositsAmount = loanTransactions
+      .filter((transaction) => transaction.amount > 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const loanWithdrawsAmount = loanTransactions
+      .filter((transaction) => transaction.amount < 0)
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
+    const totalDeposits = depositoryDepositsAmount + creditDepositsAmount + investmentDepositsAmount + loanDepositsAmount;
+    const totalWithdrawls = depositoryWithdrawsAmount + creditWithdrawsAmount + investmentWithdrawsAmount + loanWithdrawsAmount;
 
     let currentCashFlow = 0;
-    console.log(`Debug: Week ${week}, totalDeposits: ${totalDeposits}, totalWithdrawls: ${totalWithdrawls}`);
-    weekTransactions.forEach(t => console.log(`  Transaction: ${t._id}, Amount: ${t.amount}, AccountType: ${t.accountType}`));
     if (totalDeposits === 0) {
       currentCashFlow = -999;
     } else if (totalDeposits === 0 && totalWithdrawls === 0) {
@@ -70,15 +84,19 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
         deposits: creditDepositsAmount,
         withdraws: creditWithdrawsAmount,
       },
+      investment: {
+        deposits: investmentDepositsAmount,
+        withdraws: investmentWithdrawsAmount,
+      },
+      loan: {
+        deposits: loanDepositsAmount,
+        withdraws: loanWithdrawsAmount,
+      },
       cashFlow: currentCashFlow,
       totalWeeklyDeposits: totalDeposits,
       totalWeeklyWithdrawls: totalWithdrawls,
-      totalWithdrawls,
-      testing: { depositoryTransactions, creditTransactions },
     });
   }
-
-  //console.log("WEEKLY", weeklySummary);
 
   return weeklySummary;
 };

@@ -465,14 +465,6 @@ const getCashFlowsWeekly = async (profile, uid) => {
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
   for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedCurrentBalance = await safeDecrypt(
-      plaidAccount.currentBalance,
-      { context: { accountId: plaidAccount._id, field: 'currentBalance' } },
-    );
-    const decryptedAvailableBalance = await safeDecrypt(
-      plaidAccount.availableBalance,
-      { context: { accountId: plaidAccount._id, field: 'availableBalance' } },
-    );
     const decryptedAccountType = await safeDecrypt(
       plaidAccount.account_type,
       { context: { accountId: plaidAccount._id, field: 'account_type' } },
@@ -483,22 +475,14 @@ const getCashFlowsWeekly = async (profile, uid) => {
     );
     plaidAccounts.push({
       ...plaidAccount,
-      currentBalance: decryptedCurrentBalance,
-      availableBalance: decryptedAvailableBalance,
       account_type: decryptedAccountType,
       account_subtype: decryptedAccountSubtype,
     });
   }
 
-  const { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions } =
-    await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
+  const { allTransactions } = await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
 
-  const formattedTransactions = formatTransactionsWithSigns([
-    ...depositoryTransactions,
-    ...creditTransactions,
-    ...investmentTransactions,
-    ...loanTransactions,
-  ]);
+  const formattedTransactions = formatTransactionsWithSigns(allTransactions);
 
   const groupedTransactions = groupByWeek(formattedTransactions);
   const result = calculateWeeklyTotals(groupedTransactions);
@@ -515,10 +499,6 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   const nineWeeksAgo = new Date();
   nineWeeksAgo.setDate(nineWeeksAgo.getDate() - 9 * 7);
   const allTransactions = [];
-  const depositoryTransactions = [];
-  const creditTransactions = [];
-  const investmentTransactions = [];
-  const loanTransactions = [];
 
   for (const plaidAccount of plaidAccounts) {
     const transactionsResponse = await Transaction.find({
@@ -528,8 +508,6 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
     })
       .sort({ transactionDate: 1 })
       .lean();
-
-    const transactions = [];
 
     for (const transaction of transactionsResponse) {
       let decryptedAmount = await safeDecrypt(transaction.amount, {
@@ -554,30 +532,14 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
         decryptedAmount = -decryptedAmount;
       }
 
-      const decryptedAccountType = await safeDecrypt(
-        transaction.accountType,
-        { transaction_id: transaction._id, field: "accountType" },
-      );
-
-      transactions.push({
+      allTransactions.push({
         ...transaction,
         amount: decryptedAmount,
-        accountType: decryptedAccountType,
+        accountType: accountType,
       });
     }
-
-    allTransactions.push(...transactions);
-    if (plaidAccount.account_type === "depository") {
-      depositoryTransactions.push(...transactions);
-    } else if (plaidAccount.account_type === "credit") {
-      creditTransactions.push(...transactions);
-    } else if (plaidAccount.account_type === "investment") {
-      investmentTransactions.push(...transactions);
-    } else if (plaidAccount.account_type === "loan") {
-      loanTransactions.push(...transactions);
-    }
   }
-  return { depositoryTransactions, creditTransactions, investmentTransactions, loanTransactions, allTransactions };
+  return { allTransactions };
 };
 
 
