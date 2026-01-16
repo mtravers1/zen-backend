@@ -59,20 +59,7 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
     const totalDeposits = depositoryDepositsAmount + creditDepositsAmount + investmentDepositsAmount + loanDepositsAmount;
     const totalWithdrawls = depositoryWithdrawsAmount + creditWithdrawsAmount + investmentWithdrawsAmount + loanWithdrawsAmount;
 
-    let currentCashFlow = 0;
-    if (totalDeposits === 0) {
-      currentCashFlow = -999;
-    } else if (totalDeposits === 0 && totalWithdrawls === 0) {
-      currentCashFlow = 0;
-    } else {
-      currentCashFlow = (
-        (totalDeposits + totalWithdrawls) /
-        totalDeposits
-      ).toFixed(2);
-    }
-    if (totalDeposits !== 0) {
-      currentCashFlow = currentCashFlow * 100;
-    }
+    let currentCashFlow = totalDeposits + totalWithdrawls;
 
     weeklySummary.push({
       week,

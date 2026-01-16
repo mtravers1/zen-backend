@@ -396,7 +396,8 @@ const getCashFlows = async (profile, uid) => {
 
       // weekly cash flow
 
-      const weeklyCashFlow = calculateWeeklyTotals(groupByWeek(allTransactions));
+      const formattedAllTransactions = formatTransactionsWithSigns(allTransactions);
+      const weeklyCashFlow = calculateWeeklyTotals(groupByWeek(formattedAllTransactions));
 
       structuredLogger.logSuccess("get_cash_flows_completed", {
         uid,
@@ -449,11 +450,17 @@ const getCashFlowsWeekly = async (profile, uid) => {
   }
 
   const { allTransactions } = await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
+  console.log('allTransactions', allTransactions);
 
   const formattedTransactions = formatTransactionsWithSigns(allTransactions);
+  console.log('formattedTransactions', formattedTransactions);
 
   const groupedTransactions = groupByWeek(formattedTransactions);
+  console.log('groupedTransactions', groupedTransactions);
+
   const result = calculateWeeklyTotals(groupedTransactions);
+  console.log('result', result);
+
   return { weeklyCashFlow: result };
 };
 
@@ -478,7 +485,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
       .lean();
 
     for (const transaction of transactionsResponse) {
-      let decryptedAmount = await safeDecrypt(transaction.amount, {
+      let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
         transaction_id: transaction._id,
         field: "amount",
       });
@@ -490,15 +497,7 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
 
       const accountType = plaidAccount.account_type;
 
-      if (accountType === 'investment') {
-        if (decryptedType === 'buy') {
-          decryptedAmount = -Math.abs(decryptedAmount);
-        } else if (decryptedType === 'sell') {
-          decryptedAmount = Math.abs(decryptedAmount);
-        }
-      } else if (accountType === 'credit' || accountType === 'loan') {
-        decryptedAmount = -decryptedAmount;
-      }
+
 
       allTransactions.push({
         ...transaction,
