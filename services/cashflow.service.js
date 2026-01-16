@@ -206,11 +206,11 @@ const getCashFlows = async (profile, uid) => {
       );
 
       const depositoryDepositsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount < 0)
+        .filter((transaction) => transaction.amount > 0)
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const depositoryWithdrawsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount > 0)
+        .filter((transaction) => transaction.amount < 0)
         .reduce((total, transaction) => total + transaction.amount, 0);
 
       const creditDepositsAmount = cleanCreditTxns
@@ -656,11 +656,11 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   );
 
   const depositoryDepositsAmount = depositoryTransactions
-    .filter((transaction) => transaction.amount < 0)
+    .filter((transaction) => transaction.amount > 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
   const depositoryWithdrawsAmount = depositoryTransactions
-    .filter((transaction) => transaction.amount > 0)
+    .filter((transaction) => transaction.amount < 0)
     .reduce((total, transaction) => total + transaction.amount, 0);
 
   const creditDepositsAmount = creditTransactions

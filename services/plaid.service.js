@@ -28,6 +28,7 @@ import { hashValue } from "../database/encryption.js";
 import {
   createSafeEncrypt,
   createSafeDecrypt,
+  getDecryptedAccount,
 } from "../lib/encryptionHelper.js";
 
 /**
@@ -724,8 +725,14 @@ const updateTransactions = async (item) => {
     structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
 
     for (let i = 0; i < maxRetries; i++) {
-      accounts = await PlaidAccount.find({ itemId: item });
-      if (accounts.length > 0) {
+      const encryptedAccounts = await PlaidAccount.find({ itemId: item });
+      if (encryptedAccounts.length > 0) {
+        const dek = await getUserDek(uid);
+        accounts = await Promise.all(
+          encryptedAccounts.map((account) =>
+            getDecryptedAccount(account, dek, uid, accessInfo)
+          )
+        );
         break;
       }
       structuredLogger.logWarning(`[SYNC_TRACE] No accounts found for item. Retrying in ${delayMs}ms...`, {
