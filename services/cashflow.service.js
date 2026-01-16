@@ -425,35 +425,6 @@ const getCashFlows = async (profile, uid) => {
   );
 };
 
-const formatTransactionsWithSigns = (transactions) => {
-  for (const transaction of transactions) {
-    if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
-      transaction.amount = transaction.amount * -1;
-    } else if (transaction.accountType === "investment") {
-      if (
-        transaction.type === 'buy' ||
-        transaction.type === 'fee' ||
-        transaction.type === 'reinvested_dividend'
-      ) {
-        transaction.amount = transaction.amount * -1;
-      } else if (
-        transaction.type === 'sell' ||
-        transaction.type === 'dividend'
-      ) {
-        if (transaction.amount < 0) {
-          transaction.amount = transaction.amount * -1;
-        }
-      }
-    }
-    if (transaction.merchant) {
-      delete transaction.merchant._id;
-      delete transaction.merchant.website;
-      delete transaction.merchant.logo;
-    }
-  }
-  return transactions;
-};
-
 const getCashFlowsWeekly = async (profile, uid) => {
   const plaidIds = profile.plaidAccounts;
   const plaidAccountsResponse = await PlaidAccount.find({
