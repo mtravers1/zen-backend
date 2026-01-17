@@ -6,7 +6,7 @@ import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
-  if (account.account_type === "depository" || account.account_type === "credit" || account.account_type === "loan") {
+  if (account.account_type === "depository" || account.account_type === "credit" || account.account_type === "loan" || account.account_subtype === "cd" || account.account_subtype === "money market") {
     transaction.amount = transaction.amount * -1;
   } else if (account.account_type === "investment") {
     if (
@@ -323,6 +323,10 @@ const getUserTransactions = async (
       decryptedAccount.account_type = await safeDecrypt(
         account.account_type,
         { account_id: account._id, field: "account_type" },
+      );
+      decryptedAccount.account_subtype = await safeDecrypt(
+        account.account_subtype,
+        { account_id: account._id, field: "account_subtype" },
       );
     } catch (e) {
       console.error(`Failed to decrypt account_type for account ${account._id}:`, e);
