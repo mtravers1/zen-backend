@@ -34,7 +34,7 @@ export const formatTransactionsWithSigns = (transactions) => {
       delete transaction.merchant.website;
       delete transaction.merchant.logo;
     }
-    console.log(`Original: Amount=${originalAmount}, Type=${originalAccountType} | Formatted: Amount=${transaction.amount}, Type=${transaction.accountType}`);
+    // console.log(`Original: Amount=${originalAmount}, Type=${originalAccountType} | Formatted: Amount=${transaction.amount}, Type=${transaction.accountType}`);
     formatted.push(transaction);
   }
   return formatted;
@@ -531,10 +531,6 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     }
   }
 
-  //----------WEEKLY-cashflow-chart calculations
-  // NOTE: Moved calculation to AFTER data fetch below.
-  // Previous location was here (on empty array).
-
   if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
     balanceCredit = balanceCredit += plaidAccount.currentBalance;
   } else if (plaidAccount.account_type === "depository") {
@@ -604,9 +600,20 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   allTransactions.push(...transactions);
 
-  // ✅ FIXED: Calculate Charts HERE, after allTransactions is full
-  // We use formatTransactionsWithSigns to ensure correct credit/debit math
-  const formattedForCharts = formatTransactionsWithSigns(allTransactions); 
+  // ✅ FIXED: Isolate logic for charts
+  // 1. Create a Deep Copy so we don't mutate `allTransactions` used for the manual logic below
+  const chartTransactions = JSON.parse(JSON.stringify(allTransactions)).map(txn => ({
+      ...txn,
+      // Ensure amount is a number (handle string formatting from formatTransactionAmount)
+      amount: Number(txn.amount),
+      // Ensure accountType matches what formatTransactionsWithSigns expects (based on the parent plaidAccount)
+      accountType: plaidAccount.account_type || txn.accountType
+  }));
+
+  // 2. Format with signs (using the copy)
+  const formattedForCharts = formatTransactionsWithSigns(chartTransactions); 
+  
+  // 3. Calculate
   const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(formattedForCharts));
 
   depositoryTransactions.push(
