@@ -40,10 +40,6 @@ export const formatTransactionsWithSigns = (transactions) => {
   return formatted;
 };
 
-
-
-
-
 const getCashFlows = async (profile, uid) => {
   return await structuredLogger.withContext(
     "get_cash_flows",
@@ -510,10 +506,6 @@ const weeklyCashFlowPlaidAccountSetUpTransactions = async (
   return { allTransactions };
 };
 
-
-
-
-
 const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
@@ -531,18 +523,17 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const investmentTransactions = [];
   const loanTransactions = [];
 
-  //----------WEEKLY-cashflow-chart calculations
-  const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(allTransactions));
-
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
     const liab = await Liability.find({ accountId: plaidAccount.plaid_account_id }).lean().exec();
     if (liab && liab.length > 0) {
-        liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
+      liabilityPlaid = await getDecryptedLiabilitiesCredit(liab, dek, uid);
     }
   }
 
   //----------WEEKLY-cashflow-chart calculations
+  // NOTE: Moved calculation to AFTER data fetch below.
+  // Previous location was here (on empty array).
 
   if (plaidAccount.account_type === "credit" && plaidAccount.currentBalance) {
     balanceCredit = balanceCredit += plaidAccount.currentBalance;
@@ -588,13 +579,13 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     .lean();
   const transactions = [];
 
-          for (const transaction of transactionsResponse) {
+  for (const transaction of transactionsResponse) {
 
-            let decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
-            const decryptedType = await safeDecrypt(transaction.type, {
-              transaction_id: transaction._id,
-              field: "type",
-            });
+    let decryptedAmount = await safeDecrypt(transaction.amount, { context: { resource: 'transaction', field: 'amount' } });
+    const decryptedType = await safeDecrypt(transaction.type, {
+      transaction_id: transaction._id,
+      field: "type",
+    });
     const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
     decryptedAmount = formattedTransaction.amount;
 
@@ -612,6 +603,11 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   }
 
   allTransactions.push(...transactions);
+
+  // ✅ FIXED: Calculate Charts HERE, after allTransactions is full
+  // We use formatTransactionsWithSigns to ensure correct credit/debit math
+  const formattedForCharts = formatTransactionsWithSigns(allTransactions); 
+  const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(formattedForCharts));
 
   depositoryTransactions.push(
     ...transactions.filter(
@@ -894,4 +890,3 @@ const cashflowService = {
 };
 
 export default cashflowService;
-
