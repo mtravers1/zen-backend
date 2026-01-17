@@ -347,8 +347,7 @@ const getCashFlows = async (profile, uid) => {
 
       // weekly cash flow
 
-      const formattedAllTransactions = formatTransactionsWithSigns(allTransactions);
-      const weeklyCashFlow = calculateWeeklyTotals(groupByWeek(formattedAllTransactions));
+      const weeklyCashFlow = calculateWeeklyTotals(groupByWeek(allTransactions));
 
       structuredLogger.logSuccess("get_cash_flows_completed", {
         uid,
@@ -375,42 +374,15 @@ const getCashFlows = async (profile, uid) => {
 };
 
 const getCashFlowsWeekly = async (profile, uid) => {
-  const plaidIds = profile.plaidAccounts;
-  const plaidAccountsResponse = await PlaidAccount.find({
-    _id: { $in: plaidIds },
-  }).lean();
+  // Get all pre-formatted transactions from transactionsService
+  const allRawTransactions = await transactionsService.getProfileTransactions(profile, uid);
 
-  let plaidAccounts = [];
+  // Apply cashflow-specific formatting
+  const allTransactions = allRawTransactions.map(applyCashflowFormatting);
 
-  const dek = await getUserDek(uid);
-  const safeDecrypt = createSafeDecrypt(uid, dek);
-  for (const plaidAccount of plaidAccountsResponse) {
-    const decryptedAccountType = await safeDecrypt(
-      plaidAccount.account_type,
-      { context: { accountId: plaidAccount._id, field: 'account_type' } },
-    );
-    const decryptedAccountSubtype = await safeDecrypt(
-      plaidAccount.account_subtype,
-      { context: { accountId: plaidAccount._id, field: 'account_subtype' } },
-    );
-    plaidAccounts.push({
-      ...plaidAccount,
-      account_type: decryptedAccountType,
-      account_subtype: decryptedAccountSubtype,
-    });
-  }
-
-  const { allTransactions } = await weeklyCashFlowPlaidAccountSetUpTransactions(plaidAccounts, uid);
-  console.log('allTransactions', allTransactions);
-
-  const formattedTransactions = formatTransactionsWithSigns(allTransactions);
-  console.log('formattedTransactions', formattedTransactions);
-
-  const groupedTransactions = groupByWeek(formattedTransactions);
-  console.log('groupedTransactions', groupedTransactions);
-
+  // Calculate weekly totals
+  const groupedTransactions = groupByWeek(allTransactions);
   const result = calculateWeeklyTotals(groupedTransactions);
-  console.log('result', result);
 
   return { weeklyCashFlow: result };
 };
