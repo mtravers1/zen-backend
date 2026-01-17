@@ -6,24 +6,41 @@ import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
-  if (account.account_type === "depository" || account.account_type === "credit" || account.account_type === "loan" || account.account_subtype === "cd" || account.account_subtype === "money market") {
+  const { account_type, account_subtype } = account;
+
+  // Invert amounts for all depository-style accounts to show deposits as positive
+  if (account_type === 'depository') {
+    // This includes checking, savings, cd, money market, etc.
+    // Plaid sends deposits as negative, so we invert to make them positive.
     transaction.amount = transaction.amount * -1;
-  } else if (account.account_type === "investment") {
-    if (
-      transaction.type === 'buy' ||
-      transaction.type === 'fee' ||
-      transaction.type === 'reinvested_dividend'
-    ) {
-      transaction.amount = transaction.amount * -1;
-    } else if (
-      transaction.type === 'sell' ||
-      transaction.type === 'dividend'
-    ) {
+    return transaction;
+  }
+
+  // Invert amounts for credit card payments and loan payments
+  if (account_type === 'credit' || account_type === 'loan') {
+    transaction.amount = transaction.amount * -1;
+    return transaction;
+  }
+
+  if (account_type === 'investment') {
+    // For investments, 'buy' is a cash outflow, so it should be negative.
+    // Plaid may send 'buy' as positive, so we invert it.
+    if (transaction.type === 'buy' || transaction.type === 'fee' || transaction.type === 'reinvested_dividend') {
+      if (transaction.amount > 0) { // Only flip if it's positive
+        transaction.amount = transaction.amount * -1;
+      }
+    } 
+    // 'sell' is a cash inflow, should be positive.
+    // Plaid may send 'sell' as negative, so we flip it.
+    else if (transaction.type === 'sell' || transaction.type === 'dividend') {
       if (transaction.amount < 0) {
         transaction.amount = transaction.amount * -1;
       }
     }
+    return transaction;
   }
+
+  // Default: return transaction as-is
   return transaction;
 };
 
