@@ -532,12 +532,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
   const loanTransactions = [];
 
   //----------WEEKLY-cashflow-chart calculations
-  const plaidWeeklyTransactions =
-    await weeklyCashFlowPlaidAccountSetUpTransactions([plaidAccount], uid);
-
-  
-
-  const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(plaidWeeklyTransactions.allTransactions));
+  const resultWeeklyCashFlowwCharts = calculateWeeklyTotals(groupByWeek(allTransactions));
 
   let liabilityPlaid = null;
   if (plaidAccount.account_type === "credit") {
@@ -612,6 +607,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
       ...transaction,
       amount: decryptedAmount,
       accountType: decryptedAccountType,
+      accountSubtype: plaidAccount.account_subtype,
     });
   }
 
