@@ -125,11 +125,32 @@ const getTransactions = async (
               console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
             }
 
-            merchantCategory = transaction.merchant.merchantCategory;
+            try {
+                merchantCategory = await safeDecrypt(
+                    transaction.merchant.merchantCategory,
+                    { transaction_id: transaction._id, field: "merchant.merchantCategory" },
+                );
+            } catch (e) {
+                console.error(`Failed to decrypt merchant.merchantCategory for transaction ${transaction._id}:`, e);
+            }
 
-            merchantLogo = transaction.merchant.logo;
+            try {
+                merchantLogo = await safeDecrypt(
+                    transaction.merchant.logo,
+                    { transaction_id: transaction._id, field: "merchant.logo" },
+                );
+            } catch (e) {
+                console.error(`Failed to decrypt merchant.logo for transaction ${transaction._id}:`, e);
+            }
 
-            merchantWebsite = transaction.merchant.website;
+            try {
+                merchantWebsite = await safeDecrypt(
+                    transaction.merchant.website,
+                    { transaction_id: transaction._id, field: "merchant.website" },
+                );
+            } catch (e) {
+                console.error(`Failed to decrypt merchant.website for transaction ${transaction._id}:`, e);
+            }
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -212,9 +233,9 @@ const getTransactions = async (
               ...transaction.merchant,
               name: decryptedMerchantName,
               merchantName: decryptedMerchantMerchantName,
-              merchantCategory: transaction.merchant.merchantCategory,
-              logo: transaction.merchant.logo,
-              website: transaction.merchant.website,
+              merchantCategory: merchantCategory,
+              logo: merchantLogo,
+              website: merchantWebsite,
             } : null,
             fees: decryptedFees,
             price: decryptedPrice,
@@ -292,8 +313,24 @@ const getUserTransactions = async (
   }
 
   const accounts = user.plaidAccounts;
+  const decryptedAccounts = [];
+  const dek = await getUserDek(uid);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
 
-  return getTransactions(accounts, uid, pagination);
+  for (const account of accounts) {
+    const decryptedAccount = { ...account.toObject() };
+    try {
+      decryptedAccount.account_type = await safeDecrypt(
+        account.account_type,
+        { account_id: account._id, field: "account_type" },
+      );
+    } catch (e) {
+      console.error(`Failed to decrypt account_type for account ${account._id}:`, e);
+    }
+    decryptedAccounts.push(decryptedAccount);
+  }
+
+  return getTransactions(decryptedAccounts, uid, pagination);
 };
 
 const getProfileTransactions = async (
