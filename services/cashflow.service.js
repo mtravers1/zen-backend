@@ -750,7 +750,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 const cashflowService = {
   getCashFlows,
   getCashFlowsWeekly,
-  weeklyCashFlowPlaidAccountSetUpTransactions,
+
   getCashFlowsByPlaidAccount,
 };
 
