@@ -391,23 +391,28 @@ const getTransactionsByAccount = async (
   uid,
   pagination = { paginate: false },
 ) => {
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
+  const originalAccount = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
     .lean()
     .exec();
 
-  if (!account) {
+  if (!originalAccount) {
     throw new Error("Account not found");
   }
 
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
 
-  const decryptedAccountType = await safeDecrypt(
-    account.account_type,
-    { account_id: account._id, field: "account_type" },
+  // Create a mutable copy and decrypt necessary fields
+  const account = { ...originalAccount };
+  account.account_type = await safeDecrypt(
+    originalAccount.account_type,
+    { account_id: originalAccount._id, field: "account_type" },
   );
-  account.account_type = decryptedAccountType;
+  account.account_subtype = await safeDecrypt(
+    originalAccount.account_subtype,
+    { account_id: originalAccount._id, field: "account_subtype" },
+  );
 
   const transactionsResponse = await Transaction.find({
     plaidAccountId: account.plaid_account_id,
@@ -586,6 +591,7 @@ const getTransactionsByAccount = async (
       quantity: decryptedQuantity,
 
       accountType: decryptedAccountType,
+      accountSubtype: account.account_subtype,
       description: decryptedDescription,
       notes: decryptedNotes,
       tags: decryptedTags,
