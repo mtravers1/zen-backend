@@ -186,45 +186,25 @@ const getCashFlows = async (profile, uid) => {
         (txn) => !filteredOutIds.has(String(txn._id)),
       );
 
-      const depositoryDepositsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount > 0)
-        .reduce((total, transaction) => total + transaction.amount, 0);
+      const allTxnsForCalc = [
+        ...cleanDepositoryTxns,
+        ...cleanCreditTxns,
+        ...cleanInvestmentTxns,
+        ...cleanLoanTxns,
+      ];
 
-      const depositoryWithdrawsAmount = cleanDepositoryTxns
-        .filter((transaction) => transaction.amount < 0)
-        .reduce((total, transaction) => total + transaction.amount, 0);
+      const totalDeposits = allTxnsForCalc
+        .filter((t) => t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      const totalWithdrawls = allTxnsForCalc
+        .filter((t) => t.amount < 0)
+        .reduce((sum, t) => sum + t.amount, 0);
 
-      const creditDepositsAmount = cleanCreditTxns
-        .filter((transaction) => transaction.amount < 0)
-        .reduce((total, transaction) => total + transaction.amount, 0);
-
-      const creditWithdrawsAmount = cleanCreditTxns
-        .filter((transaction) => transaction.amount > 0)
-        .reduce((total, transaction) => total + transaction.amount, 0);
-
-      const depositoryDepositTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount > 0,
-      );
-      const depositoryWithdrawTransactions = cleanDepositoryTxns.filter(
-        (transaction) => transaction.amount < 0,
-      );
-      const creditDepositTransactions = cleanCreditTxns.filter(
-        (transaction) => transaction.amount < 0,
-      );
-      const creditWithdrawTransactions = cleanCreditTxns.filter(
-        (transaction) => transaction.amount > 0,
-      );
-
-      /// Calculate current cash flow
-
-      const depositDepositsAmountAbs = depositoryDepositsAmount;
-      const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
-      const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-      const creditWithdrawAmountAbs = creditWithdrawsAmount;
-
-      const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
-      const totalWithdrawls =
-        depositWithdrawAmountAbs + creditWithdrawAmountAbs;
+      const depositoryDepositTransactions = cleanDepositoryTxns.filter(t => t.amount > 0);
+      const depositoryWithdrawTransactions = cleanDepositoryTxns.filter(t => t.amount < 0);
+      const creditDepositTransactions = cleanCreditTxns.filter(t => t.amount < 0);
+      const creditWithdrawTransactions = cleanCreditTxns.filter(t => t.amount > 0);
 
       let currentCashFlow = 0;
       if (totalDeposits === 0) {
@@ -233,7 +213,7 @@ const getCashFlows = async (profile, uid) => {
         currentCashFlow = 0;
       } else {
         currentCashFlow = (
-          (totalDeposits - totalWithdrawls) /
+          (totalDeposits + totalWithdrawls) / // totalWithdrawls is negative
           totalDeposits
         ).toFixed(2);
       }
@@ -467,44 +447,25 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     const loanTransactions = allTransactions.filter(
       (txn) => txn.accountType === "loan",
     );
-    const depositoryDepositsAmount = depositoryTransactions
-    .filter((transaction) => transaction.amount > 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
+    const allTxnsForCalc = [
+    ...depositoryTransactions,
+    ...creditTransactions,
+    ...investmentTransactions,
+    ...loanTransactions,
+  ];
 
-  const depositoryWithdrawsAmount = depositoryTransactions
-    .filter((transaction) => transaction.amount < 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
+  const totalDeposits = allTxnsForCalc
+    .filter((t) => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  const totalWithdrawls = allTxnsForCalc
+    .filter((t) => t.amount < 0)
+    .reduce((sum, t) => sum + t.amount, 0);
 
-  const creditDepositsAmount = creditTransactions
-    .filter((transaction) => transaction.amount < 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
-
-  const creditWithdrawsAmount = creditTransactions
-    .filter((transaction) => transaction.amount > 0)
-    .reduce((total, transaction) => total + transaction.amount, 0);
-
-  const depositoryDepositTransactions = depositoryTransactions.filter(
-    (transaction) => transaction.amount < 0,
-  );
-  const depositoryWithdrawTransactions = depositoryTransactions.filter(
-    (transaction) => transaction.amount > 0,
-  );
-  const creditDepositTransactions = creditTransactions.filter(
-    (transaction) => transaction.amount < 0,
-  );
-  const creditWithdrawTransactions = creditTransactions.filter(
-    (transaction) => transaction.amount > 0,
-  );
-
-  /// Calculate current cash flow
-
-  const depositDepositsAmountAbs = Math.abs(depositoryDepositsAmount);
-  const depositWithdrawAmountAbs = Math.abs(depositoryWithdrawsAmount);
-  const creditDepositsAmountAbs = Math.abs(creditDepositsAmount);
-  const creditWithdrawAmountAbs = Math.abs(creditWithdrawsAmount);
-
-  const totalDeposits = depositDepositsAmountAbs + creditDepositsAmountAbs;
-  const totalWithdrawls = depositWithdrawAmountAbs + creditWithdrawAmountAbs;
+  const depositoryDepositTransactions = depositoryTransactions.filter(t => t.amount > 0);
+  const depositoryWithdrawTransactions = depositoryTransactions.filter(t => t.amount < 0);
+  const creditDepositTransactions = creditTransactions.filter(t => t.amount < 0);
+  const creditWithdrawTransactions = creditTransactions.filter(t => t.amount > 0);
 
   let currentCashFlow = 0;
   if (totalDeposits === 0) {
@@ -513,7 +474,7 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
     currentCashFlow = 0;
   } else {
     currentCashFlow = (
-      (totalDeposits - totalWithdrawls) /
+      (totalDeposits + totalWithdrawls) / // totalWithdrawls is negative
       totalDeposits
     ).toFixed(2);
   }
