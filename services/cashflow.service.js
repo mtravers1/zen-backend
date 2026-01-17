@@ -20,7 +20,7 @@ export const formatTransactionsWithSigns = (transactions) => {
     const originalAmount = transaction.amount;
     const originalAccountType = transaction.accountType;
 
-    if (transaction.accountType === "depository" || transaction.accountType === "credit" || transaction.accountType === "loan") {
+    if ((transaction.accountType === "depository" && transaction.accountSubtype !== "cd") || transaction.accountType === "credit" || transaction.accountType === "loan") {
       transaction.amount = transaction.amount * -1;
     } else if (transaction.accountType === "investment") {
       if (transaction.type === 'buy' || transaction.type === 'fee' || transaction.type === 'reinvested_dividend') {
@@ -175,6 +175,7 @@ const getCashFlows = async (profile, uid) => {
             ...transaction,
             amount: decryptedAmount,
             accountType: decryptedAccountType,
+            accountSubtype: plaidAccount.account_subtype,
           });
         }
 
