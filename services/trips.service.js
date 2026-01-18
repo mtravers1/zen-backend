@@ -66,7 +66,12 @@ const saveTrip = async ({
       ? await safeEncrypt(metadata.dateTime, { field: "dateTime" })
       : undefined,
     vehicle: metadata.vehicle
-      ? await safeEncrypt(metadata.vehicle, { field: "vehicle" })
+      ? await safeEncrypt(
+          typeof metadata.vehicle === "object" && metadata.vehicle._id
+            ? metadata.vehicle._id
+            : metadata.vehicle,
+          { field: "vehicle" },
+        )
       : undefined,
     profile: metadata.profile
       ? await safeEncrypt(metadata.profile, { field: "profile" })
@@ -420,7 +425,10 @@ const updateTrip = async (tripId, updateData, uid) => {
 
     if (updateData.metadata.vehicle) {
       encryptedMetadata.vehicle = await safeEncrypt(
-        updateData.metadata.vehicle,
+        typeof updateData.metadata.vehicle === "object" &&
+        updateData.metadata.vehicle._id
+          ? updateData.metadata.vehicle._id
+          : updateData.metadata.vehicle,
         { trip_id: tripId, field: "vehicle" },
       );
     }
@@ -498,8 +506,17 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
     for (const key in updateData.metadata) {
       if (Object.prototype.hasOwnProperty.call(updateData.metadata, key)) {
         const value = updateData.metadata[key];
+        let valueToEncrypt = value;
+        if (key === "vehicle") {
+          if (typeof value === "object" && value._id) {
+            valueToEncrypt = value._id;
+          } else {
+            valueToEncrypt = value;
+          }
+        }
+
         updateObject.$set[`metadata.${key}`] = await safeEncrypt(
-          value.toString(),
+          valueToEncrypt.toString(),
           { trip_id: tripId, field: key },
         );
       }
