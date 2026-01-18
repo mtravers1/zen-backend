@@ -56,8 +56,8 @@ export const calculateWeeklyTotals = (groupedTransactions) => {
       .filter((transaction) => transaction.amount < 0)
       .reduce((total, transaction) => total + transaction.amount, 0);
 
-    const totalDeposits = depositoryDepositsAmount + creditDepositsAmount + investmentDepositsAmount + loanDepositsAmount;
-    const totalWithdrawls = depositoryWithdrawsAmount + creditWithdrawsAmount + investmentWithdrawsAmount + loanWithdrawsAmount;
+    const totalDeposits = depositoryDepositsAmount + creditDepositsAmount //+ investmentDepositsAmount + loanDepositsAmount;
+    const totalWithdrawls = depositoryWithdrawsAmount + creditWithdrawsAmount //+ investmentWithdrawsAmount + loanWithdrawsAmount;
 
     let currentCashFlow = totalDeposits + totalWithdrawls;
 
