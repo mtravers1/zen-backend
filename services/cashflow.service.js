@@ -206,7 +206,7 @@ const getCashFlows = async (profile, uid) => {
         averageDailyIncome = Math.abs(totalDepositsVal / 90).toFixed(2);
       }
 
-      const unroundedTotalCashBalance = plaidAccounts.filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd' && acc.account_subtype !== 'money market')).reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
+      const unroundedTotalCashBalance = plaidAccounts.filter(acc => (acc.account_type === 'depository' && acc.account_subtype !== 'cd' )).reduce((total, acc) => total + (acc.availableBalance || acc.currentBalance || 0), 0);
       const totalCashBalance = parseFloat(unroundedTotalCashBalance.toFixed(2));
 
       const assets = await assetsService.getAssets(uid);
