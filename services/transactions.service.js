@@ -6,7 +6,11 @@ import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
-  if (account.account_type === "depository" || account.account_type === "credit" || account.account_type === "loan" || account.account_subtype === "cd" || account.account_subtype === "money market") {
+  if (
+    (account.account_type === "depository" && account.account_subtype !== "cd" && account.account_subtype !== "money market") || 
+    account.account_type === "credit" || 
+    account.account_type === "loan"
+  ) {
     transaction.amount = transaction.amount * -1;
   } else if (account.account_type === "investment") {
     if (
@@ -408,6 +412,12 @@ const getTransactionsByAccount = async (
     { account_id: account._id, field: "account_type" },
   );
   account.account_type = decryptedAccountType;
+
+  const decryptedAccountSubtype = await safeDecrypt(
+    account.account_subtype,
+    { account_id: account._id, field: "account_subtype" },
+  );
+  account.account_subtype = decryptedAccountSubtype;
 
   const transactionsResponse = await Transaction.find({
     plaidAccountId: account.plaid_account_id,
