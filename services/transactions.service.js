@@ -134,13 +134,12 @@ const getTransactions = async (
               structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.merchantName", error: e.message });
             }
 
-            try {
-                merchantCategory = await safeDecrypt(
-                    transaction.merchant.merchantCategory,
-                    { transaction_id: transaction._id, field: "merchant.merchantCategory" },
-                );
-            } catch (e) {
-                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.merchantCategory", error: e.message });
+            if (transaction.merchant && transaction.merchant.merchantCategory) {
+              const decryptedCategory = await safeDecrypt(
+                transaction.merchant.merchantCategory,
+                { transaction_id: transaction._id, field: "merchant.merchantCategory" },
+              );
+              merchantCategory = decryptedCategory !== null ? decryptedCategory : transaction.merchant.merchantCategory;
             }
 
             try {
