@@ -42,16 +42,20 @@ const getTransactions = async (
     "get_transactions",
     { uid, accounts_count: accounts.length, pagination },
     async () => {
+      structuredLogger.logInfo("get_transactions_started", { accounts_count: accounts.length });
       const allTransactions = [];
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
 
       for (const plaidAccount of accounts) {
+        structuredLogger.logInfo("get_transactions_processing_account", { plaid_account_id: plaidAccount.plaid_account_id });
         const transactionsResponse = await Transaction.find({
           plaidAccountId: plaidAccount.plaid_account_id,
         })
           .sort({ transactionDate: -1 })
           .lean();
+
+        structuredLogger.logInfo("get_transactions_found_transactions_for_account", { a: plaidAccount.plaid_account_id, count: transactionsResponse.length });
 
         const decryptedInstitutionName = await safeDecrypt(
           plaidAccount.institution_name,
@@ -66,6 +70,7 @@ const getTransactions = async (
           });
 
           if (decryptedAmount === null) {
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "amount" });
             continue;
           }
 
@@ -76,7 +81,7 @@ const getTransactions = async (
               field: "type",
             });
           } catch (e) {
-            console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "type", error: e.message });
           }
 
           const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
@@ -89,7 +94,7 @@ const getTransactions = async (
               field: "name",
             });
           } catch (e) {
-            console.error(`Failed to decrypt name for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "name", error: e.message });
           }
           
           let decryptedAccountType = null;
@@ -99,7 +104,7 @@ const getTransactions = async (
               { transaction_id: transaction._id, field: "accountType" },
             );
           } catch (e) {
-            console.error(`Failed to decrypt accountType for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "accountType", error: e.message });
           }
 
           let decryptedMerchantName;
@@ -114,7 +119,7 @@ const getTransactions = async (
                 { transaction_id: transaction._id, field: "merchant.name" },
               );
             } catch (e) {
-              console.error(`Failed to decrypt merchant.name for transaction ${transaction._id}:`, e);
+              structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.name", error: e.message });
             }
 
             try {
@@ -126,7 +131,7 @@ const getTransactions = async (
                 },
               );
             } catch (e) {
-              console.error(`Failed to decrypt merchant.merchantName for transaction ${transaction._id}:`, e);
+              structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.merchantName", error: e.message });
             }
 
             try {
@@ -135,7 +140,7 @@ const getTransactions = async (
                     { transaction_id: transaction._id, field: "merchant.merchantCategory" },
                 );
             } catch (e) {
-                console.error(`Failed to decrypt merchant.merchantCategory for transaction ${transaction._id}:`, e);
+                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.merchantCategory", error: e.message });
             }
 
             try {
@@ -144,7 +149,7 @@ const getTransactions = async (
                     { transaction_id: transaction._id, field: "merchant.logo" },
                 );
             } catch (e) {
-                console.error(`Failed to decrypt merchant.logo for transaction ${transaction._id}:`, e);
+                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.logo", error: e.message });
             }
 
             try {
@@ -153,7 +158,7 @@ const getTransactions = async (
                     { transaction_id: transaction._id, field: "merchant.website" },
                 );
             } catch (e) {
-                console.error(`Failed to decrypt merchant.website for transaction ${transaction._id}:`, e);
+                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.website", error: e.message });
             }
           }
 
@@ -174,7 +179,7 @@ const getTransactions = async (
               field: "subtype",
             });
           } catch (e) {
-            console.error(`Failed to decrypt subtype for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "subtype", error: e.message });
           }
 
           const decryptedQuantity = await safeDecryptNumericValue(
@@ -189,7 +194,7 @@ const getTransactions = async (
               { transaction_id: transaction._id, field: "securityId" },
             );
           } catch (e) {
-            console.error(`Failed to decrypt securityId for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "securityId", error: e.message });
           }
 
           // console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
@@ -202,7 +207,7 @@ const getTransactions = async (
               });
             }
           } catch (e) {
-            console.error(`Failed to decrypt description for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "description", error: e.message });
           }
 
           let decryptedNotes = null;
@@ -214,7 +219,7 @@ const getTransactions = async (
               });
             }
           } catch (e) {
-            console.error(`Failed to decrypt notes for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "notes", error: e.message });
           }
 
           let decryptedTags = null;
@@ -226,7 +231,7 @@ const getTransactions = async (
               });
             }
           } catch (e) {
-            console.error(`Failed to decrypt tags for transaction ${transaction._id}:`, e);
+            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "tags", error: e.message });
           }
 
           transactions.push({
@@ -281,9 +286,11 @@ const getTransactions = async (
           },
         };
 
+        structuredLogger.logInfo("get_transactions_paginated_results", { pagination: paginatedResults.pagination });
         return paginatedResults;
       }
 
+      structuredLogger.logInfo("get_transactions_completed", { total_transactions: sortedTransactions.length });
       return sortedTransactions;
     },
   );
@@ -346,14 +353,21 @@ const getProfileTransactions = async (
   uid,
   pagination = { paginate: false },
 ) => {
-  // console.log('[AI] getProfileTransactions called');
+  structuredLogger.logInfo("get_profile_transactions_started", { profile, uid, pagination });
+
   if (!profile) {
+    structuredLogger.logError("get_profile_transactions_error", { message: "Profile not found", uid });
     throw new Error("Profile not found");
   }
+
   const plaidIds = profile.plaidAccounts;
+  structuredLogger.logInfo("get_profile_transactions_plaid_ids", { plaidIds, profileId: profile.id });
+
   const plaidAccountsResponse = await PlaidAccount.find({
     _id: { $in: plaidIds },
   }).lean();
+
+  structuredLogger.logInfo("get_profile_transactions_plaid_accounts_response", { count: plaidAccountsResponse.length });
 
   let plaidAccounts = [];
   const dek = await getUserDek(uid);
@@ -386,7 +400,8 @@ const getProfileTransactions = async (
     });
   }
 
-  // console.log('[AI] getProfileTransactions finished');
+  structuredLogger.logInfo("get_profile_transactions_finished_decryption", { count: plaidAccounts.length });
+
   return await getTransactions(plaidAccounts, uid, pagination);
 };
 
