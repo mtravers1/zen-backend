@@ -7,6 +7,8 @@ import authService from "../auth.service.js";
 import assetsService from "../assets.service.js";
 import tripService from "../trips.service.js";
 import filesService from "../files.service.js";
+import transactionsService from "../transactions.service.js"; // Added import
+import cashflowService from "../cashflow.service.js"; // Added import
 import { filterAccounts, filterTransactions } from "./filters.js";
 
 /**
@@ -177,7 +179,7 @@ export const toolFunctions = (context) => ({
   getCashFlows: async ({ uid }) => {
     try {
       const { profile } = context;
-      const cashFlows = await accountsService.getCashFlows(profile, uid);
+      const cashFlows = await cashflowService.getCashFlows(profile, uid);
 
       if (!cashFlows) {
         return { message: "No cash flow information available", data: null };
@@ -200,7 +202,7 @@ export const toolFunctions = (context) => ({
   getCashFlowsWeekly: async ({ uid }) => {
     try {
       const { profile } = context;
-      const cashFlowsWeekly = await accountsService.getCashFlowsWeekly(
+      const cashFlowsWeekly = await cashflowService.getCashFlowsWeekly(
         profile,
         uid,
       );
@@ -276,7 +278,7 @@ export const toolFunctions = (context) => ({
         },
       );
 
-      const cashFlows = await accountsService.getCashFlows(profile, uid);
+      const cashFlows = await cashflowService.getCashFlows(profile, uid);
 
       console.log("[AI][getNetWorth] getCashFlows result:", {
         hasCashFlows: !!cashFlows,
@@ -363,7 +365,7 @@ export const toolFunctions = (context) => ({
         },
       );
 
-      const transactions = await accountsService.getProfileTransactions(
+      const transactions = await transactionsService.getProfileTransactions(
         profile,
         uid,
       );
