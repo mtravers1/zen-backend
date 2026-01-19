@@ -237,6 +237,7 @@ const addAccount = async (accessToken, email, uid, profileId) => {
           owner_id: userId,
           itemId: accountsResponse.item.item_id,
           owner_type: userType,
+          profileId: profileId, // Added profileId
           plaid_account_id: account.account_id,
           account_name: encryptedName,
           account_official_name: encryptedOfficialName,

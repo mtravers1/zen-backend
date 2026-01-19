@@ -337,7 +337,7 @@ When a user asks for specific financial data, you MUST use the available tools:
 
 **MANDATORY TOOL USAGE:**
 - "What's my net worth?" → CALL getNetWorth()
-- "What's my balance?" → CALL getAccountsByProfile()
+- "What's my balance?" or when you need to get accounts for a specific profile → CALL getAccountsByProfile()
 - "Show my transactions" → CALL getProfileTransactions()
 - "What's my cash flow?" → CALL getCashFlows()
 

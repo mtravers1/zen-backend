@@ -16,6 +16,10 @@ const plaidAccountSchema = new Schema({
     enum: ["business_owner", "individual"],
     required: true,
   },
+  profileId: {
+    type: Schema.Types.ObjectId,
+    ref: "Business",
+  },
   plaid_account_id: {
     type: String,
     required: true,
