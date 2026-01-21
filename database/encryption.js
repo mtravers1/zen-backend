@@ -363,6 +363,14 @@ async function decryptValue(cipherTextBase64, deks) {
     return cipherTextBase64;
   }
 
+  const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
+
+  // A valid encrypted value will have at least a 16-byte IV and a 16-byte auth tag.
+  if (cipherBuffer.length < 32) {
+    console.warn(`⚠️ Skipping decryption for value that is too short to be valid ciphertext.`);
+    return cipherTextBase64; // Return the original value, as it cannot be valid ciphertext.
+  }
+
   for (const dek of deks) {
     try {
       const dekHash = crypto.createHash('sha256').update(dek).digest('hex');

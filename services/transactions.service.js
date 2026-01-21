@@ -3,7 +3,8 @@ import PlaidAccount from "../database/models/PlaidAccount.js";
 import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import { getUserDek } from "../database/encryption.js";
-import { createSafeDecrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
+import { createSafeDecrypt, createSafeEncrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
+import { healAndDecryptField } from "../lib/dataHealing.js";
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
   if (
@@ -65,8 +66,9 @@ const getTransactions = async (
 
         for (const transaction of transactionsResponse) {
           let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "amount",
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "amount",
           });
 
           if (decryptedAmount === null) {
@@ -77,8 +79,9 @@ const getTransactions = async (
           let decryptedType = null;
           try {
             decryptedType = await safeDecrypt(transaction.type, {
-              transaction_id: transaction._id,
-              field: "type",
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "type",
             });
           } catch (e) {
             structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "type", error: e.message });
@@ -90,8 +93,9 @@ const getTransactions = async (
           let decryptedName = null;
           try {
             decryptedName = await safeDecrypt(transaction.name, {
-              transaction_id: transaction._id,
-              field: "name",
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "name",
             });
           } catch (e) {
             structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "name", error: e.message });
@@ -101,7 +105,7 @@ const getTransactions = async (
           try {
             decryptedAccountType = await safeDecrypt(
               transaction.accountType,
-              { transaction_id: transaction._id, field: "accountType" },
+              { model: Transaction, docId: transaction._id, fieldPath: "accountType" },
             );
           } catch (e) {
             structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "accountType", error: e.message });
@@ -116,7 +120,7 @@ const getTransactions = async (
             try {
               decryptedMerchantName = await safeDecrypt(
                 transaction.merchant.name,
-                { transaction_id: transaction._id, field: "merchant.name" },
+                { model: Transaction, docId: transaction._id, fieldPath: "merchant.name" },
               );
             } catch (e) {
               structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.name", error: e.message });
@@ -126,8 +130,9 @@ const getTransactions = async (
               decryptedMerchantMerchantName = await safeDecrypt(
                 transaction.merchant.merchantName,
                 {
-                  transaction_id: transaction._id,
-                  field: "merchant.merchantName",
+                  model: Transaction,
+                  docId: transaction._id,
+                  fieldPath: "merchant.merchantName",
                 },
               );
             } catch (e) {
@@ -145,7 +150,7 @@ const getTransactions = async (
             try {
                 merchantLogo = await safeDecrypt(
                     transaction.merchant.logo,
-                    { transaction_id: transaction._id, field: "merchant.logo" },
+                    { model: Transaction, docId: transaction._id, fieldPath: "merchant.logo" },
                 );
             } catch (e) {
                 structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.logo", error: e.message });
@@ -154,7 +159,7 @@ const getTransactions = async (
             try {
                 merchantWebsite = await safeDecrypt(
                     transaction.merchant.website,
-                    { transaction_id: transaction._id, field: "merchant.website" },
+                    { model: Transaction, docId: transaction._id, fieldPath: "merchant.website" },
                 );
             } catch (e) {
                 structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.website", error: e.message });
@@ -162,20 +167,23 @@ const getTransactions = async (
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "fees",
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "fees",
           });
 
           const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
-            transaction_id: transaction._id,
-            field: "price",
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "price",
           });
 
           let decryptedSubtype = null;
           try {
             decryptedSubtype = await safeDecrypt(transaction.subtype, {
-              transaction_id: transaction._id,
-              field: "subtype",
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "subtype",
             });
           } catch (e) {
             structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "subtype", error: e.message });
@@ -183,14 +191,14 @@ const getTransactions = async (
 
           const decryptedQuantity = await safeDecryptNumericValue(
             transaction.quantity, safeDecrypt,
-            { transaction_id: transaction._id, field: "quantity" },
+            { model: Transaction, docId: transaction._id, fieldPath: "quantity" },
           );
 
           let decryptedSecurityId = null;
           try {
             decryptedSecurityId = await safeDecrypt(
               transaction.securityId,
-              { transaction_id: transaction._id, field: "securityId" },
+              { model: Transaction, docId: transaction._id, fieldPath: "securityId" },
             );
           } catch (e) {
             structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "securityId", error: e.message });
@@ -201,8 +209,9 @@ const getTransactions = async (
           try {
             if (transaction.description) {
               decryptedDescription = await safeDecrypt(transaction.description, {
-                  transaction_id: transaction._id,
-                  field: "description",
+                  model: Transaction,
+                  docId: transaction._id,
+                  fieldPath: "description",
               });
             }
           } catch (e) {
@@ -213,8 +222,9 @@ const getTransactions = async (
           try {
             if (transaction.notes) {
               decryptedNotes = await safeDecrypt(transaction.notes, {
-                  transaction_id: transaction._id,
-                  field: "notes",
+                  model: Transaction,
+                  docId: transaction._id,
+                  fieldPath: "notes",
               });
             }
           } catch (e) {
@@ -225,8 +235,9 @@ const getTransactions = async (
           try {
             if (transaction.tags && typeof transaction.tags === 'string') {
               decryptedTags = await safeDecrypt(transaction.tags, {
-                  transaction_id: transaction._id,
-                  field: "tags",
+                  model: Transaction,
+                  docId: transaction._id,
+                  fieldPath: "tags",
               });
             }
           } catch (e) {
