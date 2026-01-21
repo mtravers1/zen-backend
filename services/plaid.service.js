@@ -273,20 +273,28 @@ const saveAccessToken = async (
         item_id: itemId,
         field: "accessToken",
       });
-      // Check if access token already exists for this itemId
-      const existingToken = await getNewestAccessToken({ itemId });
+      const existingToken = await AccessToken.findOne({ itemId });
 
       if (existingToken) {
-        structuredLogger.logSuccess("access_token_already_exists", {
+        structuredLogger.logWarning("access_token_already_exists_updating", {
           user_id: userId,
           item_id: itemId,
           institution_id: institutionId,
+          message: "Access token for this item already exists. Updating to the new token.",
         });
+
+        existingToken.accessToken = encryptedToken;
+        existingToken.institutionId = institutionId; // The institution ID should not change, but let's update it just in case.
+        existingToken.isAccessTokenExpired = false; // The new token is not expired.
+        existingToken.status = 'good'; // The new token should be in a good state.
+        await existingToken.save();
+
         return {
           userId,
           accessToken,
           itemId,
           institutionId,
+          updated: true, // Add a flag to indicate that the token was updated.
         };
       }
 
@@ -1636,28 +1644,44 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
   }
 };
 
-const invalidateAccessToken = async (accessToken) => {
+const invalidateAccessToken = async (accessToken, itemId) => {
   return await structuredLogger.withContext(
     "invalidate_access_token",
-    { has_access_token: !!accessToken },
+    { has_access_token: !!accessToken, itemId },
     async () => {
+      let tokenToInvalidate = accessToken;
       try {
+        if (!tokenToInvalidate && itemId) {
+          tokenToInvalidate = await getAccessTokenFromItemId(itemId);
+        }
+
+        if (!tokenToInvalidate) {
+          structuredLogger.logError(
+            "invalidate_access_token_failed",
+            { error: "No access token or itemId provided to invalidate." },
+          );
+          return;
+        }
+
         const plaidClient = getPlaidClient();
         await plaidClient.itemRemove({
-          access_token: accessToken,
-          client_id: plaidClientId,
-          secret: plaidSecret,
+          access_token: tokenToInvalidate,
         });
 
-        structuredLogger.logPlaidApi("item_remove", true, {
-          has_access_token: !!accessToken,
+        structuredLogger.logPlaidApi("item_remove_success", true, {
+          has_access_token: !!tokenToInvalidate,
+          itemId: itemId,
         });
       } catch (error) {
-        structuredLogger.logPlaidApi("item_remove", false, {
+        const plaidError = error.response?.data;
+        structuredLogger.logPlaidApi("item_remove_failed", false, {
           error: error.message,
-          has_access_token: !!accessToken,
+          plaid_error: plaidError,
+          has_access_token: !!tokenToInvalidate,
+          itemId: itemId,
         });
-        throw error;
+        // Log the error, but don't re-throw it to prevent downstream processes from failing
+        console.error(`Failed to invalidate Plaid item ${itemId}:`, plaidError || error.message);
       }
     },
   );

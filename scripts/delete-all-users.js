@@ -83,39 +83,21 @@ const deleteUser = async (user) => {
     await findAndRenameDekFiles(user, uid);
 
     try {
-      const dek = await getUserDek(uid);
-      const safeDecrypt = createSafeDecrypt(uid, dek);
-      const accessTokens = await AccessToken.find({ userId: userIdOrString });
+      const accounts = await PlaidAccount.find({
+        owner_id: userIdOrString,
+      });
+      const itemIds = [...new Set(accounts.map((account) => account.itemId))];
 
-      for (const accessToken of accessTokens) {
-        if (accessToken.accessToken) {
-            const decryptedAccessToken = await safeDecrypt(accessToken.accessToken, {
-              user_id: user._id,
-              field: "accessToken",
-            });
-
-            if (decryptedAccessToken) {
-              try {
-                console.log(`Invalidating Plaid access token for itemID: ${accessToken.itemId}...`);
-                await plaidService.invalidateAccessToken(decryptedAccessToken);
-              } catch (plaidError) {
-                console.error(`Failed to invalidate Plaid access token for itemId: ${accessToken.itemId}. Continuing with user deletion. Error: ${plaidError.message}`);
-              }
-            } else {
-              structuredLogger.logErrorBlock(
-                new Error("Decrypted access token is null"),
-                {
-                  operation: "deleteUserScript",
-                  user_id: user._id,
-                  field: "accessToken",
-                  warning: "Skipping invalidateAccessToken call due to null token",
-                }
-              );
-            }
+      for (const itemId of itemIds) {
+        try {
+          console.log(`Invalidating Plaid access token for itemID: ${itemId}...`);
+          await plaidService.invalidateAccessToken(null, itemId);
+        } catch (plaidError) {
+          console.error(`Failed to invalidate Plaid access token for itemId: ${itemId}. Continuing with user deletion. Error: ${plaidError.message}`);
         }
       }
-    } catch (dekError) {
-      console.warn(`Could not retrieve DEK for user ${uid}. Plaid access token will not be invalidated. Error: ${dekError.message}`);
+    } catch (error) {
+      console.warn(`Could not invalidate Plaid items for user ${uid}. Error: ${error.message}`);
     }
 
     console.log("Deleting access tokens...");

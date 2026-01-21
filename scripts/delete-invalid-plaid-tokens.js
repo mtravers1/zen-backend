@@ -56,42 +56,46 @@ const deleteInvalidPlaidTokens = async (isDryRun) => {
           } else {
             console.log(`Processing deletion for itemId: ${token.itemId}`);
 
-            // 1. Soft delete AccessToken to prevent race conditions
-            await AccessToken.updateOne({ _id: token._id }, { $set: { deletedAt: new Date() } });
+            try {
+              console.log(`Invalidating Plaid item for itemId: ${token.itemId}...`);
+              await plaidService.invalidateAccessToken(null, token.itemId);
+              console.log(`Successfully invalidated Plaid item for itemId: ${token.itemId}`);
 
-            // Check if there are any other valid (not soft-deleted) access tokens for this user and institution
-            const otherValidTokens = await AccessToken.find({
-              userId: token.userId,
-              institutionId: token.institutionId,
-              _id: { $ne: token._id }, // Exclude the current token
-              deletedAt: null // Only consider truly active tokens
-            });
+              // Now that the Plaid item is successfully invalidated, we can safely delete our local records.
+              // 1. Soft delete AccessToken to prevent race conditions during the script run
+              await AccessToken.updateOne({ _id: token._id }, { $set: { deletedAt: new Date() } });
 
-            if (otherValidTokens.length === 0) {
-              console.log(`No other valid tokens found for institution ${token.institutionId}. Proceeding with full data deletion.`);
+              const otherValidTokens = await AccessToken.find({
+                userId: token.userId,
+                institutionId: token.institutionId,
+                _id: { $ne: token._id },
+                deletedAt: null
+              });
 
-              // Find associated PlaidAccounts
-              const accounts = await PlaidAccount.find({ itemId: token.itemId });
-              const accountIds = accounts.map(account => account._id);
+              if (otherValidTokens.length === 0) {
+                console.log(`No other valid tokens found for institution ${token.institutionId}. Proceeding with full data deletion.`);
+                const accounts = await PlaidAccount.find({ itemId: token.itemId });
+                const accountIds = accounts.map(account => account._id);
 
-              // 2. Hard-delete associated Transactions
-              if (accountIds.length > 0) {
-                await Transaction.deleteMany({ accountId: { $in: accountIds } });
-                console.log(`Hard-deleted transactions for itemId: ${token.itemId}`);
+                if (accountIds.length > 0) {
+                  await Transaction.deleteMany({ accountId: { $in: accountIds } });
+                  console.log(`Hard-deleted transactions for itemId: ${token.itemId}`);
+                  await PlaidAccount.deleteMany({ _id: { $in: accountIds } });
+                  console.log(`Hard-deleted accounts for itemId: ${token.itemId}`);
+                }
+              } else {
+                console.log(`Other valid tokens exist for institution ${token.institutionId}. Only deleting the invalid AccessToken.`);
               }
 
-              // 3. Hard-delete associated PlaidAccounts
-              if (accountIds.length > 0) {
-                await PlaidAccount.deleteMany({ _id: { $in: accountIds } });
-                console.log(`Hard-deleted accounts for itemId: ${token.itemId}`);
-              }
-            } else {
-              console.log(`Other valid tokens exist for institution ${token.institutionId}. Only deleting the invalid AccessToken.`);
+              // Hard-delete the AccessToken itself
+              await AccessToken.deleteOne({ _id: token._id });
+              console.log(`Successfully hard-deleted AccessToken for itemId: ${token.itemId}`);
+
+            } catch (plaidError) {
+              console.error(`Failed to invalidate Plaid item for itemId: ${token.itemId}. Aborting deletion for this token. Error: ${plaidError.message}`);
+              // We will not delete the token or related data if invalidation fails.
+              // You might want to add more sophisticated retry logic or notifications here.
             }
-
-            // 4. Hard-delete the AccessToken itself
-            await AccessToken.deleteOne({ _id: token._id });
-            console.log(`Successfully hard-deleted AccessToken for itemId: ${token.itemId}`);
           }
         } else {
           console.error(`Error checking token for itemId: ${token.itemId}`, error.response?.data || error);

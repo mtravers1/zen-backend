@@ -397,11 +397,16 @@ const deleteUser = async (uid) => {
     if (!user) {
       throw new Error("User not found");
     }
-    const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid, dek);
+
     const accounts = await PlaidAccount.find({
       owner_id: user._id,
     });
+    const itemIds = [...new Set(accounts.map((account) => account.itemId))];
+
+    for (const itemId of itemIds) {
+      await plaidService.invalidateAccessToken(null, itemId);
+    }
+
     const accountIds = accounts.map((account) => account.plaid_account_id);
 
     await PlaidAccount.deleteMany({
@@ -421,22 +426,6 @@ const deleteUser = async (uid) => {
     await Business.deleteMany({
       userId: user._id,
     });
-    const accessToken = await plaidService.getNewestAccessToken({ userId: user._id });
-    const decryptedAccessToken = await safeDecrypt(
-      accessToken.accessToken,
-      { user_id: user._id, field: "accessToken" },
-    );
-
-    if (decryptedAccessToken) {
-      await plaidService.invalidateAccessToken(decryptedAccessToken);
-    } else {
-      structuredLogger.logErrorBlock(new Error("Decrypted access token is null"), {
-        operation: "deleteUser",
-        user_id: user._id,
-        field: "accessToken",
-        warning: "Skipping invalidateAccessToken call due to null token",
-      });
-    }
     await AccessToken.deleteMany({
       userId: user._id,
     });

@@ -566,7 +566,12 @@ const unlinkAccounts = async (data, uid) => {
 
   for (const account of data) {
     const plaidAccount = await PlaidAccount.findById(account.id);
+    if (!plaidAccount) {
+      continue;
+    }
+    
     const plaidAccountId = plaidAccount.plaid_account_id;
+    await plaidService.invalidateAccessToken(null, plaidAccount.itemId);
 
     await Transaction.deleteMany({
       plaidAccountId: plaidAccountId,

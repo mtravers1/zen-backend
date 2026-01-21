@@ -50,16 +50,11 @@ const cleanupDuplicateAccounts = async () => {
           await Transaction.deleteMany({ plaidAccountId: redundantAccount.plaid_account_id });
           await Liability.deleteMany({ accountId: redundantAccount.plaid_account_id });
 
-          const accessToken = await AccessToken.findOne({ itemId: redundantAccount.itemId });
-          if (accessToken) {
-            const dek = await getUserDek(user.authUid);
-            const safeDecrypt = createSafeDecrypt(user.authUid, dek);
-            const decryptedToken = await safeDecrypt(accessToken.accessToken, { item_id: accessToken.itemId, field: "accessToken" });
-            if (decryptedToken) {
-              await plaidService.invalidateAccessToken(decryptedToken);
-            }
-            await AccessToken.deleteOne({ _id: accessToken._id });
-          }
+          // Invalidate the Plaid item and delete the access token.
+          // Note: invalidateAccessToken can handle cases where the token is already invalid,
+          // so we don't need extensive checks here.
+          await plaidService.invalidateAccessToken(null, redundantAccount.itemId);
+          await AccessToken.deleteOne({ itemId: redundantAccount.itemId });
 
           await PlaidAccount.deleteOne({ _id: redundantAccount._id });
 

@@ -377,15 +377,18 @@ const deletePlaidAccountByEmail = async (accountId, email) => {
   const plaidAccounts = user.plaidAccounts;
 
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId });
-  user.plaidAccounts = plaidAccounts.filter(
-    (id) => id.toString() !== account._id.toString(),
-  );
+  if (account) {
+    await plaidService.invalidateAccessToken(null, account.itemId);
+    user.plaidAccounts = plaidAccounts.filter(
+      (id) => id.toString() !== account._id.toString(),
+    );
 
-  await user.save();
+    await user.save();
 
-  await PlaidAccount.deleteOne({ plaid_account_id: accountId });
-  await Transaction.deleteMany({ plaidAccountId: accountId });
-  await Liability.deleteMany({ accountId });
+    await PlaidAccount.deleteOne({ plaid_account_id: accountId });
+    await Transaction.deleteMany({ plaidAccountId: accountId });
+    await Liability.deleteMany({ accountId });
+  }
 };
 
 const deletePlaidAccount = async (accountId, uid) => {
@@ -430,16 +433,11 @@ const deletePlaidAccount = async (accountId, uid) => {
   // 3. Invalidate all Plaid items and delete AccessTokens.
   for (const itemId of itemIdsToDelete) {
     try {
-      const accessToken = await AccessToken.findOne({ itemId: itemId });
-      if (accessToken) {
-        const dek = await getUserDek(uid);
-        const safeDecrypt = createSafeDecrypt(uid, dek);
-        const decryptedToken = await safeDecrypt(accessToken.accessToken, { item_id: itemId, field: "accessToken" });
-        if (decryptedToken) {
-          await plaidService.invalidateAccessToken(decryptedToken);
-        }
-        await AccessToken.deleteOne({ _id: accessToken._id });
-      }
+      // Invalidate the Plaid item.
+      await plaidService.invalidateAccessToken(null, itemId);
+      
+      // Delete the access token from the database.
+      await AccessToken.deleteOne({ itemId: itemId });
     } catch (error) {
       structuredLogger.logErrorBlock(error, {
         operation: "deletePlaidAccount_invalidate_item",
