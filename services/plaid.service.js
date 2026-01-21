@@ -754,9 +754,35 @@ const updateTransactions = async (item) => {
     }
 
     if (!accounts.length) {
-      structuredLogger.logErrorBlock(new Error(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries.`), { itemId: item });
-      //TODO: remove item
-      throw new Error(`No accounts found for item ID: ${item} after ${maxRetries} retries.`);
+      structuredLogger.logErrorBlock(new Error(`[SYNC_TRACE] updateTransactions failed: No accounts found for item after ${maxRetries} retries. Cleaning up orphan item and all associated data.`), { itemId: item });
+      
+      const invalidationSuccess = await plaidService.invalidateAccessToken(null, item);
+      
+      if (invalidationSuccess) {
+        // Even though we didn't find accounts initially, we do a comprehensive cleanup
+        // to handle any race conditions or data inconsistencies.
+        
+        // Find all accounts one last time to get their IDs for cleanup.
+        const accountsToDelete = await PlaidAccount.find({ itemId: item });
+        if (accountsToDelete.length > 0) {
+          const accountIdsToDelete = accountsToDelete.map(acc => acc._id);
+          const plaidAccountIdsToDelete = accountsToDelete.map(acc => acc.plaid_account_id);
+          
+          await Transaction.deleteMany({ accountId: { $in: accountIdsToDelete } });
+          await Liability.deleteMany({ accountId: { $in: plaidAccountIdsToDelete } });
+          await PlaidAccount.deleteMany({ itemId: item });
+        }
+        
+        // Delete ALL access tokens for this item from the database.
+        await AccessToken.deleteMany({ itemId: item });
+        
+        structuredLogger.logInfo(`[SYNC_TRACE] Successfully cleaned up orphan item and all associated data.`, { itemId: item });
+      } else {
+        structuredLogger.logError(`[SYNC_TRACE] Failed to invalidate orphan item. Local records will not be deleted.`, { itemId: item });
+      }
+
+      // Stop the execution of this function.
+      return; 
     }
     structuredLogger.logInfo(`[SYNC_TRACE] Found ${accounts.length} accounts for item.`, { itemId: item });
 
@@ -1660,7 +1686,7 @@ const invalidateAccessToken = async (accessToken, itemId) => {
             "invalidate_access_token_failed",
             { error: "No access token or itemId provided to invalidate." },
           );
-          return;
+          return false;
         }
 
         const plaidClient = getPlaidClient();
@@ -1672,6 +1698,7 @@ const invalidateAccessToken = async (accessToken, itemId) => {
           has_access_token: !!tokenToInvalidate,
           itemId: itemId,
         });
+        return true;
       } catch (error) {
         const plaidError = error.response?.data;
         structuredLogger.logPlaidApi("item_remove_failed", false, {
@@ -1682,6 +1709,7 @@ const invalidateAccessToken = async (accessToken, itemId) => {
         });
         // Log the error, but don't re-throw it to prevent downstream processes from failing
         console.error(`Failed to invalidate Plaid item ${itemId}:`, plaidError || error.message);
+        return false;
       }
     },
   );
