@@ -1,6 +1,7 @@
 import express from "express";
 import webhookService from "../services/webhook.service.js";
 import { UnknownItemError } from "../lib/errors.js";
+import structuredLogger from "../lib/structuredLogger.js";
 
 const router = express.Router();
 
@@ -51,6 +52,13 @@ router.post("/plaid", async (req, res, next) => {
     console.error("Webhook processing error:", error);
 
     if (error instanceof UnknownItemError) {
+      // Log the orphan item for manual cleanup later.
+      structuredLogger.logError("lost_plaid_item", {
+        item_id: req.body.item_id,
+        webhook_type: req.body.webhook_type,
+        webhook_code: req.body.webhook_code,
+        error_message: error.message,
+      });
       return res.status(404).json({ error: "Item not found" });
     }
 
