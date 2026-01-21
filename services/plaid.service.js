@@ -1010,18 +1010,27 @@ const updateTransactions = async (item) => {
         structuredLogger.logInfo("[SYNC_TRACE] Cursor update successful.", { itemId: item, updatedCursor: cursor });
 
       } catch (error) {
-        if (error.response?.data?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
+        const plaidError = error.response?.data;
+        if (plaidError?.error_code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
                   structuredLogger.logWarning("[SYNC_TRACE] Mutation detected during pagination, restarting with null cursor...", { itemId: item, oldCursor: oldCursor });
                   cursor = null;
+        } else if (plaidError?.error_code === 'INVALID_FIELD' && plaidError?.error_message.includes('cursor')) {
+          structuredLogger.logWarning("[SYNC_TRACE] Invalid cursor detected. Resetting cursor and restarting sync.", {
+            itemId: item,
+            oldCursor: cursor,
+            plaid_error: plaidError,
+          });
+          cursor = null; // Reset the cursor
+          // The loop will continue and retry with a null cursor
         } else {
-          console.log('PLAID ERROR RESPONSE:', error.response.data);
+          console.log('PLAID ERROR RESPONSE:', plaidError);
           structuredLogger.logErrorBlock(error, {
               operation: "[SYNC_TRACE] Error syncing transactions",
               itemId: item,
-              plaidError: error.response?.data, // Log the full Plaid error
-              plaid_error_code: error.response?.data?.error_code,
-              plaid_error_message: error.response?.data?.error_message,
-              plaid_error_type: error.response?.data?.error_type,
+              plaidError: plaidError,
+              plaid_error_code: plaidError?.error_code,
+              plaid_error_message: plaidError?.error_message,
+              plaid_error_type: plaidError?.error_type,
           });
           throw error;
         }
