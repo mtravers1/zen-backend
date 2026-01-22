@@ -54,21 +54,25 @@ router.post("/plaid", async (req, res, next) => {
 
     if (error instanceof UnknownItemError) {
       let authUid = null;
+      let databaseId = null;
       if (req.body.client_user_id) {
-        const user = await User.findById(req.body.client_user_id);
+        databaseId = req.body.client_user_id;
+        const user = await User.findById(databaseId);
         if (user) {
           authUid = user.authUid;
         }
       }
 
-      // Log the orphan item for manual cleanup later.
-      structuredLogger.logError("lost_plaid_item", {
+      // Log the orphan item as a warning for manual cleanup later.
+      structuredLogger.logWarning("unknown_plaid_item_webhook", {
         item_id: req.body.item_id,
         webhook_type: req.body.webhook_type,
         webhook_code: req.body.webhook_code,
         authUid: authUid,
+        databaseId: databaseId,
         error_message: error.message,
       });
+
       return res.status(404).json({ error: "Item not found" });
     }
 
