@@ -64,6 +64,8 @@ const getTransactions = async (
         );
         const transactions = [];
 
+        const safeEncrypt = createSafeEncrypt(uid, dek);
+
         for (const transaction of transactionsResponse) {
           let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
             model: Transaction,
@@ -76,40 +78,25 @@ const getTransactions = async (
             continue;
           }
 
-          let decryptedType = null;
-          try {
-            decryptedType = await safeDecrypt(transaction.type, {
-              model: Transaction,
-              docId: transaction._id,
-              fieldPath: "type",
-            });
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "type", error: e.message });
-          }
+          let decryptedType = await safeDecrypt(transaction.type, {
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "type",
+          });
 
           const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
           decryptedAmount = formattedTransaction.amount;
           
-          let decryptedName = null;
-          try {
-            decryptedName = await safeDecrypt(transaction.name, {
-              model: Transaction,
-              docId: transaction._id,
-              fieldPath: "name",
-            });
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "name", error: e.message });
-          }
+          let decryptedName = await safeDecrypt(transaction.name, {
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "name",
+          });
           
-          let decryptedAccountType = null;
-          try {
-            decryptedAccountType = await safeDecrypt(
-              transaction.accountType,
-              { model: Transaction, docId: transaction._id, fieldPath: "accountType" },
-            );
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "accountType", error: e.message });
-          }
+          let decryptedAccountType = await safeDecrypt(
+            transaction.accountType,
+            { model: Transaction, docId: transaction._id, fieldPath: "accountType" },
+          );
 
           let decryptedMerchantName;
           let decryptedMerchantMerchantName;
@@ -117,53 +104,38 @@ const getTransactions = async (
           let merchantLogo;
           let merchantWebsite;
           if (transaction.merchant) {
-            try {
-              decryptedMerchantName = await safeDecrypt(
-                transaction.merchant.name,
-                { model: Transaction, docId: transaction._id, fieldPath: "merchant.name" },
-              );
-            } catch (e) {
-              structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.name", error: e.message });
-            }
+            decryptedMerchantName = await safeDecrypt(
+              transaction.merchant.name,
+              { model: Transaction, docId: transaction._id, fieldPath: "merchant.name" },
+            );
 
-            try {
-              decryptedMerchantMerchantName = await safeDecrypt(
-                transaction.merchant.merchantName,
-                {
-                  model: Transaction,
-                  docId: transaction._id,
-                  fieldPath: "merchant.merchantName",
-                },
-              );
-            } catch (e) {
-              structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.merchantName", error: e.message });
-            }
+            decryptedMerchantMerchantName = await safeDecrypt(
+              transaction.merchant.merchantName,
+              {
+                model: Transaction,
+                docId: transaction._id,
+                fieldPath: "merchant.merchantName",
+              },
+            );
 
-            if (transaction.merchant && transaction.merchant.merchantCategory) {
-              const decryptedCategory = await safeDecrypt(
-                transaction.merchant.merchantCategory,
-                { transaction_id: transaction._id, field: "merchant.merchantCategory" },
-              );
-              merchantCategory = decryptedCategory !== null ? decryptedCategory : transaction.merchant.merchantCategory;
-            }
+            merchantCategory = await safeDecrypt(
+              transaction.merchant.merchantCategory,
+              {
+                model: Transaction,
+                docId: transaction._id,
+                fieldPath: "merchant.merchantCategory",
+              },
+            );
 
-            try {
-                merchantLogo = await safeDecrypt(
-                    transaction.merchant.logo,
-                    { model: Transaction, docId: transaction._id, fieldPath: "merchant.logo" },
-                );
-            } catch (e) {
-                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.logo", error: e.message });
-            }
+            merchantLogo = await safeDecrypt(
+                transaction.merchant.logo,
+                { model: Transaction, docId: transaction._id, fieldPath: "merchant.logo" },
+            );
 
-            try {
-                merchantWebsite = await safeDecrypt(
-                    transaction.merchant.website,
-                    { model: Transaction, docId: transaction._id, fieldPath: "merchant.website" },
-                );
-            } catch (e) {
-                structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "merchant.website", error: e.message });
-            }
+            merchantWebsite = await safeDecrypt(
+                transaction.merchant.website,
+                { model: Transaction, docId: transaction._id, fieldPath: "merchant.website" },
+            );
           }
 
           const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
@@ -178,70 +150,47 @@ const getTransactions = async (
             fieldPath: "price",
           });
 
-          let decryptedSubtype = null;
-          try {
-            decryptedSubtype = await safeDecrypt(transaction.subtype, {
-              model: Transaction,
-              docId: transaction._id,
-              fieldPath: "subtype",
-            });
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "subtype", error: e.message });
-          }
+          let decryptedSubtype = await safeDecrypt(transaction.subtype, {
+            model: Transaction,
+            docId: transaction._id,
+            fieldPath: "subtype",
+          });
 
           const decryptedQuantity = await safeDecryptNumericValue(
             transaction.quantity, safeDecrypt,
             { model: Transaction, docId: transaction._id, fieldPath: "quantity" },
           );
 
-          let decryptedSecurityId = null;
-          try {
-            decryptedSecurityId = await safeDecrypt(
-              transaction.securityId,
-              { model: Transaction, docId: transaction._id, fieldPath: "securityId" },
-            );
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "securityId", error: e.message });
-          }
+          let decryptedSecurityId = await safeDecrypt(
+            transaction.securityId,
+            { model: Transaction, docId: transaction._id, fieldPath: "securityId" },
+          );
 
-          // console.log("[TRACE] Applying conditional decryption logic for transaction fields.");
           let decryptedDescription = null;
-          try {
-            if (transaction.description) {
-              decryptedDescription = await safeDecrypt(transaction.description, {
-                  model: Transaction,
-                  docId: transaction._id,
-                  fieldPath: "description",
-              });
-            }
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "description", error: e.message });
+          if (transaction.description) {
+            decryptedDescription = await safeDecrypt(transaction.description, {
+                model: Transaction,
+                docId: transaction._id,
+                fieldPath: "description",
+            });
           }
 
           let decryptedNotes = null;
-          try {
-            if (transaction.notes) {
-              decryptedNotes = await safeDecrypt(transaction.notes, {
-                  model: Transaction,
-                  docId: transaction._id,
-                  fieldPath: "notes",
-              });
-            }
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "notes", error: e.message });
+          if (transaction.notes) {
+            decryptedNotes = await safeDecrypt(transaction.notes, {
+                model: Transaction,
+                docId: transaction._id,
+                fieldPath: "notes",
+            });
           }
 
           let decryptedTags = null;
-          try {
-            if (transaction.tags && typeof transaction.tags === 'string') {
-              decryptedTags = await safeDecrypt(transaction.tags, {
-                  model: Transaction,
-                  docId: transaction._id,
-                  fieldPath: "tags",
-              });
-            }
-          } catch (e) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "tags", error: e.message });
+          if (transaction.tags && typeof transaction.tags === 'string') {
+            decryptedTags = await safeDecrypt(transaction.tags, {
+                model: Transaction,
+                docId: transaction._id,
+                fieldPath: "tags",
+            });
           }
 
           transactions.push({
