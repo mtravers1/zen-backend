@@ -20,7 +20,12 @@ class DekMigrationInProgressError extends Error {
   }
 }
 
-
+class CorruptedDataError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'CorruptedDataError';
+  }
+}
 
 let kmsClientInstance;
 async function getKmsClient() {
@@ -51,14 +56,6 @@ async function getKmsClient() {
   return kmsClientInstance;
 }
 
-
-
-/**
- * Resolve and validate a Google Cloud Storage bucket for use (defaults to the configured primary bucket).
- * @param {string} [bucketName] - Optional explicit bucket name; if omitted the configured `GCS_BUCKET_NAME` is used.
- * @returns {object} The Storage Bucket instance for the resolved bucket name.
- * @throws {Error} If no bucket name is configured or the resolved bucket does not exist or is not accessible.
- */
 async function getBucket(bucketName) {
   const targetBucketName = bucketName || keysBucketName;
   if (!targetBucketName) {
@@ -82,25 +79,13 @@ async function getBucket(bucketName) {
   }
 }
 
-
-
-// DEK cache in memory
 const dekCache = new LimitedMap(1000);
 
-// Import User model for data checking
 import User from "./models/User.js";
 
-/**
- * Generate a new 32-byte data encryption key (DEK), encrypt it with KMS, store the encrypted DEK in Cloud Storage, cache the plaintext DEK, and return the plaintext.
- *
- * @param {string} bucketKey - Identifier used as the storage key name (typically the user's database ID).
- * @param {object|null} targetBucket - Optional Google Cloud Storage Bucket object to write the encrypted DEK to; if null the configured primary bucket is used.
- * @returns {Buffer} The generated plaintext 32-byte DEK.
- * @throws {Error} If KMS encryption or saving the encrypted DEK to Cloud Storage fails.
- */
 async function generateAndStoreEncryptedDEK(
   bucketKey,
-  targetBucket = null, // Allow specifying target bucket for migration
+  targetBucket = null,
 ) {
   console.log(`✨ Generating new DEK for bucket key: ${bucketKey}`);
   const dek = crypto.randomBytes(32);
@@ -124,11 +109,9 @@ async function generateAndStoreEncryptedDEK(
     const file = bucket.file(filePath);
 
     console.log(`[SIGNUP-TRACE] Step 4: encryption.js -> Attempting to save key to GCS bucket: ${bucket.name}, path: ${filePath}`);
-    // Use simple upload for small files (DEK is ~113 bytes)
-    // This avoids the resumable upload endpoint that was causing "URL is required" error
     await file.save(encryptedDEK, {
       resumable: false,
-      validation: false, // Skip CRC32C/MD5 validation for encrypted data
+      validation: false,
       metadata: {
         contentType: "application/octet-stream",
         cacheControl: "private, max-age=0",
@@ -140,20 +123,11 @@ async function generateAndStoreEncryptedDEK(
     throw saveError;
   }
 
-  // Cache the DEK
   dekCache.set(bucketKey, [dek]);
 
   return dek;
 }
 
-/**
- * List files in a bucket matching a prefix, retrying until at least one match is found or the attempt limit is reached.
- *
- * @param {string} prefix - The file name prefix to search for.
- * @param {number} [maxAttempts=3] - Maximum number of listing attempts.
- * @param {number} [baseDelay=500] - Base delay in milliseconds used between retries (multiplied by attempt index).
- * @return {Array} An array of file objects matching the prefix; may be empty if no files are found after all attempts.
- */
 async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 500) {
   let files = [];
   let attempts = 0;
@@ -169,14 +143,6 @@ async function getFilesWithRetry(bucket, prefix, maxAttempts = 3, baseDelay = 50
   return files;
 }
 
-/**
- * Constructs the GCS path for a DEK file, handling legacy and modern path structures.
- *
- * @param {string} bucketKey - The logical key for the DEK (e.g., user ID).
- * @param {object} bucket - The GCS Bucket object.
- * @param {boolean} [includeExtension=false] - Whether to include the '.key' extension in the path.
- * @returns {string} The constructed GCS path for the DEK file.
- */
 function getDEKPath(bucketKey, bucket, includeExtension = false) {
   let path;
   if (bucket.name === process.env.LEGACY_GCS_BUCKET_NAME) {
@@ -193,23 +159,12 @@ function getDEKPath(bucketKey, bucket, includeExtension = false) {
   return path;
 }
 
-/**
- * Locate encrypted DEK files for a given bucket key in the specified GCS bucket, download and decrypt them, and return their plaintext DEKs.
- *
- * Searches for DEK files under `keys/{bucketKey}` or, when the provided bucket is the legacy bucket, under `keys/{env}/{bucketKey}` (where `env` is derived from ENVIRONMENT). If not found in the keys directory for non-legacy buckets, the function also checks the bucket root for a file named exactly `bucketKey`. Each found encrypted DEK is downloaded and decrypted with the configured KMS key; decrypted plaintext DEKs are returned as Buffer instances. Encrypted DEKs that fail KMS decryption are moved to a dead-letter location and skipped.
- *
- * @param {string} bucketKey - Identifier used to locate DEK files in the bucket.
- * @param {object} bucket - Google Cloud Storage Bucket instance to search.
- * @returns {Buffer[]} An array of decrypted DEKs (Buffers). Returns an empty array if no DEK files are found or none can be decrypted.
- * @throws {Error} If file listing, download, or non-decryption-related decryption operations fail.
- */
 async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
   let prefix = getDEKPath(bucketKey, bucket);
   console.log(`🔍 Looking for DEKs with prefix: gs://${bucket.name}/${prefix}`);
 
   let files = await getFilesWithRetry(bucket, prefix);
 
-  // If no files are found, and we are not in the legacy bucket, check the root of the bucket
   if (files.length === 0 && bucket.name !== process.env.LEGACY_GCS_BUCKET_NAME) {
     console.log(`[DEK_TRACE] DEK not found in keys/ directory, checking root of the bucket`);
     prefix = bucketKey;
@@ -259,13 +214,10 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
           `⚠️ The DEK may have been encrypted with a different KMS key or is corrupted`,
         );
 
-        // Move failing DEK to dead-letter queue
         await moveDEKToDeadLetterQueue(file, bucket);
 
-        // Continue to the next file
         continue;
       } else {
-        // Re-throw other errors
         throw decryptError;
       }
     }
@@ -274,15 +226,6 @@ async function getDEKFromBucket(bucketKey, bucket, kmsKeyPath = null) {
   return deks;
 }
 
-/**
- * Retrieve and cache the user's data encryption keys (DEKs) by Firebase UID.
- *
- * Searches the in-memory cache, then the primary GCS bucket and legacy bucket(s), migrates any found legacy DEKs to the primary bucket, deduplicates results, caches them, and returns the plaintext DEKs.
- *
- * @param {string} firebaseUid - Firebase Authentication UID of the user.
- * @returns {Buffer[]} An array of unique plaintext DEKs as Buffers.
- * @throws {Error} If the user does not exist, no DEK is found for the user, or an error occurs during retrieval or migration.
- */
 async function getUserDek(firebaseUid) {
   const user = await User.findOne({ authUid: firebaseUid });
   if (!user) {
@@ -291,7 +234,6 @@ async function getUserDek(firebaseUid) {
   const bucketKey = user._id.toString();
   console.log(`[DEK_TRACE] getUserDek called for UID: ${firebaseUid}, resolved to bucketKey: ${bucketKey}`);
 
-  // 1. Check cache first
   if (dekCache.has(bucketKey)) {
     const cachedDeks = dekCache.get(bucketKey);
     if (cachedDeks.length > 0) {
@@ -300,13 +242,11 @@ async function getUserDek(firebaseUid) {
     }
   }
 
-  // 2. If not in cache, retrieve it, cache it, and return it.
   console.log(`[DEK_TRACE] DEK not in cache for user ${bucketKey}. Retrieving...`);
   const deks = await migrateAndCacheDek(firebaseUid);
   return deks;
 }
 
-// Encrypts a value using AES-256-GCM and a provided data encryption key (DEK)
 async function encryptValue(value, dek) {
   if (value === null || value === undefined) return value;
 
@@ -314,42 +254,26 @@ async function encryptValue(value, dek) {
     const encryptionKey = Array.isArray(dek) ? dek[0] : dek;
     const dekHash = crypto.createHash('sha256').update(encryptionKey).digest('hex');
     
-    // Convert the value to a JSON string to ensure it's properly formatted
     const jsonString = JSON.stringify(value);
 
-    // Generate a random 16-byte initialization vector (IV)
     const iv = crypto.randomBytes(16);
 
-    // Create an AES-256-GCM cipher using the DEK and IV
     const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey, iv);
 
-    // Encrypt the JSON string
     const encrypted = Buffer.concat([
       cipher.update(jsonString, "utf8"),
       cipher.final(),
     ]);
 
-    // Get the authentication tag to ensure integrity during decryption
     const tag = cipher.getAuthTag();
 
-    // Combine IV + Auth Tag + Encrypted content, and return as base64 string
     return Buffer.concat([iv, tag, encrypted]).toString("base64");
   } catch (e) {
     console.error("Error encrypting value:", e);
-    throw e; // Re-throw the error to propagate encryption failures
+    throw e;
   }
 }
 
-/**
- * Decrypts a base64-encoded AES-256-GCM ciphertext using one of the provided data encryption keys (DEKs) and returns the original value.
- *
- * Tries each DEK in order; on successful decryption parses and returns the JSON-decoded plaintext. If the input is null, undefined, or an empty string, it is returned unchanged.
- *
- * @param {string|null|undefined} cipherTextBase64 - The ciphertext encoded as a base64 string (IV || authTag || ciphertext).
- * @param {Buffer[]|Array<Buffer>} deks - An array of 32-byte DEKs to attempt for decryption; the function tries each key until one succeeds.
- * @returns {*} The decrypted value parsed from JSON, or the original input if it was null, undefined, or an empty string.
- * @throws {DecryptionError} When all provided DEKs fail to decrypt the ciphertext; the error includes an `errorCode` for reporting.
- */
 async function decryptValue(cipherTextBase64, deks) {
   if (
     cipherTextBase64 === null ||
@@ -365,37 +289,27 @@ async function decryptValue(cipherTextBase64, deks) {
 
   const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
 
-  // A valid encrypted value will have at least a 16-byte IV and a 16-byte auth tag.
   if (cipherBuffer.length < 32) {
-    console.warn(`⚠️ Skipping decryption for value that is too short to be valid ciphertext.`);
-    return cipherTextBase64; // Return the original value, as it cannot be valid ciphertext.
+    throw new CorruptedDataError("Value is too short to be valid ciphertext.");
   }
 
   for (const dek of deks) {
     try {
       const dekHash = crypto.createHash('sha256').update(dek).digest('hex');
       
-      // Decode the base64-encoded ciphertext
-      const cipherBuffer = Buffer.from(cipherTextBase64, "base64");
-
-      // Extract IV (first 16 bytes), authentication tag (next 16), and encrypted content (remaining)
       const iv = cipherBuffer.slice(0, 16);
       const tag = cipherBuffer.slice(16, 32);
       const encrypted = cipherBuffer.slice(32);
 
-      // Create a decipher using AES-256-GCM with the same DEK and IV
       const decipher = crypto.createDecipheriv("aes-256-gcm", dek, iv);
 
-      // Set the authentication tag
       decipher.setAuthTag(tag);
 
-      // Decrypt the content and convert it back to UTF-8 string
       const decrypted = Buffer.concat([
         decipher.update(encrypted),
         decipher.final(),
       ]).toString("utf8");
 
-      // Parse the decrypted JSON string and return the original value
       return JSON.parse(decrypted);
     } catch (e) {
       console.warn(
@@ -411,11 +325,6 @@ async function decryptValue(cipherTextBase64, deks) {
   );
 }
 
-/**
- * Produces a SHA-256 hash of an email after trimming, lowercasing, and appending the configured salt.
- * @param {string} email - The email address to hash.
- * @returns {string} Hex-encoded SHA-256 digest of the salted, normalized email.
- */
 function hashEmail(email) {
   const salt = process.env.HASH_SALT;
   return crypto
@@ -432,17 +341,6 @@ function hashValue(value) {
     .digest("hex");
 }
 
-/**
- * Copy an encrypted DEK file from a source bucket/key to a new key in a target bucket, preserving a versioned filename.
- *
- * Attempts a direct server-side copy; if that fails, falls back to downloading the encrypted DEK and saving it to the target location.
- *
- * @param {string} sourceKey - The logical key name (bucketKey or legacy UID) identifying the DEK in the source bucket (without path or extension).
- * @param {object} sourceBucket - The GCS Bucket instance containing the source DEK file.
- * @param {object} targetBucket - The GCS Bucket instance where the DEK should be copied to.
- * @param {string|null} [targetKey=null] - Optional override for the target logical key name; when omitted, `sourceKey` is used.
- * @returns {Promise<boolean>} `true` if the DEK was successfully copied to the target bucket; `false` otherwise.
- */
 async function copyDEKToNewBucketKey(
   sourceKey,
   sourceBucket,
@@ -470,7 +368,6 @@ async function copyDEKToNewBucketKey(
       `keys/${finalTargetKey}_v${version}.key`,
     );
 
-    // Copy the DEK to the new bucket key location
     try {
       await sourceFile.copy(targetFile);
       console.log(
@@ -478,7 +375,6 @@ async function copyDEKToNewBucketKey(
       );
       return true;
     } catch (copyError) {
-      // Fallback strategy: download then save, to avoid transient SDK copy issues (e.g., Parse Error)
       console.error(
         `⚠️  Direct copy failed (${copyError?.message}). Falling back to download+save...`,
       );
@@ -494,7 +390,6 @@ async function copyDEKToNewBucketKey(
           `❌ Fallback copy (download+save) failed from ${sourceKey} to ${finalTargetKey}:`,
           fallbackError,
         );
-        // Do not throw to avoid hard-failing auth flow; return false so callers can proceed using legacy DEK
         return false;
       }
     }
@@ -503,21 +398,10 @@ async function copyDEKToNewBucketKey(
       `❌ Error copying DEK from ${sourceKey} to ${targetKey}:`,
       error,
     );
-    // Do not throw here to prevent 500 on sign-in; allow caller to continue with legacy DEK
     return false;
   }
 }
 
-
-
-/**
- * Create and store a new data encryption key (DEK) for a user signing up and cache it under the provided database ID.
- *
- * @param {string} firebaseUid - Firebase authentication UID, used for logging and tracing.
- * @param {string|number} databaseId - Database user ID that will be used as the bucket key for storing the DEK.
- * @throws {Error} If `databaseId` is missing or empty.
- * @returns {Buffer[]} An array containing the newly generated plaintext DEK (as a Buffer).
- */
 async function getUserDekForSignup(firebaseUid, databaseId) {
   try {
     if (!databaseId) {
@@ -528,15 +412,12 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
     const bucketKey = databaseId.toString();
     const currentBucket = await getBucket();
 
-    // For a new signup, we should always generate a new key.
-    // The legacy check is now handled by getUserDek.
     console.log(`[SIGNUP_TRACE] Generating new DEK for new user. DB_ID: ${bucketKey}`);
     const newDek = await generateAndStoreEncryptedDEK(
       bucketKey,
       currentBucket,
     );
     
-    // Cache the new DEK
     dekCache.set(bucketKey, [newDek]);
 
     return [newDek];
@@ -548,12 +429,6 @@ async function getUserDekForSignup(firebaseUid, databaseId) {
   } 
 }
 
-/**
- * Move a DEK file to the dead-letter location within the given bucket.
- *
- * @param {import('@google-cloud/storage').File} file - The file object representing the failing DEK to move.
- * @param {import('@google-cloud/storage').Bucket} bucket - Target bucket where the dead-letter file will be placed.
- */
 async function moveDEKToDeadLetterQueue(file, bucket) {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -579,7 +454,6 @@ async function migrateAndCacheDek(firebaseUid) {
     const bucketKey = user._id.toString();
     console.log(`[DEK_TRACE] Starting DEK retrieval for user ${bucketKey}`);
 
-    // Check cache first
     if (dekCache.has(bucketKey)) {
       const cachedDeks = dekCache.get(bucketKey);
       if (cachedDeks.length > 0) {
@@ -590,7 +464,6 @@ async function migrateAndCacheDek(firebaseUid) {
 
     const primaryBucket = await getBucket();
 
-    // Check primary bucket with databaseId
     console.log(`[DEK_TRACE] Checking primary bucket with databaseId: ${bucketKey}`);
     const primaryDeks = await getDEKFromBucket(bucketKey, primaryBucket);
     if (primaryDeks.length > 0) {
@@ -624,5 +497,6 @@ export {
   migrateAndCacheDek,
   DecryptionError,
   DekMigrationInProgressError,
+  CorruptedDataError,
   getBucket,
 };
