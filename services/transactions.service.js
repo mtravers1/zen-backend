@@ -4,7 +4,7 @@ import User from "../database/models/User.js";
 import Transaction from "../database/models/Transaction.js";
 import { getUserDek } from "../database/encryption.js";
 import { createSafeDecrypt, createSafeEncrypt, safeDecryptNumericValue } from "../lib/encryptionHelper.js";
-import { healAndDecryptField } from "../lib/dataHealing.js";
+
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
   structuredLogger.logInfo("formatTransactionAmount_start", {
