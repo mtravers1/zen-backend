@@ -1,5 +1,6 @@
 import express from "express";
 import webhookService from "../services/webhook.service.js";
+import { isUnknownItem, addUnknownItem } from "../lib/webhookBlacklist.js";
 import { UnknownItemError } from "../lib/errors.js";
 import structuredLogger from "../lib/structuredLogger.js";
 import User from "../database/models/User.js";
@@ -31,6 +32,12 @@ router.get("/health", (req, res) => {
 
 // Plaid webhook endpoint
 router.post("/plaid", async (req, res, next) => {
+  // Immediately check if the item is on the blacklist.
+  if (req.body.item_id && isUnknownItem(req.body.item_id)) {
+    // If so, silently drop the webhook by returning a 404.
+    return res.status(404).json({ error: "Item not found" });
+  }
+
   try {
     console.log("Plaid webhook received:", {
       body: req.body,
@@ -72,6 +79,9 @@ router.post("/plaid", async (req, res, next) => {
         databaseId: databaseId,
         error_message: error.message,
       });
+
+      // Add the item to the blacklist to prevent repeated logging.
+      addUnknownItem(req.body.item_id);
 
       return res.status(404).json({ error: "Item not found" });
     }
