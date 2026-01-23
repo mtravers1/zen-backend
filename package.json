@@ -21,7 +21,8 @@
     "delete-invalid-plaid-tokens": "node -r dotenv/config scripts/delete-invalid-plaid-tokens.js",
     "fix-transaction-dates": "node -r dotenv/config scripts/fix-transaction-dates.js",
     "delete-orphaned-pending-transactions": "node -r dotenv/config scripts/delete-orphaned-pending-transactions.js",
-    "delete-duplicate-transactions": "node -r dotenv/config scripts/delete-duplicate-transactions.js"
+    "delete-duplicate-transactions": "node -r dotenv/config scripts/delete-duplicate-transactions.js",
+    "resync-account-transactions": "node -r dotenv/config scripts/resync-account-transactions.js"
   },
   "author": "",
   "license": "ISC",
