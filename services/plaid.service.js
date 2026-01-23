@@ -853,8 +853,7 @@ const updateTransactions = async (item) => {
           const encryptedName = transaction.name ? await safeEncrypt(transaction.name, { transaction_id: transaction.transaction_id, field: "name" }) : null;
           const merchantCategory = transaction.category?.[0];
           const merchant = { merchantName: encryptedMerchantName, name: encryptedName, merchantCategory: merchantCategory, website: transaction.website ? transaction.website : null, logo: transaction.logo_url ? transaction.logo_url : null };
-          const formattedTransaction = formatTransactionAmount(transaction, accountMap.get(transaction.account_id));
-          const encryptedAmount = await safeEncrypt(formattedTransaction.amount, { transaction_id: transaction.transaction_id, field: "amount" });
+          const encryptedAmount = await safeEncrypt(transaction.amount, { transaction_id: transaction.transaction_id, field: "amount" });
           const encryptedAccountType = await safeEncrypt(accountMap.get(transaction.account_id).account_type, { transaction_id: transaction.transaction_id, field: "account_type" });
           const transactionCode = transaction.transaction_code ? await safeEncrypt(transaction.transaction_code, { transaction_id: transaction.transaction_id, field: "transaction_code" }) : null;
           const tags = transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags" }) : null;
