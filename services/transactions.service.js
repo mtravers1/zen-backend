@@ -7,13 +7,7 @@ import { createSafeDecrypt, createSafeEncrypt, safeDecryptNumericValue } from ".
 
 import structuredLogger from "../lib/structuredLogger.js";
 export const formatTransactionAmount = (transaction, account) => {
-  structuredLogger.logInfo("formatTransactionAmount_start", {
-    transaction_id: transaction._id,
-    initial_amount: transaction.amount,
-    transaction_type: transaction.type,
-    account_type: account.account_type,
-    account_subtype: account.account_subtype,
-  });
+
 
   if (
     (account.account_type === "depository" && account.account_subtype !== "cd" && account.account_subtype !== "money market") || 
@@ -38,10 +32,7 @@ export const formatTransactionAmount = (transaction, account) => {
     }
   }
 
-  structuredLogger.logInfo("formatTransactionAmount_end", {
-    transaction_id: transaction._id,
-    final_amount: transaction.amount,
-  });
+
 
   return transaction;
 };

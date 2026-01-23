@@ -152,7 +152,7 @@ const createLinkToken = async (
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
-        android_package_name: isAndroid ? process.env.BUNDLEID : null,
+        android_package_name: isAndroid ? process.env.ANDROID_PACKAGE_NAME : null,
         redirect_uri: !isAndroid ? redirectUri : null,
         webhook: webhookUrl,
         language: "en",
@@ -286,7 +286,7 @@ const saveAccessToken = async (
         existingToken.accessToken = encryptedToken;
         existingToken.institutionId = institutionId; // The institution ID should not change, but let's update it just in case.
         existingToken.isAccessTokenExpired = false; // The new token is not expired.
-        existingToken.status = 'good'; // The new token should be in a good state.
+        existingToken.status = 'active'; // The new token should be in an active state.
         await existingToken.save();
 
         return {
@@ -1022,16 +1022,8 @@ const updateTransactions = async (item) => {
           cursor = null; // Reset the cursor
           // The loop will continue and retry with a null cursor
         } else {
-          console.log('PLAID ERROR RESPONSE:', plaidError);
-          structuredLogger.logErrorBlock(error, {
-              operation: "[SYNC_TRACE] Error syncing transactions",
-              itemId: item,
-              plaidError: plaidError,
-              plaid_error_code: plaidError?.error_code,
-              plaid_error_message: plaidError?.error_message,
-              plaid_error_type: plaidError?.error_type,
-          });
-          throw error;
+          await handlePlaidError(error, item);
+          return;
         }
       }
     }
