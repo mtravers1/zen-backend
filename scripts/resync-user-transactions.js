@@ -3,6 +3,7 @@ import connectDB from '../database/database.js';
 import User from '../database/models/User.js';
 import PlaidAccount from '../database/models/PlaidAccount.js';
 import Transaction from '../database/models/Transaction.js';
+import Liability from '../database/models/Liability.js';
 import plaidService from '../services/plaid.service.js';
 import structuredLogger from '../lib/structuredLogger.js';
 
@@ -65,9 +66,11 @@ async function resyncUserTransactions() {
         const plaidAccountIds = accounts.map(a => a.plaid_account_id);
 
         const numTransactionsToDelete = await Transaction.countDocuments({ plaidAccountId: { $in: plaidAccountIds } });
+        const numLiabilitiesToDelete = await Liability.countDocuments({ accountId: { $in: plaidAccountIds } });
 
         if (isDryRun) {
           structuredLogger.logInfo(`[DRY RUN] Would delete ${numTransactionsToDelete} transactions for ${accounts.length} accounts.`);
+          structuredLogger.logInfo(`[DRY RUN] Would delete ${numLiabilitiesToDelete} liabilities.`);
           structuredLogger.logInfo(`[DRY RUN] Would clear sync cursor.`);
           structuredLogger.logInfo(`[DRY RUN] Would trigger transaction update.`);
           successCount++;
@@ -78,6 +81,10 @@ async function resyncUserTransactions() {
         structuredLogger.logInfo(`Deleting existing transactions for ${accounts.length} accounts.`);
         const deleteResult = await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
         structuredLogger.logSuccess(`Deleted ${deleteResult.deletedCount} transactions.`);
+
+        structuredLogger.logInfo(`Deleting existing liabilities.`);
+        const liabilityDeleteResult = await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+        structuredLogger.logSuccess(`Deleted ${liabilityDeleteResult.deletedCount} liabilities.`);
 
         structuredLogger.logInfo("Clearing the transaction sync cursor by setting nextCursor to null.");
         await PlaidAccount.updateMany({ itemId: itemId }, { $set: { nextCursor: null } });

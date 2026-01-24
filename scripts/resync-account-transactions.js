@@ -2,6 +2,7 @@
 import connectDB from '../database/database.js';
 import PlaidAccount from '../database/models/PlaidAccount.js';
 import Transaction from '../database/models/Transaction.js';
+import Liability from '../database/models/Liability.js';
 import plaidService from '../services/plaid.service.js';
 import structuredLogger from '../lib/structuredLogger.js';
 
@@ -30,6 +31,11 @@ async function resyncAccountTransactions() {
     structuredLogger.logInfo(`Deleting existing transactions for ${plaidAccountIds.length} accounts.`);
     const deleteResult = await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
     structuredLogger.logSuccess(`Deleted ${deleteResult.deletedCount} transactions.`);
+
+    // Step 2a: Delete all existing liabilities for these accounts
+    structuredLogger.logInfo(`Deleting existing liabilities for ${plaidAccountIds.length} accounts.`);
+    const liabilityDeleteResult = await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+    structuredLogger.logSuccess(`Deleted ${liabilityDeleteResult.deletedCount} liabilities.`);
 
     // Step 3: Clear the sync cursor
     structuredLogger.logInfo("Clearing the transaction sync cursor by setting nextCursor to null.");
