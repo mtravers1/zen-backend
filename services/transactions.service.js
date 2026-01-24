@@ -373,6 +373,7 @@ const getTransactionsByAccount = async (
   accountId,
   uid,
   pagination = { paginate: false },
+  context // Added context parameter here
 ) => {
   const account = await PlaidAccount.findOne({ plaid_account_id: accountId })
     .populate("transactions")
@@ -426,9 +427,21 @@ const getTransactionsByAccount = async (
       console.error(`Failed to decrypt type for transaction ${transaction._id}:`, e);
     }
     
-    const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, account);
-    decryptedAmount = formattedTransaction.amount;
+    let finalAmount = decryptedAmount;
 
+    // Apply context-specific amount formatting
+    if (context === 'details_page') {
+        if (account.account_type === 'depository') {
+            // For depository accounts on details page, purchases are negative.
+            finalAmount = decryptedAmount * -1;
+        } 
+        // For credit accounts on details page, purchases are positive (raw value).
+        // For loan accounts on details page, leave as raw.
+    } else {
+        // Default to the original universal formatting for other contexts (e.g., dashboard)
+        const formattedTx = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, account);
+        finalAmount = formattedTx.amount;
+    }
 
     let decryptedName = null;
     try {
@@ -551,7 +564,7 @@ const getTransactionsByAccount = async (
     allTransactions.push({
       ...transaction,
 
-      amount: decryptedAmount,
+      amount: finalAmount,
 
       name: decryptedName,
 
