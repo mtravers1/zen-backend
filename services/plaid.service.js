@@ -1023,7 +1023,7 @@ const updateTransactions = async (item) => {
           // The loop will continue and retry with a null cursor
         } else {
           await handlePlaidError(error, item);
-          throw error;
+          return;
         }
       }
     }
