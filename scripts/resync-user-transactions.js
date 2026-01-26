@@ -24,7 +24,11 @@ async function processItem(itemId, isDryRun) {
       structuredLogger.logSuccess(`Health check PASSED for item: ${itemId}`);
     } catch (error) {
       structuredLogger.logError(`Health check FAILED for item: ${itemId}. Plaid API error: ${error.message}. Skipping.`);
-      await plaidService.handlePlaidError(error, itemId);
+      if (!isDryRun) {
+        await plaidService.handlePlaidError(error, itemId);
+      } else {
+        structuredLogger.logWarning(`[DRY RUN] Would mark item as expired due to health check failure.`);
+      }
       return { success: false };
     }
 
