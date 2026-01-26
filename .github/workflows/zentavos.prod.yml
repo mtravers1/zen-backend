@@ -935,52 +935,52 @@ jobs:
       - name: Replace environment variables
         run: |
           cp .env.sample .env
-          sed -i -e "s|MONGODB_URI=.*|MONGODB_URI=\'mongodb://${{ secrets.MONGODB_URI_STG }}\'|g" .env
-          sed -i -e "s|MONGODB_USER=.*|MONGODB_USER=\'${{ secrets.MONGODB_USER_STG }}\'|g" .env
-          sed -i -e "s|MONGODB_PASS=.*|MONGODB_PASS=\'${{ secrets.MONGODB_PASS_STG }}\'|g" .env
-          sed -i -e "s|MONGODB_DB=.*|MONGODB_DB=\'${{ secrets.MONGODB_DB_STG }}\'|g" .env
+          sed -i -e "s|MONGODB_URI=.*|MONGODB_URI=\'mongodb://${{ secrets.MONGODB_URI_PROD }}\'|g" .env
+          sed -i -e "s|MONGODB_USER=.*|MONGODB_USER=\'${{ secrets.MONGODB_USER_PROD }}\'|g" .env
+          sed -i -e "s|MONGODB_PASS=.*|MONGODB_PASS=\'${{ secrets.MONGODB_PASS_PROD }}\'|g" .env
+          sed -i -e "s|MONGODB_DB=.*|MONGODB_DB=\'${{ secrets.MONGODB_DB_PROD }}\'|g" .env
           sed -i -e "s|APP_PORT=.*|APP_PORT=$APP_PORT|g" .env
           sed -i -e "s|FIREBASE_SERVICE_ACCOUNT_PATH=.*|FIREBASE_SERVICE_ACCOUNT_PATH=./ServiceAccountKey.json|g" .env
-          sed -i -e "s|PLAID_CLIENT_ID=.*|PLAID_CLIENT_ID=${{ secrets.PLAID_CLIENT_ID_STG }}|g" .env
-          sed -i -e "s|PLAID_SECRET=.*|PLAID_SECRET=${{ secrets.PLAID_SECRET_STG }}|g" .env
-          sed -i -e "s|PLAID_WEBHOOK_URL=.*|PLAID_WEBHOOK_URL=${{ secrets.PLAID_WEBHOOK_URL_STG }}|g" .env
-          sed -i -e "s|PLAID_ENV=.*|PLAID_ENV=staging|g" .env
-          sed -i -e "s|GCP_PROJECT_ID=.*|GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID_STG }}|g" .env
-          sed -i -e "s|GCS_DEK_BUCKET_NAME=.*|GCS_DEK_BUCKET_NAME=${{ vars.GCS_DEK_BUCKET_NAME_STG }}|g" .env
-          sed -i -e "s|GCS_FILES_BUCKET_NAME=.*|GCS_FILES_BUCKET_NAME=${{ vars.GCS_FILES_BUCKET_NAME_STG }}|g" .env
-          sed -i -e "s|LEGACY_GCS_BUCKET_NAME=.*|LEGACY_GCS_BUCKET_NAME=${{ vars.LEGACY_GCS_BUCKET_NAME_STG }}|g" .env
-          sed -i -e "s|LEGACY_GCS_ENVIRONMENT_FOLDER=.*|LEGACY_GCS_ENVIRONMENT_FOLDER=${{ vars.LEGACY_GCS_ENVIRONMENT_FOLDER_STG }}|g" .env
-          sed -i -e "s|GCP_KEY_LOCATION=.*|GCP_KEY_LOCATION=${{ vars.GCP_KEY_LOCATION_STG }}|g" .env
-          sed -i -e "s|GCP_KEY_RING=.*|GCP_KEY_RING=${{ vars.GCP_KEY_RING_STG }}|g" .env
-          sed -i -e "s|GCP_KEY_NAME=.*|GCP_KEY_NAME=${{ vars.GCP_KEY_NAME_STG }}|g" .env
+          sed -i -e "s|PLAID_CLIENT_ID=.*|PLAID_CLIENT_ID=${{ secrets.PLAID_CLIENT_ID_PROD }}|g" .env
+          sed -i -e "s|PLAID_SECRET=.*|PLAID_SECRET=${{ secrets.PLAID_SECRET_PROD }}|g" .env
+          sed -i -e "s|PLAID_WEBHOOK_URL=.*|PLAID_WEBHOOK_URL=${{ secrets.PLAID_WEBHOOK_URL_PROD }}|g" .env
+          sed -i -e "s|PLAID_ENV=.*|PLAID_ENV=production|g" .env
+          sed -i -e "s|GCP_PROJECT_ID=.*|GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID_PROD }}|g" .env
+          sed -i -e "s|GCS_DEK_BUCKET_NAME=.*|GCS_DEK_BUCKET_NAME=${{ vars.GCS_DEK_BUCKET_NAME_PROD }}|g" .env
+          sed -i -e "s|GCS_FILES_BUCKET_NAME=.*|GCS_FILES_BUCKET_NAME=${{ vars.GCS_FILES_BUCKET_NAME_PROD }}|g" .env
+          sed -i -e "s|LEGACY_GCS_BUCKET_NAME=.*|LEGACY_GCS_BUCKET_NAME=${{ vars.LEGACY_GCS_BUCKET_NAME_PROD }}|g" .env
+          sed -i -e "s|LEGACY_GCS_ENVIRONMENT_FOLDER=.*|LEGACY_GCS_ENVIRONMENT_FOLDER=${{ vars.LEGACY_GCS_ENVIRONMENT_FOLDER_PROD }}|g" .env
+          sed -i -e "s|GCP_KEY_LOCATION=.*|GCP_KEY_LOCATION=${{ vars.GCP_KEY_LOCATION_PROD }}|g" .env
+          sed -i -e "s|GCP_KEY_RING=.*|GCP_KEY_RING=${{ vars.GCP_KEY_RING_PROD }}|g" .env
+          sed -i -e "s|GCP_KEY_NAME=.*|GCP_KEY_NAME=${{ vars.GCP_KEY_NAME_PROD }}|g" .env
           sed -i -e "s|LEGACY_GCP_PROJECT_ID=.*|LEGACY_GCP_PROJECT_ID=${{ vars.LEGACY_GCP_PROJECT_ID }}|g" .env
           sed -i -e "s|LEGACY_GCP_KEY_LOCATION=.*|LEGACY_GCP_KEY_LOCATION=${{ vars.LEGACY_GCP_KEY_LOCATION }}|g" .env
           sed -i -e "s|LEGACY_GCP_KEY_RING=.*|LEGACY_GCP_KEY_RING=${{ vars.LEGACY_GCP_KEY_RING }}|g" .env
           sed -i -e "s|LEGACY_GCP_KEY_NAME=.*|LEGACY_GCP_KEY_NAME=${{ vars.LEGACY_GCP_KEY_NAME }}|g" .env
-          sed -i -e "s|HASH_SALT=.*|HASH_SALT=${{ secrets.HASH_SALT_STG }}|g" .env
-          sed -i -e "s|STORAGE_SERVICE_ACCOUNT=.*|STORAGE_SERVICE_ACCOUNT=${{ secrets.STORAGE_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|KMS_SERVICE_ACCOUNT=.*|KMS_SERVICE_ACCOUNT=${{ secrets.KMS_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|HASH_SALT=.*|HASH_SALT=${{ secrets.HASH_SALT_PROD }}|g" .env
+          sed -i -e "s|STORAGE_SERVICE_ACCOUNT=.*|STORAGE_SERVICE_ACCOUNT=${{ secrets.STORAGE_SERVICE_ACCOUNT_PROD }}|g" .env
+          sed -i -e "s|KMS_SERVICE_ACCOUNT=.*|KMS_SERVICE_ACCOUNT=${{ secrets.KMS_SERVICE_ACCOUNT_PROD }}|g" .env
           sed -i -e "s|AI_URL=.*|AI_URL=${{ secrets.AI_URL }}|g" .env
           sed -i -e "s|AI_MODEL=.*|AI_MODEL=${{ vars.AI_MODEL }}|g" .env
-          sed -i -e "s|PLAID_REDIRECT_URI=.*|PLAID_REDIRECT_URI=${{ secrets.PLAID_REDIRECT_URI_STG }}|g" .env
-          sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_STG }}|g" .env
+          sed -i -e "s|PLAID_REDIRECT_URI=.*|PLAID_REDIRECT_URI=${{ secrets.PLAID_REDIRECT_URI_PROD }}|g" .env
+          sed -i -e "s|PLAID_REDIRECT_URI_NEW_ACCOUNTS=.*|PLAID_REDIRECT_URI_NEW_ACCOUNTS=${{ secrets.PLAID_REDIRECT_URI_NEW_ACCOUNTS_PROD }}|g" .env
           sed -i -e "s|GROQ_AI_MODEL=.*|GROQ_AI_MODEL=${{ vars.GROQ_AI_MODEL }}|g" .env
           sed -i -e "s|GROQ_API_KEY=.*|GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}|g" .env
-          sed -i -e "s|IAP_CERTIFICATE=.*|IAP_CERTIFICATE=${{ secrets.IAP_CERTIFICATE_STG }}|g" .env
-          sed -i -e "s|ISSUER_ID=.*|ISSUER_ID=${{ secrets.ISSUER_ID_STG }}|g" .env
-          sed -i -e "s|KEY_ID=.*|KEY_ID=${{ secrets.KEY_ID_STG }}|g" .env
-          sed -i -e "s|APPLE_SHARED_SECRET=.*|APPLE_SHARED_SECRET=${{ secrets.APPLE_SHARED_SECRET_STG }}|g" .env
-          sed -i -e "s|APPLE_SANDBOX_EMAIL=.*|APPLE_SANDBOX_EMAIL=${{ secrets.APPLE_SANDBOX_EMAIL_STG }}|g" .env
-          sed -i -e "s|APPLE_SANDBOX_PASSWORD=.*|APPLE_SANDBOX_PASSWORD=${{ secrets.APPLE_SANDBOX_PASSWORD_STG }}|g" .env
-          sed -i -e "s|APPLE_CLIENT_ID=.*|APPLE_CLIENT_ID=${{ secrets.APPLE_CLIENT_ID_STG }}|g" .env
-          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT=.*|FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT_STG }}|g" .env
-          sed -i -e "s|FIREBASE_API_KEY=.*|FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_STG }}|g" .env
-          sed -i -e "s|GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID_STG }}|g" .env
-          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT=.*|GOOGLE_PLAY_SERVICE_ACCOUNT=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_STG }}|g" .env
+          sed -i -e "s|IAP_CERTIFICATE=.*|IAP_CERTIFICATE=${{ secrets.IAP_CERTIFICATE_PROD }}|g" .env
+          sed -i -e "s|ISSUER_ID=.*|ISSUER_ID=${{ secrets.ISSUER_ID_PROD }}|g" .env
+          sed -i -e "s|KEY_ID=.*|KEY_ID=${{ secrets.KEY_ID_PROD }}|g" .env
+          sed -i -e "s|APPLE_SHARED_SECRET=.*|APPLE_SHARED_SECRET=${{ secrets.APPLE_SHARED_SECRET_PROD }}|g" .env
+          sed -i -e "s|APPLE_SANDBOX_EMAIL=.*|APPLE_SANDBOX_EMAIL=${{ secrets.APPLE_SANDBOX_EMAIL_PROD }}|g" .env
+          sed -i -e "s|APPLE_SANDBOX_PASSWORD=.*|APPLE_SANDBOX_PASSWORD=${{ secrets.APPLE_SANDBOX_PASSWORD_PROD }}|g" .env
+          sed -i -e "s|APPLE_CLIENT_ID=.*|APPLE_CLIENT_ID=${{ secrets.APPLE_CLIENT_ID_PROD }}|g" .env
+          sed -i -e "s|FIREBASE_SERVICE_ACCOUNT=.*|FIREBASE_SERVICE_ACCOUNT=${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}|g" .env
+          sed -i -e "s|FIREBASE_API_KEY=.*|FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY_PROD }}|g" .env
+          sed -i -e "s|GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID_PROD }}|g" .env
+          sed -i -e "s|GOOGLE_PLAY_SERVICE_ACCOUNT=.*|GOOGLE_PLAY_SERVICE_ACCOUNT=${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_PROD }}|g" .env
           sed -i -e "s|BUNDLEID=.*|BUNDLEID=$BUNDLE_ID|g" .env
           sed -i -e "s|ENVIRONMENT=.*|ENVIRONMENT=$DEPLOYMENT_NAME|g" .env
-          sed -i -e "s|DEBUG_ENCRYPTION=.*|DEBUG_ENCRYPTION=${{ vars.DEBUG_ENCRYPTION_STG }}|g" .env
-          sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME=.*|USER_ENCRYPTION_KEY_BUCKET_NAME=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_STG }}|g" .env
+          sed -i -e "s|DEBUG_ENCRYPTION=.*|DEBUG_ENCRYPTION=${{ vars.DEBUG_ENCRYPTION_PROD }}|g" .env
+          sed -i -e "s|USER_ENCRYPTION_KEY_BUCKET_NAME=.*|USER_ENCRYPTION_KEY_BUCKET_NAME=${{ vars.USER_ENCRYPTION_KEY_BUCKET_NAME_PROD }}|g" .env
       - name: VPN config
         env:
           OVPN_CONFIG: ${{ secrets.OVPN_CONFIG }}
@@ -999,19 +999,19 @@ jobs:
           switches: -avzr --delete --no-times --omit-dir-times --no-perms --no-owner --no-group --chmod=D755,F664
           path: ./.env
           remote_path: ${{ vars.DEPLOYMENT_PATH }}/.env
-          remote_host: ${{ vars.DEPLOYMENT_HOST_STG }}
-          remote_user: ${{ secrets.DEPLOYMENT_USER_STG }}
-          remote_key: ${{ secrets.DEPLOYMENT_KEY_STG }}
+          remote_host: ${{ vars.DEPLOYMENT_HOST_PROD }}
+          remote_user: ${{ secrets.DEPLOYMENT_USER_PROD }}
+          remote_key: ${{ secrets.DEPLOYMENT_KEY_PROD }}
           remote_port: ${{ secrets.DEPLOYMENT_PORT }}
       - name: SSH config
         env:
-          PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_STG }}
+          PRIVATE_KEY: ${{ secrets.DEPLOYMENT_KEY_PROD }}
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
       - name: Run resync-user-transactions script
         run: |
-          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_STG }}@${{ vars.DEPLOYMENT_HOST_STG }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
+          ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_PROD }}@${{ vars.DEPLOYMENT_HOST_PROD }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
             cd ${{ vars.DEPLOYMENT_PATH }}
             npm run resync-user-transactions -- ${{ github.event.inputs.resync_user_transactions_args }}
           EOF
