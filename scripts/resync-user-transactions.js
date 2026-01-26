@@ -10,12 +10,16 @@ import structuredLogger from '../lib/structuredLogger.js';
 async function processItem(itemId, isDryRun) {
   structuredLogger.logInfo(`
 --- Processing item: ${itemId} ---`);
+  let accounts, plaidAccountIds;
 
   try {
+    accounts = await PlaidAccount.find({ itemId: itemId });
+    plaidAccountIds = accounts.map(a => a.plaid_account_id);
+
     const accessToken = await plaidService.getAccessTokenFromItemId(itemId);
     if (!accessToken) {
         structuredLogger.logError(`Could not get decrypted access token for item ID: ${itemId}. Skipping.`);
-        return { success: false };
+        return { success: false, reason: 'Could not get access token' };
     }
 
     // Health Check
@@ -29,15 +33,13 @@ async function processItem(itemId, isDryRun) {
       } else {
         structuredLogger.logWarning(`[DRY RUN] Would mark item as expired due to health check failure.`);
       }
-      return { success: false };
+      return { success: false, reason: 'Health check failed', accounts: plaidAccountIds };
     }
 
-    const accounts = await PlaidAccount.find({ itemId: itemId });
     if (!accounts || accounts.length === 0) {
         structuredLogger.logWarning(`No Plaid accounts found for item ID during loop: ${itemId}`);
         return { success: true }; // Not a failure, just nothing to do.
     }
-    const plaidAccountIds = accounts.map(a => a.plaid_account_id);
 
     const numTransactionsToDelete = await Transaction.countDocuments({ plaidAccountId: { $in: plaidAccountIds } });
     const numLiabilitiesToDelete = await Liability.countDocuments({ accountId: { $in: plaidAccountIds } });
@@ -88,7 +90,7 @@ async function processItem(itemId, isDryRun) {
     } else {
         structuredLogger.logErrorBlock(error, { operation: "resync-item (live-run)", itemId: itemId, message: `Failed to resync item. It may be expired or invalid.` });
     }
-    return { success: false };
+    return { success: false, reason: 'Generic error during processing', accounts: plaidAccountIds };
   }
 }
 
@@ -113,6 +115,9 @@ async function resyncUserTransactions() {
   }
 
   let usersToProcess = [];
+  const failedItems = [];
+  let totalSuccessCount = 0; // Initialize global success counter
+  let totalFailureCount = 0; // Initialize global failure counter
 
   try {
     if (runForAllUsers) {
@@ -155,6 +160,12 @@ async function resyncUserTransactions() {
           successCount++;
         } else {
           failureCount++;
+          failedItems.push({
+            user: { id: user._id, email: user.email[0].email },
+            itemId: itemId,
+            reason: result.reason,
+            accounts: result.accounts
+          });
         }
       }
   
@@ -165,12 +176,47 @@ async function resyncUserTransactions() {
       } else {
           structuredLogger.logInfo(`All items were processed without any failures.`);
       }
+      totalSuccessCount += successCount; // Accumulate global success
+      totalFailureCount += failureCount; // Accumulate global failure
     }
 
   } catch (error) {
     structuredLogger.logErrorBlock(error, { operation: "resync-user-transactions", userIdArg: userIdArg, allUsers: runForAllUsers });
     process.exit(1);
   }
+
+  if (failedItems.length > 0) {
+    console.log('\n');
+    structuredLogger.logWarning('--- Summary of Failed Items ---');
+    const flattenedFailures = [];
+    for (const failedItem of failedItems) {
+        if (failedItem.accounts && failedItem.accounts.length > 0) {
+            for (const accountId of failedItem.accounts) {
+                flattenedFailures.push({
+                    userId: failedItem.user.id,
+                    userEmail: failedItem.user.email,
+                    itemId: failedItem.itemId,
+                    accountId: accountId,
+                    reason: failedItem.reason
+                });
+            }
+        } else {
+             flattenedFailures.push({
+                userId: failedItem.user.id,
+                userEmail: failedItem.user.email,
+                itemId: failedItem.itemId,
+                accountId: 'N/A',
+                reason: failedItem.reason
+            });
+        }
+    }
+    console.table(flattenedFailures);
+  }
+
+  console.log('\n');
+  structuredLogger.logSuccess(`--- Global Resync Summary ---`);
+  structuredLogger.logSuccess(`Total successful items processed: ${totalSuccessCount}`);
+  structuredLogger.logWarning(`Total failed items: ${totalFailureCount}`);
 
   console.log("\n--- User re-sync script finished ---");
   process.exit(0);
