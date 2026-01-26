@@ -7,15 +7,98 @@ import Liability from '../database/models/Liability.js';
 import plaidService from '../services/plaid.service.js';
 import structuredLogger from '../lib/structuredLogger.js';
 
+async function processItem(itemId, isDryRun) {
+  structuredLogger.logInfo(`
+--- Processing item: ${itemId} ---`);
+
+  try {
+    const accessToken = await plaidService.getAccessTokenFromItemId(itemId);
+    if (!accessToken) {
+        structuredLogger.logError(`Could not get decrypted access token for item ID: ${itemId}. Skipping.`);
+        return { success: false };
+    }
+
+    // Health Check
+    try {
+      await plaidService.getItemWithAccessToken(accessToken);
+      structuredLogger.logSuccess(`Health check PASSED for item: ${itemId}`);
+    } catch (error) {
+      structuredLogger.logError(`Health check FAILED for item: ${itemId}. Plaid API error: ${error.message}. Skipping.`);
+      await plaidService.handlePlaidError(error, itemId);
+      return { success: false };
+    }
+
+    const accounts = await PlaidAccount.find({ itemId: itemId });
+    if (!accounts || accounts.length === 0) {
+        structuredLogger.logWarning(`No Plaid accounts found for item ID during loop: ${itemId}`);
+        return { success: true }; // Not a failure, just nothing to do.
+    }
+    const plaidAccountIds = accounts.map(a => a.plaid_account_id);
+
+    const numTransactionsToDelete = await Transaction.countDocuments({ plaidAccountId: { $in: plaidAccountIds } });
+    const numLiabilitiesToDelete = await Liability.countDocuments({ accountId: { $in: plaidAccountIds } });
+
+    if (isDryRun) {
+      structuredLogger.logInfo(`[DRY RUN] Would fetch new transactions for item ${itemId}.`);
+      structuredLogger.logInfo(`[DRY RUN] Would delete ${numTransactionsToDelete} transactions for ${accounts.length} accounts.`);
+      structuredLogger.logInfo(`[DRY RUN] Would delete ${numLiabilitiesToDelete} liabilities.`);
+      structuredLogger.logInfo(`[DRY RUN] Would clear sync cursor.`);
+      structuredLogger.logInfo(`[DRY RUN] Would trigger transaction update to save.`);
+      return { success: true };
+    }
+
+    // ----- Live Mode -----
+
+    // Step 1: Fetch new transactions first (safer)
+    structuredLogger.logInfo("Fetching fresh transactions from Plaid...");
+    await plaidService.fetchTransactions(itemId);
+    structuredLogger.logSuccess(`Successfully fetched all transactions for item ${itemId}.`);
+
+    // Step 2: Delete existing transactions and liabilities
+    structuredLogger.logInfo(`Deleting ${numTransactionsToDelete} existing transactions for ${accounts.length} accounts.`);
+    if (numTransactionsToDelete > 0) {
+      const deleteResult = await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
+      structuredLogger.logSuccess(`Deleted ${deleteResult.deletedCount} transactions.`);
+    }
+
+    structuredLogger.logInfo(`Deleting ${numLiabilitiesToDelete} existing liabilities.`);
+    if (numLiabilitiesToDelete > 0) {
+      const liabilityDeleteResult = await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
+      structuredLogger.logSuccess(`Deleted ${liabilityDeleteResult.deletedCount} liabilities.`);
+    }
+    // Step 3: Clear the sync cursor
+    structuredLogger.logInfo("Clearing the transaction sync cursor by setting nextCursor to null.");
+    await PlaidAccount.updateMany({ itemId: itemId }, { $set: { nextCursor: null } });
+    structuredLogger.logSuccess("Successfully cleared the sync cursor.");
+
+    // Step 4: Trigger the transaction update to save the fresh data.
+    structuredLogger.logInfo("Triggering plaidService.updateTransactions to save fresh data.");
+    await plaidService.updateTransactions(itemId);
+    
+    structuredLogger.logSuccess(`Transaction re-sync completed successfully for item: ${itemId}`);
+    return { success: true };
+
+  } catch (error) {
+    if (isDryRun) {
+        structuredLogger.logErrorBlock(error, { operation: "resync-item (dry-run)", itemId: itemId, message: "Failed during read-only phase of dry run." });
+    } else {
+        structuredLogger.logErrorBlock(error, { operation: "resync-item (live-run)", itemId: itemId, message: `Failed to resync item. It may be expired or invalid.` });
+    }
+    return { success: false };
+  }
+}
+
 async function resyncUserTransactions() {
   await connectDB();
 
   const args = process.argv.slice(2);
+  const runForAllUsers = args.includes('--all-users');
   const userIdArg = args.find(arg => !arg.startsWith('--'));
   const isDryRun = !args.includes('--no-dry-run');
 
-  if (!userIdArg) {
+  if (!userIdArg && !runForAllUsers) {
     console.error("Usage: node -r dotenv/config scripts/resync-user-transactions.js <user_id_or_auth_uid> [--no-dry-run]");
+    console.error("   or: node -r dotenv/config scripts/resync-user-transactions.js --all-users [--no-dry-run]");
     process.exit(1);
   }
 
@@ -25,98 +108,63 @@ async function resyncUserTransactions() {
     structuredLogger.logWarning("--- Running in LIVE mode. Data will be deleted and updated. ---");
   }
 
-  structuredLogger.logInfo(`Starting transaction re-sync for user: ${userIdArg}`);
+  let usersToProcess = [];
 
   try {
-    // Step 1: Find the user by authUid or _id
-    let user;
-    if (mongoose.Types.ObjectId.isValid(userIdArg)) {
-        user = await User.findById(userIdArg);
+    if (runForAllUsers) {
+      structuredLogger.logInfo("Running for all users...");
+      usersToProcess = await User.find({});
+      structuredLogger.logInfo(`Found ${usersToProcess.length} users to process.`);
     } else {
-        user = await User.findOne({ authUid: userIdArg });
+      let user;
+      if (mongoose.Types.ObjectId.isValid(userIdArg)) {
+          user = await User.findById(userIdArg);
+      } else {
+          user = await User.findOne({ authUid: userIdArg });
+      }
+      
+      if (!user) {
+        structuredLogger.logError(`User not found with identifier: ${userIdArg}`);
+        process.exit(1);
+      }
+      usersToProcess.push(user);
     }
-    
-    if (!user) {
-      structuredLogger.logError(`User not found with identifier: ${userIdArg}`);
-      process.exit(1);
-    }
-    structuredLogger.logInfo(`Found user: ${user.email[0].email} (_id: ${user._id})`);
 
-    // Step 2: Find all unique itemIds associated with the user's Plaid accounts
-    const userAccounts = await PlaidAccount.find({ owner_id: user._id });
-    if (!userAccounts || userAccounts.length === 0) {
-        structuredLogger.logInfo(`No Plaid accounts found for user: ${user._id}`);
-        process.exit(0);
-    }
-    const itemIds = [...new Set(userAccounts.map(acc => acc.itemId))];
-    structuredLogger.logInfo(`Found ${itemIds.length} unique items to resync for user ${user._id}.`);
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Step 3: Iterate through each itemId and perform the resync
-    for (const itemId of itemIds) {
-      structuredLogger.logInfo(`--- Processing item: ${itemId} ---`);
-      try {
-        const accounts = await PlaidAccount.find({ itemId: itemId });
-        if (!accounts || accounts.length === 0) {
-          structuredLogger.logWarning(`No Plaid accounts found for item ID during loop: ${itemId}`);
+    for (const user of usersToProcess) {
+      structuredLogger.logInfo(`
+>>> Starting transaction re-sync for user: ${user.email[0].email} (_id: ${user._id})`);
+      
+      const userAccounts = await PlaidAccount.find({ owner_id: user._id });
+      if (!userAccounts || userAccounts.length === 0) {
+          structuredLogger.logInfo(`No Plaid accounts found for user: ${user._id}. Skipping.`);
           continue;
-        }
-        const plaidAccountIds = accounts.map(a => a.plaid_account_id);
-
-        const numTransactionsToDelete = await Transaction.countDocuments({ plaidAccountId: { $in: plaidAccountIds } });
-        const numLiabilitiesToDelete = await Liability.countDocuments({ accountId: { $in: plaidAccountIds } });
-
-        if (isDryRun) {
-          structuredLogger.logInfo(`[DRY RUN] Would delete ${numTransactionsToDelete} transactions for ${accounts.length} accounts.`);
-          structuredLogger.logInfo(`[DRY RUN] Would delete ${numLiabilitiesToDelete} liabilities.`);
-          structuredLogger.logInfo(`[DRY RUN] Would clear sync cursor.`);
-          structuredLogger.logInfo(`[DRY RUN] Would trigger transaction update.`);
+      }
+      const itemIds = [...new Set(userAccounts.map(acc => acc.itemId))];
+      structuredLogger.logInfo(`Found ${itemIds.length} unique items to resync for user ${user._id}.`);
+  
+      let successCount = 0;
+      let failureCount = 0;
+  
+      for (const itemId of itemIds) {
+        const result = await processItem(itemId, isDryRun);
+        if (result.success) {
           successCount++;
-          continue;
-        }
-
-        // ----- Live Mode -----
-        structuredLogger.logInfo(`Deleting existing transactions for ${accounts.length} accounts.`);
-        const deleteResult = await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
-        structuredLogger.logSuccess(`Deleted ${deleteResult.deletedCount} transactions.`);
-
-        structuredLogger.logInfo(`Deleting existing liabilities.`);
-        const liabilityDeleteResult = await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
-        structuredLogger.logSuccess(`Deleted ${liabilityDeleteResult.deletedCount} liabilities.`);
-
-        structuredLogger.logInfo("Clearing the transaction sync cursor by setting nextCursor to null.");
-        await PlaidAccount.updateMany({ itemId: itemId }, { $set: { nextCursor: null } });
-        structuredLogger.logSuccess("Successfully cleared the sync cursor.");
-
-        structuredLogger.logInfo("Triggering plaidService.updateTransactions to fetch fresh data.");
-        await plaidService.updateTransactions(itemId);
-        
-        structuredLogger.logSuccess(`Transaction re-sync completed successfully for item: ${itemId}`);
-        successCount++;
-
-      } catch (error) {
-        if (isDryRun) {
-            structuredLogger.logErrorBlock(error, { operation: "resync-user-transactions (dry-run)", itemId: itemId, message: "Failed during read-only phase of dry run." });
         } else {
-            structuredLogger.logErrorBlock(error, { operation: "resync-user-transactions (live-run)", itemId: itemId, message: `Failed to resync item. It may be expired or invalid.` });
+          failureCount++;
         }
-        failureCount++;
+      }
+  
+      structuredLogger.logInfo(`--- Resync Summary for user ${user._id} ---`);
+      structuredLogger.logSuccess(`Successfully processed ${successCount} items.`);
+      if (failureCount > 0) {
+          structuredLogger.logWarning(`Failed to process ${failureCount} items. Check logs above for details.`);
+      } else {
+          structuredLogger.logInfo(`All items were processed without any failures.`);
       }
     }
 
-    structuredLogger.logInfo(`--- Resync Summary for user ${user._id} ---`);
-    structuredLogger.logSuccess(`Successfully processed ${successCount} items.`);
-    if (failureCount > 0) {
-        structuredLogger.logWarning(`Failed to process ${failureCount} items. Check logs above for details.`);
-    } else {
-        structuredLogger.logInfo(`All items were processed without any failures.`);
-    }
-
-
   } catch (error) {
-    structuredLogger.logErrorBlock(error, { operation: "resync-user-transactions", userIdArg: userIdArg });
+    structuredLogger.logErrorBlock(error, { operation: "resync-user-transactions", userIdArg: userIdArg, allUsers: runForAllUsers });
     process.exit(1);
   }
 
