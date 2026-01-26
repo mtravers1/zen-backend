@@ -22,7 +22,7 @@
     "fix-transaction-dates": "node -r dotenv/config scripts/fix-transaction-dates.js",
     "delete-orphaned-pending-transactions": "node -r dotenv/config scripts/delete-orphaned-pending-transactions.js",
     "delete-duplicate-transactions": "node -r dotenv/config scripts/delete-duplicate-transactions.js",
-    "resync-account-transactions": "node -r dotenv/config scripts/resync-account-transactions.js"
+    "resync-user-transactions": "node -r dotenv/config scripts/resync-user-transactions.js"
   },
   "author": "",
   "license": "ISC",

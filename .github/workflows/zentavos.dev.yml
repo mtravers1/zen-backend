@@ -32,8 +32,8 @@ on:
       delete_duplicate_transactions_args:
         description: 'Arguments for the delete-duplicate-transactions script. Use --no-dry-run to execute.'
         required: false  
-      resync_account_transactions_args:
-        description: 'Arguments for the resync-account-transactions script. Use --no-dry-run to execute'
+      resync_user_transactions_args:
+        description: 'Arguments for the resync-user-transactions script. Use --no-dry-run to execute'
 
 
 env:
@@ -1004,9 +1004,9 @@ jobs:
           EOF
           rm -f private_key.pem
           rm -f client.ovpn
-  resync_account_transactions:
+  resync_user_transactions:
       runs-on: ubuntu-latest
-      if: github.event.inputs.resync_account_transactions_args != ''
+      if: github.event.inputs.resync_user_transactions_args != ''
       steps:
         - name: Install OpenVPN
           uses: awalsh128/cache-apt-pkgs-action@latest
@@ -1103,11 +1103,11 @@ jobs:
           run: |
             echo "$PRIVATE_KEY" > private_key.pem
             chmod 600 private_key.pem
-        - name: Run resync-account-transactions script
+        - name: Run resync-user-transactions script
           run: |
             ssh -i private_key.pem ${{ secrets.DEPLOYMENT_USER_DEV }}@${{ vars.DEPLOYMENT_HOST_DEV }} -p ${{ secrets.DEPLOYMENT_PORT }} -o StrictHostKeyChecking=no <<EOF
               cd ${{ vars.DEPLOYMENT_PATH }}
-              npm run resync-account-transactions -- ${{ github.event.inputs.resync_account_transactions_args }}
+              npm run resync-user-transactions -- ${{ github.event.inputs.resync_user_transactions_args }}
             EOF
             rm -f private_key.pem
             rm -f client.ovpn

@@ -51,7 +51,7 @@ const getTransactionsByAccount = async (req, res) => {
   try {
     const { accountId } = req.params;
     const uid = req.user.uid;
-    const { page = 1, limit = 50, paginate = false } = req.query;
+    const { page = 1, limit = 50, paginate = false, context } = req.query;
     const transactions = await transactionsService.getTransactionsByAccount(
       accountId,
       uid,
@@ -60,6 +60,7 @@ const getTransactionsByAccount = async (req, res) => {
         limit: parseInt(limit),
         paginate: paginate === "true",
       },
+      context
     );
     res.status(200).send(transactions);
   } catch (error) {

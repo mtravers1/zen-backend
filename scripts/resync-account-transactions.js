@@ -3,6 +3,7 @@ import connectDB from '../database/database.js';
 import PlaidAccount from '../database/models/PlaidAccount.js';
 import Transaction from '../database/models/Transaction.js';
 import AccessToken from '../database/models/AccessToken.js';
+import Liability from '../database/models/Liability.js';
 import plaidService from '../services/plaid.service.js';
 import structuredLogger from '../lib/structuredLogger.js';
 
