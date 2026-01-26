@@ -18,8 +18,29 @@ async function processItem(itemId, isDryRun) {
 
     const accessToken = await plaidService.getAccessTokenFromItemId(itemId);
     if (!accessToken) {
-        structuredLogger.logError(`Could not get decrypted access token for item ID: ${itemId}. Skipping.`);
-        return { success: false, reason: 'Could not get access token' };
+        const reason = 'Could not get decrypted access token';
+        structuredLogger.logError(`${reason} for item ID: ${itemId}.`);
+
+        if (isDryRun) {
+            structuredLogger.logWarning(`[DRY RUN] Would mark item ${itemId} as bad.`);
+        } else {
+            try {
+                const updateResult = await PlaidAccount.updateMany(
+                    { itemId: itemId },
+                    { $set: { status: 'bad' } }
+                );
+                structuredLogger.logInfo(`Marked ${updateResult.nModified} accounts as bad for item ID: ${itemId}`);
+            } catch (dbError) {
+                structuredLogger.logErrorBlock(dbError, {
+                    operation: 'mark-bad-item-db-update',
+                    itemId: itemId,
+                    message: `Failed to update PlaidAccount documents in the database for item ID: ${itemId}.`,
+                });
+                // We still return a failure, but with a more specific DB error reason
+                return { success: false, reason: `DB error while marking bad item: ${dbError.message}`, accounts: plaidAccountIds };
+            }
+        }
+        return { success: false, reason: reason, accounts: plaidAccountIds };
     }
 
     // Health Check
