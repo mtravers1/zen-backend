@@ -798,22 +798,13 @@ const updateTransactions = async (item) => {
     let hasMore = true;
     let transactionsByAccount = {};
     let oldCursor = cursor;
-    let iterationCounter = 0;
-    const maxIterations = 10;
     const newTransactions = [];
     let allModifiedTransactions = [];
     let allRemovedTransactions = [];
 
     while (hasMore) {
       oldCursor = cursor;
-      iterationCounter++;
-      structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration #${iterationCounter}.`, { itemId: item, cursor: cursor, hasMore: hasMore });
-      
-      if (iterationCounter > maxIterations) {
-        structuredLogger.logErrorBlock(new Error("[SYNC_TRACE] Max sync iterations reached, stopping."), { itemId: item });
-        hasMore = false;
-        break;
-      }
+      structuredLogger.logInfo(`[SYNC_TRACE] Starting sync iteration.`, { itemId: item, cursor: cursor, hasMore: hasMore });
       try {
         const plaidClient = getPlaidClient();
         const response = await withRetry(() => plaidClient.transactionsSync({
@@ -1957,7 +1948,73 @@ const createLinkTokenForUpdate = async (uid, institutionId) => {
   return response.data.link_token;
 };
 
+const fetchTransactions = async (item) => {
+  if (syncingItems.has(item)) {
+    structuredLogger.logInfo("[SYNC_TRACE] Sync already in progress for item, skipping fetch.", { itemId: item });
+    return;
+  }
+  syncingItems.set(item, true);
+  try {
+    structuredLogger.logInfo("[SYNC_TRACE] Starting fetchTransactions.", { itemId: item });
+    const accessToken = await getAccessTokenFromItemId(item);
+    if (!accessToken) {
+      throw new Error(`Access token could not be retrieved for item ID: ${item}`);
+    }
+
+    let cursor = null; // Always start from the beginning for a full fetch
+    let allAdded = [];
+    let allModified = [];
+    let allRemoved = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        const plaidClient = getPlaidClient();
+        const response = await withRetry(() => plaidClient.transactionsSync({
+          access_token: accessToken,
+          cursor: cursor,
+          count: 500,
+        }));
+        
+        allAdded.push(...(response.data.added || []));
+        allModified.push(...(response.data.modified || []));
+        allRemoved.push(...(response.data.removed || []));
+        cursor = response.data.next_cursor;
+        hasMore = response.data.has_more;
+
+      } catch (error) {
+        const plaidError = error.response?.data;
+        if (plaidError?.error_code === 'INVALID_FIELD' && plaidError?.error_message.includes('cursor')) {
+          structuredLogger.logWarning("[SYNC_TRACE] Invalid cursor detected during fetch. Resetting and retrying.", { itemId: item });
+          cursor = null;
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    structuredLogger.logSuccess("[SYNC_TRACE] Finished fetchTransactions successfully.", {
+        itemId: item,
+        added_transactions: allAdded.length,
+        modified_transactions: allModified.length,
+        removed_transactions: allRemoved.length,
+    });
+
+    return {
+      added: allAdded,
+      modified: allModified,
+      removed: allRemoved,
+      nextCursor: cursor
+    };
+
+  } finally {
+    syncingItems.delete(item);
+    structuredLogger.logInfo("[SYNC_TRACE] Finished fetchTransactions, releasing lock.", { itemId: item });
+  }
+};
+
 const plaidService = {
+  fetchTransactions,
   createLinkToken,
   getPublicToken,
   getAccessToken,
