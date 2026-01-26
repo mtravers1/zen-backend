@@ -33,7 +33,7 @@ async function processItem(itemId, isDryRun) {
       } else {
         structuredLogger.logWarning(`[DRY RUN] Would mark item as expired due to health check failure.`);
       }
-      return { success: false, reason: 'Health check failed', accounts: plaidAccountIds };
+      return { success: false, reason: `Health check failed: ${error.message}`, accounts: plaidAccountIds };
     }
 
     if (!accounts || accounts.length === 0) {
@@ -90,7 +90,7 @@ async function processItem(itemId, isDryRun) {
     } else {
         structuredLogger.logErrorBlock(error, { operation: "resync-item (live-run)", itemId: itemId, message: `Failed to resync item. It may be expired or invalid.` });
     }
-    return { success: false, reason: 'Generic error during processing', accounts: plaidAccountIds };
+    return { success: false, reason: `Generic error during processing: ${error.message}`, accounts: plaidAccountIds };
   }
 }
 
@@ -161,7 +161,7 @@ async function resyncUserTransactions() {
         } else {
           failureCount++;
           failedItems.push({
-            user: { id: user._id, email: user.email[0].email },
+            user: { id: user._id, authUid: user.authUid },
             itemId: itemId,
             reason: result.reason,
             accounts: result.accounts
@@ -194,7 +194,7 @@ async function resyncUserTransactions() {
             for (const accountId of failedItem.accounts) {
                 flattenedFailures.push({
                     userId: failedItem.user.id,
-                    userEmail: failedItem.user.email,
+                    userAuthUid: failedItem.user.authUid,
                     itemId: failedItem.itemId,
                     accountId: accountId,
                     reason: failedItem.reason
@@ -203,7 +203,7 @@ async function resyncUserTransactions() {
         } else {
              flattenedFailures.push({
                 userId: failedItem.user.id,
-                userEmail: failedItem.user.email,
+                userAuthUid: failedItem.user.authUid,
                 itemId: failedItem.itemId,
                 accountId: 'N/A',
                 reason: failedItem.reason
