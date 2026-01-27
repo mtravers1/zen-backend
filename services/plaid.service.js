@@ -851,9 +851,9 @@ const updateTransactions = async (item) => {
 
           if (transaction.pending_transaction_id) {
             // This is a posted transaction that was previously pending.
-            // Update the existing pending transaction.
+            // It will UPSERT to prevent losing transactions if the pending one is missing.
             const updatePayload = {
-              plaidTransactionId: transaction.transaction_id, // Update the transaction ID
+              plaidTransactionId: transaction.transaction_id, // Final transaction ID
               postDate: new Date(`${transaction.date}T12:00:00Z`),
               amount: encryptedAmount,
               currency: transaction.iso_currency_code,
@@ -861,13 +861,26 @@ const updateTransactions = async (item) => {
               transactionCode: transactionCode,
               tags: tags,
               pending: transaction.pending,
-              pending_transaction_id: null, // The transaction is no longer pending
+              pending_transaction_id: null, // Final transaction is no longer pending
+              accountType: encryptedAccountType,
+            };
+
+            const onInsertPayload = {
+                accountId: accountMap.get(transaction.account_id)._id,
+                plaidAccountId: transaction.account_id,
+                transactionDate: new Date(`${transaction.authorized_date || transaction.date}T12:00:00Z`),
+                notes: null,
+                description: null,
             };
 
             bulkOps.push({
               updateOne: {
                 filter: { plaidTransactionId: transaction.pending_transaction_id },
-                update: { $set: updatePayload },
+                update: { 
+                  $set: updatePayload,
+                  $setOnInsert: onInsertPayload,
+                },
+                upsert: true, // This is the fix
               },
             });
           } else {
