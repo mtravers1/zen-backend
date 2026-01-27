@@ -849,68 +849,37 @@ const updateTransactions = async (item) => {
           const transactionCode = transaction.transaction_code ? await safeEncrypt(transaction.transaction_code, { transaction_id: transaction.transaction_id, field: "transaction_code" }) : null;
           const tags = transaction.category ? await safeEncrypt(transaction.category, { transaction_id: transaction.transaction_id, field: "tags" }) : null;
 
-          if (transaction.pending_transaction_id) {
-            // This is a posted transaction that was previously pending.
-            // It will UPSERT to prevent losing transactions if the pending one is missing.
-            const updatePayload = {
-              plaidTransactionId: transaction.transaction_id, // Final transaction ID
-              postDate: new Date(`${transaction.date}T12:00:00Z`),
-              amount: encryptedAmount,
-              currency: transaction.iso_currency_code,
-              merchant,
-              transactionCode: transactionCode,
-              tags: tags,
-              pending: transaction.pending,
-              pending_transaction_id: null, // Final transaction is no longer pending
-              accountType: encryptedAccountType,
-            };
+          const updatePayload = {
+            plaidTransactionId: transaction.transaction_id,
+            amount: encryptedAmount,
+            currency: transaction.iso_currency_code,
+            merchant,
+            transactionCode: transactionCode,
+            tags: tags,
+            pending: transaction.pending,
+            postDate: !transaction.pending ? new Date(`${transaction.date}T12:00:00Z`) : null,
+            accountType: encryptedAccountType,
+            pending_transaction_id: transaction.pending_transaction_id,
+          };
 
-            const onInsertPayload = {
-                accountId: accountMap.get(transaction.account_id)._id,
-                plaidAccountId: transaction.account_id,
-                transactionDate: new Date(`${transaction.authorized_date || transaction.date}T12:00:00Z`),
-                notes: null,
-                description: null,
-            };
+          const onInsertPayload = {
+            accountId: accountMap.get(transaction.account_id)._id,
+            plaidAccountId: transaction.account_id,
+            transactionDate: new Date(`${transaction.authorized_date || transaction.date}T12:00:00Z`),
+            notes: null,
+            description: null,
+          };
 
-            bulkOps.push({
-              updateOne: {
-                filter: { plaidTransactionId: transaction.pending_transaction_id },
-                update: { 
-                  $set: updatePayload,
-                  $setOnInsert: onInsertPayload,
-                },
-                upsert: true, // This is the fix
+          bulkOps.push({
+            updateOne: {
+              filter: { plaidTransactionId: transaction.transaction_id },
+              update: {
+                $set: updatePayload,
+                $setOnInsert: onInsertPayload,
               },
-            });
-          } else {
-            // This is a new transaction.
-            bulkOps.push({
-              updateOne: {
-                filter: { plaidTransactionId: transaction.transaction_id },
-                update: {
-                  $setOnInsert: {
-                    accountId: accountMap.get(transaction.account_id)._id,
-                    plaidTransactionId: transaction.transaction_id,
-                    plaidAccountId: transaction.account_id,
-                    transactionDate: new Date(`${transaction.authorized_date || transaction.date}T12:00:00Z`),
-                    postDate: !transaction.pending ? new Date(`${transaction.date}T12:00:00Z`) : null,
-                    amount: encryptedAmount,
-                    currency: transaction.iso_currency_code,
-                    notes: null,
-                    merchant,
-                    description: null,
-                    transactionCode: transactionCode,
-                    tags: tags,
-                    accountType: encryptedAccountType,
-                    pending_transaction_id: transaction.pending_transaction_id,
-                    pending: transaction.pending,
-                  },
-                },
-                upsert: true,
-              },
-            });
-          }
+              upsert: true,
+            },
+          });
 
           if (!transactionsByAccount[transaction.account_id]) {
             transactionsByAccount[transaction.account_id] = [];
