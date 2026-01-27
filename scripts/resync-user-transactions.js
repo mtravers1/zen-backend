@@ -62,13 +62,8 @@ async function processItem(itemId, isDryRun) {
         return { success: true }; // Not a failure, just nothing to do.
     }
 
-    const numTransactionsToDelete = await Transaction.countDocuments({ plaidAccountId: { $in: plaidAccountIds } });
-    const numLiabilitiesToDelete = await Liability.countDocuments({ accountId: { $in: plaidAccountIds } });
-
     if (isDryRun) {
       structuredLogger.logInfo(`[DRY RUN] Would fetch new transactions for item ${itemId}.`);
-      structuredLogger.logInfo(`[DRY RUN] Would delete ${numTransactionsToDelete} transactions for ${accounts.length} accounts.`);
-      structuredLogger.logInfo(`[DRY RUN] Would delete ${numLiabilitiesToDelete} liabilities.`);
       structuredLogger.logInfo(`[DRY RUN] Would clear sync cursor.`);
       structuredLogger.logInfo(`[DRY RUN] Would trigger transaction update to save.`);
       return { success: true };
@@ -81,24 +76,12 @@ async function processItem(itemId, isDryRun) {
     await plaidService.fetchTransactions(itemId);
     structuredLogger.logSuccess(`Successfully fetched all transactions for item ${itemId}.`);
 
-    // Step 2: Delete existing transactions and liabilities
-    structuredLogger.logInfo(`Deleting ${numTransactionsToDelete} existing transactions for ${accounts.length} accounts.`);
-    if (numTransactionsToDelete > 0) {
-      const deleteResult = await Transaction.deleteMany({ plaidAccountId: { $in: plaidAccountIds } });
-      structuredLogger.logSuccess(`Deleted ${deleteResult.deletedCount} transactions.`);
-    }
-
-    structuredLogger.logInfo(`Deleting ${numLiabilitiesToDelete} existing liabilities.`);
-    if (numLiabilitiesToDelete > 0) {
-      const liabilityDeleteResult = await Liability.deleteMany({ accountId: { $in: plaidAccountIds } });
-      structuredLogger.logSuccess(`Deleted ${liabilityDeleteResult.deletedCount} liabilities.`);
-    }
-    // Step 3: Clear the sync cursor
+    // Step 2: Clear the sync cursor
     structuredLogger.logInfo("Clearing the transaction sync cursor by setting nextCursor to null.");
     await PlaidAccount.updateMany({ itemId: itemId }, { $set: { nextCursor: null } });
     structuredLogger.logSuccess("Successfully cleared the sync cursor.");
 
-    // Step 4: Trigger the transaction update to save the fresh data.
+    // Step 3: Trigger the transaction update to save the fresh data.
     structuredLogger.logInfo("Triggering plaidService.updateTransactions to save fresh data.");
     await plaidService.updateTransactions(itemId);
     

@@ -1019,6 +1019,11 @@ const updateTransactions = async (item) => {
       }
     }
 
+    // Release the primary lock BEFORE starting chained updates.
+    // This allows chained updates to acquire their own locks.
+    syncingItems.delete(item);
+    structuredLogger.logInfo("[SYNC_TRACE] Primary transaction sync complete. Releasing lock before chained updates.", { itemId: item });
+
     // Also, trigger an update for investment transactions, just in case.
     structuredLogger.logInfo("[SYNC_TRACE] Sync loop finished. Proceeding with chained updates.", { itemId: item });
     try {
@@ -1073,8 +1078,11 @@ const updateTransactions = async (item) => {
 
     return transactionsByAccount;
   } finally {
-    syncingItems.delete(item);
-    structuredLogger.logInfo("[SYNC_TRACE] Finished updateTransactions, releasing lock.", { itemId: item });
+    // Safeguard: ensure the lock is always released if it still exists for any reason.
+    if (syncingItems.has(item)) {
+        syncingItems.delete(item);
+        structuredLogger.logInfo("[SYNC_TRACE] Finished all operations, releasing final safeguard lock.", { itemId: item });
+    }
   }
 };
 
@@ -1363,17 +1371,28 @@ const updateLiabilities = async (item) => {
         const liabilitiesResponse = await getLoanLiabilitiesWithAccessToken(accessToken);
 
         if (liabilitiesResponse && liabilitiesResponse.liabilities) {
-          const accountIds = liabilitiesResponse.accounts.map(acc => acc.account_id);
+          const newLiabilitiesByAccount = {};
+          let totalNewLiabilities = 0;
 
-          // Delete old liabilities for all affected accounts to ensure consistency
-          await Liability.deleteMany({ accountId: { $in: accountIds } });
+          for (const liabType of Object.keys(liabilitiesResponse.liabilities)) {
+            const liabArray = liabilitiesResponse.liabilities[liabType];
+            if (Array.isArray(liabArray)) {
+              for (const liab of liabArray) {
+                if (!newLiabilitiesByAccount[liab.account_id]) {
+                  newLiabilitiesByAccount[liab.account_id] = [];
+                }
+                newLiabilitiesByAccount[liab.account_id].push({ ...liab, liabilityType: liabType });
+                totalNewLiabilities++;
+              }
+            }
+          }
 
-          let newLiabilitiesCount = 0;
-          // Now, add the new, updated liabilities
-          for (const [key, value] of Object.entries(liabilitiesResponse.liabilities)) {
-            if (Array.isArray(value)) {
-              for (const liab of value) {
-                newLiabilitiesCount++;
+          for (const accountId of Object.keys(newLiabilitiesByAccount)) {
+            const liabilitiesForThisAccount = newLiabilitiesByAccount[accountId];
+            if (liabilitiesForThisAccount && liabilitiesForThisAccount.length > 0) {
+              await Liability.deleteMany({ accountId: accountId });
+
+              for (const liab of liabilitiesForThisAccount) {
                 const encryptedAccountNumber = await safeEncrypt(liab.account_number);
                 const encryptedLastPaymentAmount = await safeEncrypt(liab.last_payment_amount);
                 const encryptedMinimumPaymentAmount = await safeEncrypt(liab.minimum_payment_amount);
@@ -1423,7 +1442,7 @@ const updateLiabilities = async (item) => {
                 const encryptedYtdPrincipalPaid = await safeEncrypt(liab.ytd_principal_paid);
 
                 const newLiability = new Liability({
-                  liabilityType: key,
+                  liabilityType: liab.liabilityType,
                   accountId: liab.account_id,
                   accountNumber: encryptedAccountNumber,
                   lastPaymentAmount: encryptedLastPaymentAmount,
@@ -1465,13 +1484,14 @@ const updateLiabilities = async (item) => {
               }
             }
           }
+
           structuredLogger.logSuccess('update_liabilities_completed', {
             item_id: item,
             user_id: uid,
-            updated_accounts_count: accountIds.length,
-            new_liabilities_count: newLiabilitiesCount,
+            updated_accounts_count: Object.keys(newLiabilitiesByAccount).length,
+            new_liabilities_count: totalNewLiabilities,
           });
-          return { success: true, updated_accounts: accountIds.length };
+          return { success: true, updated_accounts: Object.keys(newLiabilitiesByAccount).length };
         }
         return { success: true, updated_accounts: 0, message: "No new liability data to update." };
       },
