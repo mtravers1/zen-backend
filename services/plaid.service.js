@@ -909,8 +909,14 @@ const updateTransactions = async (item) => {
 
         if (bulkOps.length > 0) {
           structuredLogger.logInfo(`[SYNC_TRACE] Performing bulkWrite for ${bulkOps.length} new transactions.`, { itemId: item });
-          await Transaction.bulkWrite(bulkOps);
-          structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for new transactions successful.`, { itemId: item });
+          const bulkWriteResult = await Transaction.bulkWrite(bulkOps);
+          structuredLogger.logInfo(`[SYNC_TRACE] bulkWrite for new transactions successful.`, {
+            itemId: item,
+            inserted: bulkWriteResult.nInserted,
+            upserted: bulkWriteResult.nUpserted,
+            modified: bulkWriteResult.nModified,
+            matched: bulkWriteResult.nMatched,
+          });
         }
 
         if (removedTransactions.length > 0) {
