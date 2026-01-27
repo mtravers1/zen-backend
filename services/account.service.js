@@ -667,8 +667,7 @@ const getAccountDetails = async (accountId, profileId, uid) => {
   }
 
   const access_token = await plaidService.getNewestAccessToken({
-    userId: user._id,
-    institutionId: account.institution_id,
+    itemId: account.itemId,
   });
 
   // Decrypt account details for display, and determine sync status based on token
