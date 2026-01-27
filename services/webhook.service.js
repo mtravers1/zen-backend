@@ -62,11 +62,7 @@ const webhookHandler = async (event, signature = null, body = null) => {
             item_id: event.item_id,
           },
           async () => {
-            const accessToken = await plaidService.getNewestAccessToken({ itemId: event.item_id });
-      if (!accessToken) {
-        throw new Error(`No valid access token found for item ID: ${event.item_id}`);
-      }
-      return accessToken;
+            return await plaidService.getAccessTokenFromItemId(event.item_id);
           },
         );
 
