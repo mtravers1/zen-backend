@@ -38,46 +38,42 @@ import {
  * @returns {Promise<string>} The link token.
  */
 const getNewestAccessToken = async (find) => {
-  const accessTokens = await AccessToken.find({
-    ...find,
-    isAccessTokenExpired: { $ne: true },
-  }).sort({ createdAt: -1 });
-
-  if (accessTokens.length > 1) {
-    console.warn("Multiple active access tokens found for query: ", find);
-    console.warn(
-      "The newest token will be used, and older ones will be invalidated and marked as expired.",
-    );
-
-    const newestToken = accessTokens[0];
-    const olderTokens = accessTokens.slice(1);
-
-    for (const token of olderTokens) {
-        try {
-            token.isAccessTokenExpired = true;
-            await token.save();
-            structuredLogger.logWarning("marked_duplicate_token_as_expired", {
-                tokenId: token._id,
-                itemId: token.itemId,
-                message: "Found multiple valid access tokens for the same item. The older one was marked as expired.",
-            });
-        } catch (error) {
-            Sentry.captureException(error, {
-                level: "error",
-                extra: {
-                    message: "Failed to mark duplicate access token as expired",
-                    tokenId: token._id,
-                    itemId: token.itemId,
-                },
-            });
-        }
+    const accessTokens = await AccessToken.find({
+      ...find,
+      isAccessTokenExpired: { $ne: true },
+    }).sort({ createdAt: -1 }); // Correctly sort descending (newest first)
+  
+    if (accessTokens.length > 1) {
+      structuredLogger.logWarning("Multiple active access tokens found for query. The newest token will be used and older ones will be expired.", { find });
+  
+      const newestToken = accessTokens[0];
+      const olderTokens = accessTokens.slice(1);
+  
+      for (const token of olderTokens) {
+          try {
+              token.isAccessTokenExpired = true;
+              await token.save();
+              structuredLogger.logWarning("marked_duplicate_token_as_expired", {
+                  tokenId: token._id,
+                  itemId: token.itemId,
+                  message: "Found and expired an older, duplicate access token to resolve conflict.",
+              });
+          } catch (error) {
+              Sentry.captureException(error, {
+                  level: "error",
+                  extra: {
+                      message: "Failed to mark duplicate access token as expired",
+                      tokenId: token._id,
+                      itemId: token.itemId,
+                  },
+              });
+          }
+      }
+  
+      return newestToken;
     }
-
-    return newestToken;
-  }
-
-  return accessTokens[0];
-};
+  
+    return accessTokens[0];};
 
 const createLinkToken = async (
   email,
@@ -355,7 +351,7 @@ const getUserAccessTokens = async (email, uid) => {
 };
 
 const getAccountsByItem = async (itemId, uid) => {
-  const accessToken = await getAccessTokenFromItemId(itemId, uid);
+  const accessToken = await getNewestAccessToken({ itemId });
   if (!accessToken) {
     throw new Error(`Could not retrieve access token for item ${itemId}`);
   }
@@ -569,6 +565,9 @@ const getItemWithAccessToken = async (accessToken) => {
   return response.data;
 };
 
+/**
+ * @deprecated This function is unsafe as it does not handle duplicate tokens. Use getNewestAccessToken instead.
+ */
 const getAccessTokenFromItemId = async (itemId, uid) => {
   // Directly find the access token by itemId without checking for expiration
   const access = await AccessToken.findOne({ itemId });
@@ -727,9 +726,9 @@ const updateTransactions = async (item) => {
     const uid = user?.authUid;
     structuredLogger.logInfo("[SYNC_TRACE] Found user.", { itemId: item, uid: uid });
 
-    const accessToken = await getAccessTokenFromItemId(item, uid);
+    const accessToken = await getNewestAccessToken({ itemId: item });
     if (!accessToken) {
-      structuredLogger.logError("updateTransactions failed: Could not decrypt access token.", { itemId: item, operation: "[SYNC_TRACE]" });
+      structuredLogger.logError("updateTransactions failed: Could not retrieve a valid access token.", { itemId: item, operation: "[SYNC_TRACE]" });
       throw new Error(`Access token could not be retrieved for item ID: ${item}`);
     }
     structuredLogger.logInfo("[SYNC_TRACE] Decrypted access token.", { itemId: item });
@@ -1099,7 +1098,7 @@ const updateInvestmentTransactions = async (item) => {
           throw new Error(`User not found for user ID: ${userId}`);
         }
         const uid = user?.authUid;
-        const accessToken = await getAccessTokenFromItemId(item, uid);
+        const accessToken = await getNewestAccessToken({ itemId: item });
 
         if (!accessToken) {
           return;
@@ -1348,7 +1347,7 @@ const updateLiabilities = async (item) => {
           throw new Error(`User not found for item ID: ${item}`);
         }
         const uid = user.authUid;
-        const accessToken = await getAccessTokenFromItemId(item, uid);
+        const accessToken = await getNewestAccessToken({ itemId: item });
         if (!accessToken) {
           throw new Error(`Access token could not be retrieved for item ID: ${item}`);
         }
@@ -1621,7 +1620,7 @@ const getInstitutionUpdateToken = async (institutionId, uid) => {
     }
 
     const itemId = account.itemId;
-    const decryptedAccessToken = await getAccessTokenFromItemId(itemId, uid);
+    const decryptedAccessToken = await getNewestAccessToken({ itemId });
 
     if (!decryptedAccessToken) {
       // This should ideally not be reached if getAccessTokenFromItemId throws on failure,
@@ -1677,7 +1676,7 @@ const invalidateAccessToken = async (accessToken, itemId) => {
       let tokenToInvalidate = accessToken;
       try {
         if (!tokenToInvalidate && itemId) {
-          tokenToInvalidate = await getAccessTokenFromItemId(itemId);
+          tokenToInvalidate = await getNewestAccessToken({ itemId });
         }
 
         if (!tokenToInvalidate) {
@@ -1903,7 +1902,7 @@ const createLinkTokenForUpdate = async (uid, institutionId) => {
 
   let accessToken;
   try {
-    accessToken = await getAccessTokenFromItemId(account.itemId, uid);
+    accessToken = await getNewestAccessToken({ itemId: account.itemId });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {
       operation: "createLinkTokenForUpdate",
@@ -1964,7 +1963,7 @@ const fetchTransactions = async (item) => {
   syncingItems.set(item, true);
   try {
     structuredLogger.logInfo("[SYNC_TRACE] Starting fetchTransactions.", { itemId: item });
-    const accessToken = await getAccessTokenFromItemId(item);
+    const accessToken = await getNewestAccessToken({ itemId: item });
     if (!accessToken) {
       throw new Error(`Access token could not be retrieved for item ID: ${item}`);
     }
