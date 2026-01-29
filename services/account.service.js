@@ -33,10 +33,11 @@ import {
 
 
 
-async function _updatePlaidAccountDetails(existingAccount, account, institutionId, institutionName, safeEncrypt, hashValue) {
+async function _updatePlaidAccountDetails(existingAccount, account, institutionId, institutionName, safeEncrypt, hashValue, targetEntity) {
   existingAccount.itemId = account.itemId; // Ensure itemId is passed correctly
   existingAccount.plaid_account_id = account.account_id;
   existingAccount.status = 'good';
+  existingAccount.owner_id = targetEntity._id;
 
   existingAccount.account_name = await safeEncrypt(account.name, { account_id: existingAccount._id.toString(), field: "name" });
   existingAccount.account_official_name = account.official_name ? await safeEncrypt(account.official_name, { account_id: existingAccount._id.toString(), field: "official_name" }) : null;
@@ -125,7 +126,7 @@ const addAccount = async (accessToken, email, uid, profileId) => {
           const oldItemId = primaryExistingAccount.itemId;
 
           // Use the new helper function to update the primary existing account
-          await _updatePlaidAccountDetails(primaryExistingAccount, { ...account, itemId: accountsResponse.item.item_id }, institutionId, institutionName, safeEncrypt, hashValue);
+          await _updatePlaidAccountDetails(primaryExistingAccount, { ...account, itemId: accountsResponse.item.item_id }, institutionId, institutionName, safeEncrypt, hashValue, targetEntity);
 
           // Invalidate the old Plaid item ONLY if the itemId has changed
           if (oldItemId !== accountsResponse.item.item_id) {
@@ -238,7 +239,7 @@ const addAccount = async (accessToken, email, uid, profileId) => {
         const hashAccountMask = hashValue(account.mask);
 
         const newAccount = new PlaidAccount({
-          owner_id: userId,
+          owner_id: targetEntity._id,
           itemId: accountsResponse.item.item_id,
           owner_type: userType,
           plaid_account_id: account.account_id,
