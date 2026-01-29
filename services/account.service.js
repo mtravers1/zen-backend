@@ -486,17 +486,10 @@ const getAccounts = async (profile, uid) => {
         .lean()
         .exec();
 
-      const itemIds = [...new Set(plaidAccountsResponse.map(acc => acc.itemId))];
-
-      const accessTokens = await AccessToken.find({
-        itemId: { $in: itemIds },
-      });
-      const accessTokenMap = new Map(accessTokens.map(token => [token.itemId, token]));
-
       let plaidAccounts = [];
 
       for (const plaidAccount of plaidAccountsResponse) {
-        const accessToken = accessTokenMap.get(plaidAccount.itemId);
+        const accessToken = await plaidService.getNewestAccessToken({ itemId: plaidAccount.itemId });
         const decryptedAccount = await getDecryptedAccount(plaidAccount, dek, uid, accessToken);
 
         plaidAccounts.push(decryptedAccount);
