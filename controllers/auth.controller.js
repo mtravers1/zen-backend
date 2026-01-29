@@ -195,27 +195,75 @@ const signUp = async (req, res) => {
 
 const signIn = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, idToken } = req.body;
 
-    structuredLogger.logOperationStart("auth_signin_email", { email });
+    if (idToken) {
+      // OAuth sign-in flow
+      structuredLogger.logOperationStart("auth_signin_oauth_token", {
+        hasIdToken: !!idToken,
+      });
 
-    // Validate required fields
-    if (!email || !password) {
-      return res.status(400).send("Email and password are required");
+      try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const { uid, email: tokenEmail } = decodedToken;
+
+        const user = await User.findOne({ authUid: uid });
+
+        if (!user) {
+          return res.status(404).json({
+            success: false,
+            message: "User not found for the provided token.",
+          });
+        }
+
+        const decryptedUser = await authService.signInOrCreate(uid, {
+          email: tokenEmail,
+        });
+
+        const sessionToken = authService.generateJWTToken(
+          decryptedUser.id,
+          decryptedUser.email
+        );
+
+        structuredLogger.logSuccess("auth_signin_oauth_token", { uid });
+
+        res.status(200).json({
+          success: true,
+          user: decryptedUser,
+          token: sessionToken,
+        });
+      } catch (error) {
+        structuredLogger.logErrorBlock(error, {
+          operation: "auth_signin_oauth_token",
+          error_classification: "token_verification_failed",
+        });
+        res
+          .status(401)
+          .json({ success: false, message: "Invalid or expired token." });
+      }
+    } else {
+      // Email/password sign-in flow
+      structuredLogger.logOperationStart("auth_signin_email", { email });
+
+      if (!email || !password) {
+        return res
+          .status(400)
+          .send("Email and password are required for this sign-in method.");
+      }
+
+      const user = await authService.signIn(email, password);
+      structuredLogger.logSuccess("auth_signin_email", { email });
+      res.status(200).send(user);
     }
-
-    // Use authService to handle email/password authentication
-    const user = await authService.signIn(email, password);
-    structuredLogger.logSuccess("auth_signin_email", { email });
-    res.status(200).send(user);
   } catch (error) {
     const errorClassification =
       error.message === "User not found" ||
       error.message === "Invalid credentials"
         ? "user_not_found"
         : "authentication_error";
+
     structuredLogger.logErrorBlock(error, {
-      operation: "auth_signin_email",
+      operation: "auth_signin",
       email: req.body.email,
       error_classification: errorClassification,
     });
@@ -226,10 +274,10 @@ const signIn = async (req, res) => {
     ) {
       return res.status(401).send("Invalid email or password");
     }
-    if (error.message === 'SIGN_IN_ERROR') {
+    if (error.message === "SIGN_IN_ERROR") {
       return res.status(418).json({
-        error: 'SIGN_IN_ERROR',
-        message: `We couldn't sign you in. Please contact support with code ${error.code}`
+        error: "SIGN_IN_ERROR",
+        message: `We couldn't sign you in. Please contact support with code ${error.code}`,
       });
     }
     res.status(500).send(error.message);

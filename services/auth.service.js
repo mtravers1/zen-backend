@@ -1305,6 +1305,7 @@ const authService = {
   createFirebaseUserWithEmailPassword,
   generateFirebaseToken,
   getOwnUserProfile,
+  generateJWTToken,
 };
 
 export default authService;
