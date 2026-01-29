@@ -18,7 +18,6 @@ const createLinkToken = async (req, res) => {
   if (logBody.access_token) {
     logBody.access_token = '[REDACTED]';
   }
-  structuredLogger.logInfo('createLinkToken_request_body', logBody);
 
   const { uid, email } = req.user;
   const {
