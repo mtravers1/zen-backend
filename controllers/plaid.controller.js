@@ -14,6 +14,7 @@ const createLinkToken = async (req, res) => {
   );
 
   try {
+  console.log('Request body:', req.body);
   const logBody = { ...req.body };
   if (logBody.access_token) {
     logBody.access_token = '[REDACTED]';
