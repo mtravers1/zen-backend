@@ -1871,8 +1871,8 @@ const doesItemExist = async (itemId) => {
   return !!token;
 };
 
-const createLinkTokenForUpdate = async (uid, institutionId) => {
-  structuredLogger.logInfo("createLinkTokenForUpdate called", { uid, institutionId });
+const createLinkTokenForUpdate = async (uid, institutionId, isAndroid, android_package_name) => {
+  structuredLogger.logInfo("createLinkTokenForUpdate called", { uid, institutionId, isAndroid });
 
   const user = await User.findOne({ authUid: uid });
   if (!user) {
@@ -1930,6 +1930,8 @@ const createLinkTokenForUpdate = async (uid, institutionId) => {
   const plaidClient = getPlaidClient();
   let response;
   try {
+    const redirectUri = plaidRedirectUri; // Or plaidRedirectNewAccounts based on screen
+
     response = await plaidClient.linkTokenCreate({
       client_id: plaidClientId,
       secret: plaidSecret,
@@ -1940,6 +1942,8 @@ const createLinkTokenForUpdate = async (uid, institutionId) => {
         client_user_id: user._id.toString(),
       },
       access_token: accessToken,
+      android_package_name: isAndroid ? android_package_name : undefined,
+      redirect_uri: !isAndroid ? redirectUri : undefined,
     });
   } catch (error) {
     structuredLogger.logErrorBlock(error, {

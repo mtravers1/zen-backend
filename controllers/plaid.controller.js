@@ -677,10 +677,10 @@ const getInstitutionUpdateToken = async (req, res) => {
 
 const getLinkTokenForUpdate = async (req, res) => {
   try {
-    const { institution_id } = req.body;
+    const { institution_id, isAndroid, android_package_name } = req.body;
     const { uid } = req.user;
 
-    const linkToken = await plaidService.createLinkTokenForUpdate(uid, institution_id);
+    const linkToken = await plaidService.createLinkTokenForUpdate(uid, institution_id, isAndroid, android_package_name);
 
     res.status(200).send({ link_token: linkToken });
   } catch (error) {
