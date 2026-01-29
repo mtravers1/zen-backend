@@ -1354,6 +1354,15 @@ const updateLiabilities = async (item) => {
           throw new Error(`Access token could not be retrieved for item ID: ${item}`);
         }
 
+        const itemInfo = await getItemWithAccessToken(accessToken);
+        if (!itemInfo.item.billed_products.includes('liabilities')) {
+          structuredLogger.logInfo(
+            'Skipping liabilities sync: item does not have liabilities product enabled.',
+            { item_id: item, billed_products: itemInfo.item.billed_products },
+          );
+          return 'Skipped: Item does not have liabilities product.';
+        }
+
         const dek = await getUserDek(uid);
         const safeEncrypt = createSafeEncrypt(uid, dek);
 
