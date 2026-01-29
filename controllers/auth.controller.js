@@ -123,12 +123,12 @@ const signUp = async (req, res) => {
       authUid: authUid,
     });
 
-    // Generate Firebase custom token for the new user
-    const tokenResult = await authService.generateFirebaseToken(authUid);
+    // Generate a session JWT for the new user
+    const sessionToken = authService.generateJWTToken(user.id, data.email);
 
-    if (!tokenResult.success) {
+    if (!sessionToken) {
       // If token generation fails, log it and send an error response
-      structuredLogger.logErrorBlock(new Error(tokenResult.error), {
+      structuredLogger.logErrorBlock(new Error("Failed to generate session token"), {
         operation: "auth_signup_token_generation",
         email: data.email,
         authUid: authUid,
@@ -137,7 +137,6 @@ const signUp = async (req, res) => {
       return res.status(500).json({
         success: false,
         message: "User created, but failed to generate authentication token.",
-        error: tokenResult.error,
       });
     }
 
@@ -145,7 +144,7 @@ const signUp = async (req, res) => {
     res.status(201).json({
       success: true,
       user: user,
-      token: tokenResult.token, // Use 'token' as the key
+      token: sessionToken, // Use 'token' as the key
       message: "User created successfully",
     });
   } catch (error) {

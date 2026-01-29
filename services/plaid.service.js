@@ -89,6 +89,7 @@ const createLinkToken = async (
   access_token,
   plaidEnvironment,
   institution_id,
+  android_package_name,
 ) => {
   return await structuredLogger.withContext(
     "create_link_token",
@@ -152,7 +153,7 @@ const createLinkToken = async (
         secret: plaidSecret,
         client_name: "Zentavos",
         country_codes: ["US"],
-        android_package_name: isAndroid ? process.env.ANDROID_PACKAGE_NAME : null,
+        android_package_name: android_package_name,
         redirect_uri: !isAndroid ? redirectUri : null,
         webhook: webhookUrl,
         language: "en",
