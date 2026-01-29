@@ -14,12 +14,11 @@ const createLinkToken = async (req, res) => {
   );
 
   try {
-  console.log('Request body:', req.body);
   const logBody = { ...req.body };
   if (logBody.access_token) {
     logBody.access_token = '[REDACTED]';
   }
-  console.log('[DEBUG-LINK-TOKEN] Received body for createLinkToken:', JSON.stringify(logBody, null, 2));
+  structuredLogger.logInfo('createLinkToken_request_body', logBody);
 
   const { uid, email } = req.user;
   const {
