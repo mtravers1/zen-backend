@@ -528,6 +528,8 @@ const assignsAccountsToProfiles = async (data, email, uid) => {
       { $pull: { plaidAccountIds: accountObjectId } },
     );
 
+    await PlaidAccount.updateOne({ _id: accountObjectId }, { $set: { owner_id: profileId } });
+
     const profile = profiles.find((p) => String(p.id) === profileId);
     if (!profile) {
       // Account is now unassigned. It should remain in the user's master list.
