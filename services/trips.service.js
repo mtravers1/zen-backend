@@ -501,26 +501,43 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
     updateObject.$set.mileageManuallyEdited = true;
   }
 
-  // Handle metadata
   if (updateData.metadata) {
-    for (const key in updateData.metadata) {
-      if (Object.prototype.hasOwnProperty.call(updateData.metadata, key)) {
-        const value = updateData.metadata[key];
-        let valueToEncrypt = value;
-        if (key === "vehicle") {
-          if (typeof value === "object" && value._id) {
-            valueToEncrypt = value._id;
-          } else {
-            valueToEncrypt = value;
+    const decryptedMetadata = {};
+    if (existingTrip.metadata) {
+      for (const key in existingTrip.metadata) {
+        if (Object.prototype.hasOwnProperty.call(existingTrip.metadata, key)) {
+          try {
+            const decryptedValue = await safeDecrypt(
+              existingTrip.metadata[key],
+              {
+                trip_id: tripId,
+                field: key,
+              },
+            );
+            decryptedMetadata[key] = decryptedValue;
+          } catch (error) {
+            console.warn(`Could not decrypt metadata.${key}, leaving as is.`);
+            decryptedMetadata[key] = existingTrip.metadata[key];
           }
         }
+      }
+    }
 
-        updateObject.$set[`metadata.${key}`] = await safeEncrypt(
-          valueToEncrypt.toString(),
+    const mergedMetadata = { ...decryptedMetadata, ...updateData.metadata };
+
+    const encryptedMetadata = {};
+    for (const key in mergedMetadata) {
+      if (
+        Object.prototype.hasOwnProperty.call(mergedMetadata, key) &&
+        mergedMetadata[key] != null
+      ) {
+        encryptedMetadata[key] = await safeEncrypt(
+          mergedMetadata[key].toString(),
           { trip_id: tripId, field: key },
         );
       }
     }
+    updateObject.$set.metadata = encryptedMetadata;
   }
 
   return Trips.findByIdAndUpdate(tripId, updateObject, { new: true });

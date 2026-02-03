@@ -1885,15 +1885,8 @@ const createLinkTokenForUpdate = async (uid, institutionId, isAndroid, android_p
 
   const user = await User.findOne({ authUid: uid });
   if (!user) {
-    structuredLogger.logErrorBlock(new Error("User not found"), {
-      operation: "createLinkTokenForUpdate",
-      uid,
-      institutionId,
-      message: "User not found in database.",
-    });
     throw new Error("User not found");
   }
-  structuredLogger.logInfo("User found", { uid, institutionId });
 
   const account = await PlaidAccount.findOne({
     owner_id: user._id,
@@ -1901,40 +1894,18 @@ const createLinkTokenForUpdate = async (uid, institutionId, isAndroid, android_p
   });
 
   if (!account) {
-    structuredLogger.logErrorBlock(new Error("Institution not found for this user"), {
-      operation: "createLinkTokenForUpdate",
-      uid,
-      institutionId,
-      message: "Plaid account not found for user and institution.",
-    });
     throw new Error("Institution not found for this user");
   }
-  structuredLogger.logInfo("Plaid account found", { uid, institutionId, itemId: account.itemId });
 
   let accessToken;
   try {
     accessToken = await getAccessTokenFromItemId(account.itemId, uid);
   } catch (error) {
-    structuredLogger.logErrorBlock(error, {
-      operation: "createLinkTokenForUpdate",
-      uid,
-      institutionId,
-      itemId: account.itemId,
-      message: "Failed to retrieve or decrypt access token.",
-    });
     throw new Error("Could not retrieve access token for this institution");
   }
   if (!accessToken) {
-    structuredLogger.logErrorBlock(new Error("Access token is null or undefined"), {
-      operation: "createLinkTokenForUpdate",
-      uid,
-      institutionId,
-      itemId: account.itemId,
-      message: "Access token is null after retrieval attempt.",
-    });
     throw new Error("Could not retrieve access token for this institution");
   }
-  structuredLogger.logInfo("Access token retrieved", { uid, institutionId, itemId: account.itemId });
 
   const plaidClient = getPlaidClient();
   let response;
@@ -1955,18 +1926,9 @@ const createLinkTokenForUpdate = async (uid, institutionId, isAndroid, android_p
       redirect_uri: !isAndroid ? redirectUri : undefined,
     });
   } catch (error) {
-    structuredLogger.logErrorBlock(error, {
-      operation: "createLinkTokenForUpdate",
-      uid,
-      institutionId,
-      itemId: account.itemId,
-      message: "Plaid API call linkTokenCreate failed.",
-      plaid_error: error.response?.data, // Log Plaid's specific error response
-    });
     throw new Error(`Plaid API error creating link token: ${error.message}`);
   }
 
-  structuredLogger.logSuccess("Link token created successfully", { uid, institutionId, itemId: account.itemId });
   return response.data.link_token;
 };
 
