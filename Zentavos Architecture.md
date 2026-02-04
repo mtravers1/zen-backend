@@ -7,7 +7,10 @@ graph TD
     subgraph Clients
         android[Android App]
         ios[iOS App]
-        web_browser[Web Browser]
+        subgraph Browser
+            web_app[Web App - user facing]
+            admin_portal[Admin Portal]
+        end
     end
 
 	plaid[Plaid]
@@ -32,7 +35,8 @@ graph TD
 
     android <--> api_server
     ios <--> api_server
-    web_browser <--> web_app_server
+    Browser <--> web_app_server
+    admin_portal <--> web_app_server
     web_app_server <--> api_server
     api_server <-.->|Encrypted| mongodb
     api_server <-.->|Encrypted| file_storage
@@ -82,7 +86,7 @@ Financial data and any other costly data gets cached in the MongoDB for faster r
 
 ## LLM
 
-We're using [Groq](https://console.groq.com/docs/api-reference) as an llm server.
+We're using [Groq](https://console.groq.com/docs/api-reference) as an LLM server.
 
 # Zentavos Servers
 
