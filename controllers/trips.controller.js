@@ -38,8 +38,8 @@ const createTrip = async (req, res) => {
 const getFilteredTrips = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const trips = await tripService.fetchFilteredTrips(req.query, uid);
-    res.json(trips);
+    const { trips, totalMiles } = await tripService.fetchFilteredTrips(req.query, uid);
+    res.json({ trips, totalMiles });
   } catch (error) {
     console.error("Error fetching trips:", error);
     res.status(500).json({ error: "Error al obtener los viajes" });

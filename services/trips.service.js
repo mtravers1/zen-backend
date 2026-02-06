@@ -302,7 +302,10 @@ const fetchFilteredTrips = async (query, uid) => {
           );
         })
       : populatedTrips;
-    return filteredTrips;
+
+    const sumOfTotalMiles = filteredTrips.reduce((sum, trip) => sum + (trip.totalMiles || 0), 0);
+    
+    return { trips: filteredTrips, totalMiles: sumOfTotalMiles };
   } catch (err) {
     console.error("Error al obtener los viajes filtrados:", err);
     throw err;
