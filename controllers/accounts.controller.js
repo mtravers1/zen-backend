@@ -61,6 +61,7 @@ const getAccountDetails = async (req, res) => {
   try {
     const { accountId, profileId } = req.params;
     const uid = req.user.uid;
+    const email = req.user.email;
     console.log(
       `[getAccountDetails] accountId: ${accountId}, profileId: ${profileId}, uid: ${uid}`,
     );
@@ -69,6 +70,7 @@ const getAccountDetails = async (req, res) => {
       accountId,
       profileId,
       uid,
+      email,
     );
     res.status(200).send(accountData);
   } catch (error) {

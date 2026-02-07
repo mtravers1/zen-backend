@@ -643,16 +643,41 @@ function summarizeHoldingsByAccountId(
   return summary;
 }
 
-const getAccountDetails = async (accountId, profileId, uid) => {
+const getAccountDetails = async (accountId, profileId, uid, email) => {
   const dek = await getUserDek(uid);
   const safeDecrypt = createSafeDecrypt(uid, dek);
   const user = await User.findOne({ authUid: uid });
   if (!user) {
     throw new Error("User not found");
   }
-  const account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id })
+
+  // Verify that the user has access to the profile they are requesting.
+  const profiles = await businessService.getUserProfiles(email, uid);
+  const profile = profiles.find(p => p.id.toString() === profileId);
+  if (!profile) {
+    throw new Error("Profile not found or user does not have permission to access it.");
+  }
+
+  let account = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: profileId })
     .lean()
     .exec();
+
+  if (!account) {
+    // If the account is not found with the profileId, it might be a personal account.
+    // We can try to find it with the user's id.
+    const personalAccount = await PlaidAccount.findOne({ plaid_account_id: accountId, owner_id: user._id })
+      .lean()
+      .exec();
+    if (!personalAccount) {
+      throw new Error("Account not found");
+    }
+    // If we found a personal account, we should check if the profileId is the user's personal profile.
+    if (profileId !== user._id.toString()) {
+      throw new Error("Account not found for this profile");
+    }
+    // If it is a personal account, we should use it.
+    account = personalAccount;
+  }
 
   const liab = await Liability.find({ accountId: accountId }).lean().exec();
 
