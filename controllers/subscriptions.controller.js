@@ -156,7 +156,7 @@ const getAvailablePlans = async (req, res) => {
 
     // Filter out admin roles and create plan objects
     const allPlans = Object.keys(permissions)
-      .filter((planId) => !adminRoles.includes(planId))
+      .filter((planId) => !adminRoles.includes(planId) && !planId.includes('+'))
       .map((planId) => ({
         id: planId,
         name: formatPlanName(planId),
