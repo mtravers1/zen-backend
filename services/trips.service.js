@@ -35,6 +35,9 @@ const saveTrip = async ({
       longitude: await safeEncrypt(loc.longitude.toString(), {
         field: "longitude",
       }),
+      timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), {
+        field: "timestamp",
+      }) : undefined,
     })),
   );
 
@@ -258,7 +261,6 @@ const fetchFilteredTrips = async (query, uid) => {
           profileData: setting,
         };
 
-        // Decrypt coordinates
         const decryptedLocations = await Promise.all(
           trip.locations.map(async (loc) => ({
             latitude: loc.latitude
@@ -276,6 +278,12 @@ const fetchFilteredTrips = async (query, uid) => {
                     field: "longitude",
                   }),
                 )
+              : null,
+            timestamp: loc.timestamp
+              ? await safeDecrypt(loc.timestamp, {
+                  trip_id: trip._id,
+                  field: "timestamp",
+                })
               : null,
           })),
         );
@@ -361,6 +369,10 @@ const updateTrip = async (tripId, updateData, uid) => {
           trip_id: tripId,
           field: "longitude",
         }),
+        timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), {
+          trip_id: tripId,
+          field: "timestamp",
+        }) : undefined,
       })),
     );
     encryptedData.totalMiles = haversine.calculateTotalMiles(updateData.locations);
@@ -478,6 +490,7 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
             field: "longitude",
           }),
         ),
+        timestamp: loc.timestamp ? await safeDecrypt(loc.timestamp, { trip_id: tripId, field: 'timestamp' }) : undefined,
       })),
     );
 
@@ -492,6 +505,10 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
           trip_id: tripId,
           field: "longitude",
         }),
+        timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), {
+          trip_id: tripId,
+          field: "timestamp",
+        }) : undefined,
       })),
     );
 

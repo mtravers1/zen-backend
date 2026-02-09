@@ -4,6 +4,7 @@ const coordinateSchema = new mongoose.Schema(
   {
     latitude: String,
     longitude: String,
+    timestamp: String,
   },
   { _id: false },
 );
