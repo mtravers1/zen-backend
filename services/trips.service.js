@@ -414,6 +414,7 @@ const updateTrip = async (tripId, updateData, uid) => {
         );
       }
     }
+    delete encryptedData.metadata;
     Object.assign(encryptedData, encryptedMetadataUpdates);
   }
 
