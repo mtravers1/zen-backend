@@ -391,75 +391,29 @@ const updateTrip = async (tripId, updateData, uid) => {
 
   // Encrypt metadata if provided
   if (updateData.metadata) {
-    const encryptedMetadata = { ...updateData.metadata };
+    const existingMetadata = await Trips.findById(tripId).select('metadata').lean();
+    const decryptedExistingMetadata = {};
 
-    if (updateData.metadata.placeName) {
-      encryptedMetadata.placeName = await safeEncrypt(
-        updateData.metadata.placeName,
-        { trip_id: tripId, field: "placeName" },
-      );
+    if (existingMetadata?.metadata) {
+      for (const key in existingMetadata.metadata) {
+        if (Object.prototype.hasOwnProperty.call(existingMetadata.metadata, key)) {
+          decryptedExistingMetadata[key] = await safeDecrypt(existingMetadata.metadata[key], { trip_id: tripId, field: key });
+        }
+      }
     }
 
-    if (updateData.metadata.pickupAddress) {
-      encryptedMetadata.pickupAddress = await safeEncrypt(
-        updateData.metadata.pickupAddress,
-        { trip_id: tripId, field: "pickupAddress" },
-      );
-    }
+    const mergedMetadata = { ...decryptedExistingMetadata, ...updateData.metadata };
 
-    if (updateData.metadata.dropoffAddress) {
-      encryptedMetadata.dropoffAddress = await safeEncrypt(
-        updateData.metadata.dropoffAddress,
-        { trip_id: tripId, field: "dropoffAddress" },
-      );
+    const encryptedMetadataUpdates = {};
+    for (const key in mergedMetadata) {
+      if (Object.prototype.hasOwnProperty.call(mergedMetadata, key) && mergedMetadata[key] !== undefined && mergedMetadata[key] !== null) {
+        encryptedMetadataUpdates[`metadata.${key}`] = await safeEncrypt(
+          mergedMetadata[key].toString(),
+          { trip_id: tripId, field: `metadata.${key}` }
+        );
+      }
     }
-
-    if (updateData.metadata.description) {
-      encryptedMetadata.description = await safeEncrypt(
-        updateData.metadata.description,
-        { trip_id: tripId, field: "description" },
-      );
-    }
-
-    if (updateData.metadata.purpose) {
-      encryptedMetadata.purpose = await safeEncrypt(
-        updateData.metadata.purpose,
-        { trip_id: tripId, field: "purpose" },
-      );
-    }
-
-    if (updateData.metadata.other) {
-      encryptedMetadata.other = await safeEncrypt(
-        updateData.metadata.other,
-        { trip_id: tripId, field: "other" },
-      );
-    }
-
-    if (updateData.metadata.dateTime) {
-      encryptedMetadata.dateTime = await safeEncrypt(
-        updateData.metadata.dateTime.toString(),
-        { trip_id: tripId, field: "dateTime" },
-      );
-    }
-
-    if (updateData.metadata.vehicle) {
-      encryptedMetadata.vehicle = await safeEncrypt(
-        typeof updateData.metadata.vehicle === "object" &&
-        updateData.metadata.vehicle._id
-          ? updateData.metadata.vehicle._id
-          : updateData.metadata.vehicle,
-        { trip_id: tripId, field: "vehicle" },
-      );
-    }
-
-    if (updateData.metadata.profile) {
-      encryptedMetadata.profile = await safeEncrypt(
-        updateData.metadata.profile,
-        { trip_id: tripId, field: "profile" },
-      );
-    }
-
-    encryptedData.metadata = encryptedMetadata;
+    Object.assign(encryptedData, encryptedMetadataUpdates);
   }
 
   const updatedDoc = await Trips.findByIdAndUpdate(tripId, encryptedData, { new: true }).lean();
