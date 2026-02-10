@@ -502,7 +502,7 @@ const partialUpdateTrip = async (tripId, updateData, uid) => {
     );
 
     const existingTimestamps = new Set(decryptedLocations.map(loc => loc.timestamp));
-    const newUniqueLocations = updateData.locations.filter(loc => !existingTimestamps.has(loc.timestamp));
+    const newUniqueLocations = updateData.locations.filter(loc => !existingTimestamps.has(loc.timestamp.toString()));
     const newLocations = decryptedLocations.concat(newUniqueLocations);
     
     updateObject.$set.locations = await Promise.all(
