@@ -358,6 +358,7 @@ const getLastVehicleIdUsed = async (uid) => {
 const updateTrip = async (tripId, updateData, uid) => {
   const dek = await getUserDek(uid);
   const safeEncrypt = createSafeEncrypt(uid, dek);
+  const safeDecrypt = createSafeDecrypt(uid, dek);
 
   const encryptedData = { ...updateData };
 
