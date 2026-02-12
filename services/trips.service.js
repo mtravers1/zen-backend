@@ -155,8 +155,7 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
 
     const existingTrip = await Trips.findOne({ clientTripId }).lean();
 
-    // Ignore client-sent totalMiles
-    const { totalMiles, ...restOfTripData } = tripData;
+    const { totalMiles, mileageManuallyEdited: isManualEdit, ...restOfTripData } = tripData;
 
     if (existingTrip) {
         // UPDATE (APPEND)
@@ -183,9 +182,25 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
                     timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), { trip_id: existingTrip._id.toString(), field: "timestamp" }) : undefined,
                 })),
             );
-
-            // Always recalculate totalMiles
-            updateObject.$set.totalMiles = haversine.calculateTotalMiles(newLocations);
+            
+            // Recalculate miles if not a manual edit
+            if (!isManualEdit) {
+                updateObject.$set.totalMiles = haversine.calculateTotalMiles(newLocations);
+                updateObject.$set.mileageManuallyEdited = false;
+            }
+        }
+        
+        // Handle manual mileage override only if the flag is explicitly true
+        if (isManualEdit && totalMiles !== undefined) {
+            updateObject.$set.totalMiles = totalMiles;
+            updateObject.$set.mileageManuallyEdited = true;
+            updateObject.$set.mileageEditedAt = new Date();
+        } else if (isManualEdit === false) { // Handle explicit recalculation
+            const locationsForCalc = updateObject.$set.locations ? 
+                (await Promise.all(updateObject.$set.locations.map(async loc => ({...loc, latitude: await safeDecrypt(loc.latitude, {trip_id: existingTrip._id.toString(), field: 'latitude'}), longitude: await safeDecrypt(loc.longitude, {trip_id: existingTrip._id.toString(), field: 'longitude'}) })))) :
+                (await Promise.all(existingTrip.locations.map(async loc => ({...loc, latitude: await safeDecrypt(loc.latitude, {trip_id: existingTrip._id.toString(), field: 'latitude'}), longitude: await safeDecrypt(loc.longitude, {trip_id: existingTrip._id.toString(), field: 'longitude'}) }))));
+            updateObject.$set.totalMiles = haversine.calculateTotalMiles(locationsForCalc);
+            updateObject.$set.mileageManuallyEdited = false;
         }
 
         // Handle metadata (merge)
@@ -226,15 +241,26 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
         }
 
         const locations = restOfTripData.locations || [];
-        const calculatedTotalMiles = haversine.calculateTotalMiles(locations);
+        let finalTotalMiles;
+        let mileageManuallyEdited = false;
+        let mileageEditedAt = null;
+
+        if (isManualEdit && totalMiles !== undefined) {
+            finalTotalMiles = totalMiles;
+            mileageManuallyEdited = true;
+            mileageEditedAt = new Date();
+        } else {
+            finalTotalMiles = haversine.calculateTotalMiles(locations);
+        }
         
-        // Mongoose will generate a new ObjectId for _id automatically
         const newTripModel = new Trips({
             clientTripId,
             user: user._id,
-            locations: [], // Will be encrypted separately to get the _id
-            totalMiles: calculatedTotalMiles,
-            metadata: {}, // Will be encrypted separately
+            locations: [],
+            totalMiles: finalTotalMiles,
+            mileageManuallyEdited,
+            mileageEditedAt,
+            metadata: {},
         });
 
         // Encrypt using the new _id
@@ -392,10 +418,31 @@ const deleteTrip = async (tripId) => {
   return deletedTrip;
 };
 
+const recalculateMileage = async (clientTripId, uid) => {
+    const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
+    const trip = await Trips.findOne({ clientTripId }).lean();
+
+    if (!trip) {
+        throw new Error("Trip not found");
+    }
+
+    const decryptedLocations = await Promise.all(
+        trip.locations.map(async (loc) => ({
+            latitude: parseFloat(await safeDecrypt(loc.latitude, { trip_id: trip._id.toString(), field: "latitude" })),
+            longitude: parseFloat(await safeDecrypt(loc.longitude, { trip_id: trip._id.toString(), field: "longitude" })),
+            timestamp: loc.timestamp ? await safeDecrypt(loc.timestamp, { trip_id: trip._id.toString(), field: 'timestamp' }) : undefined,
+        })),
+    );
+
+    return haversine.calculateTotalMiles(decryptedLocations);
+};
+
 const tripService = {
   upsertTrip,
   fetchFilteredTrips,
   deleteTrip,
   getLastVehicleIdUsed,
+  recalculateMileage,
 };
 export default tripService;

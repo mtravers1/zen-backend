@@ -9,6 +9,8 @@ router.get("/check-limit", tripsController.checkTripLimit);
 router.get("/", tripsController.getFilteredTrips);
 router.get("/lastvehicle", tripsController.getLatVehicleUsed);
 
+router.get("/:tripId/recalculate", tripsController.recalculateMileage);
+
 // According to the spec, this is the primary endpoint for syncing trip data.
 // It handles both creating a new trip and appending data to an existing one.
 router.put("/:tripId", tripsController.upsertTrip);
