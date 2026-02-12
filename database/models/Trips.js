@@ -50,6 +50,13 @@ const tripSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    clientTripId: {
+      type: String,
+      required: false, // Not all documents will have this (old ones)
+      unique: true,
+      sparse: true, // Allows multiple documents to have a null value for this field
+      index: true,
+    },
     locations: [coordinateSchema],
     totalMiles: Number,
     mileageEditedAt: {
