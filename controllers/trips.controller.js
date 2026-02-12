@@ -1,36 +1,25 @@
 import tripService from "../services/trips.service.js";
 import permissionsService from "../services/permissions.service.js";
 
-const createTrip = async (req, res) => {
+const upsertTrip = async (req, res) => {
   try {
-    const { locations, totalMiles, metadata, userId } = req.body;
-    const email = req.user.email;
+    const { tripId } = req.params;
     const uid = req.user.uid;
 
-    if (!locations || totalMiles < 0 || !metadata) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const canCreateTrip = await permissionsService.canPerformAction(
+    // Permission check can be done here before upserting
+    const canCreateOrUpdateTrip = await permissionsService.canPerformAction(
       uid,
-      "create_trip",
+      "create_trip", // Assuming same permission for create and update
     );
 
-    if (!canCreateTrip.success) {
-      return res.status(403).send(canCreateTrip);
+    if (!canCreateOrUpdateTrip.success) {
+      return res.status(403).send(canCreateOrUpdateTrip);
     }
 
-    const trip = await tripService.saveTrip({
-      user: userId,
-      locations,
-      totalMiles,
-      metadata,
-      email,
-      uid,
-    });
-    res.status(201).json(trip);
+    const trip = await tripService.upsertTrip(tripId, req.body, uid);
+    res.status(200).json(trip);
   } catch (error) {
-    console.error("Error creating trip:", error);
+    console.error("Error upserting trip:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -54,21 +43,6 @@ const getLatVehicleUsed = async (req, res) => {
   } catch (error) {
     console.error("Error fetching trips:", error);
     res.status(500).json({ error: "Error al obtener los viajes" });
-  }
-};
-
-const updateTrip = async (req, res) => {
-  try {
-    const { tripId } = req.params;
-    const uid = req.user.uid;
-    const updatedTrip = await tripService.updateTrip(tripId, req.body, uid);
-    if (!updatedTrip) {
-      return res.status(404).json({ error: "Trip not found" });
-    }
-    res.json(updatedTrip);
-  } catch (error) {
-    console.error("Error updating trip:", error);
-    res.status(500).json({ error: "Error al actualizar el viaje" });
   }
 };
 
@@ -106,29 +80,12 @@ const checkTripLimit = async (req, res) => {
   }
 };
 
-const partialUpdateTrip = async (req, res) => {
-  try {
-    const { tripId } = req.params;
-    const uid = req.user.uid;
-    const updatedTrip = await tripService.partialUpdateTrip(tripId, req.body, uid);
-    if (!updatedTrip) {
-      return res.status(404).json({ error: "Trip not found" });
-    }
-    res.json(updatedTrip);
-  } catch (error) {
-    console.error("Error partially updating trip:", error);
-    res.status(500).json({ error: "Error updating trip" });
-  }
-};
-
 const tripsController = {
-  createTrip,
+  upsertTrip,
   getFilteredTrips,
-  updateTrip,
   deleteTrip,
   getLatVehicleUsed,
   checkTripLimit,
-  partialUpdateTrip,
 };
 
 export default tripsController;
