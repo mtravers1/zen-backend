@@ -256,8 +256,8 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
 
         const encryptedLocations = await Promise.all(
             locations.map(async (loc) => ({
-                latitude: await safeEncrypt(loc.latitude.toString(), { trip_id: newTripIdForEncryption, field: "latitude" })_id,
-                longitude: await safeEncrypt(loc.longitude.toString(), { trip_id: newTripIdForEncryption, field: "longitude" })_id,
+                latitude: await safeEncrypt(loc.latitude.toString(), { trip_id: newTripIdForEncryption, field: "latitude" }),
+                longitude: await safeEncrypt(loc.longitude.toString(), { trip_id: newTripIdForEncryption, field: "longitude" }),
                 timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), { trip_id: newTripIdForEncryption, field: "timestamp" }) : undefined,
             })),
         );
