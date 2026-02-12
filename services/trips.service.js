@@ -183,19 +183,17 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
                 })),
             );
             
-            // Recalculate miles if not a manual edit
             if (!isManualEdit) {
                 updateObject.$set.totalMiles = haversine.calculateTotalMiles(newLocations);
                 updateObject.$set.mileageManuallyEdited = false;
             }
         }
         
-        // Handle manual mileage override only if the flag is explicitly true
         if (isManualEdit && totalMiles !== undefined) {
             updateObject.$set.totalMiles = totalMiles;
             updateObject.$set.mileageManuallyEdited = true;
             updateObject.$set.mileageEditedAt = new Date();
-        } else if (isManualEdit === false) { // Handle explicit recalculation
+        } else if (isManualEdit === false) { 
             const locationsForCalc = updateObject.$set.locations ? 
                 (await Promise.all(updateObject.$set.locations.map(async loc => ({...loc, latitude: await safeDecrypt(loc.latitude, {trip_id: existingTrip._id.toString(), field: 'latitude'}), longitude: await safeDecrypt(loc.longitude, {trip_id: existingTrip._id.toString(), field: 'longitude'}) })))) :
                 (await Promise.all(existingTrip.locations.map(async loc => ({...loc, latitude: await safeDecrypt(loc.latitude, {trip_id: existingTrip._id.toString(), field: 'latitude'}), longitude: await safeDecrypt(loc.longitude, {trip_id: existingTrip._id.toString(), field: 'longitude'}) }))));
@@ -240,6 +238,9 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
             throw new Error("User not found");
         }
 
+        const newMongoId = new mongoose.Types.ObjectId();
+        const newTripIdForEncryption = newMongoId.toString();
+
         const locations = restOfTripData.locations || [];
         let finalTotalMiles;
         let mileageManuallyEdited = false;
@@ -252,39 +253,36 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
         } else {
             finalTotalMiles = haversine.calculateTotalMiles(locations);
         }
-        
-        const newTripModel = new Trips({
-            clientTripId,
-            user: user._id,
-            locations: [],
-            totalMiles: finalTotalMiles,
-            mileageManuallyEdited,
-            mileageEditedAt,
-            metadata: {},
-        });
 
-        // Encrypt using the new _id
-        const newTripId = newTripModel._id.toString();
-
-        newTripModel.locations = await Promise.all(
+        const encryptedLocations = await Promise.all(
             locations.map(async (loc) => ({
-                latitude: await safeEncrypt(loc.latitude.toString(), { trip_id: newTripId, field: "latitude" }),
-                longitude: await safeEncrypt(loc.longitude.toString(), { trip_id: newTripId, field: "longitude" }),
-                timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), { trip_id: newTripId, field: "timestamp" }) : undefined,
+                latitude: await safeEncrypt(loc.latitude.toString(), { trip_id: newTripIdForEncryption, field: "latitude" })_id,
+                longitude: await safeEncrypt(loc.longitude.toString(), { trip_id: newTripIdForEncryption, field: "longitude" })_id,
+                timestamp: loc.timestamp ? await safeEncrypt(loc.timestamp.toString(), { trip_id: newTripIdForEncryption, field: "timestamp" }) : undefined,
             })),
         );
 
+        const encryptedMetadata = {};
         if (restOfTripData.metadata) {
-            const encryptedMetadata = {};
             for (const key in restOfTripData.metadata) {
                 if (Object.prototype.hasOwnProperty.call(restOfTripData.metadata, key) && restOfTripData.metadata[key] != null) {
-                    encryptedMetadata[key] = await safeEncrypt(restOfTripData.metadata[key].toString(), { trip_id: newTripId, field: `metadata.${key}` });
+                    encryptedMetadata[key] = await safeEncrypt(restOfTripData.metadata[key].toString(), { trip_id: newTripIdForEncryption, field: `metadata.${key}` });
                 }
             }
-            newTripModel.metadata = encryptedMetadata;
         }
+        
+        const tripToSave = {
+            _id: newMongoId,
+            clientTripId,
+            user: user._id,
+            locations: encryptedLocations,
+            totalMiles: finalTotalMiles,
+            mileageManuallyEdited,
+            mileageEditedAt,
+            metadata: encryptedMetadata,
+        };
 
-        const savedTrip = await newTripModel.save();
+        const savedTrip = await Trips.create(tripToSave);
         const leanTrip = savedTrip.toObject();
         return _decryptAndEnrichTrip(leanTrip, safeDecrypt);
     }
@@ -413,9 +411,15 @@ const getLastVehicleIdUsed = async (uid) => {
   }
 };
 
-const deleteTrip = async (tripId) => {
-  const deletedTrip = await Trips.findByIdAndDelete(tripId);
-  return deletedTrip;
+const deleteTrip = async (idToDelete) => {
+  // Check if the provided ID is a valid MongoDB ObjectId
+  if (mongoose.Types.ObjectId.isValid(idToDelete)) {
+    // If it's a valid ObjectId, it's a legacy trip. Delete by _id.
+    return await Trips.findByIdAndDelete(idToDelete);
+  } else {
+    // Otherwise, assume it's a clientTripId (UUID). Delete by clientTripId.
+    return await Trips.findOneAndDelete({ clientTripId: idToDelete });
+  }
 };
 
 const recalculateMileage = async (clientTripId, uid) => {
