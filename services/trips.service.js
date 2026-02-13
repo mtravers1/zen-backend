@@ -22,42 +22,52 @@ const _decryptAndEnrichTrip = async (trip, safeDecrypt) => {
   let profileId = null;
 
   if (encryptedProfileId) {
-    profileId = await safeDecrypt(encryptedProfileId, { trip_id: trip._id, field: "profile" });
-    profileData = await Business.findById(profileId).lean();
-    if (!profileData) {
-      profileData = await User.findById(profileId).lean();
-      const first = await safeDecrypt(profileData.name.firstName, {
-        trip_id: trip._id,
-        field: "firstName",
-      });
-      const middle = profileData.name?.middleName
-        ? " " +
-          (await safeDecrypt(profileData.name.middleName, {
-            trip_id: trip._id,
-            field: "middleName",
-          })) +
-          " "
-        : " ";
-      const last = await safeDecrypt(profileData.name.lastName, {
-        trip_id: trip._id,
-        field: "lastName",
-      });
+    try {
+        profileId = await safeDecrypt(encryptedProfileId, { trip_id: trip._id, field: "profile" });
+    } catch (e) {
+        console.warn(`Could not decrypt profileId for trip ${trip._id}, assuming it might be plaintext.`);
+        profileId = encryptedProfileId; // Assume it's already decrypted or handle as needed
+    }
 
-      setting = {
-        name: first + middle + last,
-        _id: profileData._id,
-        type: "personal",
-      };
+    if (mongoose.Types.ObjectId.isValid(profileId)) {
+        profileData = await Business.findById(profileId).lean();
+        if (!profileData) {
+            profileData = await User.findById(profileId).lean();
+            const first = await safeDecrypt(profileData.name.firstName, {
+                trip_id: trip._id,
+                field: "firstName",
+            });
+            const middle = profileData.name?.middleName
+                ? " " +
+                  (await safeDecrypt(profileData.name.middleName, {
+                    trip_id: trip._id,
+                    field: "middleName",
+                  })) +
+                  " "
+                : " ";
+            const last = await safeDecrypt(profileData.name.lastName, {
+                trip_id: trip._id,
+                field: "lastName",
+            });
+
+            setting = {
+                name: first + middle + last,
+                _id: profileData._id,
+                type: "personal",
+            };
+        } else {
+            const name = await safeDecrypt(profileData.name, {
+                trip_id: trip._id,
+                field: "name",
+            });
+            setting = {
+                name: name,
+                _id: profileData._id,
+                type: "business",
+            };
+        }
     } else {
-      const name = await safeDecrypt(profileData.name, {
-        trip_id: trip._id,
-        field: "name",
-      });
-      setting = {
-        name: name,
-        _id: profileData._id,
-        type: "business",
-      };
+        console.warn(`Invalid ObjectId for profileId after decryption attempt: ${profileId}`);
     }
   }
 
