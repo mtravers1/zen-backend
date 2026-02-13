@@ -20,11 +20,16 @@ const addAsset = async (data, uid) => {
   return { message: "Asset added successfully" };
 };
 
-const getAssets = async (uid) => {
+const getAssets = async (uid, profileId = null) => {
   const user = await User.findOne({ authUid: uid });
   if (!user) throw new Error("User not found");
 
-  const assets = await Assets.find({ userId: user._id.toString() });
+  const query = { userId: user._id.toString() };
+  if (profileId) {
+    query.profileId = profileId;
+  }
+
+  const assets = await Assets.find(query);
   return assets.map((asset) => ({
     id: asset._id,
     account: asset.account,
@@ -74,5 +79,24 @@ const deleteAsset = async (data, uid) => {
   return { message: "Asset deleted successfully" };
 };
 
-const assetsService = { addAsset, getAssets, updateAsset, deleteAsset };
+const addAssetAndReturn = async (data, uid) => {
+  const user = await User.findOne({ authUid: uid });
+  if (!user) throw new Error("User not found");
+
+  const newAsset = new Assets({
+    userId: user._id.toString(),
+    profileId: data.profileId,
+    account: data.accountName,
+    type: data.type,
+    basis: data.basis,
+    purchaseDate: data.purchaseDate,
+    info: data.info,
+    updatedAt: new Date(),
+  });
+
+  const savedAsset = await newAsset.save();
+  return savedAsset;
+};
+
+const assetsService = { addAsset, getAssets, updateAsset, deleteAsset, addAssetAndReturn };
 export default assetsService;

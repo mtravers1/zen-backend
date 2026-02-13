@@ -15,7 +15,8 @@ const addAsset = async (req, res) => {
 const getAssets = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const response = await assetsService.getAssets(uid);
+    const { profileId } = req.query; // Get profileId from query params
+    const response = await assetsService.getAssets(uid, profileId);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);
@@ -47,5 +48,17 @@ const deleteAsset = async (req, res) => {
   }
 };
 
-const assetsController = { addAsset, getAssets, updateAsset, deleteAsset };
+const addAssetAndReturn = async (req, res) => {
+  try {
+    const data = req.body;
+    const uid = req.user.uid;
+    const response = await assetsService.addAssetAndReturn(data, uid);
+    res.status(201).json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const assetsController = { addAsset, getAssets, updateAsset, deleteAsset, addAssetAndReturn };
 export default assetsController;

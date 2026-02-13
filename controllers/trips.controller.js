@@ -1,19 +1,24 @@
 import tripService from "../services/trips.service.js";
 import permissionsService from "../services/permissions.service.js";
+import Trips from "../database/models/Trips.js";
 
 const upsertTrip = async (req, res) => {
   try {
     const { tripId } = req.params;
     const uid = req.user.uid;
 
-    // Permission check can be done here before upserting
-    const canCreateOrUpdateTrip = await permissionsService.canPerformAction(
-      uid,
-      "create_trip", // Assuming same permission for create and update
-    );
+    const existingTrip = await Trips.findOne({ clientTripId: tripId }).lean();
 
-    if (!canCreateOrUpdateTrip.success) {
-      return res.status(403).send(canCreateOrUpdateTrip);
+    if (!existingTrip) {
+      // This is a new trip, so check creation permission
+      const canCreateTrip = await permissionsService.canPerformAction(
+        uid,
+        "create_trip",
+      );
+
+      if (!canCreateTrip.success) {
+        return res.status(403).send(canCreateTrip);
+      }
     }
 
     const trip = await tripService.upsertTrip(tripId, req.body, uid);
