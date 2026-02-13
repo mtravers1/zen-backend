@@ -422,14 +422,24 @@ const deleteTrip = async (idToDelete) => {
   }
 };
 
-const recalculateMileage = async (clientTripId, uid) => {
-    const dek = await getUserDek(uid);
-    const safeDecrypt = createSafeDecrypt(uid, dek);
-    const trip = await Trips.findOne({ clientTripId }).lean();
+const recalculateMileage = async (tripId, uid) => {
+    let trip;
+    // Check if tripId could be a valid ObjectId for backward compatibility
+    if (mongoose.Types.ObjectId.isValid(tripId)) {
+        trip = await Trips.findOne({
+            $or: [{ _id: tripId }, { clientTripId: tripId }],
+        }).lean();
+    } else {
+        // If not a valid ObjectId, it can only be a clientTripId
+        trip = await Trips.findOne({ clientTripId: tripId }).lean();
+    }
 
     if (!trip) {
         throw new Error("Trip not found");
     }
+
+    const dek = await getUserDek(uid);
+    const safeDecrypt = createSafeDecrypt(uid, dek);
 
     const decryptedLocations = await Promise.all(
         trip.locations.map(async (loc) => ({
@@ -439,7 +449,9 @@ const recalculateMileage = async (clientTripId, uid) => {
         })),
     );
 
-    return haversine.calculateTotalMiles(decryptedLocations);
+    const recalculatedMiles = haversine.calculateTotalMiles(decryptedLocations);
+
+    return { recalculatedMiles };
 };
 
 const tripService = {
