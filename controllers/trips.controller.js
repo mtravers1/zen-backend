@@ -84,7 +84,10 @@ const recalculateMileage = async (req, res) => {
   try {
     const { tripId } = req.params;
     const uid = req.user.uid;
-    const recalculatedMiles = await tripService.recalculateMileage(tripId, uid);
+    const { recalculatedMiles } = await tripService.recalculateMileage(
+      tripId,
+      uid,
+    );
     res.json({ recalculatedMiles });
   } catch (error) {
     console.error("Error recalculating mileage:", error);
