@@ -19,9 +19,10 @@ const _decryptAndEnrichTrip = async (trip, safeDecrypt) => {
   const encryptedProfileId = trip.metadata?.profile;
   let profileData = null;
   let setting = null;
+  let profileId = null;
 
   if (encryptedProfileId) {
-    const profileId = await safeDecrypt(encryptedProfileId, { trip_id: trip._id, field: "profile" });
+    profileId = await safeDecrypt(encryptedProfileId, { trip_id: trip._id, field: "profile" });
     profileData = await Business.findById(profileId).lean();
     if (!profileData) {
       profileData = await User.findById(profileId).lean();
@@ -63,6 +64,7 @@ const _decryptAndEnrichTrip = async (trip, safeDecrypt) => {
   // Decrypt metadata fields
   const decryptedMetadata = {
     ...trip.metadata,
+    profile: profileId,
     placeName: trip.metadata.placeName
       ? await safeDecrypt(trip.metadata.placeName, {
           trip_id: trip._id,
@@ -149,6 +151,10 @@ const _decryptAndEnrichTrip = async (trip, safeDecrypt) => {
 };
 
 const upsertTrip = async (clientTripId, tripData, uid) => {
+    if (tripData.metadata && tripData.metadata.profileData) {
+        delete tripData.metadata.profileData;
+    }
+
     const dek = await getUserDek(uid);
     const safeEncrypt = createSafeEncrypt(uid, dek);
     const safeDecrypt = createSafeDecrypt(uid, dek);
