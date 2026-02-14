@@ -238,7 +238,11 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
             const encryptedMetadata = {};
             for (const key in mergedMetadata) {
                 if (Object.prototype.hasOwnProperty.call(mergedMetadata, key) && mergedMetadata[key] != null) {
-                    encryptedMetadata[key] = await safeEncrypt(mergedMetadata[key].toString(), { trip_id: existingTrip._id.toString(), field: key });
+                    if (key === "initialMileage" || key === "endMileage") {
+                        encryptedMetadata[key] = mergedMetadata[key];
+                    } else {
+                        encryptedMetadata[key] = await safeEncrypt(mergedMetadata[key].toString(), { trip_id: existingTrip._id.toString(), field: key });
+                    }
                 }
             }
             updateObject.$set.metadata = encryptedMetadata;
@@ -282,7 +286,11 @@ const upsertTrip = async (clientTripId, tripData, uid) => {
         if (restOfTripData.metadata) {
             for (const key in restOfTripData.metadata) {
                 if (Object.prototype.hasOwnProperty.call(restOfTripData.metadata, key) && restOfTripData.metadata[key] != null) {
-                    encryptedMetadata[key] = await safeEncrypt(restOfTripData.metadata[key].toString(), { trip_id: newTripIdForEncryption, field: `metadata.${key}` });
+                    if (key === "initialMileage" || key === "endMileage") {
+                        encryptedMetadata[key] = restOfTripData.metadata[key];
+                    } else {
+                        encryptedMetadata[key] = await safeEncrypt(restOfTripData.metadata[key].toString(), { trip_id: newTripIdForEncryption, field: `metadata.${key}` });
+                    }
                 }
             }
         }
