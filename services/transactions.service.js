@@ -49,213 +49,215 @@ const getTransactions = async (
     { uid, accounts_count: accounts.length, pagination },
     async () => {
       structuredLogger.logInfo("get_transactions_started", { accounts_count: accounts.length });
-      const allTransactions = [];
       const dek = await getUserDek(uid);
       const safeDecrypt = createSafeDecrypt(uid, dek);
 
-      for (const plaidAccount of accounts) {
-        structuredLogger.logInfo("get_transactions_processing_account", { plaid_account_id: plaidAccount.plaid_account_id });
-        const transactionsResponse = await Transaction.find({
-          plaidAccountId: plaidAccount.plaid_account_id,
-        })
-          .sort({ transactionDate: -1 })
-          .lean();
+      const accountIds = accounts.map(a => a.plaid_account_id);
+      const findQuery = { plaidAccountId: { $in: accountIds } };
 
-        structuredLogger.logInfo("get_transactions_found_transactions_for_account", { a: plaidAccount.plaid_account_id, count: transactionsResponse.length });
+      let transactionsToProcess = [];
+      let totalCount = 0;
 
-        const decryptedInstitutionName = await safeDecrypt(
-          plaidAccount.institution_name,
-          { account_id: plaidAccount._id, field: "institution_name" },
-        );
-        const transactions = [];
-
-        const safeEncrypt = createSafeEncrypt(uid, dek);
-
-        for (const transaction of transactionsResponse) {
-          let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "amount",
-          });
-
-          if (decryptedAmount === null) {
-            structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "amount" });
-            continue;
-          }
-
-          let decryptedType = await safeDecrypt(transaction.type, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "type",
-          });
-
-          const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, plaidAccount);
-          decryptedAmount = formattedTransaction.amount;
-          
-          let decryptedName = await safeDecrypt(transaction.name, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "name",
-          });
-          
-          let decryptedAccountType = await safeDecrypt(
-            transaction.accountType,
-            { model: Transaction, docId: transaction._id, fieldPath: "accountType" },
-          );
-
-          let decryptedMerchantName;
-          let decryptedMerchantMerchantName;
-          let merchantCategory;
-          let merchantLogo;
-          let merchantWebsite;
-          if (transaction.merchant) {
-            decryptedMerchantName = await safeDecrypt(
-              transaction.merchant.name,
-              { model: Transaction, docId: transaction._id, fieldPath: "merchant.name" },
-            );
-
-            decryptedMerchantMerchantName = await safeDecrypt(
-              transaction.merchant.merchantName,
-              {
-                model: Transaction,
-                docId: transaction._id,
-                fieldPath: "merchant.merchantName",
-              },
-            );
-
-            merchantCategory = await safeDecrypt(
-              transaction.merchant.merchantCategory,
-              {
-                model: Transaction,
-                docId: transaction._id,
-                fieldPath: "merchant.merchantCategory",
-              },
-            );
-
-            merchantLogo = await safeDecrypt(
-                transaction.merchant.logo,
-                { model: Transaction, docId: transaction._id, fieldPath: "merchant.logo" },
-            );
-
-            merchantWebsite = await safeDecrypt(
-                transaction.merchant.website,
-                { model: Transaction, docId: transaction._id, fieldPath: "merchant.website" },
-            );
-          }
-
-          const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "fees",
-          });
-
-          const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "price",
-          });
-
-          let decryptedSubtype = await safeDecrypt(transaction.subtype, {
-            model: Transaction,
-            docId: transaction._id,
-            fieldPath: "subtype",
-          });
-
-          const decryptedQuantity = await safeDecryptNumericValue(
-            transaction.quantity, safeDecrypt,
-            { model: Transaction, docId: transaction._id, fieldPath: "quantity" },
-          );
-
-          let decryptedSecurityId = await safeDecrypt(
-            transaction.securityId,
-            { model: Transaction, docId: transaction._id, fieldPath: "securityId" },
-          );
-
-          let decryptedDescription = null;
-          if (transaction.description) {
-            decryptedDescription = await safeDecrypt(transaction.description, {
-                model: Transaction,
-                docId: transaction._id,
-                fieldPath: "description",
-            });
-          }
-
-          let decryptedNotes = null;
-          if (transaction.notes) {
-            decryptedNotes = await safeDecrypt(transaction.notes, {
-                model: Transaction,
-                docId: transaction._id,
-                fieldPath: "notes",
-            });
-          }
-
-          let decryptedTags = null;
-          if (transaction.tags && typeof transaction.tags === 'string') {
-            decryptedTags = await safeDecrypt(transaction.tags, {
-                model: Transaction,
-                docId: transaction._id,
-                fieldPath: "tags",
-            });
-          }
-
-          transactions.push({
-            ...transaction,
-            amount: decryptedAmount,
-            name: decryptedName,
-            merchant: transaction.merchant ? {
-              ...transaction.merchant,
-              name: decryptedMerchantName,
-              merchantName: decryptedMerchantMerchantName,
-              merchantCategory: merchantCategory,
-              logo: merchantLogo,
-              website: merchantWebsite,
-            } : null,
-            fees: decryptedFees,
-            price: decryptedPrice,
-            type: decryptedType,
-            subtype: decryptedSubtype,
-            quantity: decryptedQuantity,
-            securityId: decryptedSecurityId,
-            accountType: decryptedAccountType,
-            description: decryptedDescription,
-            notes: decryptedNotes,
-            tags: decryptedTags,
-          });
-        }
-        transactions.forEach((transaction) => {
-          transaction.institutionName = decryptedInstitutionName;
-          transaction.institutionId = plaidAccount.institution_id;
-        });
-
-        allTransactions.push(...transactions);
-      }
-
-      const sortedTransactions = allTransactions.sort(
-        (a, b) => new Date(b.transactionDate) - new Date(a.transactionDate),
-      );
-
-      // Apply pagination if requested
       if (pagination && pagination.paginate) {
         const { page = 1, limit = 50 } = pagination;
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
+        const skip = (page - 1) * limit;
 
-        const paginatedResults = {
-          data: sortedTransactions.slice(startIndex, endIndex),
-          pagination: {
-            total: sortedTransactions.length,
-            page,
-            limit,
-            totalPages: Math.ceil(sortedTransactions.length / limit),
-          },
-        };
+        totalCount = await Transaction.countDocuments(findQuery);
+        transactionsToProcess = await Transaction.find(findQuery)
+          .sort({ transactionDate: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+      } else {
+        transactionsToProcess = await Transaction.find(findQuery)
+          .sort({ transactionDate: -1 })
+          .lean();
+        totalCount = transactionsToProcess.length;
+      }
+      
+      const accountsMap = new Map(accounts.map(acc => [acc.plaid_account_id, acc]));
+      const allTransactions = [];
 
-        structuredLogger.logInfo("get_transactions_paginated_results", { pagination: paginatedResults.pagination });
-        return paginatedResults;
+      for (const transaction of transactionsToProcess) {
+        const account = accountsMap.get(transaction.plaidAccountId);
+        if (!account) {
+            structuredLogger.logWarn("get_transactions_account_not_found_for_transaction", { plaidAccountId: transaction.plaidAccountId });
+            continue;
+        }
+
+        let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "amount",
+        });
+
+        if (decryptedAmount === null) {
+          structuredLogger.logError("get_transactions_decryption_error", { transaction_id: transaction._id, field: "amount" });
+          continue;
+        }
+
+        let decryptedType = await safeDecrypt(transaction.type, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "type",
+        });
+
+        const formattedTransaction = formatTransactionAmount({ ...transaction, amount: decryptedAmount, type: decryptedType }, account);
+        decryptedAmount = formattedTransaction.amount;
+        
+        let decryptedName = await safeDecrypt(transaction.name, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "name",
+        });
+        
+        let decryptedAccountType = await safeDecrypt(
+          transaction.accountType,
+          { model: Transaction, docId: transaction._id, fieldPath: "accountType" },
+        );
+
+        let decryptedMerchantName;
+        let decryptedMerchantMerchantName;
+        let merchantCategory;
+        let merchantLogo;
+        let merchantWebsite;
+        if (transaction.merchant) {
+          decryptedMerchantName = await safeDecrypt(
+            transaction.merchant.name,
+            { model: Transaction, docId: transaction._id, fieldPath: "merchant.name" },
+          );
+
+          decryptedMerchantMerchantName = await safeDecrypt(
+            transaction.merchant.merchantName,
+            {
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "merchant.merchantName",
+            },
+          );
+
+          merchantCategory = await safeDecrypt(
+            transaction.merchant.merchantCategory,
+            {
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "merchant.merchantCategory",
+            },
+          );
+
+          merchantLogo = await safeDecrypt(
+              transaction.merchant.logo,
+              { model: Transaction, docId: transaction._id, fieldPath: "merchant.logo" },
+          );
+
+          merchantWebsite = await safeDecrypt(
+              transaction.merchant.website,
+              { model: Transaction, docId: transaction._id, fieldPath: "merchant.website" },
+          );
+        }
+
+        const decryptedFees = await safeDecryptNumericValue(transaction.fees, safeDecrypt, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "fees",
+        });
+
+        const decryptedPrice = await safeDecryptNumericValue(transaction.price, safeDecrypt, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "price",
+        });
+
+        let decryptedSubtype = await safeDecrypt(transaction.subtype, {
+          model: Transaction,
+          docId: transaction._id,
+          fieldPath: "subtype",
+        });
+
+        const decryptedQuantity = await safeDecryptNumericValue(
+          transaction.quantity, safeDecrypt,
+          { model: Transaction, docId: transaction._id, fieldPath: "quantity" },
+        );
+
+        let decryptedSecurityId = await safeDecrypt(
+          transaction.securityId,
+          { model: Transaction, docId: transaction._id, fieldPath: "securityId" },
+        );
+
+        let decryptedDescription = null;
+        if (transaction.description) {
+          decryptedDescription = await safeDecrypt(transaction.description, {
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "description",
+          });
+        }
+
+        let decryptedNotes = null;
+        if (transaction.notes) {
+          decryptedNotes = await safeDecrypt(transaction.notes, {
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "notes",
+          });
+        }
+
+        let decryptedTags = null;
+        if (transaction.tags && typeof transaction.tags === 'string') {
+          decryptedTags = await safeDecrypt(transaction.tags, {
+              model: Transaction,
+              docId: transaction._id,
+              fieldPath: "tags",
+          });
+        }
+        
+        const decryptedInstitutionName = await safeDecrypt(
+          account.institution_name,
+          { account_id: account._id, field: "institution_name" },
+        );
+
+        allTransactions.push({
+          ...transaction,
+          amount: decryptedAmount,
+          name: decryptedName,
+          merchant: transaction.merchant ? {
+            ...transaction.merchant,
+            name: decryptedMerchantName,
+            merchantName: decryptedMerchantMerchantName,
+            merchantCategory: merchantCategory,
+            logo: merchantLogo,
+            website: merchantWebsite,
+          } : null,
+          fees: decryptedFees,
+          price: decryptedPrice,
+          type: decryptedType,
+          subtype: decryptedSubtype,
+          quantity: decryptedQuantity,
+          securityId: decryptedSecurityId,
+          accountType: decryptedAccountType,
+          description: decryptedDescription,
+          notes: decryptedNotes,
+          tags: decryptedTags,
+          institutionName: decryptedInstitutionName,
+          institutionId: account.institution_id,
+        });
       }
 
-      structuredLogger.logInfo("get_transactions_completed", { total_transactions: sortedTransactions.length });
-      return sortedTransactions;
+      if (pagination && pagination.paginate) {
+        const { page = 1, limit = 50 } = pagination;
+
+        return {
+          data: allTransactions,
+          pagination: {
+            total: totalCount,
+            page,
+            limit,
+            totalPages: Math.ceil(totalCount / limit),
+          },
+        };
+      }
+
+      return allTransactions;
     },
   );
 };
