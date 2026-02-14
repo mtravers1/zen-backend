@@ -312,10 +312,6 @@ const webhookHandler = async (event, signature = null, body = null) => {
                   event.item_id,
                 );
 
-                if (event.new_investments_transactions) {
-                  await plaidService.updateInvestmentTransactions(event.item_id);
-                }
-
                 plaidService.resetWebhookFailures(event.item_id);
                 return syncResult;
               } catch (error) {
