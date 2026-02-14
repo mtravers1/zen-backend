@@ -337,7 +337,8 @@ const getCashFlowsByPlaidAccount = async (plaidAccount, uid) => {
 
   const transactions = [];
   for (const transaction of transactionsResponse) {
-    let decryptedAmount = await safeDecryptNumericValue(transaction.amount, safeDecrypt, { transaction_id: transaction._id, field: "amount" });
+    let decryptedAmountString = await safeDecrypt(transaction.amount, { transaction_id: transaction._id, field: "amount" });
+    let decryptedAmount = parseFloat(String(decryptedAmountString).replace(/[^0-9.-]+/g, "")) || 0;
     const decryptedType = await safeDecrypt(transaction.type, { transaction_id: transaction._id, field: "type" });
     
     transactions.push({
