@@ -1093,7 +1093,16 @@ const updateInvestmentTransactions = async (item) => {
         });
 
         const accessInfo = await getNewestAccessToken({ itemId: item });
-        if (!accessInfo) return;
+        if (!accessInfo) {
+          structuredLogger.logWarning(
+            "update_investment_transactions_skipped",
+            {
+              item_id: item,
+              reason: "No access token metadata found for item.",
+            },
+          );
+          return;
+        }
         const userId = accessInfo.userId;
         const user = await User.findById(userId);
         if (!user) {
@@ -1103,6 +1112,13 @@ const updateInvestmentTransactions = async (item) => {
         const accessToken = await getAccessTokenFromItemId(item, uid);
 
         if (!accessToken) {
+          structuredLogger.logWarning(
+            "update_investment_transactions_skipped",
+            {
+              item_id: item,
+              reason: "Access token could not be decrypted.",
+            },
+          );
           return;
         }
 
@@ -1130,6 +1146,11 @@ const updateInvestmentTransactions = async (item) => {
         );
 
         if (newPlaidAccounts.length > 0) {
+          structuredLogger.logInfo("adding_new_investment_accounts", {
+            item_id: item,
+            new_account_count: newPlaidAccounts.length,
+            plaid_account_ids: newPlaidAccounts.map(acc => acc.account_id),
+          });
           const dekForNewAccounts = await getUserDek(uid);
           const safeEncryptForNewAccounts = createSafeEncrypt(uid, dekForNewAccounts);
           for (const account of newPlaidAccounts) {
@@ -1228,6 +1249,10 @@ const updateInvestmentTransactions = async (item) => {
               plaidTransactionId: transaction.investment_transaction_id,
             });
             if (existingTransaction) {
+              structuredLogger.logInfo("skipping_duplicate_investment_transaction", {
+                item_id: item,
+                plaid_investment_transaction_id: transaction.investment_transaction_id,
+              });
               continue;
             }
             const accountType = "investment";
@@ -1307,6 +1332,13 @@ const updateInvestmentTransactions = async (item) => {
               type: encryptedType,
               subType: encryptedSubType,
               accountType: encryptedAccountType,
+            });
+
+            structuredLogger.logInfo("creating_new_investment_transaction", {
+                item_id: item,
+                plaid_investment_transaction_id: transaction.investment_transaction_id,
+                account_id: account._id,
+                date: transaction.date,
             });
 
             await newTransaction.save();
