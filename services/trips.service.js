@@ -353,16 +353,18 @@ const fetchFilteredTrips = async (query, uid) => {
     if (maxMiles) filter.totalMiles.$lte = Number(maxMiles);
   }
 
-  if (dateRange) {
+  if (dateRange && typeof dateRange === 'string' && dateRange.includes('<')) {
     const [start, end] = dateRange.split("<");
-    const startDate = new Date(start.trim());
-    const endDate = new Date(end.trim());
+    if (start && end) {
+      const startDate = new Date(start.trim());
+      const endDate = new Date(end.trim());
 
-    if (startDate && endDate) {
-      filter["metadata.dateTime"] = {
-        $gte: startDate.toISOString(),
-        $lte: endDate.toISOString(),
-      };
+      if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+        filter["metadata.dateTime"] = {
+          $gte: startDate.toISOString(),
+          $lte: endDate.toISOString(),
+        };
+      }
     }
   }
 
