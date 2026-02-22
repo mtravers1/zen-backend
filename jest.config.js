@@ -17,5 +17,5 @@ export default {
   ],
   testTimeout: 30000,
   verbose: true,
-  setupFiles: ['<rootDir>/tests/jest.setup.js']
+  setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.js']
 };

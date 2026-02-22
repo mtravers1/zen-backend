@@ -11,7 +11,7 @@
     "start:prod": "./scripts/version.sh && cross-env NODE_ENV=production node -r dotenv/config ./bin/www",
     "mongodb": "docker-compose up",
     "build": "webpack --config webpack.config.js",
-    "test": "./scripts/version.sh && cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test NODE_OPTIONS=--experimental-vm-modules node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand",
+    "test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=./.env.test ./node_modules/jest/bin/jest.js --runInBand",
     "test:vitest": "cross-env NODE_ENV=development node -r dotenv/config ./node_modules/.bin/vitest --run tests/cashflow-chart-synthetic.test.js",
     "migrate:encryption": "node -r dotenv/config scripts/migrate-encryption.js",
     "delete-user": "node -r dotenv/config scripts/delete-user.js",
