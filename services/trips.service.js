@@ -33,28 +33,32 @@ const _decryptAndEnrichTrip = async (trip, safeDecrypt) => {
         profileData = await Business.findById(profileId).lean();
         if (!profileData) {
             profileData = await User.findById(profileId).lean();
-            const first = await safeDecrypt(profileData.name.firstName, {
-                trip_id: trip._id,
-                field: "firstName",
-            });
-            const middle = profileData.name?.middleName
-                ? " " +
-                  (await safeDecrypt(profileData.name.middleName, {
+            if (profileData) {
+                const first = await safeDecrypt(profileData.name.firstName, {
                     trip_id: trip._id,
-                    field: "middleName",
-                  })) +
-                  " "
-                : " ";
-            const last = await safeDecrypt(profileData.name.lastName, {
-                trip_id: trip._id,
-                field: "lastName",
-            });
-
-            setting = {
-                name: first + middle + last,
-                _id: profileData._id,
-                type: "personal",
-            };
+                    field: "firstName",
+                });
+                const middle = profileData.name?.middleName
+                    ? " " +
+                      (await safeDecrypt(profileData.name.middleName, {
+                        trip_id: trip._id,
+                        field: "middleName",
+                      })) +
+                      " "
+                    : " ";
+                const last = await safeDecrypt(profileData.name.lastName, {
+                    trip_id: trip._id,
+                    field: "lastName",
+                });
+    
+                setting = {
+                    name: first + middle + last,
+                    _id: profileData._id,
+                    type: "personal",
+                };
+            } else {
+                console.warn(`User not found for profileId: ${profileId} in trip ${trip._id}`);
+            }
         } else {
             const name = await safeDecrypt(profileData.name, {
                 trip_id: trip._id,
