@@ -105,6 +105,9 @@ export async function createApp() {
 			"/api/subscriptions/plans",
 			"/api/ai/ping",
 			"/api/security/clear-dev-blacklist",
+			// New public endpoints
+			"/api/admin/health",
+			"/api/settings/client-portal",
 		];
 
 		// Block known attack patterns immediately
@@ -113,7 +116,6 @@ export async function createApp() {
 			"/api/v1/admin",
 			"/api/v1/login",
 			"/wp-admin",
-			"/admin",
 			"/phpmyadmin",
 		];
 
