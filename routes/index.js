@@ -14,6 +14,9 @@ import subscriptionsRouter from "./subscriptions.router.js";
 import roleRouter from "./role.router.js";
 import securityRouter from "./security.router.js";
 import usersRouter from "./users.router.js";
+import clientsRouter from "./clients.router.js";
+import documentsRouter from "./documents.router.js";
+import tasksRouter from "./tasks.router.js";
 
 
 
@@ -36,6 +39,9 @@ router.use("/subscriptions", subscriptionsRouter);
 router.use("/role", roleRouter);
 router.use("/security", securityRouter);
 router.use("/users", usersRouter);
+router.use("/clients", clientsRouter);
+router.use("/documents", documentsRouter);
+router.use("/tasks", tasksRouter);
 
 
 export default router;
