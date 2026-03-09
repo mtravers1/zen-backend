@@ -105,6 +105,7 @@ export async function createApp() {
 			"/api/subscriptions/plans",
 			"/api/ai/ping",
 			"/api/security/clear-dev-blacklist",
+			"/api/staff-auth/signin",
 		];
 
 		// Block known attack patterns immediately

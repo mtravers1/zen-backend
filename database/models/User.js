@@ -181,6 +181,20 @@ const userSchema = new Schema({
     type: Object,
     default: null,
   },
+  // Web-dashboard role (used by the firm management portal)
+  staffRole: {
+    type: String,
+    enum: [
+      "client",
+      "executive_assistant",
+      "account_manager",
+      "relationship_manager",
+      "executive_manager",
+      "director",
+      "super_admin",
+    ],
+    default: null,
+  },
 });
 
 const User = model("User", userSchema);
