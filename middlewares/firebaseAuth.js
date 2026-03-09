@@ -2,6 +2,7 @@ import { unless } from "express-unless";
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import User from "../database/models/User.js";
+import StaffMember from "../database/models/StaffMember.js";
 import { redactEmail } from "../lib/emailUtils.js";
 
 async function firebaseAuthentication(req, res, next) {
@@ -68,8 +69,20 @@ async function firebaseAuthentication(req, res, next) {
       //   },
       // );
 
-      // Find user in database to get authUid (Firebase UID)
-      const user = await User.findById(decodedJWT.userId).lean();
+      // Find user in database to get authUid (Firebase UID).
+      // Check both User (mobile-app) and StaffMember (web-dashboard) collections.
+      let user = await User.findById(decodedJWT.userId).lean();
+      let isStaffToken = false;
+
+      if (!user) {
+        // Try StaffMember collection (web-dashboard staff users)
+        const staffMember = await StaffMember.findById(decodedJWT.userId).lean();
+        if (staffMember && !staffMember.deleted) {
+          user = staffMember;
+          isStaffToken = true;
+        }
+      }
+
       if (!user) {
         console.error(
           `[FIREBASE AUTH ${requestId}] ❌ User not found in database for userId: ${decodedJWT.userId}`,
@@ -79,9 +92,11 @@ async function firebaseAuthentication(req, res, next) {
 
       // Set user info in request object (compatible with Firebase format)
       req.user = {
-        uid: user.authUid, // Use Firebase UID for compatibility
+        uid: isStaffToken ? decodedJWT.userId : user.authUid,
         email: decodedJWT.email,
         userId: decodedJWT.userId,
+        isStaffUser: isStaffToken,
+        staffRole: isStaffToken ? user.role : (user.staffRole ?? null),
       };
       req.requestId = requestId;
 
